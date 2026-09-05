@@ -1,0 +1,148 @@
+Trivia: bílé znaky a komentáře
+******************************
+
+.[perex]
+Mezery, konce řádků a komentáře nejsou uzly stromu, ale visí na tokenech jako takzvaná trivia. Tahle stránka říká, podle jakého pravidla se dělí mezi sousední tokeny a jak je číst a měnit, aniž by se rozbil zbytek souboru.
+
+
+Komu patří mezera
+=================
+
+Mezi dvěma tokeny může stát ledacos: mezery, konce řádků, prázdné řádky, komentáře. Aby se o tom dalo mluvit přesně, má každý token dvě pole trivia a jedno pravidlo říká, co kam patří:
+
+**Koncová trivia** tokenu je všechno za ním až po první konec řádku včetně. **Úvodní trivia** dalšího tokenu je zbytek: prázdné řádky, odsazení, komentáře na vlastních řádcích, dokumentační komentáře.
+
+```php
+$sum = 0; // running total
+		return $sum;
+```
+
+Středník za `0` má koncová trivia `[Whitespace " ", Comment "// running total", LineEnding "\n"]`; `return` má úvodní trivia `[Whitespace "\t\t"]`. Komentář na řádku patří k řádku, na kterém je, a dokumentační komentář nad metodou patří k metodě, což je přesně to, co byste čekali, když se metoda přesouvá.
+
+Trivia je `PhpToken`, jen takový, který PHP ignoruje. Druh je jeho `id` a porovnává se s konstantami `Trivia::Whitespace`, `LineEnding`, `Comment`, `DocComment` a `OpenTag`; `line` a `pos` říkají, kde v přečteném souboru stála, u trivia vyrobené jinak než lexerem `-1`. Bílé znaky jsou rozdělené na běhy mezer a jednotlivé konce řádků. Konec řádku, na kterém stojí předchozí token, patří jemu, takže v úvodních trivia je každý `LineEnding` jeden prázdný řádek nebo konec řádku s komentářem: odsazený token pod dvěma prázdnými řádky má úvodní trivia `[LineEnding, LineEnding, Whitespace]`, neodsazený jen `[LineEnding, LineEnding]`.
+
+Tři zvláštnosti, které stojí za zapamatování:
+
+- **`<?php` není token**, ale trivia druhu `OpenTag` včetně povinné mezery nebo konce řádku za ním; je vždy úvodní trivia následujícího tokenu.
+- **`?>` je token** (`Token::CloseTag`), který si nese i konec řádku, jenž PHP za ním polyká; parser ho vidí jako středník.
+- **Bílé znaky, které PHP počítá do tokenu, zůstávají v textu tokenu**: inline HTML, obsah heredocu včetně odsazení uzavíracího návěští, `( int )`. Trivia uvnitř interpolovaného řetězce (`"{$a /* c */}"`) nesou `inInterpolation`, protože uvnitř řetězce může mezera změnit, co PHP přečte: `"${a}"` vloží proměnnou `$a`, kdežto `"${a }"` proměnnou, jejíž jméno drží konstanta `a`. Metody, které mezery upravují podle pravidel (`setTrailingSpace()`, `setIndentation()`, `ensureStartsLine()`, `setBlankLinesBefore()`, `removeTrailingWhitespace()`, `removeTrivia()`), takový token nebo trivia odmítnou; `replaceTrivia()` a přímý zápis `setLeadingTrivia()` a `setTrailingTrivia()` je přijmou a za výsledek odpovídáte vy.
+
+
+Čtení
+=====
+
+Nejčastější otázky mají hotové odpovědi, aby nikdo nemusel procházet pole trivia ručně:
+
+```php
+$token->getTrailingSpace();       // vodorovná mezera za tokenem na témže řádku, null když řádek končí nebo je tam komentář
+$token->startsLine();             // začíná řádek
+$token->getIndentation();         // odsazení řádku, který token začíná, jinak ''
+$token->getLineIndentation();     // odsazení řádku, na kterém token stojí, ať ho začíná, nebo ne
+$token->countBlankLinesBefore();  // prázdné řádky nad tokenem, nad komentářem, který k němu patří
+$token->hasComment();             // komentář v jeho trivia
+$token->getComments();            // ty komentáře jako pole Trivia
+$token->hasCommentUpTo($other);   // komentář kdekoli mezi dvěma tokeny téhož souboru, $token první
+$node->hasInnerComment();         // komentář uvnitř uzlu, kromě jeho okrajů
+$node->getInnerComments();
+$node->getDocComment();           // dokumentační komentář nad uzlem, jako Trivia
+$node->leadingTrivia;             // trivia na vnějším okraji uzlu, tedy úvodní trivia jeho prvního tokenu
+$node->trailingTrivia;            // a koncová trivia posledního; uzel bez tokenů má obě prázdná
+Indentation::measureLineWidth($token, $style); // šířka fyzického řádku tak, jak ji vidíte, tabulátor podle stylu
+```
+
+Dotazy na komentáře chodí po vlastních tokenech uzlu, takže odpovídají stejně nad odpojeným podstromem, klonem i fragmentem. Výjimky jsou dvě a obě potřebují soubor, protože sahají za uzel: `hasCommentUpTo()`, které překlenuje dva tokeny, a `getDocComment()` u dokumentačního komentáře, který stojí na řádku předchozí deklarace, a visí proto na jejím tokenu. `hasCommentUpTo()` si hlídá, na co se ptá: tokeny z různých souborů nebo druhý token před prvním skončí výjimkou `InvalidArgumentException`, token bez souboru výjimkou `LogicException`. Odpověď "žádný komentář" na otázku, kterou nešlo položit, by totiž nástroj, který komentáře chrání, přivedla k jejich smazání. Stejný token dvakrát je prázdný interval.
+
+Tabulátor se do šířky řádku počítá na zarážku stylu kdekoli na řádku, nejen v odsazení, a stejně počítá i `getVisualColumn()`; ostatní znak se počítá za jeden, i široký nebo kombinační. Řádek je fyzický, takže končí u každého konce řádku, i uvnitř víceřádkového řetězce nebo komentáře, a token, který takový řetězec začíná, se měří na řádku, na kterém začíná.
+
+Trivia sama odpoví na to, čím je, a komentář umí vydat svůj text bez značek:
+
+```php
+$trivia->id;                  // Trivia::Comment a další
+$trivia->text;
+$trivia->line;                // řádek v přečteném souboru, nikdy se nemění
+$trivia->inInterpolation;
+$trivia->isWhitespace();      // mezery i konec řádku
+$trivia->isLineEnding();       // konec řádku, nebo <?php, jehož text jím končí
+$trivia->isComment();         // jakýkoli komentář, dokumentační včetně
+$comment->isLineComment();    // // nebo #
+$comment->isDocComment();     // /** */
+$comment->isMultiLineComment();
+$comment->getCommentText();   // 'running total'
+```
+
+
+Zápis
+=====
+
+Trivia tokenu jsou `private(set)`, takže se mění jen metodami. Text je vlastnost zděděná z `PhpToken` a jazyk ho nechrání, přesto ho měňte jen metodou `setText()`: ta dá vědět indexu pozic, kolik konců řádků token získal nebo ztratil, kdežto po přímém zápisu by řádky za tokenem přestaly sedět. Metody to jsou proto, že operátor `?->` nesmí stát vlevo od přiřazení, a zápis `$node->getFirstToken()?->setText('x')` se používá pořád. Trivia jde přepsat i celá (`setLeadingTrivia()`, `setTrailingTrivia()`), ale skoro nikdy to není potřeba: běžné úpravy mají vlastní metody, které samy dodrží pravidlo o tom, komu která mezera patří.
+
+```php
+$token->setTrailingSpace(' ');        // mezera za tokenem; odmítne, když řádek končí nebo následuje komentář
+$token->ensureStartsLine("\n");     // token na vlastní řádek, konec řádku jde do koncových trivia předchozího tokenu
+$token->setBlankLinesBefore(2, "\n"); // přesně dva prázdné řádky nad tokenem, nad komentářem, který k němu patří
+$token->setIndentation("\t\t");       // odsazení řádku tokenu; token musí řádek začínat
+$token->removeTrailingWhitespace();   // mezery na konci řádku, který token končí; komentář a konec řádku zůstanou
+$token->removeTrivia($comment);       // jedna trivia, obvykle komentář, i s mezerou nebo řádkem, které by po ní zbyly
+$token->replaceTrivia($old, $new);    // výměna na místě
+$node->removeTrivia($comment);        // totéž z uzlu: hledá mezi jeho tokeny i nad ním
+$node->replaceTrivia($old, $new);
+$node->setEdgeTrivia(leading: []);    // trivia na vnějších okrajích uzlu; uzel bez tokenů je nevezme
+$node->replaceDocComment($trivia);    // dokumentační komentář uzlu
+$node->removeDocComment();
+```
+
+`ensureStartsLine()` a `setBlankLinesBefore()` zapisují konec řádku, který dostanou jako poslední argument, třeba `$style->lineEnding` souboru; výchozí žádný nemají, aby soubor s `"\r\n"` nedostal cizí konec řádku.
+
+Tyhle metody, `Indentation::set()` včetně odsazení komentářů a vůbec všechno, co mezery formátuje, si hlídají vstup dřív, než cokoli zapíšou. Mezera a odsazení smí být jen z mezer a tabulátorů, konec řádku `"\n"`, `"\r\n"` nebo `"\r"` a počet prázdných řádků nesmí být záporný; jinak je to `InvalidArgumentException`. Token uvnitř interpolace řetězce odmítnou výjimkou `LogicException`, protože tam mezera může změnit, co řetězec znamená (`"${a}"` a `"${a }"` nejsou totéž). Odmítnutá úprava po sobě nezanechá nic, ani změněná trivia, ani zvýšenou revizi. `setLeadingTrivia()` a `setTrailingTrivia()` naproti tomu zapíšou, co dostanou, i do interpolace; že trivia stojí tam, kde by je dal lexer, tedy že konec řádku patří tokenu, který řádek ukončuje, je pak na vás.
+
+Dvojice metod na uzlu je tam proto, že komentář najdete přes `$node->getInnerComments()` a odstranit ho pak chcete zase přes uzel, ne dohledávat, kterému tokenu vlastně patří. Metody `removeDocComment()` a `replaceDocComment()` jsou jejich zvláštní případ.
+
+Jednou vyrobená `Trivia` se už nemění, a víc tokenů ji proto smí sdílet. Metoda, která nějakou trivia jmenuje, ji mezi ostatními hledá podle identity objektu; kdo chce jinou, vyrobí novou a vymění ji. Nový komentář je `new Trivia(Trivia::Comment, '// fixed')`, upravený text stávajícího dá `$comment->withText('// fixed')`, kopie, která si ponechá druh i místo, kde komentář stál: `$token->replaceTrivia($comment, $comment->withText('// fixed'))`.
+
+Jedno pravidlo je za tím vším: **konec řádku, který uzavírá řádek tokenu, patří do jeho koncových trivia, nikdy do úvodních trivia dalšího tokenu.** Kdo ho dá jinam, rozbije `getTrailingSpace()` a všechno, co na něm stojí; kdo staví na `ensureStartsLine()` a `setBlankLinesBefore()`, má to za sebe vyřešené.
+
+Pole trivia se nedají měnit nepřímo, u tokenu kvůli `private(set)`, u uzlu kvůli property hooku, takže `end($token->trailingTrivia)` skončí chybou; funkcím, které pole berou referencí, předejte kopii.
+
+
+Styl a odsazení
+===============
+
+`Style` je odsazovací jednotka, konec řádku a šířka tabulátoru souboru: `new Style(indent: '    ', lineEnding: "\r\n", tabWidth: 4)`, výchozí je tabulátor, `"\n"` a 4. `Style::detectLineEnding($code)` pozná, jestli v kódu převládá `"\r\n"`, nebo `"\n"`; samotné `"\r"` nerozlišuje. `withIndent()` a `withLineEnding()` odvodí styl, `indent($level)` vrátí odsazení dané úrovně.
+
+`Indentation` je sada statických metod pro odsazení celého řádku včetně komentářů, které nad tokenem stojí na vlastních řádcích. Odsazení nastavují, ověřují a přepočítávají:
+
+```php
+Indentation::set($token, "\t\t", "\t\t");   // odsazení řádku tokenu a komentářů nad ním; token musí řádek začínat
+Indentation::matches($token, "\t\t", "\t\t"); // mají řádek i komentáře už tohle odsazení, takže by set() nic nezměnilo?
+Indentation::shift($node, 1, $style);      // celý podstrom o úroveň, viz Úpravy stromu
+```
+
+`set()` srovná víceřádkový komentář, jehož další řádky začínají hvězdičkou, do tvaru dokumentačního komentáře s hvězdičkami o mezeru dál než otevírací `/*`; jakýkoli jiný posune celý, jeho další řádky ztratí staré odsazení a dostanou nové.
+
+Počítají a ptají se:
+
+```php
+Indentation::normalize("        ", $style);   // odsazení ve znacích stylu: mezery na šířku tabulátoru v tabulátor, nebo tabulátor v jednotku stylu
+Indentation::measure("\t  ", $style);         // vizuální šířka, tabulátor na další zarážku stylu
+Indentation::advance($column, $text, $style); // sloupec, na kterém text skončí, když začne na $column
+Indentation::opensLine($token);               // je konec řádku nad tokenem trivia, takže se odsazení smí měnit?
+Indentation::opensStatement($token);          // začíná token příkaz, ve kterém stojí?
+Indentation::findTrivia($token);              // trivia, která odsazení tokenu zastupuje: jeho mezera, jinak první trivia
+```
+
+`opensLine()` odpoví `false` tam, kde konec řádku nad tokenem je text předchozího tokenu (inline HTML, tělo heredocu, data za `__halt_compiler()`); odsazení je tam součást obsahu. `Token::startsLine()` v takovém případě odpoví `true`, proto jsou to dvě otázky.
+
+A nakonec to, na čem stojí rozvržení kódu podle stromu, tedy odpověď na otázku, co řádek pokračuje a jaké odsazení by konvenčně měl:
+
+```php
+$owner = Indentation::findOwner($token);   // LineOwner, nebo null
+$owner->node;                              // nejnižší předek, kterým token nezačíná
+$owner->child;                             // jeho dítě, ve kterém token stojí: hodnota slotu, nebo seznam
+$owner->role;                              // LayoutRole toho slotu
+$owner->item;                              // co token začíná: dítě samo, nebo položka seznamu
+Indentation::infer($token, $style);        // odsazení, které by řádek začínající tokenem konvenčně měl
+```
+
+Token, kterým začíná všechno až po kořen, třeba první příkaz souboru, žádného předka nepokračuje: `findOwner()` pro něj vrátí `null` a `infer()` prázdné odsazení.
+
+`LayoutRole` říká, čím je slot pro odsazení řádků, přes které se konstrukce táhne: `Content` (obsah, odsazený o úroveň), `Anchor` (stojí tam, kde konstrukce), `Closer` (uzavírá ji), `Body` (tělo struktury), `Operator`, `Branch` (větve ternáru), `Link` (článek řetězu volání) a `Case` (větve `switch`). Role jednotlivých slotů uvádí `LayoutData::Roles`; jedinou výjimku dělá `findOwner()` u operátoru `|>`, jehož operandy dostanou místo `Operator` roli `Link`, protože řetěz `|>` se odsazuje jako řetěz volání.

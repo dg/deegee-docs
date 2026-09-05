@@ -1,0 +1,77 @@
+PhpSyntax
+*********
+
+{{maintitle: PhpSyntax: bezztrátový syntaktický strom pro PHP}}
+{{description: PhpSyntax je PHP knihovna, která parsuje zdrojový kód do bezztrátového syntaktického stromu (CST). Zachová každou mezeru i komentář, takže vytištěný strom je původní soubor bajt po bajtu. Pro nástroje, které mají kód číst a měnit.}}
+
+.[perex]
+Bezztrátový syntaktický strom PHP bez jediné závislosti: každý token, každá mezera i každý komentář má své místo a vytištěný strom je původní soubor bajt po bajtu. Knihovna pro nástroje, které mají kód číst a měnit.
+
+Roky jsem měl parsování PHP za vyřešenou věc: je tu [nikic/PHP-Parser |https://github.com/nikic/PHP-Parser], stojí na něm PHPStan i Rector, co víc chtít. Pak jsem psal skript, který měl ve stovkách souborů přejmenovat jedno volání, a došlo mi, kolik práce dá **nepřepsat přitom všechno ostatní**. Přesně na tohle je PhpSyntax.
+
+
+Strom, který nic nezahodí
+=========================
+
+Abstraktní syntaktický strom (AST) zahazuje, co pro význam programu není podstatné: mezery, prázdné řádky, komentáře uvnitř výrazů, závorky navíc. Pro analýzu kódu je to správně. Jakmile ale chcete kód **změnit a zapsat zpátky**, potřebujete i to, co AST zahodil, jinak přetisknete soubor podle svých představ místo podle autorových.
+
+PhpSyntax staví **konkrétní** syntaktický strom (concrete syntax tree, CST): každý token zdrojáku v něm má svůj slot (`IfNode` má `ifKeyword`, `openParen`, `condition`, `closeParen` a `body`) a bílé znaky s komentáři visí na tokenech jako takzvaná trivia. Zaručeno je tohle:
+
+```php
+Printer::print($parser->parse($code)) === $code
+```
+
+Platí bajt po bajtu pro cokoli, co PHP přijme: BOM, hashbang, konce řádků CR i CRLF, uzavírací tagy, inline HTML, `__halt_compiler()`. Je to invariant, který drží testy nad velkým korpusem kódu, a zároveň nejjednodušší test, jaký si nad vlastním kódem uděláte: naparsovat, vytisknout, porovnat.
+
+
+Kdy PhpSyntax a kdy nikic/PHP-Parser
+====================================
+
+Obě knihovny mají své místo a je poctivé říct které.
+
+**nikic/PHP-Parser** použijte, když potřebujete vědět, co kód dělá: typy, tok řízení, vyhodnocení konstantních výrazů i tam, kde sahají na konstantu nebo na třídu (PhpSyntax přečte hodnotu jen tam, kde je zapsaná, tedy u literálů a polí z nich, viz [toValue() |traversal#Otázky, které si klade každý nástroj]), a k tomu obrovský ekosystém nástrojů kolem. A také tehdy, když potřebujete strom i z kódu se syntaktickou chybou: PHP-Parser se z chyby umí zotavit a vrátí částečný strom, kdežto PhpSyntax skončí výjimkou, protože jeho gramatika zotavení nemá.
+
+**PhpSyntax** použijte, když se chcete kódu dotknout a zbytek nechat být: přejmenovat volání, doplnit argument, přesunout komentář, srovnat mezery, a dostat diff přesně tak velký jako změna. Formátovače, migrační skripty, generátory, které upravují existující soubory, nástroje na hromadné přepisy. Největší z nich je [DressCode |dresscode:], kontrola a oprava stylu kódu, pro kterou PhpSyntax původně vznikl.
+
+
+Instalace
+=========
+
+```shell
+composer require phpsyntax/phpsyntax
+```
+
+Knihovna běží na PHP 8.4 až 8.6 a vyžaduje rozšíření `tokenizer`. Jinak **nemá žádnou závislost**: v `composer.json` je jen PHP a tokenizer, žádné `mbstring` ani `ctype`, takže se nemá o co přetahovat s tím, co už v projektu máte. Kód psaný pro novější PHP přečte i na starším běhu, viz [Parsování |parsing#Novější syntaxe na starším PHP].
+
+
+Na ukázku
+=========
+
+```php
+use PhpSyntax\Nodes\Expression\FunctionCallNode;
+use PhpSyntax\Nodes\NameNode;
+use PhpSyntax\Parser;
+use PhpSyntax\Printer;
+
+$file = new Parser()->parse(file_get_contents('Order.php'));
+
+foreach ($file->find(FunctionCallNode::class) as $call) {
+	if ($call->name instanceof NameNode && $call->name->text === 'sizeof') {
+		$call->name->text = 'count';
+	}
+}
+
+file_put_contents('Order.php', Printer::print($file));
+```
+
+Přejmenovalo se každé volání zapsané jako `sizeof(...)` a to je také jediné, co se v souboru změnilo. Zápisy `\sizeof()` nebo `SizeOf()` volají totéž, ale text mají jiný; kdo je chce zachytit také, zeptá se [NameResolveru |analyses#NameResolver], co jméno znamená. Jak se strom prochází, jak se mění a co ví o jménech, říkají další stránky: [Parsování a tisk |parsing], [Uzly a sloty |tree], [Trivia |trivia], [Procházení |traversal], [Úpravy |mutation], [Analýzy |analyses] a [přehled uzlů |nodes].
+
+
+Výkon
+=====
+
+Parser je generovaný automat LALR(1) nad gramatikou převzatou z [nikic/PHP-Parser |https://github.com/nikic/PHP-Parser] a soubor projde rychleji než automat PHP-Parseru; postavit jeden uzel stojí zhruba stejně. Rozdíl dělá to, kolik strom nese: bílé znaky a komentáře se skládají na tokeny a uzlů je asi o třetinu víc, protože seznamy, závorky a modifikátory jsou samostatné uzly. Parsování běžného kódu proto trvá zhruba 1,5× déle než s PHP-Parserem a 1,2× déle než s PHP-Parserem, který si propojí rodiče, tedy postaví strom stejného druhu, v němž každý uzel zná svého rodiče. Na běžném stroji projde parsování a tisk celého adresáře `vendor/` s třemi sty soubory a 1,2 MB kódu za necelou sekundu, tedy zhruba dvě milisekundy na soubor.
+
+Po parsování se bohatší strom vrací. Dotaz, který stoupá k předkům, trvá zhruba polovinu, protože PHP-Parser musí strom nejdřív celý projít, aby rodiče propojil. Úprava i s tiskem stojí zhruba tolik co tisk PHP-Parseru se zachováním formátu, který si drží starý strom a tokeny vedle nového, kdežto tady je tisk pouhé spojení textů tokenů. Strom zabere méně paměti než PHP-Parser i s tokeny, které tisk se zachováním formátu potřebuje, a studený start je stejný. Index pozic tokenů se staví líně a po úpravě se neobnovuje celý, takže dotaz hned po změně stojí tolik, jak daleko od té změny leží.
+
+Měřeno v září 2026 na PHP 8.5 bez opcache proti PHP-Parseru 5.9 nad vzorky kódu Symfony, Laravelu, WordPressu, Nette a dalších.

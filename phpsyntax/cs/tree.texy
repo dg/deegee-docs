@@ -1,0 +1,181 @@
+Uzly a sloty
+************
+
+.[perex]
+Z čeho se strom skládá: uzly a jejich sloty pojmenované podle role, tokeny, seznamy s oddělovači, jména a literály. A kde se dozvíte, co který uzel nese.
+
+
+Sloty
+=====
+
+Každá konstrukce jazyka má svou třídu uzlu a každý uzel má **sloty** pojmenované podle role, ne podle textu. `IfNode` má `ifKeyword`, `openParen`, `condition`, `closeParen` a `body`; `TernaryNode` má `condition`, `question`, `then`, `colon` a `else`. Párové oddělovače se vždy jmenují `open*` a `close*`, seznamy jsou v množném čísle (`statements`, `arguments`, `members`), slot, který může být prázdný, je `?`. Všechny třídy leží v `PhpSyntax\Nodes` a úplný seznam se sloty je v [referenci uzlů |nodes].
+
+Slot je obyčejná vlastnost, takže se čte i zapisuje přiřazením:
+
+```php
+$if = $file->findFirst(IfNode::class);
+$if->ifKeyword;   // Token 'if'
+$if->condition;   // ExpressionNode, třeba PropertyFetchNode
+$if->body;        // StatementNode, u složených závorek BlockNode
+
+$if->condition = $parser->parseExpression('$order->isPaid()');
+```
+
+Za přiřazením není žádná magie, ale property hook: uzel si novou hodnotu adoptuje, starou pustí a ohlásí to indexu tokenů. Co to znamená pro trivia kolem nahrazeného uzlu, říká stránka [Úpravy stromu |mutation].
+
+Jména slotů jedné třídy vypíše konstanta `Slots`, v pořadí zdrojáku:
+
+```php
+IfNode::Slots;   // ifKeyword, openParen, condition, closeParen, body, colon, statements, elseifs, else, endKeyword, semicolon
+```
+
+Že jich je jedenáct, i když `if` má pět částí, je kvůli alternativní syntaxi: zápis `if (…): … endif;` používá tutéž třídu, jen se sloty `colon`, `statements`, `endKeyword` a `semicolon` místo `body`. Sloty, které daný zápis nepoužívá, jsou `null`.
+
+Děti uzlu vrací `getChildren()` v pořadí zdrojáku; sloty s `null` vynechá, prázdný seznam (třeba `elseifs` u `if` bez `elseif`) ale mezi dětmi je. Je to jediná cesta k dětem: uzel není iterovatelný, aby existoval jeden způsob a byl jím obyčejné pole. Výjimkou jsou jen seznamy, viz níže.
+
+```php
+foreach ($class->getChildren() as $child) {
+	// PlainNodeList (attributes), ModifiersNode, Token 'class', IdentifierNode, Token '{', PlainNodeList (members), Token '}'
+}
+```
+
+Dvě pravidla, která šetří překvapení:
+
+- **Tělo řídicí struktury je `StatementNode`**, ne nutně blok: `if ($a) return;` má v `body` přímo `ReturnNode`. Se složenými závorkami je to `BlockNode` se seznamem `statements`.
+- **`else if` je `ElseNode`, jehož tělo je `IfNode`**; `elseif` je `ElseifNode`. Třídy, rozhraní, traity a výčty jsou různé uzly (`ClassNode`, `InterfaceNode`, `TraitNode`, `EnumNode`), ale všechny i s anonymní třídou implementují `ClassLikeNode`, které slibuje `$name` (u anonymní třídy `null`) a `$members`. Podobně `FunctionLikeNode` slibuje `$parameters` (u hooku bez závorek `null`) a `$returnType` u funkce, metody, closure, arrow funkce i hooku. Obě rozhraní se dají použít jako filtr v `find()`. Totéž dělá `AttributeAwareNode`: slibuje `$attributes` všem deklaracím, které smějí nést atributy, tedy třídám i funkcím, členům, konstantám, případům výčtu a parametrům. Seznam je prázdný, když žádný atribut napsaný není.
+
+Uzly, seznamy a rozhraní uzlů patří knihovně. Vlastní třída, která uzel nebo seznam dědí nebo rozhraní uzlu implementuje, se nepodporuje, a rozhraní uzlů může v nové verzi získat další člen.
+
+
+Tokeny
+======
+
+Listy stromu jsou `Token`: druh (`id`), text (`text`) a dvě pole trivia, úvodní a koncová. `Token` je potomkem nativního `PhpToken` a jeho druh je id, které tokenu dává tokenizér PHP. Pojmenované druhy jsou konstanty třídy `Token` s hodnotou příslušné konstanty `T_*` (`Token::Variable` je `T_VARIABLE`, dále třeba `Token::DoubleArrow` nebo `Token::If`), jednoznakový token má za druh ordinální hodnotu znaku (`ord(';')`). Výjimkou v pojmenování jsou `Token::ClassKeyword` a `Token::NamespaceKeyword`, protože `class` si PHP u třídy vyhrazuje pro `::class` a `namespace` od verze 8.6 také. Na druh i text se ptá `is()`, kterému můžete dát i pole, když vyhovuje víc možností:
+
+```php
+$token->is(Token::Variable);     // druh
+$token->is(ord(','));            // druh jednoznakového tokenu
+$token->is(['(', '[']);          // text, kterýkoli z nich
+```
+
+Hodnoty druhů se mezi verzemi PHP liší, proto druh vždycky porovnávejte s konstantou a nikdy si ho neukládejte ani nepište jako číslo. Druhy, pro které PHP žádný token nemá, jsou nula nebo záporné: `Token::EndOfFile` na konci souboru a `Token::HaltCompilerData` pro data za `__halt_compiler()`. Záporný druh má i token novější syntaxe, kterou lexer na starším PHP napodobuje, třeba `Token::Pipe` pro `|>` před PHP 8.5. Jméno druhu pro výpis dá `$token->getTokenName()`, zděděné z `PhpToken`.
+
+`is()` s textem porovná text kteréhokoli tokenu, obsah řetězce nevyjímaje: v řetězci `"{$a},{$b}"` je čárka mezi oběma interpolacemi samostatný token obsahu řetězce s textem `,`. Když procházíte všechny tokeny souboru, ptejte se proto podle druhu, `is(ord(','))`, jinak se trefíte i do řetězců, inline HTML a těla heredocu. U slotu, o kterém víte, co v něm stojí, třeba u operátoru binární operace, se text čte lépe a znamená totéž. Text tokenu je přesně to, co stálo ve zdrojáku, i tam, kde PHP počítá do tokenu mezery: přetypování `( int )`, inline HTML, obsah heredocu.
+
+
+Seznamy
+=======
+
+`PlainNodeList<T>` je seznam bez oddělovačů (příkazy, členy třídy, skupiny atributů), `SeparatedNodeList<T>` seznam s oddělovači mezi položkami (parametry, argumenty, položky pole, importy), který si pamatuje i oddělovače a případnou koncovou čárku. Oba jsou `NodeList<T>`, a to je typ, po kterém sáhnete, když vám je jedno, o který z nich jde. Seznam se čte jako kolekce, tedy procházet, počítat i indexovat ho jde přímo:
+
+```php
+$args = $call->arguments->items;
+$args[0];                       // první argument; index mimo seznam je OutOfRangeException, $args[5] ?? null se ptá
+$args->getItems();              // list<ArgumentNode|VariadicPlaceholderNode|ArgumentPlaceholderNode>, když potřebujete pole
+$args->getSeparators();         // list<Token>, čárky
+$args->hasTrailingSeparator();  // koncová čárka
+count($args);
+$args->isEmpty();
+$args->indexOf($item);
+
+foreach ($args as $arg) {
+	// průchod je snímek, seznam se smí během něj měnit
+}
+```
+
+Položky seznamu jsou jeho vlastní úložiště, takže se mění jen jeho vlastními metodami (`append()`, `insert()`, `removeItem()`) a zápis `$args[0] = …` vyhodí výjimku; díky tomu seznam vždycky ví, co v něm je. Mezera mezi dvěma čárkami destrukturace (`[, $b] = …`) je `EmptyArrayItemNode`, aby seznam měl na každém místě položku; modifikátory (`public static readonly`) drží `ModifiersNode` v pořadí zdrojáku.
+
+Slot, ve kterém seznam sedí, se jmenuje podle toho, co drží: `statements`, `members`, `parameters`, a tam, kde by jméno jen zopakovalo jméno uzlu, prostě `items`. Argumenty volání jsou tedy `$call->arguments->items`, ne `$call->arguments->arguments`.
+
+
+Jména
+=====
+
+`NameNode` je jméno třídy, funkce, konstanty nebo jmenného prostoru; je to jeden token, včetně klíčových slov, která gramatika na místě jména připouští (`static`, `array`, `readonly`). Umí o sobě říct víc než text, a to vlastnostmi:
+
+```php
+$name->text;        // 'App\Model\Order', jak je zapsané
+$name->form;        // NameForm::Unqualified, Qualified, FullyQualified, Relative
+$name->parts;       // ['App', 'Model', 'Order']
+$name->shortName;   // 'Order'
+$name->symbolKind;  // SymbolKind::ClassLike, Function nebo Constant podle místa ve stromu
+$name->isKeyword();
+$name->isDeclaration();   // zavádí jméno symbol (use, namespace), místo aby na něj odkazovalo?
+$name->isReference();     // odkazuje na symbol, který má smysl překládat?
+$name->equals('App\Model\Order');
+```
+
+Vlastnost `text` je zapisovatelná a je to nejkratší cesta, jak jméno přepsat: `$call->name->text = 'count'` jméno přetokenizuje na nové a všechno kolem nechá, jak bylo. Nové jméno mimo strom vyrobí `NameNode::fromText('Nette\Utils\Strings')`, jméno členu pak `IdentifierNode::fromText('render')`.
+
+Role se odvozuje z místa ve stromu: totéž `Foo` je třída za `new`, v typu, za `extends`, `instanceof` nebo před `::`, funkce před `(` a konstanta jen jako samostatný výraz (`$x = Foo;`). Třídu a jmenný prostor drží PHP v jedné tabulce jmen, takže obojí je `ClassLike`; `use Foo;` totiž zavádí zároveň třídu `Foo` i prefix `Foo\Bar` a rozlišit to nejde. Co jméno znamená doopravdy, tedy včetně importů a jmenného prostoru, říká až analýza `NameResolver`, viz [Analýzy |analyses].
+
+Role ale říká jen to, do které tabulky jmen zápis patří, ne jestli na nějaký symbol vůbec odkazuje. Na to je `isReference()` a odpoví `false` ve třech případech: jméno symbol zavádí (`use`, `namespace`), pojmenovává vestavěný typ tam, kde se píše typ (`int`, `array`), nebo je to `self`, `static` či `parent` na místě třídy, protože ta zastupují konkrétní třídu jen tam, kde jsou napsaná. Klíčové slovo na místě jména naopak reference je: `readonly(...)` volá funkci toho jména. Právě na tohle se ptejte, než jméno pošlete resolveru, viz [Analýzy |analyses#NameResolver].
+
+`IdentifierNode` je jméno členu, návěští, hooku nebo aliasu (`->name`, `::CONST`, `as Alias`), také jeden token, i když je to rezervované slovo. Slot, který drží jméno, se jmenuje `name`, takže text typu se čte `$type->name->text`. Porovnat ho se jménem jde přes `equals()`, který podle místa ve stromu ví, jestli PHP velikost písmen ignoruje: u metody, funkce a třídy ano, u vlastnosti, konstanty a návěští ne.
+
+Role jména i to, jestli `equals()` ignoruje velikost písmen, se čtou z místa, kde uzel stojí. Vyjmutý ze stromu na to zapomene: odpojené jméno je vždy třída. Přečtěte si tedy, co potřebujete vědět, dřív než uzel přesunete. Stejně je to u položky `use`, která druh importu (třída, funkce, konstanta) i prefix skupiny zná jen z příkazu, ve kterém stojí; import do skupiny proto nepřenášíte uzlem, ale píšete znovu přes `UseNode::addImport()`.
+
+
+Skaláry
+=======
+
+Literály si drží text tak, jak byl zapsán, a hodnotu, kterou znamenají, dávají jako vlastnost:
+
+```php
+$int->token->text;   // '0o755'
+$int->value;         // 493
+$int->base;          // 8
+
+$string->token->text;   // '"a\nb"'
+$string->value;         // "a\nb" se skutečným koncem řádku
+$string->quote;         // '"'
+```
+
+Zápis hodnoty je metoda, protože přijímá dvě věci najednou: hodnotu a případně uvozovku, kterou se má zapsat. O escapování se stará uzel, ne vy:
+
+```php
+$string->setValue("x'y", "'");           // 'x\'y'
+StringNode::fromValue("it's", '"');      // nový uzel: "it's"
+StringNode::fromValue('plain');          // 'plain'
+```
+
+Co `fromValue()` zapíše, to `$value` přečte zpátky; drží to test knihovny. Holé jméno offsetu v interpolaci (`"$row[label]"`) není `StringNode`, ale `UnquotedStringNode`, aby `StringNode` znamenal jednu věc a `$quote` bylo vždycky `'` nebo `"`.
+
+U heredocu se nejdřív zeptejte `hasInterpolation()`, teprve pak se dá číst jeho `value`. Ta hodnota je tělo, ze kterého se nejdřív odečte odsazení uzavíracího návěští a teprve potom se čtou escape sekvence, přesně jak to dělá PHP: odsazení je fyzické, kdežto to, co vyrobí `\n`, žádný řádek zdrojáku není a odsazení se z něj neubírá. Interpolovaný řetězec je vlastní uzel poskládaný ze svých částí.
+
+
+Importy
+=======
+
+Příkaz `use` má jedinou třídu `UseNode`, ať je zapsaný jakkoli. Skupinový zápis (`use App\{A, B};`) je jen zápisová varianta téhož příkazu, ne jiný uzel, takže má navíc vyplněné sloty `prefix`, `namespaceSeparator`, `openBrace` a `closeBrace` a odpoví na `isGroup()`. Každá položka umí říct, co doopravdy importuje a jakého druhu to je, i když prefix a klíčové slovo `function` stojí o patro výš:
+
+```php
+$use->symbolKind;           // SymbolKind::ClassLike, Function nebo Constant
+
+foreach ($use->items as $item) {
+	$item->fullName;        // 'App\A', i u skupinového zápisu
+	$item->symbolKind;      // vlastní druh, jinak druh příkazu
+	$item->getStatement();  // UseNode, ke kterému patří
+}
+```
+
+**Položka znamená to, co říká příkaz, ve kterém stojí**, prefix skupiny v to počítaje. Proto se položka mezi příkazy nestěhuje, ale píše se znovu, a to metodou `addImport()`, která ji přidá do existujícího příkazu a zapíše tak, jak ten který příkaz své položky píše: celým jménem v prostém importu, relativně k prefixu ve skupině:
+
+```php
+// use App\Model\Item;
+$use->addImport('App\Model\Order');            // use App\Model\Item, App\Model\Order;
+$use->addImport('App\Model\Cart', 'Basket');   // use App\Model\Item, App\Model\Order, App\Model\Cart as Basket;
+
+// use App\Model\{Item};
+$group->addImport('App\Model\Order');          // use App\Model\{Item, Order};
+```
+
+Nový samostatný příkaz `use` se vyrobí jako každý jiný příkaz, `parseStatement()`, a vloží se do seznamu příkazů, viz [Úpravy stromu |mutation#Seznamy].
+
+Jméno, které pod prefix skupiny nespadá, metoda odmítne výjimkou, místo aby zapsala import, který znamená něco jiného. Bez třetího parametru jde nová položka na konec seznamu.
+
+
+Kořen
+=====
+
+`FileNode` je kořen: `statements` se všemi příkazy souboru, přičemž příkazy za `namespace App;` jsou vnořené do `NamespaceNode`, takže každý jmenný prostor má své příkazy jako děti. Poslední token souboru je vždy `EndOfFile` s prázdným textem, na kterém visí to, co je za posledním řádkem kódu: prázdné řádky a komentáře pod ním. Komentář na řádku posledního příkazu patří podle pravidla o trivia k tomu příkazu. `FileNode::$revision` roste s každou změnou stromu; hodí se k tomu poznat, že se něco změnilo, ne k počítání změn.

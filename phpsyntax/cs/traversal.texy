@@ -1,0 +1,156 @@
+Procházení stromu
+*****************
+
+.[perex]
+Hledání uzlů podle třídy, `Traverser` s řízením průchodu, cesta nahoru k rodičům a do stran po tokenech, pozice ve zdrojáku a otázky, na které strom odpoví za vás.
+
+
+Hledání
+=======
+
+Nejkratší cesta k uzlům dané třídy vede přes `find()` a `findFirst()`:
+
+```php
+foreach ($file->find(FunctionCallNode::class) as $call) {
+	// ...
+}
+
+$class = $file->findFirst(ClassNode::class);
+```
+
+Když třída sama nestačí, přidá se za ni podmínka. Třída zůstává na svém místě, takže podmínka i výsledek jsou typované a IDE i PHPStan vědí, s čím pracují:
+
+```php
+$long = $file->find(StringNode::class, fn(StringNode $s) => strlen($s->value) > 80);
+```
+
+Filtrem smí být i rozhraní, takže `find(ClassLikeNode::class)` najde naráz třídy, rozhraní, traity i výčty. Kdo chce úplně všechno a rozhodnout se až v podmínce, napíše `find(Node::class, $condition)`.
+
+Obě metody hledají jen mezi potomky, uzel, na kterém je voláte, nevrátí nikdy, a procházejí je v pořadí zdrojáku, rodiče dřív než jeho děti. `find()` vrací pole, tedy snímek pořízený předem, takže je bezpečné strom během procházení měnit. Prochází uzly, ne tokeny; k tokenu se dostanete přes uzel, ve kterém sedí, přes `getTokens()` celého podstromu, nebo procházením od `getFirstToken()` metodou `getNext()`.
+
+
+Traverser
+=========
+
+Když potřebujete vidět všechno v pořadí zdrojáku, včetně tokenů, nebo reagovat na vstup i výstup z uzlu, je na to `Traverser`:
+
+```php
+use PhpSyntax\{TraverseAction, Traverser};
+
+Traverser::traverse($file, function (Node|Token $node) {
+	// enter
+}, function (Node|Token $node) {
+	// leave
+});
+```
+
+Callback smí uzel, který dostal, nahradit nebo odstranit; traverser pak do něj ani do jeho náhrady nesestoupí, sourozence odpojené mezitím přeskočí a uzly vložené mezitím nechá dalšímu průchodu. Díky tomu se dá měnit strom přímo během průchodu bez zvláštního režimu.
+
+**Každý `enter` má svůj `leave`**, a to se stejným objektem, i když uzel mezitím ze stromu zmizel. Callback, který si drží hloubku nebo zásobník, tak nemusí řešit chybějící patro. Platí to i pro `TraverseAction::Stop`: do dalších uzlů už průchod nevstoupí, ale ty, do kterých vstoupil, cestou ven opustí, ten zastavující včetně. Pozor na to, že callback může dostat uzel, který ve stromu už není. Týká se to nejen uzlu, který callback sám odstranil, ale i potomků odstraněného předka: když `enter` odstraní rodiče uzlu, traverser do jeho dětí vstoupí dál, protože ty mají rodiče pořád nastaveného, jen ten už v souboru nestojí. Spolehlivě to pozná `$node->getFile() === null` u průchodu souborem; kdo v callbacku mění strom, ať se na to nejdřív zeptá, jinak upraví jen odpojený podstrom.
+
+Callback může průchod řídit návratovou hodnotou:
+
+```php
+Traverser::traverse($file, function ($node) {
+	if ($node instanceof ClosureNode) {
+		return TraverseAction::SkipChildren;   // do tělíčka closure nechceme
+	} elseif ($node instanceof HaltCompilerNode) {
+		return TraverseAction::Stop;           // dál už nic zajímavého není
+	}
+});
+```
+
+`TraverseAction::Stop` platí i jako návratová hodnota `leave`. Cokoli jiného, co callback vrátí, průchod ignoruje, a protože jsou obě odpovědi případy výčtu, arrow funkce jako `fn($node) => $this->visited++`, která vrací hodnotu svého výrazu, průchod nikdy neřídí. Callback smí spustit i vlastní průchod, třeba podstromu, který právě dostal.
+
+
+Nahoru a do stran
+=================
+
+Každý uzel i token zná svého rodiče (`$node->parent`) a od něj se dá jít výš:
+
+```php
+$method = $call->findAncestor(MethodNode::class);   // nejbližší předek dané třídy, nebo null
+$class = $call->findAncestor(ClassLikeNode::class);
+```
+
+Po tokenech se chodí do stran: `$token->getNext()` a `getPrevious()` je následující a předchozí token v souboru bez ohledu na strukturu. `$node->getFirstToken()` a `getLastToken()` jsou okraje uzlu, takže "token před uzlem" je `$node->getFirstToken()->getPrevious()`.
+
+Text uzlu je vlastnost `$node->text`: všechno od prvního tokenu po poslední, bez trivia na okrajích. Hodí se do hlášek i při ladění a je to totéž, co `$token->text`, jen o patro výš.
+
+
+Pozice
+======
+
+```php
+$token->currentLine;     // řádek v aktuálním stavu stromu, od 1
+$token->currentColumn;   // sloupec od 1, ve znacích UTF-8
+$token->currentOffset;   // bajtový offset
+$token->getVisualColumn($style);   // sloupec s tabulátory rozvinutými podle stylu
+$token->line;            // řádek v přečteném souboru, nikdy se nemění
+$token->pos;             // bajtový offset v přečteném souboru
+$node->getStartLine();   // řádky uzlu
+$node->getEndLine();
+$node->isMultiLine();    // končí uvnitř textu uzlu nějaký řádek? Funguje i bez souboru
+```
+
+Rozdíl mezi `currentLine` a `line` je podstatný, jakmile strom měníte: první sleduje změny, druhé je pozice, kterou zná uživatel ze svého souboru, a právě ta patří do hlášení. `line` a `pos` jsou vlastnosti zděděné z `PhpToken`; token, který nevznikl v lexeru, tedy vyrobený konstruktorem nebo naparsovaný jako fragment, má v obou `-1`. Přepíšete-li text jména nebo identifikátoru, nový token si původní pozici ponechá, takže hlášení pořád ukazuje na místo v souboru; token, který vložíte přes `replaceWith()`, má pozici vlastní. Zdroj v jiném kódování než UTF-8 projde bajt po bajtu, ale sloupce se počítají ve znacích UTF-8, takže u něj jsou jen přibližné. Vlastnosti `current*` jsou jen pro čtení a aktuální pozici mají jen tokeny stromu, který visí na `FileNode`; v odpojeném podstromu vrátí `currentLine`, `currentColumn`, `currentOffset`, `getVisualColumn()`, `getStartLine()` i `getEndLine()` hodnotu `null`.
+
+Opačným směrem, od pozice k uzlu, vede soubor. Hodí se, když pozici dodá jiný nástroj nebo editor:
+
+```php
+$node->getOffsetRange();                               // [začátek, konec) v bajtech, konec se nepočítá
+$file->findNode($start, $end, MethodCallNode::class);  // největší uzel třídy, jehož text stojí přesně na těch offsetech
+$token->getFile() === $file;                           // stojí token v tomhle souboru?
+$a->isBefore($b);                                      // stojí token $a v souboru před tokenem $b?
+```
+
+Soubor, ve kterém uzel nebo token stojí, vrátí `getFile()`, u odpojeného podstromu `null`. Pozice počítá index tokenů, který se staví líně. Pořadí tokenů, řádky, offsety i sloupce po změně opravuje jen tam, kam dotazy sahají, takže dotaz na pozici hned po změně stojí tolik, jak daleko od té změny leží. Pozice celého souboru potřebuje jen `findNode()`. Změna struktury k tomu přidá přesun tokenů za místem změny, který stojí úměrně velikosti souboru.
+
+
+Otázky, které si klade každý nástroj
+====================================
+
+Pár otázek si nad kódem položí každý, kdo ho upravuje, a odpovědět na ně pořádně dá práci na dva dny. Strom je proto zodpoví za vás.
+
+```php
+$a->matches($b);             // jsou ty dva uzly stejné, token po tokenu, bez ohledu na mezery?
+$node->getTokenTexts();      // a podle čeho se to pozná: texty tokenů, bez trivia
+$expr->isRepeatableRead();   // dá se výraz vyhodnotit podruhé, aniž by se něco změnilo?
+$expr->getDereferenceKind(); // jak na něj rodič sahá: přes ->, [], (...) nebo ::?
+$expr->isDereferenced();     // táž otázka bez druhu: sahá na něj rodič vůbec?
+$expr->isDereferenceable();  // a naopak: šlo by na jeho člen sáhnout i bez závorek?
+$expr->canNameClass();       // smí stát tam, kde se jmenuje třída?
+$expr->isWritable();         // smí stát tam, kam se přiřazuje?
+$paren->isRedundant();       // můžou tyhle závorky pryč?
+$expr->hasValue();           // je to zapsaná hodnota, ne výpočet?
+$expr->toValue();            // a jaká
+```
+
+`matches()` porovnává texty tokenů, ne trivia, takže `$a->b` a `$a -> b` si odpovídají. `isRepeatableRead()` říká `true` pro proměnné, přístupy k vlastnostem a prvkům, konstanty a literály, pole z takových položek a to, co z nich udělají závorky nebo unární operátor. Všechno ostatní dostane `false`: volání, `new`, přiřazení, `++` a další, co může mít vedlejší účinek, položka pole s `...`, která může spustit generátor, nebo s `&`, která proměnnou založí, ale i čisté výrazy, na které výčet nepamatuje, třeba `$a + $b`, přetypování, ternár nebo `match`. Odpověď `false` tedy neříká, že vedlejší účinek hrozí, jen že ho metoda nevyloučila. Dohromady odpovídají na otázku "opakuje tenhle ternár svou podmínku a smím ji vyhodnotit jen jednou". Odpověď je ale syntaktická: co jazyk za takovým čtením spustí sám, na to strom nevidí, ať jde o magický getter nebo hook za `->`, `ArrayAccess` za `[]`, nebo `__toString()` za interpolovaným řetězcem. Kdo si tohle dovolit nemůže, potřebuje typy, a ty syntaxe nezná.
+
+Texty, podle kterých `matches()` porovnává, dostanete i samostatně jako `getTokenTexts()`. Je to tvar, kterým se kód klíčuje do mapy nebo porovnávají dvě jeho verze, protože na vysázení v něm nezáleží. Měřit se z něj ale nedá: délku kódu čtěte z `$node->text`, který drží zápis i s mezerami tak, jak v souboru stojí.
+
+`isRedundant()` na uzlu `ParenthesizedNode` je z těch otázek nejpracnější a odpovídá se na ni nejčastěji špatně: záleží na prioritě a asociativitě operátoru uvnitř i vně závorek, na tom, jestli se na výsledek přistupuje jako na objekt nebo pole, a na několika zvláštních případech. Každý uzel zapsaný operátorem proto implementuje rozhraní `OperatorNode` s metodou `getPrecedence()`, která vrátí sílu vazby a stranu, ke které se operátor kloní; `isRedundant()` z toho složí odpověď. Kde si jistá není, odpoví `false`.
+
+Vedle priority nese uzel ještě jednu vlastnost. Operátor, který nemá levý operand a jehož pravý sahá, kam mu kód dovolí, se hlásí rozhraním `RightExtendingNode`: šipková funkce, `throw`, `print`, `yield`, `yield from` a `include`. Před sebou nemůže pohltit nic, takže všude, kde za závorkami už nic nestojí, jsou zbytečné bez ohledu na to, jak volně ten výraz váže. `$f = (fn() => 1)` je tedy totéž co `$f = fn() => 1`, kdežto `(fn() => 1) + 2` závorky potřebuje, protože bez nich by tělo funkce pohltilo i tu dvojku.
+
+"Za závorkami" přitom neznamená hned vedle nich. Hledá se první token nejbližšího předka, který ty závorky nekončí, takže `$a + (yield $b) + 1` si je nechá, i když `yield` ten sčítanec končí: za celým sčítáním pořád stojí `+ 1`. Nic před sebou nebere ani prefixový operátor (`!`, `-`, `@`, přetypování), takže zleva váže těsně a `(bool) (!$a)` i `$a ** (-$b)` závorky pustí. A co by naopak mohlo pohltit, co za závorkami následuje, není jen výraz v nich, ale kterýkoli operátor, kterým končí: `(@include $f) !== false` si je nechá kvůli `include`, který uvnitř stojí na konci.
+
+Prioritou to ale nekončí. Ukázkový případ, na kterém se ruční implementace spálí: `::` bere nalevo **jméno třídy**, takže `FOO::class` je řetězec `'FOO'`, kdežto `(FOO)::class` je třída objektu, který ta konstanta drží. Ty závorky tedy nejsou zbytečné, teprve ony z jména dělají výraz. Totéž platí pro `(FOO)::BAR`, `(FOO)::m()`, `(FOO)::$p` a pro `true` a `null`, která se také píšou jako jména. Cokoli jiného nalevo od `::` je výraz tak jako tak, a `->` ani `[]` si na jméno nedělají nárok, takže `(FOO)->x` a `(FOO)[0]` závorky pustí. Podobnou výjimku má pipe: napravo od `|>` přijímá šipkovou funkci jedině v závorkách, takže `$a |> (fn($b) => $b)` si je nechá.
+
+Právě proto se `isDereferenceable()` ptá, **co** za tím výrazem stojí, a bere `DereferenceKind`: `Fetch` pro `->` a `[]` včetně volání metody, `Call` pro `(...)` a `StaticAccess` pro `::`. Odpověď se totiž případ od případu liší, jak je vidět na `FOO`: `FOO->x` projde, `FOO()` je volání úplně jiné věci a `FOO::class` je jméno třídy.
+
+Tentýž `DereferenceKind` vrací `getDereferenceKind()`, jen z opačné strany: řekne, kterým z těch tří způsobů na výraz sahá jeho rodič, a `null`, když na něj nesahá vůbec. `isDereferenced()` je táž otázka položená bez druhu.
+
+`isWritable()` je otázka z druhé strany: smí ten výraz stát nalevo od `=`? Proměnná, prvek pole, statická vlastnost a vlastnost přes `->` ano, přes `?->` **ne**, protože ta se jen čte. A nejde jen o poslední krok: stačí jediné `?->` kdekoli v řetězci, kterým zápis prochází, a odpověď je `false`, protože i `$o?->p->q = 1` je pro PHP chyba. Počítá se i volání metody v řetězci, takže `$o?->m()->p` zapisovatelné není, a stejně dopadne řetězec, který začíná hodnotou bez místa pro zápis: literálem, konstantou, `new` nebo `clone`. `(new Foo)->bar` tedy zapisovatelné není, `foo()->bar` a `Foo::create()->bar` ano. Co stojí vedle toho řetězce, třeba `$a[$b?->c]`, se jen čte a na zapisovatelnost vliv nemá. Destrukturace se na to neptá vůbec: `ListNode` není výraz, protože stojí jedině tam, kam se přiřazuje, a hodnotu vlastní nemá. Sloty, které cíl přiřazení drží, to říkají typem `ExpressionNode|ListNode`, takže kdo se nad nimi ptá na výraz, musí si typ nejdřív zúžit.
+
+```php
+$paren = $expr->findFirst(ParenthesizedNode::class);
+if ($paren->isRedundant()) {
+	$paren->replaceWith($paren->expression); // ($a * $b) + $c  →  $a * $b + $c
+}
+```
+
+Z druhé strany se na tutéž otázku ptá [`replaceWithExpression()` |mutation#Výraz místo výrazu]: kdo vkládá výraz místo výrazu, dostane závorky doplněné přesně tam, kde by je `isRedundant()` za zbytečné neprohlásil, a prioritami se zabývat nemusí.
+
+`hasValue()` a `toValue()` odpovídají na "co je tu napsáno za hodnotu": skaláry, `null`, `true`, `false`, pole i s vnořením a rozbalením, unární plus a minus u čísla, závorky a heredoc bez interpolace. Jméno konstanty hodnota **není**, ani `PHP_INT_MAX`, ani `self::FOO`: co znamená, závisí na kódu okolo, a to už syntaxe neví. `toValue()` nad výrazem, který hodnotu nemá, vyhodí `LogicException`, protože `null` je platná hodnota a musí jít odlišit od "žádná".
