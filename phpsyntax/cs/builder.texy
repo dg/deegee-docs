@@ -1,0 +1,176 @@
+Nové uzly
+*********
+
+.[perex]
+Jak vyrobit kód, který do stromu vložíte: z řetězce, ze šablony, do které dosadíte uzly, jež už držíte, nebo metodou pro to, co určují data. Všechno to dělá jedna třída, `PhpSyntax\Builder`.
+
+
+Kód z řetězce
+=============
+
+Nový kód se nestaví z tokenů, píše se jako text. `Parser` čte jen celý soubor, metodou `parse()`; cokoli menšího přečte builder:
+
+```php
+use PhpSyntax\Builder;
+
+$builder = new Builder;
+$expr = $builder->expression('$this->items[] = $item');
+$stmt = $builder->statement('return null;');
+$type = $builder->type('?array');
+$name = $builder->name('Nette\Utils\Strings');
+```
+
+Tyhle čtyři metody jsou zkratky s přesným návratovým typem. Cokoli dalšího, co ve zdrojáku nestojí samo o sobě, přečte `fragment()`, kterému řeknete, jaký uzel chcete; knihovna zná kód, do kterého ho musí zasadit, aby dával smysl:
+
+```php
+use PhpSyntax\Nodes\{ArrayItemNode, MatchArmNode, ParameterNode};
+
+$param = $builder->fragment(ParameterNode::class, 'int $x = 1');
+$arm = $builder->fragment(MatchArmNode::class, '1, 2 => true');
+$item = $builder->fragment(ArrayItemNode::class, "'key' => \$value");
+```
+
+Funguje to pro výraz, příkaz, typ, jméno, člen třídy, parametr, argument, položku pole, položku importu, větev matche, skupinu atributů, `catch`, `elseif`, položku `use` closure, statickou proměnnou, položku konstanty a hook; třída odvozená od některé z nich se čte ve stejném kódu.
+
+Výsledek je odpojený uzel bez rodiče a bez původních pozic, s prázdnými trivia na okrajích, takže se dá rovnou vložit; kam a jak, říká stránka [Úpravy stromu |mutation]. Vstup, ze kterého by něco přebývalo, builder odmítne a řekne proč: `$a, $b` zadané jako jeden parametr skončí `ParseException` s hláškou `The code is not a single parameter.` Třídu, pro kterou žádný takový kód neexistuje, třeba `FileNode`, odmítne výjimkou `InvalidArgumentException`.
+
+Konstruktory uzlů jsou `@internal`, protože jejich parametry kopírují sloty gramatiky a do těch může další verze PHP přidávat. Nový uzel proto stavějte builderem, ne konstruktorem.
+
+
+Šablona s uzly
+==============
+
+Řetězec ale neunese uzly, které už máte v ruce: operand, který chcete zachovat, volání, které chcete něčím obalit. Na to je šablona. V kódu, který builderu dáte, pojmenujete proměnnou a uzel pro ni předáte pojmenovaným argumentem téhož jména:
+
+```php
+// $sum je výraz $a + $b
+$builder->expression('$x * 2', x: $sum);   // ($a + $b) * 2
+```
+
+Každá proměnná `$x` šablony se nahradí předaným uzlem, a to stejně jako [`replaceWithExpression()` |mutation#Výraz místo výrazu]: v závorkách všude, kde by bez nich výraz znamenal něco jiného. Zástupce, který stojí jako holé jméno členu nebo proměnné, dostane ze stejného důvodu cokoli jiného než proměnnou do složených závorek: `'$order->$name'` s výrazem `$a . "b"` dá `$order->{$a . "b"}`. Šablonou jsou i `statement()` a `fragment()`:
+
+```php
+$return->replaceWith($builder->statement(
+	'return $result ?? $fallback;',
+	result: $return->expression,
+	fallback: $builder->value(''),
+));
+```
+
+Pár pravidel, na která se dá spolehnout:
+
+- Proměnné, které jako zástupce nepojmenujete, zůstanou, jak jsou napsané: v `'$this->set($x)'` se nahradí jen `$x`.
+- Proměnné šablony se najdou dřív, než se kterákoli nahradí, takže proměnná uvnitř dosazeného uzlu se za zástupce nikdy nepovažuje.
+- Zástupce použitý v šabloně dvakrát dostane podruhé kopii: `'isset($v) ? $v : null'` s `v:` nastaveným na `$items[0]` dá `isset($items[0]) ? $items[0] : null`.
+- Zástupce, který v šabloně nestojí, builder odmítne, stejně jako uzel předaný bez jména. Odmítne se i uzel, který na místo zástupce nepatří podle typu slotu, a destrukturace kdekoli jinde než tam, kam se přiřazuje.
+
+Všechno se ověří dřív, než se cokoli pohne, takže odmítnutá šablona nechá stromy, ze kterých uzly přišly, přesně tak, jak byly.
+
+
+Metody pro to, co určují data
+=============================
+
+Šablona je na tvar, který znáte předem. Kde ho určují data, tedy jméno je v proměnné, operátor přichází jako řetězec nebo se mění počet argumentů, je na každou konstrukci metoda. Komentáře v ukázce ukazují výsledek pro uzly, jejichž text odpovídá jménu proměnné, tedy `$order` je výraz `$order` a tak dál:
+
+```php
+$builder->value(['port' => 3306]);                // ['port' => 3306]
+$builder->variable('total');                      // $total
+$builder->constant('PHP_EOL');                    // PHP_EOL
+$builder->propertyFetch($order, 'items');         // $order->items
+$builder->staticPropertyFetch('Cache', 'store');  // Cache::$store
+$builder->classConstantFetch('Order', 'Paid');    // Order::Paid
+$builder->arrayAccess($items, 0);                 // $items[0]
+$builder->call('strlen', [$name]);                // strlen($name)
+$builder->methodCall($order, 'pay', [100, 'currency' => 'EUR']);  // $order->pay(100, currency: 'EUR')
+$builder->staticMethodCall('Order', 'create');    // Order::create()
+$builder->new('DateTime');                        // new DateTime
+$builder->arguments([1, 'flags' => 2]);           // (1, flags: 2)
+$builder->binary($price, '*', $qty);              // $price * $qty
+$builder->unary('!', $paid);                      // !$paid
+$builder->cast('int', $count);                    // (int) $count
+$builder->ternary($paid, 'yes', 'no');            // $paid ? 'yes' : 'no'
+$builder->shortTernary($name, 'anonymous');       // $name ?: 'anonymous'
+$builder->assign($total, 0);                      // $total = 0
+$builder->combinedAssign($total, '+=', $vat);     // $total += $vat
+$builder->parenthesize($sum);                     // ($a + $b)
+```
+
+`value()` zapíše hodnotu jako literál: celé číslo, desetinné číslo tak, aby se přečetlo zpátky jako totéž číslo, `true`, `false`, `null`, řetězec a pole na jednom řádku, s klíči tam, kde nejdou popořadě od nuly. Záporné číslo je operátor `-` před literálem, protože tak ho čte i parser. Výraz vezme, jak je, a co jako literál zapsat nejde, třeba objekt, odmítne výjimkou `InvalidArgumentException`. Stejně se chovají všechny metody, které berou operand nebo argument: hodnota, která není uzel, projde přes `value()`, takže `$builder->binary($a, '===', 1)` napíše `$a === 1`.
+
+Jméno funkce, třídy, metody, vlastnosti i konstanty se dá předat jako řetězec, jako uzel jména, nebo jako výraz. Výraz jiný než proměnná se za `->` a `::` napíše do složených závorek: `propertyFetch($a, $builder->expression('$x . $y'))` dá `$a->{$x . $y}`. `propertyFetch()` a `methodCall()` berou ještě `nullsafe: true` a pak napíšou `?->`.
+
+Několik metod hlídá, co dostanou:
+
+- `constant()` odmítne `true`, `false` a `null`, protože to jsou literály, které píše `value()`.
+- `arrayAccess()` bez indexu napíše `$items[]`; literál `null` jako index se předá jako `value(null)` a dá `$items[null]`.
+- `ternary()` s `null` místo `$then` napíše literál `null`, tedy `$paid ? null : 'no'`; zkrácený tvar `?:` píše `shortTernary()`.
+- `binary()` přijme jen binární operátor, takže `=` odmítne, a `combinedAssign()` jen operátor složeného přiřazení. `unary()` zná `!`, `-`, `+`, `~` a `@` a `cast()` bere typ bez závorek, `int` pro `(int)`.
+- `assign()` a `combinedAssign()` odmítnou cíl, do kterého se přiřadit nedá, třeba `A::B`. Krátké pole jako cíl `assign()` zapíše jako destrukturaci: `[$a, $b] = $pair`.
+- `arguments()` vezme hodnoty a výrazy, `ArgumentNode` tak, jak je (třeba `...$rest`), a pod řetězcovým klíčem pojmenovaný argument. `ArgumentNode` pod řetězcovým klíčem odmítne, protože jméno si nese sám. `call()`, `methodCall()`, `staticMethodCall()` a `new()` berou argumenty ve stejném tvaru; `new()` bez argumentů závorky nenapíše.
+
+
+Co builder dělá s uzly, které dostane
+=====================================
+
+Builder vyrobí tokeny operátorů a oddělovačů sám, s jednou mezerou kolem binárního operátoru, za `=` a za čárkou. S uzly, které dostane, zachází podle toho, kde stojí:
+
+- **Uzel, který stojí ve stromu, vezme jako kopii** bez trivia na okrajích, a to pokaždé, když ho dostane. Soubor se tedy nezmění, dokud výsledek sami nevložíte, a tentýž uzel smíte předat víckrát.
+- **Odpojený uzel vezme, jak je**, jen mu vyčistí okraje. Odpojený uzel předaný dvakrát odmítne výjimkou `LogicException` dřív, než cokoli přesune, protože by ho podruhé musel brát z místa, kam ho právě dal.
+
+Do závorek dá sám to, co by bez nich na novém místě znamenalo něco jiného, a řídí se přitom odpovědí [`isRedundant()` |traversal#Otázky, které si klade každý nástroj]:
+
+```php
+$builder->methodCall($builder->new('Foo'), 'bar');   // (new Foo)->bar()
+$builder->binary($coalesce, '.', $c);                 // ($x ?? $y) . $c, když $coalesce je $x ?? $y
+$builder->call($builder->expression('$a->b'), [1]);   // ($a->b)(1)
+```
+
+Závorky, které už v předaném uzlu jsou, zůstanou. Výsledkem je přesně ten strom, jaký by parser vrátil pro týž text.
+
+Celé to dohromady ukazuje přepis, který z `$a = $a + $b` udělá `$a += $b`, obalí volání dalším voláním a zavolá metodu na novém objektu:
+
+```php
+foreach ($file->find(AssignmentNode::class) as $assign) {
+	[$target, $sum] = [$assign->target, $assign->expression];
+	if ($target instanceof ExpressionNode && $sum instanceof BinaryOpNode && $sum->operator->is('+') && $target->matches($sum->left)) {
+		$assign->replaceWith($builder->combinedAssign($target, '+=', $sum->right));
+	}
+}
+
+$trim = $file->findFirst(FunctionCallNode::class);
+$trim->replaceWith($builder->call('htmlspecialchars', [$trim]));
+
+$format = $file->findFirst(MethodCallNode::class);
+$format->replaceWith($builder->methodCall(
+	$builder->new('Receipt', [$builder->variable('label')]),
+	'render',
+	[$builder->variable('total'), 'precision' => 2],
+));
+```
+
+```
+- 	$total = $total + $vat;   // VAT is always added last
++ 	$total += $vat;   // VAT is always added last
+- 	$label = trim($cart['label']);
++ 	$label = htmlspecialchars(trim($cart['label']));
+- 	return new Invoice($label)->format($total);
++ 	return (new Receipt($label))->render($total, precision: 2);
+```
+
+Operandy původního `+` i volání `trim()` pořád stojí v souboru, takže je builder vzal jako kopie, a `replaceWith()` nový uzel postavil tam, kde byl starý, i s komentářem za příkazem. Kontroly, bez kterých by takový přepis nebyl bezpečný, popisuje oddíl [Otázky, které si klade každý nástroj |traversal#Otázky, které si klade každý nástroj].
+
+
+Jména, řetězce a tokeny
+=======================
+
+Pro nejmenší kousky kódu builder potřeba není, vyrobí je samy třídy:
+
+```php
+NameNode::fromText('Nette\Utils\Strings');   // jméno
+IdentifierNode::fromText('render');          // jméno členu
+StringNode::fromValue("it's", '"');          // řetězcový literál: "it's"
+Token::fromText('!==');                      // token, druh určí lexer: Token::IsNotIdentical
+Trivia::fromText('// fixed');                // komentář, mezera, konec řádku nebo <?php
+```
+
+`Token::fromText()` pustí na text lexer, takže token má přesně ten druh, který mu dá PHP; text, který není jediný token, odmítne. `Trivia::fromText()` pozná mezeru v řádku, jeden konec řádku, komentář, dokumentační komentář i `<?php` s mezerou za ním a cokoli jiného odmítne. Token i trivia se dají vyrobit i konstruktorem z druhu a textu, `new Token(Token::Final, 'final')`, ale tam za to, že druh k textu sedí, odpovídáte vy.

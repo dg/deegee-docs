@@ -1,0 +1,207 @@
+Nodes and Slots
+***************
+
+.[perex]
+What the tree is made of: nodes and their slots named by their role, tokens, lists with separators, names and literals. And where to look up what each node carries.
+
+
+Slots
+=====
+
+Every language construct has its own node class, and every node has **slots** named by their role, not by their text. `IfNode` has `ifKeyword`, `openParen`, `condition`, `closeParen` and `body`; `TernaryNode` has `condition`, `question`, `then`, `colon` and `else`. Paired delimiters are always named `open*` and `close*`, lists have plural names (`statements`, `arguments`, `members`), and a slot that may be empty is marked `?`. All classes live in `PhpSyntax\Nodes`, and the full list with slots is in the [node reference |nodes].
+
+A slot is an ordinary property, so you read it and write it with an assignment:
+
+```php
+$if = $file->findFirst(IfNode::class);
+$if->ifKeyword;   // Token 'if'
+$if->condition;   // ExpressionNode, for example PropertyFetchNode
+$if->body;        // StatementNode, BlockNode for curly braces
+
+$if->condition = $builder->expression('$order->isPaid()');
+```
+
+There is no magic behind the assignment, just a property hook: the node adopts the new value, releases the old one and reports the change to the token index. The page [Modifying the Tree |mutation] explains what this means for the trivia around the replaced node.
+
+The `Slots` constant lists the slot names of a class, in source order:
+
+```php
+IfNode::Slots;   // ifKeyword, openParen, condition, closeParen, body, colon, statements, elseifs, else, endKeyword, semicolon
+```
+
+There are eleven of them, even though `if` has five parts, because of the alternative syntax: the form `if (…): … endif;` uses the same class, just with the slots `colon`, `statements`, `endKeyword` and `semicolon` instead of `body`. Slots that the given form does not use are `null`.
+
+`getChildren()` returns the children of a node in source order; it leaves out `null` slots, but an empty list (for example `elseifs` of an `if` without `elseif`) is among the children. This is the only way to get the children: a node is not iterable, so that there is just one way, and it returns an ordinary array. Lists are the one exception, see below.
+
+```php
+foreach ($class->getChildren() as $child) {
+	// PlainNodeList (attributes), ModifiersNode, Token 'class', IdentifierNode, Token '{', PlainNodeList (members), Token '}'
+}
+```
+
+Two rules that will spare you surprises:
+
+- **The body of a control structure is a `StatementNode`**, not necessarily a block: `if ($a) return;` has a `ReturnNode` directly in `body`. With curly braces, it is a `BlockNode` with a `statements` list.
+- **`else if` is an `ElseNode` whose body is an `IfNode`**; `elseif` is an `ElseifNode`. Classes, interfaces, traits and enums are different nodes (`ClassNode`, `InterfaceNode`, `TraitNode`, `EnumNode`), but all of them, the anonymous class included, implement `ClassLikeNode`, which promises `$name` (`null` for an anonymous class) and `$members`. Similarly, `FunctionLikeNode` promises `$openParen`, `$parameters`, `$closeParen` and `$returnType` for a function, a method, a closure, an arrow function and a hook; for a hook that does not have them, they are `null`. Closures and arrow functions, that is, functions written as an expression, also share `AnonymousFunctionNode` with the `$staticKeyword` slot. All these interfaces can be used as a filter in `find()`. `AttributeAwareNode` works the same way: it promises `$attributes` to all declarations that may carry attributes, that is, members, constants, enum cases and parameters, and because both `ClassLikeNode` and `FunctionLikeNode` extend it, also to all classes and functions. The list is empty when no attribute is written.
+
+Nodes, lists and node interfaces belong to the library. A custom class that extends a node or a list, or implements a node interface, is not supported, and a node interface may get a new member in a new version.
+
+
+Tokens
+======
+
+The leaves of the tree are `Token` objects: a kind (`id`), a text (`text`), and two arrays of trivia, leading and trailing. `Token` extends the native `PhpToken`, and its kind is the id the PHP tokenizer gives the token. The named kinds are constants of the `Token` class with the value of the matching `T_*` constant (`Token::Variable` is `T_VARIABLE`, other examples are `Token::DoubleArrow` and `Token::If`); a single-character token has the ordinal value of the character as its kind (`ord(';')`). The exceptions in naming are `Token::ClassKeyword` and `Token::NamespaceKeyword`, because PHP reserves the class constant name `class` for `::class`, and since version 8.6 the name `namespace` as well. `is()` checks the kind or the text, and it also accepts an array when several values are acceptable:
+
+```php
+$token->is(Token::Variable);     // kind
+$token->is(ord(','));            // kind of a single-character token
+$token->is(['(', '[']);          // text, any of them
+```
+
+The values of the kinds differ between PHP versions, so always compare a kind with a constant, and never store it or write it as a number. Kinds for which PHP has no token are zero or negative: `Token::EndOfFile` at the end of the file and `Token::HaltCompilerData` for the data after `__halt_compiler()`. A token of newer syntax that the lexer emulates on older PHP also has a negative kind, for example `Token::Pipe` for `|>` before PHP 8.5. `$token->getTokenName()`, inherited from `PhpToken`, gives the name of a kind for output.
+
+`is()` with a text compares the text of any token, the content of strings included: in the string `"{$a},{$b}"`, the comma between the two interpolations is a separate string-content token with the text `,`. So when you go through all tokens of a file, check the kind, `is(ord(','))`; otherwise you also match tokens inside strings, inline HTML and heredoc bodies. For a slot whose content you know, for example the operator of a binary operation, the text reads better and means the same. The text of a token is exactly what was in the source, even where PHP includes spaces in the token: the cast `( int )`, inline HTML, the content of a heredoc.
+
+<div class=note>
+**Why `PhpToken`.** Both `Token` and `Trivia` extend the native `PhpToken` class, which sounds obvious: after all, they are PHP tokens. But if we were designing the API from scratch, we would avoid the inheritance, because the parent brought along two things we would have named and guarded differently. Speed won. `PhpToken::tokenize()` creates instances of the `Token` class directly in C, so the lexer does not have to build one more object for each PHP token. In our measurements, a class of our own slowed parsing down by 5%, and a cleaner API was not worth that to us, but maybe we are too pedantic. It is like a furnished apartment: you move in right away and cheaply, but someone else has already arranged the furniture their way. We have to apologize for that furniture twice:
+
+- **`$line` and `$pos` are the original positions**, not the current ones. Their proper names would be `originalLine` and `originalOffset`, but `PhpToken` gave them their names and a child class cannot change them. So the current positions got the prefix, `getCurrentLine()`, `getCurrentColumn()` and `getCurrentOffset()`, and the bare name means "as it was". A token or trivia that was not in the source has `-1` in both, not `null`.
+- **The language does not guard `$text`.** PHP does allow a child class to put a hook on an inherited property, but the native code of `PhpToken` does not know about the hook and reads and writes around it: the object would then have two texts, and `__toString()` would return a different one than `$token->text`. So an agreement takes the place of protection: change the text of a token only with the `setText()` method, which tells the position index about the change, and instead of changing a trivia, take an edited copy of it with the `withText()` method.
+
+Of the inherited methods, `is()` and `getTokenName()` are useful. Just watch out for the inherited `Token::tokenize()`: it returns raw PHP tokens, with spaces and comments as separate pieces, while the library's tokens with trivia come from `Lexer::tokenize()`.
+</div>
+
+
+Lists
+=====
+
+`PlainNodeList<T>` is a list without separators (statements, class members, attribute groups). `SeparatedNodeList<T>` is a list with separators between the items (parameters, arguments, array items, imports), and it also remembers the separators and an optional trailing comma. Both are `NodeList<T>`, and that is the type to use when you do not care which of them it is. A list behaves like a collection, so you can iterate it, count it and index it directly:
+
+```php
+$args = $call->arguments->items;
+$args[0];                       // the first argument; an index outside the list throws OutOfRangeException, $args[5] ?? null just asks
+$args->getItems();              // list<ArgumentNode|VariadicPlaceholderNode|ArgumentPlaceholderNode>, when you need an array
+$args->getSeparators();         // list<Token>, the commas
+$args->hasTrailingSeparator();  // trailing comma
+$args->getTrailingSeparator();  // and its token, or null
+count($args);
+$args->isEmpty();
+$args->indexOf($item);
+
+foreach ($args as $arg) {
+	// the iteration is a snapshot, the list may change during it
+}
+```
+
+A list keeps its items in its own storage, so you change them only with its own methods (`append()`, `insert()`, `insertAfter()`, `insertBefore()`, `removeItem()`), and writing `$args[0] = …` throws an exception; thanks to this, the list always knows what is in it. `$node->getNextSibling()` and `getPreviousSibling()` return the neighbors of an item in a list, and `null` at the ends of the list; for a node that is not a list item, they throw an exception. The empty place between two commas of a destructuring (`[, $b] = …`) is a `SkippedArrayItemNode`, so that the list has an item at every position. The destructuring itself, whether written as `list(…)` or `[…]`, is a `DestructuringNode`.
+
+`ModifiersNode` holds modifiers (`public static readonly`) as tokens in source order. Its properties and a method tell you what they mean:
+
+```php
+$modifiers = $method->modifiers;
+$modifiers->visibility;           // Visibility::Public, Protected or Private
+$modifiers->writeVisibility;      // the write visibility, set separately by public(set) and the like
+$modifiers->getVisibilityToken(); // the token public, protected, private or var, null when none is written
+$modifiers->static;               // and similarly $abstract, $final, $readonly
+```
+
+`$visibility` is the visibility the member really has, so it is never `null`: where none is written, it is `Public`, and `var` is public too. `getVisibilityToken()` tells whether and how the visibility is written. `$writeVisibility` is the write visibility as PHP takes it: the one from `public(set)`, `protected(set)` or `private(set)`, `Protected` for a public `readonly`, because PHP reads it as `protected(set)`, and otherwise the same as `$visibility`. Like `$readonly`, `$writeVisibility` reads only the modifiers themselves, so for a property of a class declared as `readonly class`, it does not take the class's `readonly` into account. That is why, to find out whether a constructor parameter declares a property, you ask `ParameterNode::$promoted`, not the visibility: a parameter with just `readonly` or `private(set)` declares a property too.
+
+The slot a list sits in is named by what it holds: `statements`, `members`, `parameters`, and where the name would only repeat the name of the node, simply `items`. So the arguments of a call are `$call->arguments->items`, not `$call->arguments->arguments`.
+
+
+Names
+=====
+
+`NameNode` is the name of a class, function, constant or namespace; it is one token, including the keywords the grammar allows where a name is expected (`static`, `array`, `readonly`). Its properties tell you more than just its text:
+
+```php
+$name->text;        // 'App\Model\Order', as written
+$name->form;        // NameForm::Unqualified, Qualified, FullyQualified, Relative
+$name->parts;       // ['App', 'Model', 'Order']
+$name->shortName;   // 'Order'
+$name->symbolKind;  // SymbolKind::ClassLike, Function or Constant, based on its place in the tree
+$name->isKeyword();
+$name->isDeclaration();   // does the name introduce a symbol (use, namespace) instead of referring to one?
+$name->isReference();     // does it refer to a symbol that makes sense to resolve?
+$name->equals('App\Model\Order');
+```
+
+The `text` property is writable, and it is the shortest way to rewrite a name: `$call->name->text = 'count'` re-tokenizes the name into the new one and leaves everything around it as it was. `NameNode::fromText('Nette\Utils\Strings')` creates a new name outside the tree, and `IdentifierNode::fromText('render')` creates a member name.
+
+The role is derived from the place in the tree: the same `Foo` is a class after `new`, in a type, after `extends`, `instanceof` or before `::`, a function before `(`, and a constant only as a standalone expression (`$x = Foo;`). PHP keeps classes and namespaces in one table of names, so both are `ClassLike`; `use Foo;` introduces both the class `Foo` and the prefix `Foo\Bar` at the same time, and there is no way to tell them apart. Only the `NameResolver` analysis tells what a name really means, including the imports and the namespace, see [Analyses |analyses].
+
+But the role says only which table of names the name belongs to, not whether it refers to any symbol at all. That is what `isReference()` is for, and it returns `false` in three cases: the name introduces a symbol (`use`, `namespace`), it names a built-in type where a type is written (`int`, `array`), or it is `self`, `static` or `parent` in place of a class, because these stand for a specific class only where they are written. A keyword in the place of a name, on the other hand, is a reference: `readonly(...)` calls the function of that name. This is the question to ask before you pass a name to the resolver, see [Analyses |analyses#NameResolver].
+
+`IdentifierNode` is the name of a member, label, hook or alias (`->name`, `::CONST`, `as Alias`), also one token, even when it is a reserved word. The slot that holds a name is called `name`, so the text of a type is read as `$type->name->text`. To compare it with a name, use `equals()`, which knows from the place in the tree whether PHP ignores case: for a method, a function and a class it does, for a property, a constant and a label it does not.
+
+A name can also be written as an expression (`$a->$b()`, `A::{$name}`), so a node that holds a name has the property `$plainName`: the name as a string, or `null` when the name is an expression. It is available on a variable, a property access and a static property access, a method call and a static method call, and a class constant; for a variable and a static property, it is the name without the dollar sign. On both a property access and a method call, `isOfThis()` tells whether it is a property or a method of `$this`, whether written with `->` or with `?->`.
+
+The role of a name, and whether `equals()` ignores case, are read from where the node is in the tree. Taken out of the tree, the node forgets this: a detached name is always a class. So read what you need to know before you move the node. The same goes for a `use` item, which knows the kind of import (class, function, constant) and the group prefix only from the statement it is in; so you do not move an import into a group as a node, you write it again with `UseNode::addImport()`.
+
+
+Scalars
+=======
+
+Literals keep their text as it was written, and the `toValue()` method returns the value they represent:
+
+```php
+$int->token->text;   // '0o755'
+$int->toValue();     // 493
+$int->base;          // 8
+
+$string->token->text;   // '"a\nb"'
+$string->toValue();     // "a\nb" with a real line ending
+$string->quote;         // '"'
+```
+
+Writing a value is a method, because it takes two things at once: the value, and optionally the quote to write it with. The node takes care of escaping, not you:
+
+```php
+$string->setValue("x'y", "'");           // 'x\'y'
+StringNode::fromValue("it's", '"');      // a new node: "it's"
+StringNode::fromValue('plain');          // 'plain'
+```
+
+`toValue()` reads back whatever `fromValue()` writes; a test of the library ensures this. A bare offset name in an interpolation (`"$row[label]"`) is not a `StringNode` but an `UnquotedStringNode`, so that `StringNode` means one thing and `$quote` is always `'` or `"`.
+
+For a heredoc, first ask `hasInterpolation()`; only then can you read its `toValue()`. The value is the body with the indentation of the closing label removed, and only then are the escape sequences processed, exactly as PHP does it. The indentation belongs to the lines of the source; a line break produced by `\n` does not start a line of the source, so no indentation is removed after it. An interpolated string is a node of its own, made of its parts.
+
+
+Imports
+=======
+
+The `use` statement has a single class, `UseNode`, however it is written. The group form (`use App\{A, B};`) is just another way of writing the same statement, not a different node, so it also has the slots `prefix`, `backslash`, `openBrace` and `closeBrace` filled in, and `isGroup()` returns `true` for it. Each item can tell what it really imports and of what kind, even though the prefix and the `function` keyword stand one level higher:
+
+```php
+$use->symbolKind;           // SymbolKind::ClassLike, Function or Constant
+
+foreach ($use->items as $item) {
+	$item->fullName;        // 'App\A', even in the group form
+	$item->symbolKind;      // its own kind, otherwise the kind of the statement
+	$item->getStatement();  // the UseNode it belongs to
+}
+```
+
+**An item means what its statement says**, including the group prefix. That is why an item is not moved between statements but written again, with the `addImport()` method, which adds it to an existing statement and writes it the way that statement writes its items: with the full name in a plain import, relative to the prefix in a group:
+
+```php
+// use App\Model\Item;
+$use->addImport('App\Model\Order');            // use App\Model\Item, App\Model\Order;
+$use->addImport('App\Model\Cart', 'Basket');   // use App\Model\Item, App\Model\Order, App\Model\Cart as Basket;
+
+// use App\Model\{Item};
+$group->addImport('App\Model\Order');          // use App\Model\{Item, Order};
+```
+
+A new standalone `use` statement is created like any other statement, with `$builder->statement()`, and inserted into the list of statements, see [Modifying the Tree |mutation#Lists].
+
+The method throws an exception for a name that does not fall under the group prefix, instead of writing an import that means something else. Without the third parameter, an index, the new item goes to the end of the list.
+
+`$item->remove()` does the opposite. It removes the item like any other node, and when the item is the only one in the statement, it removes the whole statement with its line, because a `use` that imports nothing is not code.
+
+
+The Root
+========
+
+`FileNode` is the root. Its `statements` slot holds all statements of the file, and the statements after `namespace App;` are nested in a `NamespaceNode`, so each namespace has its statements as children. The last token of the file is always `EndOfFile` with an empty text, which carries what comes after the last line of code: the blank lines and comments below it. A comment on the line of the last statement belongs to that statement, by the rule about trivia. `FileNode::$revision` grows with every change of the tree; it is useful for telling that something has changed, not for counting changes.
