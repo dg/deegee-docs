@@ -1,0 +1,77 @@
+PhpSyntax
+*********
+
+{{maintitle: PhpSyntax: Lossless Syntax Tree and PHP Parser}}
+{{description: PhpSyntax is a PHP parser that builds a lossless syntax tree (CST). It keeps every space and comment, so the printed tree is the original file byte for byte. For tools that read and change code.}}
+
+.[perex]
+A lossless syntax tree for PHP with zero dependencies: every token, every space and every comment has its place, and the printed tree is the original file byte for byte. A PHP parser for tools that read code and change it.
+
+For years I thought parsing PHP was a solved problem: there is [nikic/PHP-Parser |https://github.com/nikic/PHP-Parser], PHPStan and Rector are built on it, what more could you want? Then I wrote a script to rename one function call in hundreds of files, and I realized how much work it takes **not to rewrite everything else along the way**. That is exactly what PhpSyntax is for.
+
+
+A Tree That Throws Nothing Away
+===============================
+
+An abstract syntax tree (AST) throws away what does not matter for the meaning of the program: spaces, blank lines, comments inside expressions, extra parentheses. For analyzing code, that is the right choice. But as soon as you want to **change code and write it back**, you also need what the AST threw away. Otherwise you reprint the file in your own style instead of the author's.
+
+PhpSyntax builds a **concrete** syntax tree (CST): every token of the source has its own slot (`IfNode` has `ifKeyword`, `openParen`, `condition`, `closeParen` and `body`), and whitespace and comments hang on the tokens as so-called trivia. PhpSyntax guarantees this:
+
+```php
+Printer::print($parser->parse($code)) === $code
+```
+
+It holds byte for byte for anything PHP accepts: a BOM, a hashbang, CR and CRLF line endings, closing tags, inline HTML, `__halt_compiler()`. It is an invariant checked by tests on a large corpus of code. It is also the simplest test you can run on your own code: parse, print, compare.
+
+
+When to Use PhpSyntax and When nikic/PHP-Parser
+===============================================
+
+Both libraries have their place, and it is fair to say which.
+
+Use **nikic/PHP-Parser** when you need to know what the code does: types, control flow, and the evaluation of constant expressions, even where they refer to a constant or a class. (PhpSyntax reads a value only where it is written out, that is, for literals and arrays of literals, see [toValue() |traversal#Questions Every Tool Asks].) PHP-Parser also has a huge ecosystem of tools around it. Use it, too, when you need a tree even from code with a syntax error: PHP-Parser can recover from the error and return a partial tree, while PhpSyntax stops with an exception, because its grammar has no error recovery.
+
+Use **PhpSyntax** when you want to touch the code and leave the rest alone: rename a call, add an argument, move a comment, fix spacing, and get a diff exactly as big as the change. That is the job of formatters, migration scripts, generators that modify existing files, and tools for bulk rewrites. The biggest of them is [DressCode |dresscode:], a PHP code style checker and fixer, which PhpSyntax was originally built for.
+
+
+Installation
+============
+
+```shell
+composer require phpsyntax/phpsyntax
+```
+
+The library runs on PHP 8.4 to 8.6 and requires the `tokenizer` extension. Apart from that, it **has no dependencies**: `composer.json` lists only PHP and tokenizer, no `mbstring` and no `ctype`, so nothing can conflict with what your project already has. It reads code written for newer PHP even on an older runtime, see [Parsing |parsing#Newer Syntax on Older PHP].
+
+
+An Example
+==========
+
+```php
+use PhpSyntax\Nodes\Expression\FunctionCallNode;
+use PhpSyntax\Nodes\NameNode;
+use PhpSyntax\Parser;
+use PhpSyntax\Printer;
+
+$file = new Parser()->parse(file_get_contents('Order.php'));
+
+foreach ($file->find(FunctionCallNode::class) as $call) {
+	if ($call->name instanceof NameNode && $call->name->text === 'sizeof') {
+		$call->name->text = 'count';
+	}
+}
+
+file_put_contents('Order.php', Printer::print($file));
+```
+
+Every call written as `sizeof(...)` was renamed, and nothing else in the file changed. The forms `\sizeof()` and `SizeOf()` call the same function but are written differently; if you want to catch them too, ask the [NameResolver |analyses#NameResolver] what the name means. The next pages explain how to traverse the tree, how to change it and what it knows about names: [Parsing and Printing |parsing], [Nodes and Slots |tree], [Trivia |trivia], [Traversing the Tree |traversal], [Modifying the Tree |mutation], [Building New Nodes |builder], [Analyses |analyses] and the [node reference |nodes].
+
+
+Performance
+===========
+
+The parser is a generated LALR(1) automaton over a grammar taken from [nikic/PHP-Parser |https://github.com/nikic/PHP-Parser], and it processes a file faster than the PHP-Parser automaton; building one node costs about the same. The difference is in how much the tree carries: whitespace and comments are attached to tokens, and there are about a third more nodes, because lists, parentheses and modifiers are separate nodes. So parsing ordinary code takes about 1.5× longer than with PHP-Parser, and 1.2× longer than with PHP-Parser set up to link parent nodes, that is, to build a tree of the same kind, where each node knows its parent. On an ordinary machine, parsing and printing a whole `vendor/` directory with three hundred files and 1.2 MB of code takes less than a second, about two milliseconds per file.
+
+After parsing, the richer tree pays for itself. A query that climbs to ancestors takes about half the time, because PHP-Parser first has to walk the whole tree to link the parents. A change, printing included, costs about as much as format-preserving printing in PHP-Parser, which keeps the old tree and its tokens next to the new tree. Here, printing just joins the texts of the tokens. The tree takes less memory than PHP-Parser together with the tokens that format-preserving printing needs, and the cold start is the same. The index of token positions is built lazily and is not rebuilt in full after a change, so the cost of a query right after a change depends on how far from that change it looks.
+
+Measured in September 2026 on PHP 8.5 without opcache, against PHP-Parser 5.9, on code samples from Symfony, Laravel, WordPress, Nette and others.
