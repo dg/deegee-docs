@@ -1,0 +1,1386 @@
+Přehled uzlů
+************
+
+.[perex]
+Referenční přehled všech tříd uzlů: popis a sloty i s typem. Slot je pojmenovaný podle role, ne podle textu (`ifKeyword`, `openParen`, `body`), párové oddělovače jsou vždy `open*` a `close*`, seznamy jsou v množném čísle a `?` značí slot, který může být prázdný.
+
+Všechny třídy leží v `PhpSyntax\Nodes`. Slot typu `Token` drží jeden token, `NodeList<T>` seznam uzlů bez oddělovačů a `SeparatedNodeList<T>` seznam s oddělovači (čárkami, středníky) mezi položkami. Jak strom číst a měnit, říkají stránky [Uzly a sloty |tree] a [Úpravy stromu |mutation].
+
+
+Společné uzly
+=============
+
+Kořen souboru, jména, seznamy, parametry, argumenty, atributy a části řídicích struktur.
+
+
+NameNode
+--------
+
+Name of a class, function, constant or namespace: one token of any kind, including keywords the grammar accepts as names (static, array, readonly). Rozšiřuje `Node`.
+
+- `token`: `Token`
+
+
+IdentifierNode
+--------------
+
+Identifier of a member, label, hook or alias: one token of any kind, including reserved words. Rozšiřuje `Node`.
+
+- `token`: `Token`
+
+
+ArgumentListNode
+----------------
+
+Parenthesized arguments of a call, instantiation, attribute or exit. Rozšiřuje `Node`.
+
+- `openParen`: `Token`
+- `items`: `SeparatedNodeList<ArgumentNode|VariadicPlaceholderNode|ArgumentPlaceholderNode>`
+- `closeParen`: `Token`
+
+
+ArgumentNode
+------------
+
+Argument of a call: optionally named, by reference or unpacked. Rozšiřuje `Node`.
+
+- `name`: `?IdentifierNode`
+- `colon`: `?Token`
+- `ampersand`: `?Token`
+- `ellipsis`: `?Token`
+- `value`: `ExpressionNode`
+
+
+VariadicPlaceholderNode
+-----------------------
+
+The ... placeholder of a first-class callable: f(...). Rozšiřuje `Node`.
+
+- `ellipsis`: `Token`
+
+
+ArgumentPlaceholderNode
+-----------------------
+
+The ? placeholder of a partial function application, optionally named: f(?), f(name: ?). Rozšiřuje `Node`.
+
+- `name`: `?IdentifierNode`
+- `colon`: `?Token`
+- `question`: `Token`
+
+
+ParameterNode
+-------------
+
+Parameter of a function, method, closure or hook; with modifiers it promotes a property. Rozšiřuje `Node`.
+
+- `attributes`: `NodeList<AttributeGroupNode>`
+- `modifiers`: `ModifiersNode`
+- `type`: `?TypeNode`
+- `ampersand`: `?Token`
+- `ellipsis`: `?Token`
+- `variable`: `Expression\VariableNode`
+- `equals`: `?Token`
+- `default`: `?ExpressionNode`
+- `openBrace`: `?Token`
+- `hooks`: `?NodeList<Member\PropertyHookNode>`
+- `closeBrace`: `?Token`
+
+
+AttributeGroupNode
+------------------
+
+One `#[...]` group of attributes. Rozšiřuje `Node`.
+
+- `openAttribute`: `Token`
+- `attributes`: `SeparatedNodeList<AttributeNode>`
+- `closeBracket`: `Token`
+
+
+AttributeNode
+-------------
+
+Attribute with optional arguments. Rozšiřuje `Node`.
+
+- `name`: `NameNode`
+- `arguments`: `?ArgumentListNode`
+
+
+ModifiersNode
+-------------
+
+Modifier keywords in source order (public, static, readonly, abstract, final, var, public(set)...); may be empty. Rozšiřuje `Node`.
+
+- `tokens`: `list<Token>`
+
+
+NodeList
+--------
+
+Sequence of nodes without separators: statements, members, attribute groups. Rozšiřuje `Node`.
+
+- `items`: `list<Node>`
+
+
+SeparatedNodeList
+-----------------
+
+Sequence of nodes with separator tokens between them and an optional trailing separator: parameters, arguments, array items, imports. An item may be an empty node standing for nothing between two separators `([, $b]` = $x). Rozšiřuje `Node`.
+
+- `items`: `list<Node>`
+- `separators`: `list<Token>`
+
+
+FileNode
+--------
+
+Root of the tree: the statements of a file and the end-of-file token carrying the trailing trivia. Rozšiřuje `Node`.
+
+- `statements`: `NodeList<StatementNode>`
+- `endOfFile`: `Token`
+
+
+AnonymousClassNode
+------------------
+
+Anonymous class in a new expression: new class(...) extends A implements B { ... }. Rozšiřuje `Node`. Implementuje `ClassLikeNode`.
+
+- `attributes`: `NodeList<AttributeGroupNode>`
+- `modifiers`: `ModifiersNode`
+- `classKeyword`: `Token`
+- `arguments`: `?ArgumentListNode`
+- `extendsKeyword`: `?Token`
+- `extends`: `?NameNode`
+- `implementsKeyword`: `?Token`
+- `implements`: `?SeparatedNodeList<NameNode>`
+- `openBrace`: `Token`
+- `members`: `NodeList<MemberNode>`
+- `closeBrace`: `Token`
+
+
+ArrayItemNode
+-------------
+
+Item of an array literal or a destructuring list: value with optional key, by reference or unpacked. Rozšiřuje `Node`.
+
+- `key`: `?ExpressionNode`
+- `doubleArrow`: `?Token`
+- `ampersand`: `?Token`
+- `ellipsis`: `?Token`
+- `value`: `ExpressionNode|Expression\ListNode`
+
+
+EmptyArrayItemNode
+------------------
+
+Skipped item of a destructuring list `([, $b]` = $x); has no tokens. Rozšiřuje `Node`.
+
+
+MatchArmNode
+------------
+
+Arm of a match expression: the values compared with the subject, or default, and the result. Rozšiřuje `Node`.
+
+- `values`: `?SeparatedNodeList<ExpressionNode>`
+- `defaultKeyword`: `?Token`
+- `defaultComma`: `?Token`
+- `doubleArrow`: `Token`
+- `body`: `ExpressionNode`
+
+
+ClosureUsesNode
+---------------
+
+The use (...) clause of a closure. Rozšiřuje `Node`.
+
+- `useKeyword`: `Token`
+- `openParen`: `Token`
+- `variables`: `SeparatedNodeList<ClosureUseNode>`
+- `closeParen`: `Token`
+
+
+ClosureUseNode
+--------------
+
+Variable captured by a closure, optionally by reference. Rozšiřuje `Node`.
+
+- `ampersand`: `?Token`
+- `variable`: `Expression\VariableNode`
+
+
+ElseIfNode
+----------
+
+elseif branch, in either syntax. Rozšiřuje `Node`.
+
+- `elseifKeyword`: `Token`
+- `openParen`: `Token`
+- `condition`: `ExpressionNode`
+- `closeParen`: `Token`
+- `body`: `?StatementNode`
+- `colon`: `?Token`
+- `statements`: `?NodeList<StatementNode>`
+
+
+ElseNode
+--------
+
+else branch, in either syntax; else if is an else with an if statement as the body. Rozšiřuje `Node`.
+
+- `elseKeyword`: `Token`
+- `body`: `?StatementNode`
+- `colon`: `?Token`
+- `statements`: `?NodeList<StatementNode>`
+
+
+CaseNode
+--------
+
+case or default of a switch; the separator is a colon or a semicolon. Rozšiřuje `Node`.
+
+- `caseKeyword`: `Token`
+- `value`: `?ExpressionNode`
+- `separator`: `Token`
+- `statements`: `NodeList<StatementNode>`
+
+
+CatchNode
+---------
+
+catch clause with one or more types and an optional variable. Rozšiřuje `Node`.
+
+- `catchKeyword`: `Token`
+- `openParen`: `Token`
+- `types`: `SeparatedNodeList<NameNode>`
+- `variable`: `?Expression\VariableNode`
+- `closeParen`: `Token`
+- `body`: `Statement\BlockNode`
+
+
+FinallyNode
+-----------
+
+finally clause. Rozšiřuje `Node`.
+
+- `finallyKeyword`: `Token`
+- `body`: `Statement\BlockNode`
+
+
+DeclareItemNode
+---------------
+
+Directive of a declare statement: strict_types=1. Rozšiřuje `Node`.
+
+- `name`: `IdentifierNode`
+- `equals`: `Token`
+- `value`: `ExpressionNode`
+
+
+StaticVariableNode
+------------------
+
+Variable of a static statement with an optional initializer. Rozšiřuje `Node`.
+
+- `variable`: `Expression\VariableNode`
+- `equals`: `?Token`
+- `default`: `?ExpressionNode`
+
+
+UseItemNode
+-----------
+
+Imported name with an optional alias; the type (function, const) appears only inside a group use. What the item imports is said by the statement it stands in, the prefix of a group included, so an item is not moved from one statement to another but written anew by UseNode::addImport(). Rozšiřuje `Node`.
+
+- `type`: `?Token`
+- `name`: `NameNode`
+- `asKeyword`: `?Token`
+- `alias`: `?IdentifierNode`
+
+
+ConstItemNode
+-------------
+
+Constant of a const statement or a class constant declaration. Rozšiřuje `Node`.
+
+- `name`: `IdentifierNode`
+- `equals`: `Token`
+- `value`: `ExpressionNode`
+
+
+Příkazy
+=======
+
+Deklarace a příkazy: `Statement\*` jsou položky seznamu `stmts` souboru, bloku nebo jmenného prostoru.
+
+
+NamespaceNode
+-------------
+
+namespace declaration; after "namespace A;" the following statements are nested in it. Rozšiřuje `StatementNode`.
+
+- `namespaceKeyword`: `Token`
+- `name`: `?NameNode`
+- `semicolon`: `?Token`
+- `openBrace`: `?Token`
+- `statements`: `NodeList<StatementNode>`
+- `closeBrace`: `?Token`
+
+
+UseNode
+-------
+
+use import of classes, functions or constants, written item by item or as a group under a prefix (use A\{B, C};), which fills the slots the other form leaves empty. Rozšiřuje `StatementNode`.
+
+- `useKeyword`: `Token`
+- `type`: `?Token`
+- `prefix`: `?NameNode`
+- `namespaceSeparator`: `?Token`
+- `openBrace`: `?Token`
+- `items`: `SeparatedNodeList<UseItemNode>`
+- `closeBrace`: `?Token`
+- `semicolon`: `Token`
+
+
+ConstNode
+---------
+
+const statement outside a class. Rozšiřuje `StatementNode`.
+
+- `attributes`: `NodeList<AttributeGroupNode>`
+- `constKeyword`: `Token`
+- `items`: `SeparatedNodeList<ConstItemNode>`
+- `semicolon`: `Token`
+
+
+HaltCompilerNode
+----------------
+
+__halt_compiler(); the rest of the file is the data token. Rozšiřuje `StatementNode`.
+
+- `haltKeyword`: `Token`
+- `openParen`: `Token`
+- `closeParen`: `Token`
+- `semicolon`: `Token`
+- `data`: `?Token`
+
+
+InlineHtmlNode
+--------------
+
+Text outside PHP tags, including a BOM or a hashbang line. Rozšiřuje `StatementNode`.
+
+- `html`: `Token`
+
+
+EmptyStatementNode
+------------------
+
+Bare semicolon, or a close tag after a terminated statement. Rozšiřuje `StatementNode`.
+
+- `semicolon`: `Token`
+
+
+ExpressionStatementNode
+-----------------------
+
+Expression as a statement. Rozšiřuje `StatementNode`.
+
+- `expression`: `ExpressionNode`
+- `semicolon`: `Token`
+
+
+BlockNode
+---------
+
+Statements in braces. Rozšiřuje `StatementNode`.
+
+- `openBrace`: `Token`
+- `statements`: `NodeList<StatementNode>`
+- `closeBrace`: `Token`
+
+
+IfNode
+------
+
+if statement in either syntax; the body is a statement, the alternative syntax fills statements. Rozšiřuje `StatementNode`.
+
+- `ifKeyword`: `Token`
+- `openParen`: `Token`
+- `condition`: `ExpressionNode`
+- `closeParen`: `Token`
+- `body`: `?StatementNode`
+- `colon`: `?Token`
+- `statements`: `?NodeList<StatementNode>`
+- `elseifs`: `NodeList<ElseIfNode>`
+- `else`: `?ElseNode`
+- `endKeyword`: `?Token`
+- `semicolon`: `?Token`
+
+
+WhileNode
+---------
+
+while loop in either syntax. Rozšiřuje `StatementNode`.
+
+- `whileKeyword`: `Token`
+- `openParen`: `Token`
+- `condition`: `ExpressionNode`
+- `closeParen`: `Token`
+- `body`: `?StatementNode`
+- `colon`: `?Token`
+- `statements`: `?NodeList<StatementNode>`
+- `endKeyword`: `?Token`
+- `semicolon`: `?Token`
+
+
+DoWhileNode
+-----------
+
+do-while loop. Rozšiřuje `StatementNode`.
+
+- `doKeyword`: `Token`
+- `body`: `StatementNode`
+- `whileKeyword`: `Token`
+- `openParen`: `Token`
+- `condition`: `ExpressionNode`
+- `closeParen`: `Token`
+- `semicolon`: `Token`
+
+
+ForNode
+-------
+
+for loop in either syntax. Rozšiřuje `StatementNode`.
+
+- `forKeyword`: `Token`
+- `openParen`: `Token`
+- `initializers`: `SeparatedNodeList<ExpressionNode>`
+- `firstSemicolon`: `Token`
+- `conditions`: `SeparatedNodeList<ExpressionNode>`
+- `secondSemicolon`: `Token`
+- `updates`: `SeparatedNodeList<ExpressionNode>`
+- `closeParen`: `Token`
+- `body`: `?StatementNode`
+- `colon`: `?Token`
+- `statements`: `?NodeList<StatementNode>`
+- `endKeyword`: `?Token`
+- `semicolon`: `?Token`
+
+
+ForeachNode
+-----------
+
+foreach loop in either syntax. Rozšiřuje `StatementNode`.
+
+- `foreachKeyword`: `Token`
+- `openParen`: `Token`
+- `expression`: `ExpressionNode`
+- `asKeyword`: `Token`
+- `key`: `?ExpressionNode`
+- `doubleArrow`: `?Token`
+- `ampersand`: `?Token`
+- `value`: `ExpressionNode|Expression\ListNode`
+- `closeParen`: `Token`
+- `body`: `?StatementNode`
+- `colon`: `?Token`
+- `statements`: `?NodeList<StatementNode>`
+- `endKeyword`: `?Token`
+- `semicolon`: `?Token`
+
+
+SwitchNode
+----------
+
+switch statement in either syntax; a semicolon may precede the first case. Rozšiřuje `StatementNode`.
+
+- `switchKeyword`: `Token`
+- `openParen`: `Token`
+- `subject`: `ExpressionNode`
+- `closeParen`: `Token`
+- `openBrace`: `?Token`
+- `colon`: `?Token`
+- `leadingSemicolon`: `?Token`
+- `cases`: `NodeList<CaseNode>`
+- `closeBrace`: `?Token`
+- `endKeyword`: `?Token`
+- `semicolon`: `?Token`
+
+
+BreakNode
+---------
+
+break with an optional level. Rozšiřuje `StatementNode`.
+
+- `breakKeyword`: `Token`
+- `expression`: `?ExpressionNode`
+- `semicolon`: `Token`
+
+
+ContinueNode
+------------
+
+continue with an optional level. Rozšiřuje `StatementNode`.
+
+- `continueKeyword`: `Token`
+- `expression`: `?ExpressionNode`
+- `semicolon`: `Token`
+
+
+ReturnNode
+----------
+
+return with an optional value. Rozšiřuje `StatementNode`.
+
+- `returnKeyword`: `Token`
+- `expression`: `?ExpressionNode`
+- `semicolon`: `Token`
+
+
+GlobalNode
+----------
+
+global statement. Rozšiřuje `StatementNode`.
+
+- `globalKeyword`: `Token`
+- `variables`: `SeparatedNodeList<ExpressionNode>`
+- `semicolon`: `Token`
+
+
+StaticNode
+----------
+
+static variable declaration. Rozšiřuje `StatementNode`.
+
+- `staticKeyword`: `Token`
+- `variables`: `SeparatedNodeList<StaticVariableNode>`
+- `semicolon`: `Token`
+
+
+EchoNode
+--------
+
+echo statement; the keyword may be the <?= open tag and the semicolon a close tag. Rozšiřuje `StatementNode`.
+
+- `echoKeyword`: `Token`
+- `expressions`: `SeparatedNodeList<ExpressionNode>`
+- `semicolon`: `Token`
+
+
+UnsetNode
+---------
+
+unset statement. Rozšiřuje `StatementNode`.
+
+- `unsetKeyword`: `Token`
+- `openParen`: `Token`
+- `variables`: `SeparatedNodeList<ExpressionNode>`
+- `closeParen`: `Token`
+- `semicolon`: `Token`
+
+
+DeclareNode
+-----------
+
+declare statement in its three forms: with a body, with a bare semicolon, or with the alternative syntax. Rozšiřuje `StatementNode`.
+
+- `declareKeyword`: `Token`
+- `openParen`: `Token`
+- `items`: `SeparatedNodeList<DeclareItemNode>`
+- `closeParen`: `Token`
+- `body`: `?StatementNode`
+- `colon`: `?Token`
+- `statements`: `?NodeList<StatementNode>`
+- `endKeyword`: `?Token`
+- `semicolon`: `?Token`
+
+
+TryNode
+-------
+
+try statement with catches and an optional finally. Rozšiřuje `StatementNode`.
+
+- `tryKeyword`: `Token`
+- `body`: `Statement\BlockNode`
+- `catches`: `NodeList<CatchNode>`
+- `finally`: `?FinallyNode`
+
+
+GotoNode
+--------
+
+goto statement. Rozšiřuje `StatementNode`.
+
+- `gotoKeyword`: `Token`
+- `label`: `IdentifierNode`
+- `semicolon`: `Token`
+
+
+LabelNode
+---------
+
+Label for goto. Rozšiřuje `StatementNode`.
+
+- `name`: `IdentifierNode`
+- `colon`: `Token`
+
+
+FunctionNode
+------------
+
+Function declaration. Rozšiřuje `StatementNode`. Implementuje `FunctionLikeNode`.
+
+- `attributes`: `NodeList<AttributeGroupNode>`
+- `functionKeyword`: `Token`
+- `ampersand`: `?Token`
+- `name`: `IdentifierNode`
+- `openParen`: `Token`
+- `parameters`: `SeparatedNodeList<ParameterNode>`
+- `closeParen`: `Token`
+- `colon`: `?Token`
+- `returnType`: `?TypeNode`
+- `body`: `Statement\BlockNode`
+
+
+ClassNode
+---------
+
+Class declaration. Rozšiřuje `StatementNode`. Implementuje `ClassLikeNode`.
+
+- `attributes`: `NodeList<AttributeGroupNode>`
+- `modifiers`: `ModifiersNode`
+- `classKeyword`: `Token`
+- `name`: `IdentifierNode`
+- `extendsKeyword`: `?Token`
+- `extends`: `?NameNode`
+- `implementsKeyword`: `?Token`
+- `implements`: `?SeparatedNodeList<NameNode>`
+- `openBrace`: `Token`
+- `members`: `NodeList<MemberNode>`
+- `closeBrace`: `Token`
+
+
+InterfaceNode
+-------------
+
+Interface declaration. Rozšiřuje `StatementNode`. Implementuje `ClassLikeNode`.
+
+- `attributes`: `NodeList<AttributeGroupNode>`
+- `interfaceKeyword`: `Token`
+- `name`: `IdentifierNode`
+- `extendsKeyword`: `?Token`
+- `extends`: `?SeparatedNodeList<NameNode>`
+- `openBrace`: `Token`
+- `members`: `NodeList<MemberNode>`
+- `closeBrace`: `Token`
+
+
+TraitNode
+---------
+
+Trait declaration. Rozšiřuje `StatementNode`. Implementuje `ClassLikeNode`.
+
+- `attributes`: `NodeList<AttributeGroupNode>`
+- `traitKeyword`: `Token`
+- `name`: `IdentifierNode`
+- `openBrace`: `Token`
+- `members`: `NodeList<MemberNode>`
+- `closeBrace`: `Token`
+
+
+EnumNode
+--------
+
+Enum declaration, optionally backed by a scalar type. Rozšiřuje `StatementNode`. Implementuje `ClassLikeNode`.
+
+- `attributes`: `NodeList<AttributeGroupNode>`
+- `enumKeyword`: `Token`
+- `name`: `IdentifierNode`
+- `colon`: `?Token`
+- `scalarType`: `?TypeNode`
+- `implementsKeyword`: `?Token`
+- `implements`: `?SeparatedNodeList<NameNode>`
+- `openBrace`: `Token`
+- `members`: `NodeList<MemberNode>`
+- `closeBrace`: `Token`
+
+
+Výrazy
+======
+
+Vše, co má hodnotu: operátory, volání, přístupy, přiřazení, closures.
+
+
+VariableNode
+------------
+
+Variable: $a, $$a, ${expr}; inside a string also a bare name in ${name}. Rozšiřuje `ExpressionNode`.
+
+- `dollar`: `?Token`
+- `openBrace`: `?Token`
+- `name`: `Token|ExpressionNode`
+- `closeBrace`: `?Token`
+
+
+ArrayAccessNode
+---------------
+
+Array or string offset access: `$a[$i]`, `$a[]`. Rozšiřuje `ExpressionNode`.
+
+- `expression`: `ExpressionNode`
+- `openBracket`: `Token`
+- `index`: `?ExpressionNode`
+- `closeBracket`: `Token`
+
+
+PropertyFetchNode
+-----------------
+
+Property access with -> or ?->; the name may be an identifier, a variable or a braced expression. Rozšiřuje `ExpressionNode`.
+
+- `object`: `ExpressionNode`
+- `operator`: `Token`
+- `openBrace`: `?Token`
+- `name`: `IdentifierNode|ExpressionNode`
+- `closeBrace`: `?Token`
+
+
+StaticPropertyFetchNode
+-----------------------
+
+Static property access: A::$b, A::$$b, A::${expr}. The name is written the way a variable is, dollar and braces included, but it names a property. Rozšiřuje `ExpressionNode`.
+
+- `class`: `NameNode|ExpressionNode`
+- `doubleColon`: `Token`
+- `dollar`: `?Token`
+- `openBrace`: `?Token`
+- `name`: `Token|ExpressionNode`
+- `closeBrace`: `?Token`
+
+
+ClassConstantFetchNode
+----------------------
+
+Class constant access: A::B, A::class, A::{expr}. Rozšiřuje `ExpressionNode`.
+
+- `class`: `NameNode|ExpressionNode`
+- `doubleColon`: `Token`
+- `openBrace`: `?Token`
+- `name`: `IdentifierNode|ExpressionNode`
+- `closeBrace`: `?Token`
+
+
+ConstantFetchNode
+-----------------
+
+Constant access by name: FOO, \Foo\BAR. Rozšiřuje `ExpressionNode`.
+
+- `name`: `NameNode`
+
+
+FunctionCallNode
+----------------
+
+Function call by name or on an expression. Rozšiřuje `ExpressionNode`.
+
+- `name`: `NameNode|ExpressionNode`
+- `arguments`: `ArgumentListNode`
+
+
+MethodCallNode
+--------------
+
+Method call with -> or ?->. Rozšiřuje `ExpressionNode`.
+
+- `object`: `ExpressionNode`
+- `operator`: `Token`
+- `openBrace`: `?Token`
+- `name`: `IdentifierNode|ExpressionNode`
+- `closeBrace`: `?Token`
+- `arguments`: `ArgumentListNode`
+
+
+StaticMethodCallNode
+--------------------
+
+Static method call: A::b(), $a::b(), A::{expr}(). Rozšiřuje `ExpressionNode`.
+
+- `class`: `NameNode|ExpressionNode`
+- `doubleColon`: `Token`
+- `openBrace`: `?Token`
+- `name`: `IdentifierNode|ExpressionNode`
+- `closeBrace`: `?Token`
+- `arguments`: `ArgumentListNode`
+
+
+NewNode
+-------
+
+Instantiation of a named, dynamic or anonymous class. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
+
+- `newKeyword`: `Token`
+- `class`: `NameNode|ExpressionNode|AnonymousClassNode`
+- `arguments`: `?ArgumentListNode`
+
+
+ArrayNode
+---------
+
+Array literal in either syntax: `[...]` or array(...). A short array standing where a place is assigned to destructures instead, and is a ListNode. Rozšiřuje `ExpressionNode`.
+
+- `arrayKeyword`: `?Token`
+- `openDelimiter`: `Token`
+- `items`: `SeparatedNodeList<ArrayItemNode|EmptyArrayItemNode>`
+- `closeDelimiter`: `Token`
+
+
+ListNode
+--------
+
+Destructuring, written `list(...)` or `[...]`; the keyword is null for the short form. A short array is a literal until it stands where a place is assigned to, which is where it becomes one of these. It is no expression: it never carries a value. Rozšiřuje `Node`.
+
+- `listKeyword`: `?Token`
+- `openDelimiter`: `Token`
+- `items`: `SeparatedNodeList<ArrayItemNode|EmptyArrayItemNode>`
+- `closeDelimiter`: `Token`
+
+
+AssignmentNode
+--------------
+
+Assignment `$a = $b`, whose operator is always `=`. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
+
+- `target`: `ExpressionNode|Expression\ListNode`
+- `operator`: `Token`
+- `expression`: `ExpressionNode`
+
+
+CombinedAssignmentNode
+----------------------
+
+Combined assignment `$a += $b`, whose operator token tells which operation is baked into it. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
+
+- `target`: `ExpressionNode`
+- `operator`: `Token`
+- `expression`: `ExpressionNode`
+
+
+AssignmentByReferenceNode
+-------------------------
+
+Assignment by reference `$a = &$b`; the grammar takes a variable or a new expression on the right. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
+
+- `target`: `ExpressionNode`
+- `equals`: `Token`
+- `ampersand`: `Token`
+- `expression`: `ExpressionNode`
+
+
+BinaryOpNode
+------------
+
+Binary operation; the operator token tells which (arithmetic, comparison, logical, bitwise, concatenation, coalesce, pipe). Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
+
+- `left`: `ExpressionNode`
+- `operator`: `Token`
+- `right`: `ExpressionNode`
+
+
+UnaryOpNode
+-----------
+
+Unary operation written before its operand: +, -, !, ~, @; ++ and -- are a PrefixOpNode, the way the grammar tells them apart. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
+
+- `operator`: `Token`
+- `expression`: `ExpressionNode`
+
+
+PrefixOpNode
+------------
+
+Prefix increment or decrement. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
+
+- `operator`: `Token`
+- `target`: `ExpressionNode`
+
+
+PostfixOpNode
+-------------
+
+Postfix increment or decrement. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
+
+- `target`: `ExpressionNode`
+- `operator`: `Token`
+
+
+CastNode
+--------
+
+Type cast; the cast token keeps its spelling including inner whitespace: ( int ). Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
+
+- `cast`: `Token`
+- `expression`: `ExpressionNode`
+
+
+TernaryNode
+-----------
+
+Ternary conditional `$a ? $b : $c`, or the elvis form `$a ?: $c` leaving `then` empty. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
+
+- `condition`: `ExpressionNode`
+- `question`: `Token`
+- `then`: `?ExpressionNode`
+- `colon`: `Token`
+- `else`: `ExpressionNode`
+
+
+InstanceofNode
+--------------
+
+instanceof check against a name or a dynamic class. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
+
+- `expression`: `ExpressionNode`
+- `instanceofKeyword`: `Token`
+- `class`: `NameNode|ExpressionNode`
+
+
+ParenthesizedNode
+-----------------
+
+Expression in parentheses. Rozšiřuje `ExpressionNode`.
+
+- `openParen`: `Token`
+- `expression`: `ExpressionNode`
+- `closeParen`: `Token`
+
+
+IssetNode
+---------
+
+isset(...) with one or more variables. Rozšiřuje `ExpressionNode`.
+
+- `issetKeyword`: `Token`
+- `openParen`: `Token`
+- `variables`: `SeparatedNodeList<ExpressionNode>`
+- `closeParen`: `Token`
+
+
+EmptyNode
+---------
+
+empty(...). Rozšiřuje `ExpressionNode`.
+
+- `emptyKeyword`: `Token`
+- `openParen`: `Token`
+- `expression`: `ExpressionNode`
+- `closeParen`: `Token`
+
+
+EvalNode
+--------
+
+eval(...). Rozšiřuje `ExpressionNode`.
+
+- `evalKeyword`: `Token`
+- `openParen`: `Token`
+- `expression`: `ExpressionNode`
+- `closeParen`: `Token`
+
+
+IncludeNode
+-----------
+
+include, include_once, require or require_once; the keyword token tells which. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
+
+- `includeKeyword`: `Token`
+- `expression`: `ExpressionNode`
+
+
+ExitNode
+--------
+
+exit or die with optional arguments. Rozšiřuje `ExpressionNode`.
+
+- `exitKeyword`: `Token`
+- `arguments`: `?ArgumentListNode`
+
+
+PrintNode
+---------
+
+print expression. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
+
+- `printKeyword`: `Token`
+- `expression`: `ExpressionNode`
+
+
+YieldNode
+---------
+
+yield, yield $value or yield $key => $value. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
+
+- `yieldKeyword`: `Token`
+- `key`: `?ExpressionNode`
+- `doubleArrow`: `?Token`
+- `value`: `?ExpressionNode`
+
+
+YieldFromNode
+-------------
+
+yield from expression. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
+
+- `yieldFromKeyword`: `Token`
+- `expression`: `ExpressionNode`
+
+
+ThrowNode
+---------
+
+throw expression. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
+
+- `throwKeyword`: `Token`
+- `expression`: `ExpressionNode`
+
+
+CloneNode
+---------
+
+clone expression; clone(...) with arguments is a function call. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
+
+- `cloneKeyword`: `Token`
+- `expression`: `ExpressionNode`
+
+
+MatchNode
+---------
+
+match expression. Rozšiřuje `ExpressionNode`.
+
+- `matchKeyword`: `Token`
+- `openParen`: `Token`
+- `subject`: `ExpressionNode`
+- `closeParen`: `Token`
+- `openBrace`: `Token`
+- `arms`: `SeparatedNodeList<MatchArmNode>`
+- `closeBrace`: `Token`
+
+
+ClosureNode
+-----------
+
+Anonymous function, optionally static, with captured variables. Rozšiřuje `ExpressionNode`. Implementuje `FunctionLikeNode`.
+
+- `attributes`: `NodeList<AttributeGroupNode>`
+- `staticKeyword`: `?Token`
+- `functionKeyword`: `Token`
+- `ampersand`: `?Token`
+- `openParen`: `Token`
+- `parameters`: `SeparatedNodeList<ParameterNode>`
+- `closeParen`: `Token`
+- `uses`: `?ClosureUsesNode`
+- `colon`: `?Token`
+- `returnType`: `?TypeNode`
+- `body`: `Statement\BlockNode`
+
+
+ArrowFunctionNode
+-----------------
+
+Arrow function fn(...) => expr, optionally static. Rozšiřuje `ExpressionNode`. Implementuje `FunctionLikeNode`, `OperatorNode`.
+
+- `attributes`: `NodeList<AttributeGroupNode>`
+- `staticKeyword`: `?Token`
+- `fnKeyword`: `Token`
+- `ampersand`: `?Token`
+- `openParen`: `Token`
+- `parameters`: `SeparatedNodeList<ParameterNode>`
+- `closeParen`: `Token`
+- `colon`: `?Token`
+- `returnType`: `?TypeNode`
+- `doubleArrow`: `Token`
+- `expression`: `ExpressionNode`
+
+
+ShellExecNode
+-------------
+
+Command in backticks with interpolation. Rozšiřuje `ExpressionNode`.
+
+- `openBacktick`: `Token`
+- `parts`: `NodeList<Scalar\InterpolatedStringPartNode|Scalar\InterpolationNode|ExpressionNode>`
+- `closeBacktick`: `Token`
+
+
+Členy tříd
+==========
+
+Vlastnosti, konstanty, metody, případy výčtu, hooky a použití traitů.
+
+
+PropertyNode
+------------
+
+Property declaration; one or more properties, optionally with hooks. Rozšiřuje `MemberNode`.
+
+- `attributes`: `NodeList<AttributeGroupNode>`
+- `modifiers`: `ModifiersNode`
+- `type`: `?TypeNode`
+- `items`: `SeparatedNodeList<Member\PropertyItemNode>`
+- `semicolon`: `?Token`
+- `openBrace`: `?Token`
+- `hooks`: `?NodeList<Member\PropertyHookNode>`
+- `closeBrace`: `?Token`
+
+
+PropertyItemNode
+----------------
+
+One property of a declaration with an optional default. Rozšiřuje `Node`.
+
+- `name`: `Token`
+- `equals`: `?Token`
+- `default`: `?ExpressionNode`
+
+
+PropertyHookNode
+----------------
+
+Property hook (get, set) with a block body, an arrow body or none. Rozšiřuje `Node`. Implementuje `FunctionLikeNode`.
+
+- `attributes`: `NodeList<AttributeGroupNode>`
+- `modifiers`: `ModifiersNode`
+- `ampersand`: `?Token`
+- `name`: `IdentifierNode`
+- `openParen`: `?Token`
+- `parameters`: `?SeparatedNodeList<ParameterNode>`
+- `closeParen`: `?Token`
+- `body`: `?Statement\BlockNode`
+- `doubleArrow`: `?Token`
+- `expression`: `?ExpressionNode`
+- `semicolon`: `?Token`
+
+
+ClassConstNode
+--------------
+
+Class constant declaration, optionally typed. Rozšiřuje `MemberNode`.
+
+- `attributes`: `NodeList<AttributeGroupNode>`
+- `modifiers`: `ModifiersNode`
+- `constKeyword`: `Token`
+- `type`: `?TypeNode`
+- `items`: `SeparatedNodeList<ConstItemNode>`
+- `semicolon`: `Token`
+
+
+MethodNode
+----------
+
+Method declaration; abstract and interface methods end with a semicolon instead of a body. Rozšiřuje `MemberNode`. Implementuje `FunctionLikeNode`.
+
+- `attributes`: `NodeList<AttributeGroupNode>`
+- `modifiers`: `ModifiersNode`
+- `functionKeyword`: `Token`
+- `ampersand`: `?Token`
+- `name`: `IdentifierNode`
+- `openParen`: `Token`
+- `parameters`: `SeparatedNodeList<ParameterNode>`
+- `closeParen`: `Token`
+- `colon`: `?Token`
+- `returnType`: `?TypeNode`
+- `body`: `?Statement\BlockNode`
+- `semicolon`: `?Token`
+
+
+TraitUseNode
+------------
+
+use of traits with optional adaptations in braces. Rozšiřuje `MemberNode`.
+
+- `useKeyword`: `Token`
+- `traits`: `SeparatedNodeList<NameNode>`
+- `semicolon`: `?Token`
+- `openBrace`: `?Token`
+- `adaptations`: `?NodeList<Member\TraitAdaptationNode>`
+- `closeBrace`: `?Token`
+
+
+TraitPrecedenceNode
+-------------------
+
+Trait adaptation A::m insteadof B;. Rozšiřuje `Member\TraitAdaptationNode`.
+
+- `trait`: `NameNode`
+- `doubleColon`: `Token`
+- `method`: `IdentifierNode`
+- `insteadofKeyword`: `Token`
+- `traits`: `SeparatedNodeList<NameNode>`
+- `semicolon`: `Token`
+
+
+TraitAliasNode
+--------------
+
+Trait adaptation m as `[modifier]` `[alias]`;. Rozšiřuje `Member\TraitAdaptationNode`.
+
+- `trait`: `?NameNode`
+- `doubleColon`: `?Token`
+- `method`: `IdentifierNode`
+- `asKeyword`: `Token`
+- `modifier`: `?Token`
+- `alias`: `?IdentifierNode`
+- `semicolon`: `Token`
+
+
+EnumCaseNode
+------------
+
+Enum case with an optional backing value. Rozšiřuje `MemberNode`.
+
+- `attributes`: `NodeList<AttributeGroupNode>`
+- `caseKeyword`: `Token`
+- `name`: `IdentifierNode`
+- `equals`: `?Token`
+- `value`: `?ExpressionNode`
+- `semicolon`: `Token`
+
+
+Skaláry
+=======
+
+Čísla, řetězce a jejich interpolace, magické konstanty; text zůstává tak, jak byl zapsán.
+
+
+IntegerNode
+-----------
+
+Integer literal in any base, kept as written. Rozšiřuje `ScalarNode`.
+
+- `token`: `Token`
+
+
+FloatNode
+---------
+
+Literal PHP reads as a float, kept as written. That is not the same as float syntax: an integer literal beyond the integer range is a float to PHP whatever its base (0xFFFFFFFFFFFFFFFF as much as 9223372036854775808), and the lexer hands it over as one, so such a literal is a node of this class. Rozšiřuje `ScalarNode`.
+
+- `token`: `Token`
+
+
+BooleanNode
+-----------
+
+Boolean literal, kept in the letter case and with the leading backslash it is written with: true, FALSE, \True. Rozšiřuje `ScalarNode`.
+
+- `token`: `Token`
+
+
+NullNode
+--------
+
+Null literal, kept in the letter case and with the leading backslash it is written with: null, NULL, \Null. Rozšiřuje `ScalarNode`.
+
+- `token`: `Token`
+
+
+StringNode
+----------
+
+String literal without interpolation, quotes included. Rozšiřuje `ScalarNode`.
+
+- `token`: `Token`
+
+
+UnquotedStringNode
+------------------
+
+Name of an offset written without quotes inside an interpolated string `("$row[label]")`, which PHP reads as a string; having no delimiter, it stands for itself and holds no escape sequence. Rozšiřuje `ScalarNode`.
+
+- `token`: `Token`
+
+
+MagicConstantNode
+-----------------
+
+Magic constant: __LINE__, __FILE__, __DIR__, __CLASS__, __TRAIT__, __METHOD__, __FUNCTION__, __PROPERTY__, __NAMESPACE__. Rozšiřuje `ScalarNode`.
+
+- `token`: `Token`
+
+
+InterpolatedStringNode
+----------------------
+
+Double-quoted string with interpolated variables or expressions. Rozšiřuje `ScalarNode`.
+
+- `openQuote`: `Token`
+- `parts`: `NodeList<Scalar\InterpolatedStringPartNode|Scalar\InterpolationNode|ExpressionNode>`
+- `closeQuote`: `Token`
+
+
+HeredocNode
+-----------
+
+Heredoc or nowdoc; the closing delimiter keeps its indentation, the parts keep theirs. Rozšiřuje `ScalarNode`.
+
+- `openDelimiter`: `Token`
+- `parts`: `NodeList<Scalar\InterpolatedStringPartNode|Scalar\InterpolationNode|ExpressionNode>`
+- `closeDelimiter`: `Token`
+
+
+InterpolatedStringPartNode
+--------------------------
+
+Literal text between interpolations, whitespace included. What its escape sequences mean depends on the string it stands in, so the string is what resolves them, with PhpSyntax\Escaping. Rozšiřuje `Node`.
+
+- `token`: `Token`
+
+
+InterpolationNode
+-----------------
+
+Braced interpolation inside a string: {$expr} or ${name}. Rozšiřuje `Node`.
+
+- `openBrace`: `Token`
+- `expression`: `ExpressionNode`
+- `closeBrace`: `Token`
+
+
+Typy
+====
+
+Typové deklarace parametrů, vlastností a návratových hodnot.
+
+
+NamedTypeNode
+-------------
+
+Type given by a name: builtin (int, static, array, callable) or a class. Rozšiřuje `TypeNode`.
+
+- `name`: `NameNode`
+
+
+NullableTypeNode
+----------------
+
+Nullable type: ?T. Rozšiřuje `TypeNode`.
+
+- `question`: `Token`
+- `type`: `TypeNode`
+
+
+UnionTypeNode
+-------------
+
+Union type A|B; a member may be a parenthesized intersection (DNF). Rozšiřuje `TypeNode`.
+
+- `types`: `SeparatedNodeList<TypeNode>`
+
+
+IntersectionTypeNode
+--------------------
+
+Intersection type A&B, parenthesized inside a union. Rozšiřuje `TypeNode`.
+
+- `openParen`: `?Token`
+- `types`: `SeparatedNodeList<TypeNode>`
+- `closeParen`: `?Token`
