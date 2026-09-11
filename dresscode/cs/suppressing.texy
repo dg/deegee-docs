@@ -15,11 +15,11 @@ Výjimky z pravidel osobně nemám rád a do kódu je nepíšu; když už, tak v
 | jeden řádek nebo příkaz | `// dresscode:ignore` | v kódu |
 | blok | `dresscode:disable` a `dresscode:enable` | v kódu |
 | celý soubor | `dresscode:ignore-file` | v kódu |
-| cesta | `excludeRulePaths`, `excludePaths` | v konfiguraci |
+| cesta | `excludeRulePaths`, `excludePaths`, blok `for` | v konfiguraci |
 
 Vedle nich stojí **baseline**, která není výjimka z pravidla, ale z času: zapíše porušení, která v projektu jsou dnes, a hlásí jen ta nová.
 
-Ať zvolíte kteroukoli, platí jedna věc: **potlačené porušení se neopraví.** Pravidlo smí kód změnit jen poté, co porušení ohlásilo a hlášení prošlo, a hlídá to jádro nástroje, ne autor pravidla. Potlačení tedy není jen ticho ve výpisu, ale skutečné vypnutí.
+Ať zvolíte kteroukoli, platí jedna věc: **potlačené porušení se neopraví.** Pravidlo smí kód změnit jen poté, co porušení ohlásilo a hlášení prošlo, a hlídá to jádro nástroje, ne autor pravidla. Potlačení tedy není jen ticho ve výpisu, ale skutečné vypnutí. Totéž platí pro baseline: co zná, se neopraví, takže `fix` změní přesně to, co `check` hlásí.
 
 
 Potlačení na řádku
@@ -79,6 +79,14 @@ excludeRulePaths:
 
 Zbytek pravidel takový soubor zkontroluje normálně. Celé cesty vynechá `excludePaths`; obojí popisuje stránka [Konfigurace |configuration#Cesty].
 
+Často ale pravidlo pro tu cestu nemá zmizet, jen platit s jinou hodnotou: testy mají jinou hlavičku než zdrojáky, ne žádnou. Na to je blok [`for` |configuration#Jiná pravidla pro část projektu], který dá souborům odpovídajícím vzoru vlastní vrstvu pravidel:
+
+```neon
+for:
+	- files: [tests/**.phpt]
+	  rules: {dresscode/blank-lines: {afterImports: 2}}
+```
+
 
 Baseline
 ========
@@ -111,7 +119,7 @@ files:
 			fingerprint: a91a46b053d6d827
 ```
 
-Otisk se počítá z pravidla, zprávy a obsahu řádku, ne z jeho čísla, takže baseline přežije úpravy jinde v souboru. Porušení, která jsou v baseline, se nehlásí ani neopravují, a shrnutí běhu je přizná, aby nikdo nežil v domnění, že je uklizeno:
+Otisk se počítá z pravidla, zprávy a obsahu řádku, ne z jeho čísla, takže baseline přežije úpravy jinde v souboru. Porušení, která jsou v baseline, se nehlásí ani neopravují, a to už ve chvíli, kdy je pravidlo hlásí: jádro hlášení zamítne stejně, jako by na řádku stál `dresscode:ignore`, a pravidlo kód nechá. První `fix` nad souborem s baseline proto změní jen to, co by `check` vypsal, a ne celý soubor, což je přesně to, co chcete od hooku po dvouřádkové úpravě. Migrace velkého projektu se tím stává prací po kusech: vyškrtnete z baseline, co chcete opravit, a `fix` opraví právě to. Shrnutí běhu porušení v baseline přizná, aby nikdo nežil v domnění, že je uklizeno:
 
 /--pre .[terminal]
 OK  1408 violations in the baseline in 214 files

@@ -2,9 +2,9 @@ braces-position
 ***************
 
 .[perex]
-Otevírací složená závorka stojí u tříd a funkcí na vlastním řádku a u řídicích struktur, closures a anonymních tříd na řádku hlavičky; tělo začíná na novém řádku a zavírací závorka má řádek pro sebe.
+Otevírací složená závorka stojí u tříd a funkcí na vlastním řádku a u řídicích struktur, closures a anonymních tříd na řádku hlavičky; tělo začíná na novém řádku, zavírací závorka má řádek pro sebe a `else`, `catch` či `finally` stojí na jejím řádku.
 
-Opravuje · v presetech `dresscode/per`, `dresscode/psr12`, `dresscode/nette` · pokrývá `braces_position`, `PSR2.Classes.ClassDeclaration`, `Squiz.Functions.MultiLineFunctionDeclaration` .[rule-info]
+Opravuje · v presetech `dresscode/per`, `dresscode/psr12`, `dresscode/nette`, `dresscode/symfony`, `dresscode/nette-style` · pokrývá `braces_position`, `control_structure_continuation_position`, `PSR2.Classes.ClassDeclaration`, `Squiz.ControlStructures.ControlSignature`, `Squiz.Functions.MultiLineFunctionDeclaration` .[rule-info]
 
 
 Co pravidlo hlídá
@@ -12,7 +12,9 @@ Co pravidlo hlídá
 
 Kam patří `{`, je nejviditelnější rozhodnutí každého stylu a zároveň to, na kterém se styly nejčastěji rozcházejí. Pravidlo má pro každý druh konstrukce volbu: třídy, rozhraní, traity a výčty (`classes`), anonymní třídy, anonymní funkce a řídicí struktury. Výchozí hodnoty jsou ty z PSR-12 a z [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/]: deklarace mají závorku na dalším řádku, všechno ostatní na témže. U funkce s parametry na několika řádcích rozhoduje volba `multiLineParameters`, protože tam říká PER něco jiného než některé domácí styly.
 
-Vedle otevírací závorky pravidlo hlídá, že za ní tělo začíná na novém řádku a že zavírací závorka stojí na řádku sama. Výjimky jsou tři a každá má vlastní volbu: closure (anonymní funkce) napsaná celá na jednom řádku (`allowSingleLineAnonymousFunctions`), prázdná anonymní třída zapsaná jako `{}` (`emptyAnonymousClasses`) a prázdné tělo třídy nebo funkce jako `{}` (`emptyBodies`). Property hooky mají závorku na řádku vlastnosti a zkrácený zápis `{ get; set; }` zůstává, kdežto rozepsané hooky dostanou každý svůj řádek.
+Vedle otevírací závorky pravidlo hlídá, že za ní tělo začíná na novém řádku a že zavírací závorka stojí na řádku sama. Výjimky jsou tři a každá má vlastní volbu: closure (anonymní funkce) napsaná celá na jednom řádku (`singleLineAnonymousFunctions`), prázdná anonymní třída zapsaná jako `{}` (`emptyAnonymousClasses`) a prázdné tělo třídy nebo funkce jako `{}` (`emptyBodies`). Property hooky mají závorku na řádku vlastnosti a zkrácený zápis `{ get; set; }` zůstává, kdežto rozepsané hooky dostanou každý svůj řádek.
+
+K závorkám patří i klíčové slovo, které strukturu za zavírací závorkou rozvíjí: `else`, `elseif`, `catch`, `finally` a `while` u `do`. Kam se píše, říká volba `continuation`: na řádek zavírací závorky jako `} else {`, nebo na řádek další.
 
 Pravidlo přesouvá jen závorky. Kde pak řádek stojí, tedy jeho odsazení, je věc pravidla `indentation`.
 
@@ -200,15 +202,15 @@ if ($ready)
 ```
 
 
-allowSingleLineAnonymousFunctions .[option]
--------------------------------------------
+singleLineAnonymousFunctions .[option]
+--------------------------------------
 
-`bool`, výchozí `true`. Closure napsaná celá na jednom řádku smí tak zůstat. Presety `dresscode/psr12` a `dresscode/per` to zakazují, protože PSR-12 chce tělo každé closure na vlastních řádcích.
+`allowed` nebo `expanded`, výchozí `allowed`. Closure napsaná celá na jednom řádku smí tak zůstat, nebo dostane závorky na stejná místa jako každá jiná. Presety `dresscode/psr12` a `dresscode/per` nastavují `expanded`, protože PSR-12 chce tělo každé closure na vlastních řádcích.
 
 ```neon
 rules:
 	dresscode/braces-position:
-		allowSingleLineAnonymousFunctions: false
+		singleLineAnonymousFunctions: expanded
 ```
 
 ```php .[before]
@@ -277,12 +279,60 @@ class Point
 ```
 
 
+continuation .[option]
+----------------------
+
+`sameLine` nebo `nextLine`, výchozí `sameLine`. Klíčové slovo, které strukturu rozvíjí (`else`, `elseif`, `catch`, `finally`, `while` u `do`), stojí na řádku zavírací závorky, nebo na dalším.
+
+```php .[before]
+try {
+	connect();
+}
+catch (ConnectionException $e) {  // No line break before the catch keyword
+	retry();
+}
+```
+
+```php .[after]
+try {
+	connect();
+} catch (ConnectionException $e) {
+	retry();
+}
+```
+
+Styl, který každou větev začíná na novém řádku, nastaví `nextLine`:
+
+```neon
+rules:
+	dresscode/braces-position:
+		continuation: nextLine
+```
+
+```php .[before]
+if ($ready) {
+	start();
+} else {  // A line break before the else keyword
+	wait();
+}
+```
+
+```php .[after]
+if ($ready) {
+	start();
+}
+else {
+	wait();
+}
+```
+
+
 Související pravidla
 ====================
 
 - `indentation` odsadí řádky, které tohle pravidlo otevřelo
 - `control-structure-braces` doplní závorky kolem těla řídicí struktury, které je nemá
-- `continuation-position` umístí `else`, `catch` a `finally` k zavírací závorce
+- [blank-lines |blank-lines] rozhoduje o prázdných řádcích za otevírací a před zavírací závorkou
 
 
 Zdroj

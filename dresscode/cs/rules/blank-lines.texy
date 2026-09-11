@@ -1,0 +1,673 @@
+blank-lines
+***********
+
+.[perex]
+Prázdné řádky tam, kde je standard chce: v hlavičce souboru kolem `declare`, `namespace` a importů, ve třídě mezi metodami a členy, za otevírací a před zavírací závorkou bloku a kolem příkazů jako `return`.
+
+Opravuje · v presetech `dresscode/per`, `dresscode/psr12`, `dresscode/nette`, `dresscode/symfony`, `dresscode/nette-style` · pokrývá `blank_line_after_namespace`, `blank_line_after_opening_tag`, `blank_line_before_statement`, `blank_line_between_import_groups`, `blank_lines_before_namespace`, `no_blank_lines_after_class_opening`, `no_blank_lines_after_phpdoc`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Files.FileHeader`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Attributes.AttributeAndTargetSpacing`, `SlevomatCodingStandard.Classes.ConstantSpacing`, `SlevomatCodingStandard.Classes.EmptyLinesAroundClassBraces`, `SlevomatCodingStandard.Classes.PropertySpacing`, `SlevomatCodingStandard.Classes.TraitUseSpacing`, `SlevomatCodingStandard.ControlStructures.BlockControlStructureSpacing`, `SlevomatCodingStandard.ControlStructures.JumpStatementsSpacing`, `Squiz.WhiteSpace.ControlStructureSpacing`, `Squiz.WhiteSpace.FunctionOpeningBraceSpace`, `Squiz.WhiteSpace.FunctionSpacing` .[rule-info]
+
+
+Co pravidlo hlídá
+=================
+
+Prázdné řádky jsou to, co dělá soubor čitelným na první pohled: hlavička oddělená od kódu, metody od sebe výrazně, vlastnosti a konstanty pohromadě, komentář přilepený k tomu, co popisuje. Všechna taková místa hlídá jedno pravidlo a každé z nich má vlastní volbu, ve čtyřech skupinách:
+
+- **hlavička souboru**: za otevíracím tagem, kolem `namespace`, za importy a mezi jejich skupinami, před první deklarací;
+- **třída**: mezi metodami (v rozhraní zvlášť), před první a za poslední metodou, za otevírací a před zavírací závorkou třídy, kolem `use` traitů, mezi vlastnostmi, konstantami a případy výčtu, před dokumentovaným členem a mezi dokumentačním komentářem či atributem a deklarací;
+- **blok**: za otevírací a před zavírací závorkou těla funkce nebo řídicí struktury;
+- **příkazy**: před příkazem daného druhu a za ním, třeba prázdný řádek před `return`.
+
+Každá volba je buď počet prázdných řádků, nebo rozsah `[min, max]` s otevřeným koncem zapsaným jako `null`, nebo `keep`, které dané místo nechá, jak je. Rozsah se hodí tam, kde chcete připustit dvojí zápis: `betweenMembers: [0, 1]` dovolí psát vlastnosti těsně pod sebe i oddělené jedním řádkem, ale dva už ne. Počet, který do rozsahu nespadá, pravidlo posune k nejbližší povolené hodnotě.
+
+Výchozí hodnoty odpovídají stylu se dvěma prázdnými řádky mezi metodami. Preset `dresscode/psr12` nechává na `keep` všechno, o čem PSR-12 mlčí (počet řádků mezi metodami a členy), `dresscode/nette-style` má vlastní čísla pro hlavičku i třídu. Protože se mapa voleb slévá s presetem po klíčích, změníte jedno místo jediným klíčem a ostatní zůstanou, jak je preset nastavil; testy s jinou hlavičkou dostanou jiné číslo v bloku [`for` |/configuration#Jiná pravidla pro část projektu].
+
+
+Příklad
+=======
+
+```php .[before]
+class Cart
+{
+
+	private array $items = [];  // Expected 0 blank lines before the property, 1 found
+	public function add(Item $item): void  // Expected 2 blank lines before the method, 0 found
+	{
+		$this->items[] = $item;
+	}
+
+	public function total(): int  // Expected 2 blank lines before the method, 1 found
+	{
+		return array_sum($this->items);
+	}
+}
+```
+
+```php .[after]
+class Cart
+{
+	private array $items = [];
+
+
+	public function add(Item $item): void
+	{
+		$this->items[] = $item;
+	}
+
+
+	public function total(): int
+	{
+		return array_sum($this->items);
+	}
+}
+```
+
+
+Volby: hlavička souboru
+=======================
+
+
+afterOpeningTag .[option]
+-------------------------
+
+Počet, rozsah nebo `keep`, výchozí `1`. Za řádkem s `<?php`, na kterém pak žádný kód nestojí. Soubor s HTML mimo PHP tagy si svůj tag nechá. Styl, který píše `declare(strict_types=1)` na řádek tagu, nastaví `keep`; tak to dělá `dresscode/nette-style`.
+
+```php .[before]
+<?php  // Expected 1 blank line before the declare, 0 found
+declare(strict_types=1);
+```
+
+```php .[after]
+<?php
+
+declare(strict_types=1);
+```
+
+
+beforeNamespace .[option]
+-------------------------
+
+Počet, rozsah nebo `keep`, výchozí `1`. Před deklarací jmenného prostoru.
+
+```php .[before]
+<?php
+
+declare(strict_types=1);
+namespace App;  // Expected 1 blank line before the namespace, 0 found
+```
+
+```php .[after]
+<?php
+
+declare(strict_types=1);
+
+namespace App;
+```
+
+
+afterNamespace .[option]
+------------------------
+
+Počet, rozsah nebo `keep`, výchozí `1`. Za deklarací jmenného prostoru bez složených závorek.
+
+```php .[before]
+<?php
+
+namespace App;
+use App\Model\User;  // Expected 1 blank line before the import, 0 found
+```
+
+```php .[after]
+<?php
+
+namespace App;
+
+use App\Model\User;
+```
+
+
+afterImports .[option]
+----------------------
+
+Počet, rozsah nebo `keep`, výchozí `1`. Za posledním importem, před zbytkem kódu.
+
+```php .[before]
+<?php
+
+namespace App;
+
+use App\Model\User;
+$user = new User;  // Expected 1 blank line before the statement, 0 found
+```
+
+```php .[after]
+<?php
+
+namespace App;
+
+use App\Model\User;
+
+$user = new User;
+```
+
+
+betweenImportGroups .[option]
+-----------------------------
+
+Počet, rozsah nebo `keep`, výchozí `1`. Mezi importy tříd, funkcí a konstant. Importy jedné skupiny mezi sebou prázdný řádek nemají nikdy.
+
+```php .[before]
+<?php
+
+namespace App;
+
+use App\Model\User;
+use function App\format;  // Expected 1 blank line before the import, 0 found
+```
+
+```php .[after]
+<?php
+
+namespace App;
+
+use App\Model\User;
+
+use function App\format;
+```
+
+
+beforeDeclaration .[option]
+---------------------------
+
+Počet, rozsah nebo `keep`, výchozí `keep`. Před třídou, rozhraním, traitem, výčtem nebo funkcí, která následuje hned za jmenným prostorem nebo za importy; tam nahrazuje `afterNamespace` a `afterImports`. Nette Coding Standard tu chce dva řádky, aby deklarace od hlavičky odstoupila víc než kód:
+
+```neon
+rules:
+	dresscode/blank-lines:
+		beforeDeclaration: 2
+```
+
+```php .[before]
+<?php
+
+namespace App;
+
+use App\Model\User;
+
+class Cart  // Expected 2 blank lines before the class, 1 found
+{
+}
+```
+
+```php .[after]
+<?php
+
+namespace App;
+
+use App\Model\User;
+
+
+class Cart
+{
+}
+```
+
+
+Volby: třída
+============
+
+
+betweenFunctions .[option]
+--------------------------
+
+Počet, rozsah nebo `keep`, výchozí `2`. Před funkcí nebo metodou a za ní; první a poslední metoda třídy se řídí volbami `beforeFirstFunction` a `afterLastFunction`. Platí i pro funkce deklarované mimo třídu.
+
+```neon
+rules:
+	dresscode/blank-lines:
+		betweenFunctions: 1
+```
+
+```php .[before]
+class Cart
+{
+	public function add(Item $item): void
+	{
+	}
+
+
+	public function total(): int  // Expected 1 blank line before the method, 2 found
+	{
+	}
+}
+```
+
+```php .[after]
+class Cart
+{
+	public function add(Item $item): void
+	{
+	}
+
+	public function total(): int
+	{
+	}
+}
+```
+
+
+betweenFunctionsInInterface .[option]
+-------------------------------------
+
+Počet, rozsah nebo `keep`, výchozí `1`. Mezi metodami rozhraní, které nemají tělo, a stačí jim proto menší odstup.
+
+```neon
+rules:
+	dresscode/blank-lines:
+		betweenFunctionsInInterface: 0
+```
+
+```php .[before]
+interface Storage
+{
+	public function read(string $key): mixed;
+
+	public function write(string $key, mixed $value): void;  // Expected 0 blank lines before the method, 1 found
+}
+```
+
+```php .[after]
+interface Storage
+{
+	public function read(string $key): mixed;
+	public function write(string $key, mixed $value): void;
+}
+```
+
+
+beforeFirstFunction .[option]
+-----------------------------
+
+Počet, rozsah nebo `keep`, výchozí `0`. Před metodou, která je prvním členem třídy.
+
+```neon
+rules:
+	dresscode/blank-lines:
+		beforeFirstFunction: 1
+```
+
+```php .[before]
+class Cart
+{
+	public function add(Item $item): void  // Expected 1 blank line before the method, 0 found
+	{
+	}
+}
+```
+
+```php .[after]
+class Cart
+{
+
+	public function add(Item $item): void
+	{
+	}
+}
+```
+
+
+afterLastFunction .[option]
+---------------------------
+
+Počet, rozsah nebo `keep`, výchozí `0`. Za metodou, která je posledním členem třídy.
+
+```neon
+rules:
+	dresscode/blank-lines:
+		afterLastFunction: 1
+```
+
+```php .[before]
+class Cart
+{
+	public function add(Item $item): void
+	{
+	}
+}  // Expected 1 blank line after the method, 0 found
+```
+
+```php .[after]
+class Cart
+{
+	public function add(Item $item): void
+	{
+	}
+
+}
+```
+
+
+afterClassBrace .[option]
+-------------------------
+
+Počet, rozsah nebo `keep`, výchozí `0`. Před prvním členem třídy, pokud to není metoda; pak platí `beforeFirstFunction`.
+
+```neon
+rules:
+	dresscode/blank-lines:
+		afterClassBrace: 1
+```
+
+```php .[before]
+class Cart
+{
+	private array $items = [];  // Expected 1 blank line before the property, 0 found
+}
+```
+
+```php .[after]
+class Cart
+{
+
+	private array $items = [];
+}
+```
+
+
+beforeClassBrace .[option]
+--------------------------
+
+Počet, rozsah nebo `keep`, výchozí `0`. Za posledním členem třídy, pokud to není metoda; pak platí `afterLastFunction`.
+
+```neon
+rules:
+	dresscode/blank-lines:
+		beforeClassBrace: 1
+```
+
+```php .[before]
+class Cart
+{
+	private array $items = [];
+}  // Expected 1 blank line before the closing brace, 0 found
+```
+
+```php .[after]
+class Cart
+{
+	private array $items = [];
+
+}
+```
+
+
+betweenTraitUses .[option]
+--------------------------
+
+Počet, rozsah nebo `keep`, výchozí `0`. Mezi `use` traitů na začátku třídy.
+
+```php .[before]
+class Cart
+{
+	use Countable;
+
+	use Serializable;  // Expected 0 blank lines before the trait use, 1 found
+}
+```
+
+```php .[after]
+class Cart
+{
+	use Countable;
+	use Serializable;
+}
+```
+
+
+afterTraitUses .[option]
+------------------------
+
+Počet, rozsah nebo `keep`, výchozí `1`. Před členem, který následuje za `use` traitů, pokud to není metoda; pak platí `betweenFunctions`.
+
+```php .[before]
+class Cart
+{
+	use Countable;
+	private array $items = [];  // Expected 1 blank line before the property, 0 found
+}
+```
+
+```php .[after]
+class Cart
+{
+	use Countable;
+
+	private array $items = [];
+}
+```
+
+
+betweenMembers .[option]
+------------------------
+
+Počet, rozsah nebo `keep`, výchozí `[0, 1]`. Mezi vlastnostmi, konstantami a případy výčtu bez dokumentačního komentáře a atributu. Výchozí rozsah dovolí členy psát těsně pod sebe i oddělené jedním řádkem.
+
+```php .[before]
+class Cart
+{
+	private array $items = [];
+	private int $count = 0;
+
+
+	private ?Customer $customer = null;  // Expected at most 1 blank line before the property, 2 found
+}
+```
+
+```php .[after]
+class Cart
+{
+	private array $items = [];
+	private int $count = 0;
+
+	private ?Customer $customer = null;
+}
+```
+
+S pevným počtem musí být odstup všude stejný:
+
+```neon
+rules:
+	dresscode/blank-lines:
+		betweenMembers: 1
+```
+
+```php .[before]
+class Cart
+{
+	private array $items = [];
+	private int $count = 0;  // Expected 1 blank line before the property, 0 found
+}
+```
+
+```php .[after]
+class Cart
+{
+	private array $items = [];
+
+	private int $count = 0;
+}
+```
+
+
+beforeDocumentedMember .[option]
+--------------------------------
+
+Počet, rozsah nebo `keep`, výchozí `1`. Před vlastností, konstantou nebo případem výčtu, který má dokumentační komentář nebo atribut; komentář potřebuje odstup od předchozího člena, aby bylo vidět, ke kterému patří.
+
+```php .[before]
+class Cart
+{
+	private array $items = [];
+	/** @var int<0, max> */
+	private int $count = 0;  // Expected 1 blank line before the property, 0 found
+}
+```
+
+```php .[after]
+class Cart
+{
+	private array $items = [];
+
+	/** @var int<0, max> */
+	private int $count = 0;
+}
+```
+
+
+afterPhpDoc .[option]
+---------------------
+
+Počet, rozsah nebo `keep`, výchozí `0`. Mezi dokumentačním komentářem nebo atributem a deklarací, ke které patří.
+
+```php .[before]
+class Cart
+{
+	/**
+	 * Adds an item.
+	 */
+
+	public function add(Item $item): void  // Expected 0 blank lines after the doc comment, 1 found
+	{
+	}
+}
+```
+
+```php .[after]
+class Cart
+{
+	/**
+	 * Adds an item.
+	 */
+	public function add(Item $item): void
+	{
+	}
+}
+```
+
+
+Volby: blok
+===========
+
+
+afterBlockBrace .[option]
+-------------------------
+
+Počet, rozsah nebo `keep`, výchozí `0`. Za otevírací závorkou těla funkce, řídicí struktury, `switch` nebo `match`.
+
+```php .[before]
+function add(Item $item): void
+{
+
+	$this->items[] = $item;  // Expected 0 blank lines after the opening brace, 1 found
+}
+```
+
+```php .[after]
+function add(Item $item): void
+{
+	$this->items[] = $item;
+}
+```
+
+
+beforeBlockBrace .[option]
+--------------------------
+
+Počet, rozsah nebo `keep`, výchozí `keep`. Před zavírací závorkou bloku. Výchozí je `keep`, protože prázdný řádek před `}` bývá záměrný oddělovač větví v řetězu `} catch` nebo `} else`; kdo ho nechce nikde, nastaví nulu.
+
+```neon
+rules:
+	dresscode/blank-lines:
+		beforeBlockBrace: 0
+```
+
+```php .[before]
+function add(Item $item): void
+{
+	$this->items[] = $item;
+
+}  // Expected 0 blank lines before the closing brace, 1 found
+```
+
+```php .[after]
+function add(Item $item): void
+{
+	$this->items[] = $item;
+}
+```
+
+
+Volby: příkazy
+==============
+
+
+before .[option]
+----------------
+
+Mapa druh příkazu → počet nebo rozsah, výchozí `{"return":[1,null]}`: před `return` je aspoň jeden prázdný řádek, pokud není prvním příkazem bloku. Druhů je dvanáct a jiný klíč schéma odmítne: `break`, `continue`, `do`, `for`, `foreach`, `if`, `return`, `switch`, `throw`, `try`, `while` a `yield`, které znamená příkaz tvořený výrazem `yield`. Presety podle specifikací PER a PSR-12 mapu vyprázdní, protože o prázdných řádcích mezi příkazy neříkají nic.
+
+```php .[before]
+function total(array $items): int
+{
+	$sum = array_sum($items);
+	return $sum;  // Expected at least 1 blank line before the return, 0 found
+}
+```
+
+```php .[after]
+function total(array $items): int
+{
+	$sum = array_sum($items);
+
+	return $sum;
+}
+```
+
+
+after .[option]
+---------------
+
+Mapa druh příkazu → počet nebo rozsah, výchozí `[]`. Za příkazem daného druhu, před dalším příkazem bloku.
+
+```neon
+rules:
+	dresscode/blank-lines:
+		after: {if: 1}
+```
+
+```php .[before]
+if ($item->isFree()) {
+	return;
+}
+$this->items[] = $item;  // Expected 1 blank line after the if, 0 found
+```
+
+```php .[after]
+if ($item->isFree()) {
+	return;
+}
+
+$this->items[] = $item;
+```
+
+
+Související pravidla
+====================
+
+- [braces-position |braces-position] rozhoduje o zalomení řádku u složených závorek; tohle pravidlo o prázdných řádcích za nimi
+- `single-statement-per-line` dá každému příkazu vlastní řádek, teprve pak mezi nimi mají prázdné řádky smysl
+
+
+Zdroj
+=====
+
+Třída "BlankLinesRule":https://github.com/dg/dresscode/blob/master/src/Rules/Whitespace/BlankLinesRule.php, fixtury "blank-lines":https://github.com/dg/dresscode/tree/master/tests/DressCode/Rules/fixtures/blank-lines.

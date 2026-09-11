@@ -12,8 +12,10 @@ Běh skončil s `OK` a vy víte, že by neměl. Odpověď najdete v hlavičce a 
 
 - **`OK  36 violations in the baseline`**: porušení tam jsou, ale [baseline |suppressing#Baseline] je zná. Vygenerujte ji znovu, nebo ji z konfigurace odeberte.
 - **Soubor není v rozsahu kontroly.** Hlavička říká, kolik souborů se kontroluje. Ve výchozím stavu jsou vyloučené `vendor`, `node_modules`, `temp`, `tmp`, `log` a všechny adresáře začínající tečkou, k tomu `excludePaths` z každé vrstvy. Pozor na to, že se vyloučené cesty jen sčítají a žádná vrstva je nemůže zrušit.
-- **Pravidlo není zapnuté.** `dresscode rules` označí hvězdičkou ta, která platí. Pravidlo, které není v presetu, se zapíná v klíči `rules`.
+- **Pravidlo není zapnuté.** `dresscode config` vypíše, která pravidla běží, a u těch, která ne, proč: vypnul je preset nebo konfigurace, chybí jim verze PHP, nebo o nich nikdo nemluvil. Pravidlo, které není v presetu, se zapíná v klíči `rules`.
 - **Pravidlo se vynechalo kvůli verzi PHP.** Pravidlo pro novější syntaxi se pod cílovou verzí projektu samo vypne, a pokud jste ho zapnuli jménem, běh o tom napíše varování. Cílovou verzi ukazuje hlavička jako `Target PHP 8.2 from composer.json`.
+- **Oprava je riziková.** Shrnutí říká `1 of them risky, run with --fix-risky to have them fixed`: oprava by mohla změnit chování kódu, tak ji `fix` jen ohlásil. Buď ten přepínač pro jeden běh, nebo `risky: yes` v konfiguraci.
+- **Pravidlo jen varuje.** Je v klíči `warnings`, takže hlásí se značkou `warning` a exit kód nemění; práh dá `--max-warnings`.
 - **Cache.** Soubor se stejným obsahem a stejnou konfigurací se přeskočí. Konfigurace je součástí klíče, takže její změna cache zneplatní sama; pro jistotu pomůže `--no-cache`.
 - **Potlačení v kódu.** `dresscode:ignore` i `phpcs:ignore` platí i pro opravu, a `dresscode:disable` bez `enable` platí až do konce souboru.
 
@@ -25,7 +27,9 @@ Hlášky, které stojí za vysvětlení
 
 **`Unknown rule 'no_unused_imports'. It is covered by dresscode/unused-imports; run dresscode import to translate a configuration of another tool.`** Do konfigurace patří jména pravidel DressCode. Cizí jméno hláška rovnou přeloží, celý cizí konfigurační soubor převede příkaz [import |migration#2. Přeložte konfiguraci].
 
-**`Unknown rule 'acme/foo'.`** Buď překlep, nebo pravidlo z rozšíření, které není uvedené v klíči `extensions` ani zapsané názvem třídy.
+**`Unknown rule 'acme/foo'.`** Buď překlep, u kterého hláška nabídne nejbližší známé jméno (`Did you mean '…'?`), nebo pravidlo z rozšíření, které není uvedené v klíči `extensions` ani zapsané názvem třídy.
+
+**`Invalid options of rule dresscode/line-length set by the configuration: The item 'limit' expects to be int, 'abc' given.`** Hláška jmenuje vrstvu, která volbu nastavila: konfiguraci, preset, nebo obojí, takže je hned vidět, kam jít.
 
 **`Rules acme/one, acme/two do not converge in src/Cart.php.`** Dvě pravidla se přetahují: jedno kód změní, druhé ho vrátí zpátky, a strom se tak dostal do stavu, ve kterém už jednou byl. Jádro to pozná, soubor ohlásí jako selhání (exit kód `2`) a nic do něj nezapíše. Vestavěná pravidla se nekříží, takže hláška ukazuje na vlastní pravidlo nebo na rozšíření a jmenuje obě strany sporu. Než to vyřešíte, jedno z nich vypněte.
 

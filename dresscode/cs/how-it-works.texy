@@ -46,23 +46,28 @@ Nejdřív ohlásit, teprve pak opravit
 
 Všimněte si, že `report()` stojí uvnitř podmínky. Není to náhoda, ale pravidlo, které jádro nástroje vynucuje: **kód se smí změnit až poté, co pravidlo porušení ohlásilo a hlášení prošlo.** Jádro spáruje každou změnu stromu s hlášením; pravidlo, které něco změní potichu, kontrakt poruší a dozvíte se to.
 
-Díky tomu má potlačení skutečnou váhu. Když napíšete `// dresscode:ignore` nebo pravidlo pro danou cestu vypnete, nezmizí jen hláška ve výpisu, ale opravdu se neprovede ani oprava. Nespoléhá se přitom na dobrou vůli autora pravidla: pravidlo, které by opravovalo i potlačené místo, neprojde vlastním testem.
+Díky tomu má potlačení skutečnou váhu. Když napíšete `// dresscode:ignore`, pravidlo pro danou cestu vypnete nebo porušení zná baseline, nezmizí jen hláška ve výpisu, ale opravdu se neprovede ani oprava. Nespoléhá se přitom na dobrou vůli autora pravidla: pravidlo, které by opravovalo i potlačené místo, neprojde vlastním testem.
+
+Na témž místě stojí i **rizikové opravy**. Oprava, která může změnit chování kódu (`get_class($x)` na `$x::class` je bezpečné, dokud `$x` nemůže být `null`), se ohlásí s příznakem rizika, a dokud ji konfigurace klíčem `risky: yes` nebo běh přepínačem `--fix-risky` nedovolí, hlášení neprojde a pravidlo kód nechá. Riziko je vlastnost místa, ne pravidla: totéž pravidlo v témž průchodu opraví, co bezpečně umí, a rizikový výskyt jen vypíše.
 
 
-Presety: PER, PSR-12 a Nette
-============================
+Presety: standardy a úlomky
+===========================
 
-DressCode nemá vlastní názor na styl kódu. Má katalog pravidel a jejich voleb, a **preset** je pojmenovaná sada pravidel s volbami, která dohromady dává jeden coding standard. Vestavěné jsou tři:
+DressCode nemá vlastní názor na styl kódu. Má katalog pravidel a jejich voleb, a **preset** je pojmenovaná sada pravidel s volbami. Úplné standardy, které rozhodují o všem, jsou čtyři:
 
 | preset | co je to |
 |---|---|
 | `dresscode/psr12` | [PSR-12 |https://www.php-fig.org/psr/psr-12/], oddíl po oddílu |
 | `dresscode/per` | [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/] v plném rozsahu, nástupce PSR-12 a výchozí volba |
 | `dresscode/nette` | [Nette Coding Standard |contributing:coding-standard], tedy PER s tabulátory a několika odchylkami |
+| `dresscode/symfony` | Symfony Coding Standards podle sady `@Symfony` z PHP CS Fixeru |
+
+Vedle nich jsou **úlomky** (fragments): presety bez stylu, které o rozvržení kódu nerozhodují a jen zapínají hygienu, takže se skládají s kterýmkoli standardem. `dresscode/cleanup` odstraňuje zbytečný kód, `dresscode/modern` přepisuje na syntaxi, kterou cílová verze PHP už umí, `dresscode/types`, `dresscode/phpdoc`, `dresscode/imports` a `dresscode/classes` uklízejí to, co mají ve jménu. Preset `dresscode/nette` sám je složený právě takhle: PER, rozvržení `dresscode/nette-style`, šest úlomků a k tomu volby knihoven Nette.
 
 Kde se pravidlo se specifikací rozchází, dostane volbu, ne výjimku schovanou v presetu. Tytéž volby má tedy k dispozici i váš vlastní preset.
 
-Presety se skládají jako vrstvy: potomek přebírá rodiče a přepisuje celé položky, vaše konfigurace je poslední vrstva nad nimi. Podrobně to popisuje stránka [Konfigurace |configuration#Presety a vrstvy].
+Presety se skládají jako vrstvy: potomek přebírá rodiče a mění jen to, co sám říká, vaše konfigurace je poslední vrstva nad nimi. Podrobně to popisuje stránka [Konfigurace |configuration#Presety a vrstvy].
 
 
 Bez priorit: pravidla běží do ustálení
@@ -101,7 +106,8 @@ Co si z toho odnést
 - Pravidla zapínáte a nastavujete jménem, které vidíte ve výpisu. Nic jiného než jméno a volby k nastavení není.
 - Na pořadí pravidel v konfiguraci nezáleží.
 - Když nějaké pravidlo vypnete, může se objevit hlášení jiného, které se k tomu místu dosud nedostalo. Je to totéž místo v kódu, jen ho teď hlásí někdo jiný.
-- Výjimka pro cestu i pro řádek vypíná i opravu, ne jen hlášku.
+- Výjimka pro cestu i pro řádek vypíná i opravu, ne jen hlášku; totéž dělá baseline.
+- Oprava, která může změnit chování kódu, se bez `risky: yes` jen ohlásí.
 
 
 Slovníček
@@ -113,8 +119,10 @@ Pojmy, které se v dokumentaci opakují a stojí za to je mít v ruce. Anglický
 |---|---|---|
 | pravidlo | rule | třída, která hlídá jednu vlastnost kódu, a obvykle ji umí i opravit; má jméno tvaru `dresscode/no-empty-comment` |
 | porušení | violation | jeden nález pravidla: soubor, řádek, sloupec a zpráva |
-| preset | preset | pojmenovaná sada pravidel s volbami, dohromady jeden coding standard |
+| preset | preset | pojmenovaná sada pravidel s volbami; úplný standard rozhoduje o všem, úlomek jen o hygieně |
+| úlomek | fragment | preset bez stylu, který se dá položit nad kterýkoli standard; `dresscode/cleanup`, `dresscode/imports` |
 | rozšíření | extension | balíček, který se přihlásí do konfigurace a přinese vlastní pravidla a presety |
+| riziková oprava | risky fix | oprava, která může změnit chování kódu; udělá se jen s `risky: yes` nebo `--fix-risky`, jinak se ohlásí |
 | potlačení | suppression | vypnutí pravidla na jednom řádku, v bloku nebo v celém souboru komentářem `dresscode:ignore` |
 | baseline | baseline | soupis porušení, která v projektu jsou dnes a nemají se hlásit |
 | jádro | engine | ta část nástroje, která pouští pravidla, rozhoduje spory a skládá výstup |

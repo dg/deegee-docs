@@ -68,9 +68,19 @@ if ($context->report($node, 'The var_dump() call must not stay in the code')) {
 }
 ```
 
-`report()` vrátí `false`, pokud je porušení na svém řádku potlačené komentářem, a pak se nesmí nic měnit. Nespoléhá se přitom na dobrou vůli: strom počítá své změny a jádro každou změnu spáruje s hlášením ze stejného volání. Změna bez hlášení, nebo po hlášení, které vrátilo `false`, je porušený kontrakt. Za běhu je z toho varování, s přepínačem `--strict-rules` a v `RuleTester`u chyba.
+`report()` vrátí `false`, pokud je porušení na svém řádku potlačené komentářem, pokud ho zná baseline, nebo pokud je oprava riziková a běh ji nedovolil; pak se nesmí nic měnit. Nespoléhá se přitom na dobrou vůli: strom počítá své změny a jádro každou změnu spáruje s hlášením ze stejného volání. Změna bez hlášení, nebo po hlášení, které vrátilo `false`, je porušený kontrakt. Za běhu je z toho varování, s přepínačem `--strict-rules` a v `RuleTester`u chyba.
 
-Hlášení se váže na uzel nebo na token. Problém, který leží v bílých znacích nebo v komentáři, ohlaste s příslušnou trivia (`report($token, $message, trivia: $trivia)`), aby porušení dostalo řádek té trivia a `dresscode:ignore` na tom řádku ho našel; jinak spadne na řádek tokenu. Závažnost je `Severity::Error`, nebo `Severity::Warning`; varování se vypíše, ale exit kód neovlivní.
+Oprava, která může změnit chování kódu, se hlásí s `risky: true`:
+
+```php
+if ($context->report($node, 'The class name must be obtained with $x::class', risky: true)) {
+	// ...
+}
+```
+
+Bez `risky: yes` v konfiguraci nebo `--fix-risky` na příkazové řádce vrátí takové hlášení `false`, pravidlo kód nechá a porušení se vypíše jako rizikové a neopravitelné. Riziko je vlastnost výskytu, ne pravidla: totéž pravidlo v témž průchodu opraví bezpečný výskyt a rizikový jen ohlásí, a fixtura s `// risky` v hlavičce je pak důkaz pro referenci, že pravidlo takové opravy má.
+
+Hlášení se váže na uzel nebo na token. Problém, který leží v bílých znacích nebo v komentáři, ohlaste s příslušnou trivia (`report($token, $message, trivia: $trivia)`), aby porušení dostalo řádek té trivia a `dresscode:ignore` na tom řádku ho našel; jinak spadne na řádek tokenu. Závažnost je `Severity::Error`; `Severity::Warning` je pro nález, který nemá shodit build, a stejný účinek dá uživateli klíč `warnings` v konfiguraci, který změkčí kterékoli pravidlo.
 
 Zpráva popisuje kód, ne čtenáře, a nikdy nerozkazuje. Má jeden ze tří tvarů: požadovaný stav (`A single space after the comma`), norma (`The opening brace must be on its own line`), nebo nález (`Function foo() is deprecated`). Konkrétní jména a hodnoty do zprávy patří, jméno pravidla ne, to doplní výpis.
 
@@ -123,7 +133,9 @@ final class ForbiddenFunctionsRule extends NodeRule implements ConfigurableRule
 }
 ```
 
-Jména voleb se píší v camelCase. Seznam zadaný v konfiguraci nahrazuje výchozí hodnotu celou, nikdy se s ní neslučuje; s tím počítejte v popisu volby. Popis vůbec uvádějte jen tam, kde jméno, typ a výchozí hodnota neříkají všechno.
+Jména voleb se píší v camelCase. Mapa voleb se slévá s vrstvou pod ní po klíčích, seznam zadaný v konfiguraci nahrazuje výchozí hodnotu celou; s tím počítejte v popisu volby. Popis vůbec uvádějte jen tam, kde jméno, typ a výchozí hodnota neříkají všechno.
+
+Volba, která pojmenovává rozhodnutí (tvar, polohu, zarovnání), přijímá i `keep`: pravidlo pak tohle rozhodnutí nevynucuje a zbytek hlídá dál. Volba, která rozhodnutí není (`ignoreImports`, seznam vzorů), `keep` nemá. Pravidlo, které je jedním jediným rozhodnutím, řekne v `RuleInfo` parametrem `decision`, kterou volbu vyplní hodnota zapsaná přímo u pravidla, takže uživatel píše `yoda: forbidden` místo mapy s jedním klíčem.
 
 Pravidlo, u kterého verze PHP rozhoduje o tom, co smí zapsat (ne o tom, jestli vůbec poběží), se zeptá `$context->getPhpVersion()`. Vrací řetězec ve tvaru `major.minor`, který se porovnává funkcí, ne operátory, protože `'8.10' > '8.9'` jako řetězec neplatí:
 

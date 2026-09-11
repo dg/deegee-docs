@@ -35,7 +35,9 @@ exit($result->getExitCode());
 .[caution]
 `RunnerFactory` je zatím označená `@internal`, takže se její podoba může v minoritní verzi změnit. Je to jediné hrubé místo tohohle API a zároveň jediná cesta, jak `Runner` postavit. Komu to vadí, ať volá rovnou [celý příkaz |#Vlastní příkaz], jehož rozhraní stabilní je.
 
-`RunResult` obsahuje `FileResult` pro každý soubor a k tomu souhrnná čísla: `countViolations()`, `countFixable()`, `countChangedFiles()`, `countErrors()` (soubory, které nejdou parsovat), `countFailures()` (soubory, kde pravidlo selhalo) a `getExitCode()` podle stejných pravidel jako na příkazové řádce.
+`RunResult` obsahuje `FileResult` pro každý soubor a k tomu souhrnná čísla: `countViolations()`, `countFixable()`, `countRiskyDeferred()` (rizikové opravy, které čekají na svolení), `countRemaining()` (co zůstalo na uživateli, s volitelnou závažností), `countChangedFiles()`, `countErrors()` (soubory, které nejdou parsovat), `countFailures()` (soubory, kde pravidlo selhalo), vlastnost `baselined` s počtem porušení, která umlčela baseline, a `getExitCode()` podle stejných pravidel jako na příkazové řádce.
+
+Kdo konfiguraci staví v PHP místo načítání ze souboru, má na objektu `Config` totéž, co umí NEON, včetně bloků pro část projektu (`for()`), pravidel, která jen varují (`warnings()`), a svolení k rizikovým opravám (`risky()`).
 
 
 Jeden soubor nebo řetězec
@@ -55,7 +57,7 @@ $fixed = $result->output;
 
 `processFile()` nikdy nezapisuje. Cesta říká, která pravidla pro kód platí (podle ní se vyhodnotí výjimky pro cesty), `$result->output` je opravený kód a `$result->isChanged()` řekne, jestli se od vstupu liší. Naproti tomu `processPath()` soubor přečte a s `fix: true` i zapíše. Ani jedno nepoužívá cache.
 
-`FileResult` nese cestu, původní kód, výstup, seznam objektů `Violation` (pravidlo, zpráva, řádek, sloupec, závažnost, jestli bylo opraveno, otisk pro baseline), varování a případnou chybu parsování nebo selhání pravidla.
+`FileResult` nese cestu, původní kód, výstup, seznam objektů `Violation` (pravidlo, zpráva, řádek, sloupec, závažnost, jestli bylo opraveno, jestli je oprava riziková, otisk pro baseline), varování a případnou chybu parsování nebo selhání pravidla.
 
 
 Vlastní reporter
