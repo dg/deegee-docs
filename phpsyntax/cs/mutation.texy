@@ -16,9 +16,11 @@ $node->replaceChild($old, $new);
 $node->setSlot('condition', $expr); // když jméno slotu znáte až za běhu
 ```
 
-Hook se postará o to, co byste jinak museli hlídat sami: odmítne hodnotu, která už má rodiče, novou adoptuje, starou pustí a ohlásí změnu indexu tokenů, který drží pořadí, řádky a sloupce. Hodnotu, která do slotu nepatří vůbec, odmítne ještě dřív typ vlastnosti.
+Hook se postará o to, co byste jinak museli hlídat sami: odmítne hodnotu, která už má rodiče, novou adoptuje, starou pustí a ohlásí změnu indexu tokenů, který drží pořadí, řádky a sloupce. Hodnotu, která do slotu nepatří vůbec, odmítne ještě dřív typ vlastnosti, a jméno, které žádným slotem není, odmítne `setSlot()`.
 
-Uzel patří právě jednomu stromu, takže vložit uzel, který už rodiče má, skončí výjimkou; `clone` dá hlubokou kopii bez rodiče, kterou vložit lze.
+Cokoli zápis odmítne, odmítne dřív, než se ve stromu cokoli pohne. Zápis více hodnot najednou, třeba položky i s oddělovačem, ověří všechny předem a odmítne i oddělovač vytažený z vkládané položky, protože by stál ve dvou seznamech zároveň. Po výjimce tedy vypadá přesně jako předtím cílový strom i fragment, ze kterého hodnota přišla, včetně trivia okolo, takže se z neúspěšné úpravy nemusíte zotavovat.
+
+Uzel patří právě jednomu stromu, takže vložit uzel, který už rodiče má, skončí výjimkou; `clone` dá hlubokou kopii bez rodiče, kterou vložit lze. Stejně dopadne pokus zapsat uzel sám do sebe nebo do něčeho, co drží, protože by vznikl cyklus.
 
 Ze zákazu jsou ale dvě výjimky a ušetří spoustu klonování. Ta první: **zapisovaná hodnota smí mít rodiče, pokud stojí uvnitř té hodnoty, kterou zápis zrovna uvolňuje.** Takový podstrom ze stromu odchází tak jako tak, takže si z něj kus vyzvednout smíte:
 
@@ -78,7 +80,7 @@ $args->insert(0, $arg);
 $args->setTrailingSeparator(null);    // pryč s koncovou čárkou
 ```
 
-`SeparatedNodeList` si oddělovače hlídá sám: při vložení odvodí chybějící čárku z těch, které v seznamu jsou (nebo použije `, ` u jednořádkového seznamu), a ve víceřádkovém seznamu dá položce odsazení souseda; při odstranění vezme čárku za položkou, u poslední tu před ní. `removeItem()` odstraňuje položku ze seznamu, `remove()` na uzlu odstraňuje uzel sám; je to totéž z druhé strany a jmenuje se to jinak jen proto, že PHP nedovolí dvě různé signatury.
+`SeparatedNodeList` si oddělovače hlídá sám: při vložení odvodí chybějící čárku z těch, které v seznamu jsou (nebo použije `, ` u jednořádkového seznamu), a ve víceřádkovém seznamu dá položce odsazení souseda; oddělovač s komentářem ale vzorem není, protože komentář je obsah a kopie by ho zdvojila, takže se formát vezme z dalšího oddělovače; při odstranění vezme čárku za položkou, u poslední tu před ní. `removeItem()` odstraňuje položku ze seznamu, `remove()` na uzlu odstraňuje uzel sám; je to totéž z druhé strany a jmenuje se to jinak jen proto, že PHP nedovolí dvě různé signatury.
 
 `NodeList` příkazů, kde žádný oddělovač není, se chová stejně: položce bez vlastních trivií dá odsazení souseda a konec řádku, jaký má soused. Vložení příkazu je tedy jeden řádek a nic se kolem nespravuje:
 

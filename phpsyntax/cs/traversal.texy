@@ -46,7 +46,7 @@ use PhpSyntax\Traverser;
 
 Callback smí uzel, který dostal, nahradit nebo odstranit; traverser pak do něj ani do jeho náhrady nesestoupí, sourozence odpojené mezitím přeskočí a uzly vložené mezitím nechá dalšímu průchodu. Díky tomu se dá měnit strom přímo během průchodu bez zvláštního režimu.
 
-**Každý `enter` má svůj `leave`**, a to se stejným objektem, i když uzel mezitím ze stromu zmizel. Callback, který si drží hloubku nebo zásobník, tak nemusí řešit chybějící patro. Jedinou výjimkou je `StopTraversal`, který průchod ukončí a nedokončené `leave` už nezavolá. Pozor na to, že `leave` může dostat uzel, který ve stromu už není. Pozná se podle `$node->parent === null` (kromě kořene, ten rodiče nemá nikdy) a `replaceWith()` na něm vyhodí výjimku, takže kdo v `leave` mění strom, ať se na rodiče nejdřív podívá.
+**Každý `enter` má svůj `leave`**, a to se stejným objektem, i když uzel mezitím ze stromu zmizel. Callback, který si drží hloubku nebo zásobník, tak nemusí řešit chybějící patro. Platí to i pro `StopTraversal`: do dalších uzlů už průchod nevstoupí, ale ty, do kterých vstoupil, cestou ven opustí, ten zastavující včetně. Pozor na to, že `leave` může dostat uzel, který ve stromu už není. Pozná se podle `$node->parent === null` (kromě kořene, ten rodiče nemá nikdy) a `replaceWith()` na něm vyhodí výjimku, takže kdo v `leave` mění strom, ať se na rodiče nejdřív podívá.
 
 Callback může průchod řídit návratovou hodnotou:
 
@@ -111,7 +111,7 @@ $expr->hasValue();          // je to zapsaná hodnota, ne výpočet?
 $expr->toValue();           // a jaká
 ```
 
-`matches()` porovnává texty tokenů, ne trivia, takže `$a->b` a `$a -> b` si odpovídají. `isRepeatableRead()` říká `true` pro proměnné, přístupy k vlastnostem a prvkům, konstanty a literály, a `false` pro volání, `new`, přiřazení, `++` a cokoli, co může mít vedlejší účinek. Dohromady odpovídají na otázku "opakuje tenhle ternár svou podmínku a smím ji vyhodnotit jen jednou".
+`matches()` porovnává texty tokenů, ne trivia, takže `$a->b` a `$a -> b` si odpovídají. `isRepeatableRead()` říká `true` pro proměnné, přístupy k vlastnostem a prvkům, konstanty a literály, a `false` pro volání, `new`, přiřazení, `++` a cokoli, co může mít vedlejší účinek. Dohromady odpovídají na otázku "opakuje tenhle ternár svou podmínku a smím ji vyhodnotit jen jednou". Odpověď je ale syntaktická: co jazyk za takovým čtením spustí sám, na to strom nevidí, ať jde o magický getter nebo hook za `->`, `ArrayAccess` za `[]`, nebo `__toString()` za interpolovaným řetězcem. Kdo si tohle dovolit nemůže, potřebuje typy, a ty syntaxe nezná.
 
 `isRedundant()` na uzlu `ParenthesizedNode` je z těch otázek nejpracnější a odpovídá se na ni nejčastěji špatně: záleží na prioritě a asociativitě operátoru uvnitř i vně závorek, na tom, jestli se na výsledek přistupuje jako na objekt nebo pole, a na několika zvláštních případech. Každý uzel zapsaný operátorem proto implementuje rozhraní `OperatorNode` s metodou `getPrecedence()`, která vrátí sílu vazby a stranu, ke které se operátor kloní; `isRedundant()` z toho složí odpověď. Kde si jistá není, odpoví `false`.
 
@@ -121,7 +121,7 @@ Právě proto se `isDereferencable()` ptá, **co** za tím výrazem stojí, a be
 
 Tentýž `AccessKind` vrací `getAccessKind()`, jen z opačné strany: řekne, kterým z těch tří způsobů na výraz sahá jeho rodič, a `null`, když na něj nesahá vůbec. `isDereferenced()` je táž otázka položená bez druhu.
 
-`isWritable()` je otázka z druhé strany: smí ten výraz stát nalevo od `=`? Proměnná, prvek pole, statická vlastnost a vlastnost přes `->` ano, přes `?->` **ne**, protože ta se jen čte. Destrukturace se na to neptá vůbec: `ListNode` není výraz, protože stojí jedině tam, kam se přiřazuje, a hodnotu vlastní nemá. Sloty, které cíl přiřazení drží, to říkají typem `ExpressionNode|ListNode`, takže kdo se nad nimi ptá na výraz, musí si typ nejdřív zúžit.
+`isWritable()` je otázka z druhé strany: smí ten výraz stát nalevo od `=`? Proměnná, prvek pole, statická vlastnost a vlastnost přes `->` ano, přes `?->` **ne**, protože ta se jen čte. A nejde jen o poslední krok: stačí jediné `?->` kdekoli v řetězci, kterým zápis prochází, a odpověď je `false`, protože i `$o?->p->q = 1` je pro PHP chyba. Počítá se i volání metody v řetězci, takže `$o?->m()->p` zapisovatelné není, a stejně dopadne řetězec, který začíná hodnotou bez místa pro zápis: literálem, konstantou, `new` nebo `clone`. `(new Foo)->bar` tedy zapisovatelné není, `foo()->bar` a `Foo::create()->bar` ano. Co stojí vedle toho řetězce, třeba `$a[$b?->c]`, se jen čte a na zapisovatelnost vliv nemá. Destrukturace se na to neptá vůbec: `ListNode` není výraz, protože stojí jedině tam, kam se přiřazuje, a hodnotu vlastní nemá. Sloty, které cíl přiřazení drží, to říkají typem `ExpressionNode|ListNode`, takže kdo se nad nimi ptá na výraz, musí si typ nejdřív zúžit.
 
 ```php
 $paren = $expr->findFirst(ParenthesizedNode::class);
