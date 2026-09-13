@@ -2,7 +2,7 @@ Funkce a konstanty ve jmenných prostorech
 *****************************************
 
 .[perex]
-Nekvalifikované `strlen()` uvnitř jmenného prostoru může znamenat dvě různé funkce a z kódu se nedá poznat kterou. Nástroje na styl kódu jsou kvůli tomu u celé řady oprav odkázané na odhad. DressCode tu nejistotu odstraní dvěma řádky konfigurace: řeknete mu, co ve vašich jmenných prostorech je, a každé pravidlo pak přesně ví, s čím pracuje. Style checker, konečně správně.
+Nekvalifikované `strlen()` uvnitř jmenného prostoru může znamenat dvě různé funkce a z kódu se nedá poznat kterou. Nástroje na styl kódu jsou kvůli tomu u celé řady oprav odkázané na odhad. DressCode tu nejistotu odstraní jedním řádkem konfigurace: řeknete mu, co ve vašich jmenných prostorech je, a každé pravidlo pak přesně ví, s čím pracuje. Style checker, konečně správně.
 
 
 Jedno jméno, dva významy
@@ -74,18 +74,19 @@ Obraz je tedy jasný: nejistota se týká všech, ale skutečná funkce ve jmenn
 Řekněte DressCode, co je co
 ===========================
 
-Dva klíče konfigurace říkají, které funkce a konstanty váš projekt ve jmenných prostorech deklaruje. Nejčastější případ je, že žádné:
+Nejčastější případ je, že váš projekt ve jmenných prostorech žádné funkce ani konstanty nedeklaruje. Pak stačí jediný řádek konfigurace:
 
 ```neon
-namespacedFunctions: none
-namespacedConstants: none
+nameResolution: certain
 ```
 
-Tím DressCode ví, že každé nekvalifikované jméno, které soubor neimportuje, sám nedeklaruje a nezná ho žádný [preset |#Presety znají svůj framework], je globální. Ne "nejspíš", ale jistě.
+Tím DressCode ví, že každé nekvalifikované jméno funkce nebo konstanty, které soubor neimportuje ani sám nedeklaruje, je globální. Ne "nejspíš", ale jistě.
 
-Když nějaké máte, vyjmenujete je. Zápis je stejný jako v příkazu `use`, včetně skupin ve složených závorkách. Položku se skupinou dejte do uvozovek, jinak by ji NEON četl jako mapu:
+Když nějaké funkce nebo konstanty máte, vyjmenujete je klíči `namespacedFunctions` a `namespacedConstants`. Zápis je stejný jako v příkazu `use`, včetně skupin ve složených závorkách. Položku se skupinou dejte do uvozovek, jinak by ji NEON četl jako mapu:
 
 ```neon
+nameResolution: certain
+
 namespacedFunctions:
 	- 'App\Utils\{format, parse}'
 	- App\Legacy\helper
@@ -94,17 +95,16 @@ namespacedConstants:
 	- 'App\{VERSION, DEBUG}'
 ```
 
-Funkci ze seznamu pak DressCode čte jako funkci z jmenného prostoru všude, kde se v tom jmenném prostoru volá bez importu, a všechno ostatní jako globální. Jména funkcí nerozlišují velikost písmen, jména konstant ano, přesně jako v PHP.
+Funkci ze seznamu pak DressCode čte jako funkci z jmenného prostoru všude, kde se v tom jmenném prostoru volá bez importu. U funkcí nezáleží na velikosti písmen vůbec, u konstant jen v jejich vlastním jméně, v jmenném prostoru ne, přesně jako v PHP.
 
-Každý z klíčů přijme jednu ze tří hodnot:
+Seznamy a `nameResolution` jsou dvě různé věci, a proto mají každá svůj klíč. Seznam je fakt: tahle funkce existuje. `nameResolution` je rozhodnutí: nic dalšího tam není.
 
-| hodnota | co znamená |
+| `nameResolution` | co znamená |
 |---|---|
-| seznam | tyhle a žádné jiné |
-| `none` | žádné |
-| `unknown` | nevím; totéž, jako když klíč chybí |
+| `certain` | seznamy jsou úplné, a co v nich není, je globální |
+| `uncertain` | seznamy úplné být nemusejí; totéž, jako když klíč chybí |
 
-S `unknown` se DressCode chová opatrně: nekvalifikované jméno bere jako globální, ale opravu, která na tom stojí, považuje za [rizikovou |configuration#Varování a rizikové opravy]. Ohlásí ji a udělá ji teprve tehdy, když pravidlo uvedete v `fixRisky`. Proto je `unknown` výchozí hodnota: zapnout pravidlo ještě neznamená souhlasit s tím, že smí měnit chování kódu. Jakmile napíšete `none` nebo seznam, tyhle opravy rizikové být přestanou.
+S `uncertain` se DressCode chová opatrně: nekvalifikované jméno bere jako globální, ale opravu, která na tom stojí, považuje za [rizikovou |configuration#Varování a rizikové opravy]. Ohlásí ji i s důvodem, třeba `The is_null() call must be written as a comparison with null, unless the namespace declares is_null()`, a udělá ji teprve tehdy, když pravidlo uvedete v `fixRisky` nebo spustíte `fix --fix-risky`. Proto je `uncertain` výchozí hodnota: zapnout pravidlo ještě neznamená souhlasit s tím, že smí měnit chování kódu. Jakmile napíšete `certain`, tyhle opravy rizikové být přestanou.
 
 
 Každé pravidlo z toho těží
@@ -114,10 +114,10 @@ Podstatné je, *kde* se ta znalost uplatní. DressCode ji nepředává jednotliv
 
 Pravidla se jí ptají na dvě věci:
 
-- **Co je co.** `isGlobalFunctionCall($node, 'is_null')` vrátí `true` pro globální funkci a `App\is_null()` ze seznamu za ni nepovažuje. S `none` nebo se seznamem je ta odpověď jistá, s `unknown` jen předpoklad.
-- **Jak jistá je odpověď.** `isUncertain($name)` řekne, jestli odpověď stojí jen na předpokladu, protože klíč je `unknown`. Pravidlo, které se takhle zeptá, ohlásí svou opravu jako rizikovou právě u takového výskytu, a v projektu s `none` nebo se seznamem tedy nikdy.
+- **Co je co.** `isGlobalFunctionCall($node, 'is_null')` vrátí `true` pro globální funkci a `App\is_null()` ze seznamu za ni nepovažuje. S `certain` je ta odpověď jistá, jinak jen předpoklad.
+- **Jak jistá je odpověď.** `isUncertain('is_null', SymbolKind::Function, $node)` řekne, jestli odpověď stojí jen na předpokladu. Pravidlo, které se takhle zeptá, ohlásí svou opravu jako rizikovou právě u takového výskytu, a v projektu s `certain` tedy nikdy.
 
-A funguje to i obráceně, když pravidlo jméno funkce do kódu samo zapisuje. `dresscode/no-alias-functions` přepisuje `sizeof()` na `count()`; když soubor importuje nebo deklaruje vlastní `count`, zapíše `\count()`, aby opravený kód volal totéž co původní.
+A funguje to i obráceně, když pravidlo jméno funkce do kódu samo zapisuje. `dresscode/no-alias-functions` přepisuje `sizeof()` na `count()` a nové jméno napíše stejně jako to původní: `\sizeof()` na `\count()`, `sizeof()` na `count()`. Když ale soubor importuje nebo deklaruje vlastní `count`, nebo když podle konfigurace deklaruje `count()` jeho jmenný prostor, zapíše `\count()`, aby opravený kód volal totéž co původní.
 
 Všechna pravidla tak čtou každé jméno stejně a výsledek nezávisí na tom, které z nich se na něj ptá.
 
@@ -125,52 +125,94 @@ Všechna pravidla tak čtou každé jméno stejně a výsledek nezávisí na tom
 Nová funkce neproklouzne
 ========================
 
-Seznam by nebyl k ničemu, kdyby zastaral. Proto ho hlídají dvě pravidla: `dresscode/unlisted-namespaced-function` ohlásí funkci deklarovanou ve jmenném prostoru, která v `namespacedFunctions` chybí, a `dresscode/unlisted-namespaced-constant` totéž pro `const` a pro `define('App\X', ...)`. Jakmile někdo do projektu přidá funkci `App\Utils\slugify()`, `dresscode check` upozorní, že patří do konfigurace:
+Seznam by nebyl k ničemu, kdyby zastaral. Proto ho hlídá pravidlo `dresscode/no-unlisted-namespaced-declaration`, které zapne sám klíč `nameResolution: certain`. Ohlásí funkci deklarovanou ve jmenném prostoru, která v `namespacedFunctions` chybí, a totéž udělá pro `const` a pro `define('App\X', ...)`. Počítá i s deklarací uvnitř podmínky, třeba s polyfillem v `if (!function_exists(...))`. Jakmile někdo do projektu přidá funkci `App\Utils\slugify()`, `dresscode check` upozorní, že patří do konfigurace:
 
 /--pre .[terminal]
 src/Utils/helpers.php
-  error  12:1  Function App\Utils\slugify() is declared in a namespace but not listed in namespacedFunctions  unlisted-namespaced-function
+  error  12:10  Function App\Utils\slugify() must be listed in namespacedFunctions  no-unlisted-namespaced-declaration
 \--
 
-Tohle stačí, protože deklaraci na rozdíl od volání poznat jde: stojí v souboru, který DressCode kontroluje. Pozor jen na cesty vyloučené z kontroly. Funkci deklarovanou třeba v testech, které DressCode vynechává, ohlásit nemůže, a pokud ji kód volá bez importu, zapište ji do seznamu sami. S hodnotou `unknown` pravidla mlčí, protože není co hlídat.
+Tohle stačí, protože deklaraci na rozdíl od volání poznat jde: stojí v souboru, který DressCode kontroluje. Pozor jen na cesty vyloučené z kontroly. Funkci deklarovanou třeba v testech, které DressCode vynechává, ohlásit nemůže, a pokud ji kód volá bez importu, zapište ji do seznamu sami. S `uncertain` pravidlo mlčí, protože není co hlídat, a kdybyste ho s `certain` přesto nechtěli, vypnete ho v klíči `rules` jako kterékoli jiné.
 
-Ani první seznam nemusíte psát ručně. [`dresscode init` |cli#Konfigurace naměřená z kódu: init] projde všechny soubory v cestách projektu, najde funkce a konstanty deklarované ve jmenných prostorech a zapíše buď jejich seznam, nebo `none`.
+Ani první seznam nemusíte psát ručně. [`dresscode init` |cli#Konfigurace naměřená z kódu: init] projde všechny soubory v cestách projektu, najde funkce a konstanty deklarované ve jmenných prostorech a zapíše jejich seznamy spolu s `nameResolution: certain`.
 
 .[note]
 Do budoucna se nabízí, aby nový záznam do konfigurace zapsal rovnou `dresscode fix`, místo aby na něj pravidlo jen upozornilo.
 
 
-Presety znají svůj framework
-============================
+Úlomky znají svůj framework
+===========================
 
 Někdy píšete kód přímo do jmenného prostoru frameworku, protože vás k tomu framework vede. Symfony nechává psát konfiguraci služeb do souboru, který začíná `namespace Symfony\Component\DependencyInjection\Loader\Configurator;`, právě proto, aby šlo volat `service()`, `param()` nebo `env()` bez importu. Ty funkce deklaruje Symfony ve složce `vendor`, kam DressCode nekouká.
 
-Tuhle znalost proto nese preset. V atributu `#[PresetInfo]` může vyjmenovat funkce a konstanty svého frameworku (viz [vlastní preset |presets-and-extensions#Preset]) a seznamy všech presetů se sčítají s tím, co napíšete vy. Hodnotu `none` nebo `unknown` ale preset napsat nemůže: framework zná, váš projekt ne.
+Tuhle znalost proto nese úlomek `dresscode/symfony-configurator`, preset bez jediného pravidla, který jen vyjmenuje funkce, jež Symfony do svého jmenného prostoru deklaruje. Standard `dresscode/symfony` ho skládá sám. S jiným standardem ho přidáte do presetů a `dresscode init` ho navrhne, když najde nainstalovaný balíček `symfony/dependency-injection`:
+
+```neon
+presets:
+	- per
+	- symfony-configurator
+```
+
+Vlastní preset dodá takové seznamy metodou `getNamespacedDeclarations()` (viz [vlastní preset |presets-and-extensions#Preset]) a seznamy všech presetů se sčítají s tím, co napíšete vy. Klíč `nameResolution` ale preset nastavit nemůže: framework zná, váš projekt ne.
 
 
 Proč importovat globální funkce
 ===============================
 
-S tím souvisí pravidlo `dresscode/global-imports`, které do souborů ve jmenných prostorech doplňuje řádky jako tenhle:
+S tím souvisí pravidlo `dresscode/name-notation`, které v souborech ve jmenných prostorech rozhoduje, jak se píšou jména tříd, funkcí a konstant. Třeba s touhle konfigurací:
+
+```neon
+rules:
+	name-notation:
+		optimizedFunctions: import
+```
+
+doplňuje řádky jako tenhle:
 
 ```php
 namespace App;
 
-use function count, in_array, is_array, strlen;
+use function count;
+use function in_array;
 ```
 
-Na první pohled zbytečnost, `count()` by fungovalo i bez importu. Jde ale o rychlost. Když kompilátor PHP narazí ve jmenném prostoru na nekvalifikované `strlen($s)`, neví, jestli za běhu nebude existovat `App\strlen()`, a tak vyrobí obecné volání, které se rozhodne až za běhu. Když ví, že jde o globální funkci, protože je importovaná nebo zapsaná jako `\strlen()`, může u zhruba tří desítek základních funkcí volání vynechat úplně: `strlen()` se promění v jedinou instrukci virtuálního stroje, `is_array()` v prostou kontrolu typu a `in_array()` s polem zapsaným přímo v kódu ve vyhledání v hashovací tabulce. V kódu, který se točí ve smyčkách, je to znát.
+Na první pohled zbytečnost, `count()` by fungovalo i bez importu. Jde ale o rychlost. Když kompilátor PHP narazí ve jmenném prostoru na nekvalifikované `strlen($s)`, neví, jestli za běhu nebude existovat `App\strlen()`, a tak vyrobí obecné volání, které se rozhodne až za běhu. Když ví, že jde o globální funkci, protože je importovaná nebo zapsaná jako `\strlen()`, může u zhruba tří desítek základních funkcí volání vynechat úplně: `strlen()` se promění v jedinou instrukci virtuálního stroje, `is_array()` v prostou kontrolu typu a `in_array()` s polem zapsaným přímo v kódu ve vyhledání v hashovací tabulce. V kódu, který se točí ve smyčkách, je to znát. U několika dalších funkcí, třeba u `function_exists('mb_strlen')`, spočítá výsledek už při kompilaci optimalizátor OPcache.
 
-Výchozí volba `functions: optimized` proto importuje právě ty funkce, které kompilátor umí nahradit, a ostatní nechá být, aby hlavička souboru zbytečně nebobtnala. Volba `backslash` místo importů píše před globální funkce zpětné lomítko, `\strlen()`, a to před všechny, nejen před ty optimalizované; na kompilátor to má stejný účinek.
+Právě tyhle funkce tvoří sadu `optimizedFunctions`, takže se importují jen ty, u kterých to něco přináší. `assert()` mezi nimi není, protože ho PHP přeloží zvlášť, ať je importovaný, nebo ne.
 
-A tady se vracíme ke jmenným prostorům. Import `use function strlen;` přišpendlí volání ke globální funkci. Kdyby projekt měl vlastní `App\strlen()`, import by změnil chování. S `unknown` proto DressCode takový import považuje za rizikový. S `namespacedFunctions: none` nebo se seznamem ví, že `App\strlen()` neexistuje, takže je import bezpečný a pravidlo ho prostě doplní. Funkci ze seznamu přirozeně neimportuje.
+Pravidlo samo nerozhoduje o ničem: co mu neřeknete, nechá být. Klíče jdou od obecného ke zvláštnímu:
+
+| klíč | o jakých jménech rozhoduje |
+|---|---|
+| `classes`, `functions`, `constants` | o všech třídách, funkcích a konstantách |
+| `globalClasses`, `globalFunctions`, `globalConstants` | jen o těch z globálního jmenného prostoru |
+| `optimizedFunctions` | o globálních funkcích, se kterými kompilátor nebo OPcache zachází zvlášť |
+
+Hodnotou klíče je tvar, jakým se jméno píše: `import`, `backslash` pro `\strlen()`, u globálních funkcí a konstant ještě `bare` pro holé `strlen()`, které spoléhá na pád do globálního jména, a `keep`, když se o jménu nerozhoduje. Místo jednoho tvaru můžete dát seznam: každý tvar ze seznamu je pak v pořádku a jméno zapsané jinak se přepíše na první z nich. A místo tvaru můžete dát mapu ze jména nebo ze vzoru s hvězdičkou na tvar:
+
+```neon
+rules:
+	name-notation:
+		classes: import                 # use App\Model\User; ... User
+		globalClasses: backslash        # \Exception
+		optimizedFunctions: import      # use function strlen; ... strlen()
+		globalFunctions: [backslash, bare]
+		globalConstants:
+			'PHP_*': import             # use const PHP_EOL; ... PHP_EOL
+```
+
+Když o jménu mluví víc klíčů, rozhoduje nejkonkrétnější odpověď: přesně napsané jméno má přednost před vzorem, delší vzor před kratším a obojí před prostou hodnotou klíče. Při shodě vyhraje konkrétnější klíč, a tak v ukázce dostane `\Exception` lomítko, přestože `classes` říká import. Na pořadí zápisu nezáleží: když preset importuje `'PHP_*'` a váš projekt napíše `PHP_EOL: backslash`, přesné jméno vyhraje. Samotné `name-notation: true` nedělá nic a DressCode na to upozorní.
+
+A tady se vracíme ke jmenným prostorům. Import `use function strlen;` přišpendlí volání ke globální funkci. Kdyby projekt měl vlastní `App\strlen()`, import by změnil chování. S `uncertain` proto DressCode každý přechod mezi holým jménem a importem nebo zpětným lomítkem považuje za rizikový. S `certain` ví, že `App\strlen()` neexistuje, a pravidlo import prostě doplní. Funkci ze seznamu přirozeně neimportuje.
+
+Jméno bez úvodního lomítka, třeba `Model\User` s `use App\Model;`, pravidlo nechá být, protože se čte relativně k importu nebo k jmennému prostoru souboru. Soubor bez jmenného prostoru nechá celý: úvodní lomítko tam odebere pravidlo `no-leading-backslash-in-global-namespace` a jméno zůstane kvalifikované.
 
 
 Shrnutí
 =======
 
 - Nekvalifikovaná funkce nebo konstanta ve jmenném prostoru znamená podle PHP buď tu z jmenného prostoru, nebo globální, a z jednoho souboru se to poznat nedá.
-- Napište do konfigurace `namespacedFunctions` a `namespacedConstants`: `none`, nebo seznam. Chování všech pravidel je pak jednoznačné a opravy, které stály na odhadu, přestanou být rizikové.
-- Bez těchto klíčů je DressCode opatrný a takové opravy dělá jen se svolením v `fixRisky`.
-- Novou deklaraci ve jmenném prostoru ohlásí `unlisted-namespaced-function` a `unlisted-namespaced-constant`; první seznam napíše `dresscode init`.
+- Napište do konfigurace `nameResolution: certain` a případně seznamy `namespacedFunctions` a `namespacedConstants`. Chování všech pravidel je pak jednoznačné a opravy, které stály na odhadu, přestanou být rizikové.
+- Bez toho je DressCode opatrný a takové opravy dělá jen se svolením v `fixRisky` nebo s `--fix-risky`.
+- Novou deklaraci ve jmenném prostoru ohlásí `no-unlisted-namespaced-declaration`; první seznamy napíše `dresscode init`.
 - Funkci z jmenného prostoru volejte přes `use function`. Když se její soubor nenačte, dozvíte se to hned.
