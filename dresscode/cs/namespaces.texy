@@ -1,0 +1,176 @@
+Funkce a konstanty ve jmenných prostorech
+*****************************************
+
+.[perex]
+Nekvalifikované `strlen()` uvnitř jmenného prostoru může znamenat dvě různé funkce a z kódu se nedá poznat kterou. Nástroje na styl kódu jsou kvůli tomu u celé řady oprav odkázané na odhad. DressCode tu nejistotu odstraní dvěma řádky konfigurace: řeknete mu, co ve vašich jmenných prostorech je, a každé pravidlo pak přesně ví, s čím pracuje. Style checker, konečně správně.
+
+
+Jedno jméno, dva významy
+========================
+
+Podívejte se na tenhle kód:
+
+```php
+namespace App;
+
+if (is_null($user)) {
+	// ...
+}
+```
+
+Která funkce se tu volá? Nejspíš globální `is_null()`, kterou zná každý. Jenže PHP to rozhodne až za běhu: nejdřív se podívá, jestli existuje funkce `App\is_null()`, a teprve když ne, sáhne po globální. Stačí, aby ji kdekoli v projektu deklaroval jiný soubor:
+
+```php
+namespace App;
+
+function is_null(mixed $value): bool
+{
+	return $value === null || $value === '';
+}
+```
+
+a volání nahoře najednou dělá něco jiného. Se souborem, ve kterém je volání zapsané, to nemá nic společného. Rozhoduje, jestli se ten druhý soubor načetl.
+
+Úplně stejně se chovají konstanty: `PHP_EOL` ve jmenném prostoru `App` je `App\PHP_EOL`, pokud existuje, jinak globální `PHP_EOL`. Třídy tohle nedělají. `Exception` ve jmenném prostoru `App` je vždy `App\Exception` a globální třída se píše `\Exception` nebo se importuje.
+
+
+Kus historie
+============
+
+Jmenné prostory přišly s PHP 5.3 a jejich podoba se rodila těžce. Verze měla vyjít na podzim 2008, první alfa byla venku v srpnu, a o tom, jak mají jmenné prostory vlastně fungovat, se mezi vývojáři PHP rozhodovalo ještě v říjnu. Tehdy padlo i slavné rozhodnutí vyměnit oddělovač `::` za zpětné lomítko, protože `::` se nedalo spolehlivě odlišit od volání statické metody. PHP 5.3.0 nakonec vyšlo 30. června 2009, o tři čtvrtě roku později.
+
+Jedna z nejtěžších otázek byla právě tahle: co znamená jméno, před kterým žádný jmenný prostor není. Návrh z 30. října 2008 došel k různému řešení pro třídy a pro funkce. Třídy na globální jméno nepadají, protože by to spolu s autoloadingem byla výkonnostní bomba: PHP by u každého `new Exception` napřed zkoušelo načíst `App\Exception`. Funkce a konstanty autoloading nemají, takže tohle nebezpečí nehrozilo, a protože většinu toho, co PHP umí, poskytují právě globální funkce, dostaly pád na globální jméno. Kód psaný před jmennými prostory tak mohl do jmenného prostoru přejít, aniž by před každé `strlen()` musel přidat zpětné lomítko.
+
+Byl to rozumný kompromis. Jeho cenou je, že význam nekvalifikovaného jména funkce není vlastností souboru, ale celého běžícího programu.
+
+
+Proč to pálí nástroje
+=====================
+
+Nástroj na styl kódu vidí soubory, ne běžící program. U každého `is_null($x)` ve jmenném prostoru proto stojí před stejnou otázkou jako vy nahoře a odpověď nezná. A přitom celá řada užitečných oprav stojí právě na tom, že jde o známou globální funkci:
+
+- `is_null($x)` na `$x === null`,
+- `intval($x)` na `(int) $x`,
+- `sizeof($a)` na `count($a)`,
+- `dirname(__FILE__)` na `__DIR__`,
+- `get_class()` na `self::class`,
+- doplnění `use function count;`, aby kompilátor mohl volání optimalizovat.
+
+Kdyby šlo o vaši funkci `App\is_null()`, každá z těch oprav změní, co program dělá. Poctivý nástroj je proto musí označit jako rizikové a bez svolení je neudělat. PHP CS Fixer má mezi rizikovými pravidly třeba `is_null`, `no_alias_functions` nebo `dir_constant`, všechna se stejným zdůvodněním: riskantní, pokud je funkce přepsaná.
+
+Nejde přitom o teoretickou kličku. Na přesně tomhle chování stojí známý trik z testů: knihovny jako php-mock deklarují v testu `App\time()` nebo `App\file_get_contents()`, aby kód ve jmenném prostoru `App` místo skutečné funkce zavolal podvrh.
+
+
+Buďme pragmatičtí
+=================
+
+Kolik funkcí a konstant ve svých jmenných prostorech opravdu máte? Skoro jistě málo, často žádnou. Funkce se totiž **neautoloadují**: aby šla zavolat, musí ji někdo načíst přes `require` nebo záznamem `files` v `composer.json`, a to dřív, než se použije. Proto se kód dávno přesunul do tříd a funkce ve jmenných prostorech zůstaly okrajovou věcí. Návrh na autoloading funkcí se v PHP objevil opakovaně a součástí jazyka se dosud nestal.
+
+To je zároveň dobrý důvod, proč na nekvalifikované volání funkce z jmenného prostoru nespoléhat: když se soubor s funkcí náhodou nenačte, PHP neohlásí chybu, ale potichu zavolá globální funkci stejného jména, pokud nějaká existuje. Import `use function App\is_null;` funkci také nenačte, ale v takové chvíli skončí srozumitelnou chybou `Call to undefined function App\is_null()`.
+
+Obraz je tedy jasný: nejistota se týká všech, ale skutečná funkce ve jmenném prostoru je vzácnost. Stačí ji vyjmenovat.
+
+
+Řekněte DressCode, co je co
+===========================
+
+Dva klíče konfigurace říkají, které funkce a konstanty váš projekt ve jmenných prostorech deklaruje. Nejčastější případ je, že žádné:
+
+```neon
+namespacedFunctions: none
+namespacedConstants: none
+```
+
+Tím DressCode ví, že každé nekvalifikované jméno, které soubor neimportuje, sám nedeklaruje a nezná ho žádný [preset |#Presety znají svůj framework], je globální. Ne "nejspíš", ale jistě.
+
+Když nějaké máte, vyjmenujete je. Zápis je stejný jako v příkazu `use`, včetně skupin ve složených závorkách. Položku se skupinou dejte do uvozovek, jinak by ji NEON četl jako mapu:
+
+```neon
+namespacedFunctions:
+	- 'App\Utils\{format, parse}'
+	- App\Legacy\helper
+
+namespacedConstants:
+	- 'App\{VERSION, DEBUG}'
+```
+
+Funkci ze seznamu pak DressCode čte jako funkci z jmenného prostoru všude, kde se v tom jmenném prostoru volá bez importu, a všechno ostatní jako globální. Jména funkcí nerozlišují velikost písmen, jména konstant ano, přesně jako v PHP.
+
+Každý z klíčů přijme jednu ze tří hodnot:
+
+| hodnota | co znamená |
+|---|---|
+| seznam | tyhle a žádné jiné |
+| `none` | žádné |
+| `unknown` | nevím; totéž, jako když klíč chybí |
+
+S `unknown` se DressCode chová opatrně: nekvalifikované jméno bere jako globální, ale opravu, která na tom stojí, považuje za [rizikovou |configuration#Varování a rizikové opravy]. Ohlásí ji a udělá ji teprve tehdy, když pravidlo uvedete v `fixRisky`. Proto je `unknown` výchozí hodnota: zapnout pravidlo ještě neznamená souhlasit s tím, že smí měnit chování kódu. Jakmile napíšete `none` nebo seznam, tyhle opravy rizikové být přestanou.
+
+
+Každé pravidlo z toho těží
+==========================
+
+Podstatné je, *kde* se ta znalost uplatní. DressCode ji nepředává jednotlivým pravidlům, ale analýze `NameResolver`, která pro všechna pravidla překládá jména. Ptají se jí vestavěná pravidla a ptá se jí i [vaše vlastní pravidlo |rule-contract#Analýzy]. Znalost tak leží na jednom místě a žádné pravidlo si nevede vlastní seznam výjimek.
+
+Pravidla se jí ptají na dvě věci:
+
+- **Co je co.** `isGlobalFunctionCall($node, 'is_null')` vrátí `true` pro globální funkci a `App\is_null()` ze seznamu za ni nepovažuje. S `none` nebo se seznamem je ta odpověď jistá, s `unknown` jen předpoklad.
+- **Jak jistá je odpověď.** `isUncertain($name)` řekne, jestli odpověď stojí jen na předpokladu, protože klíč je `unknown`. Pravidlo, které se takhle zeptá, ohlásí svou opravu jako rizikovou právě u takového výskytu, a v projektu s `none` nebo se seznamem tedy nikdy.
+
+A funguje to i obráceně, když pravidlo jméno funkce do kódu samo zapisuje. `dresscode/no-alias-functions` přepisuje `sizeof()` na `count()`; když soubor importuje nebo deklaruje vlastní `count`, zapíše `\count()`, aby opravený kód volal totéž co původní.
+
+Všechna pravidla tak čtou každé jméno stejně a výsledek nezávisí na tom, které z nich se na něj ptá.
+
+
+Nová funkce neproklouzne
+========================
+
+Seznam by nebyl k ničemu, kdyby zastaral. Proto ho hlídají dvě pravidla: `dresscode/unlisted-namespaced-function` ohlásí funkci deklarovanou ve jmenném prostoru, která v `namespacedFunctions` chybí, a `dresscode/unlisted-namespaced-constant` totéž pro `const` a pro `define('App\X', ...)`. Jakmile někdo do projektu přidá funkci `App\Utils\slugify()`, `dresscode check` upozorní, že patří do konfigurace:
+
+/--pre .[terminal]
+src/Utils/helpers.php
+  error  12:1  Function App\Utils\slugify() is declared in a namespace but not listed in namespacedFunctions  unlisted-namespaced-function
+\--
+
+Tohle stačí, protože deklaraci na rozdíl od volání poznat jde: stojí v souboru, který DressCode kontroluje. Pozor jen na cesty vyloučené z kontroly. Funkci deklarovanou třeba v testech, které DressCode vynechává, ohlásit nemůže, a pokud ji kód volá bez importu, zapište ji do seznamu sami. S hodnotou `unknown` pravidla mlčí, protože není co hlídat.
+
+Ani první seznam nemusíte psát ručně. [`dresscode init` |cli#Konfigurace naměřená z kódu: init] projde všechny soubory v cestách projektu, najde funkce a konstanty deklarované ve jmenných prostorech a zapíše buď jejich seznam, nebo `none`.
+
+.[note]
+Do budoucna se nabízí, aby nový záznam do konfigurace zapsal rovnou `dresscode fix`, místo aby na něj pravidlo jen upozornilo.
+
+
+Presety znají svůj framework
+============================
+
+Někdy píšete kód přímo do jmenného prostoru frameworku, protože vás k tomu framework vede. Symfony nechává psát konfiguraci služeb do souboru, který začíná `namespace Symfony\Component\DependencyInjection\Loader\Configurator;`, právě proto, aby šlo volat `service()`, `param()` nebo `env()` bez importu. Ty funkce deklaruje Symfony ve složce `vendor`, kam DressCode nekouká.
+
+Tuhle znalost proto nese preset. V atributu `#[PresetInfo]` může vyjmenovat funkce a konstanty svého frameworku (viz [vlastní preset |presets-and-extensions#Preset]) a seznamy všech presetů se sčítají s tím, co napíšete vy. Hodnotu `none` nebo `unknown` ale preset napsat nemůže: framework zná, váš projekt ne.
+
+
+Proč importovat globální funkce
+===============================
+
+S tím souvisí pravidlo `dresscode/global-imports`, které do souborů ve jmenných prostorech doplňuje řádky jako tenhle:
+
+```php
+namespace App;
+
+use function count, in_array, is_array, strlen;
+```
+
+Na první pohled zbytečnost, `count()` by fungovalo i bez importu. Jde ale o rychlost. Když kompilátor PHP narazí ve jmenném prostoru na nekvalifikované `strlen($s)`, neví, jestli za běhu nebude existovat `App\strlen()`, a tak vyrobí obecné volání, které se rozhodne až za běhu. Když ví, že jde o globální funkci, protože je importovaná nebo zapsaná jako `\strlen()`, může u zhruba tří desítek základních funkcí volání vynechat úplně: `strlen()` se promění v jedinou instrukci virtuálního stroje, `is_array()` v prostou kontrolu typu a `in_array()` s polem zapsaným přímo v kódu ve vyhledání v hashovací tabulce. V kódu, který se točí ve smyčkách, je to znát.
+
+Výchozí volba `functions: optimized` proto importuje právě ty funkce, které kompilátor umí nahradit, a ostatní nechá být, aby hlavička souboru zbytečně nebobtnala. Volba `backslash` místo importů píše před globální funkce zpětné lomítko, `\strlen()`, a to před všechny, nejen před ty optimalizované; na kompilátor to má stejný účinek.
+
+A tady se vracíme ke jmenným prostorům. Import `use function strlen;` přišpendlí volání ke globální funkci. Kdyby projekt měl vlastní `App\strlen()`, import by změnil chování. S `unknown` proto DressCode takový import považuje za rizikový. S `namespacedFunctions: none` nebo se seznamem ví, že `App\strlen()` neexistuje, takže je import bezpečný a pravidlo ho prostě doplní. Funkci ze seznamu přirozeně neimportuje.
+
+
+Shrnutí
+=======
+
+- Nekvalifikovaná funkce nebo konstanta ve jmenném prostoru znamená podle PHP buď tu z jmenného prostoru, nebo globální, a z jednoho souboru se to poznat nedá.
+- Napište do konfigurace `namespacedFunctions` a `namespacedConstants`: `none`, nebo seznam. Chování všech pravidel je pak jednoznačné a opravy, které stály na odhadu, přestanou být rizikové.
+- Bez těchto klíčů je DressCode opatrný a takové opravy dělá jen se svolením v `fixRisky`.
+- Novou deklaraci ve jmenném prostoru ohlásí `unlisted-namespaced-function` a `unlisted-namespaced-constant`; první seznam napíše `dresscode init`.
+- Funkci z jmenného prostoru volejte přes `use function`. Když se její soubor nenačte, dozvíte se to hned.

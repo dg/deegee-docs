@@ -23,7 +23,7 @@ NameResolver
 
 Překládá jména podle jmenného prostoru a importů, s tím, co PHP dělá za běhu: nekvalifikovaná funkce nebo konstanta, která ve jmenném prostoru není, spadne do globálního.
 
-Importy platí v bloku, ve kterém jsou napsané, kdežto deklarace patří celému jmennému prostoru. Druhý blok `namespace A { }` téhož souboru proto vidí funkci, kterou deklaroval ten první, ale ne to, co si první blok importoval. Co soubor nedeklaruje, o tom resolver neví nic: pád do globálního prostoru je odhad podle toho, co je v souboru vidět, ne znalost symbolu. Kdo přepisuje cizí kód, měl by s tím počítat.
+Importy platí v bloku, ve kterém jsou napsané, kdežto deklarace patří celému jmennému prostoru. Druhý blok `namespace A { }` téhož souboru proto vidí funkci, kterou deklaroval ten první, ale ne to, co si první blok importoval. Co soubor nedeklaruje, o tom resolver sám neví nic: pád do globálního prostoru je pak odhad podle toho, co je v souboru vidět, ne znalost symbolu. Z odhadu se stane znalost, když resolveru při vytvoření předáte, které funkce a konstanty jmenné prostory deklarují mimo soubor, i kdyby to bylo "žádné". Jestli konkrétní odpověď stojí jen na odhadu, řekne `isUncertain()`.
 
 ```php
 $resolver->getNamespace($node);         // 'App\Model', '' v globálním prostoru
@@ -36,9 +36,12 @@ $resolver->resolveFunction($name);
 $resolver->resolveConstant($name);
 
 $resolver->isGlobalFunctionCall($node, 'sizeof');   // volání globální funkce, případně té jedné
+$resolver->isUncertain($name);                      // true, když pád do globálního stojí jen na odhadu
 ```
 
-`isGlobalFunctionCall()` je otázka, kterou si dřív každý nástroj řešil sám a většinou hůř: uzel musí být volání funkce se jménem (ne `$f()` ani `$obj->f()`), jméno nesmí být klíčové slovo a po překladu musí být globální. Tak se pozná, že `count($a)` uvnitř `namespace App` opravdu volá `count`, a ne `App\count`, pokud taková funkce v souboru není importovaná.
+`isGlobalFunctionCall()` je otázka, kterou si dřív každý nástroj řešil sám a většinou hůř: uzel musí být volání funkce se jménem (ne `$f()` ani `$obj->f()`), jméno nesmí být klíčové slovo a po překladu musí být globální. Tak se pozná, že `count($a)` uvnitř `namespace App` opravdu volá `count`, a ne `App\count`, pokud taková funkce není importovaná, deklarovaná v souboru ani uvedená mezi deklaracemi mimo soubor.
+
+Nástroj, který podle odpovědi mění kód, se má zeptat i na `isUncertain()`. Takhle rozhoduje [DressCode |dresscode:namespaces], jestli je oprava riziková: s odhadem ano, se znalostí ne.
 
 Jméno, které jste právě naparsovali a ve stromu ještě nestojí, samo neví, kde bude; kde ho chcete přeložit, řekne druhý argument:
 
@@ -60,7 +63,7 @@ $resolver->getShortName('Other\Thing', $kind, $at);           // '\Other\Thing',
 $resolver->isAliasFree('Strings', $kind, $at);                // false, ten alias už něco znamená
 ```
 
-`getShortName()` vezme v úvahu aliasy, prefixové importy i jmenný prostor a vrátí nejkratší zápis, který na tom místě znamená totéž. To "znamená totéž" je tvrdá podmínka: kde je jméno obsazené importem, vrátí radši delší zápis. S `use function X\count;` v souboru tak globální `count` dostane `'\count'`, protože holé `count` by na tom místě znamenalo `X\count`. Přečtením zpátky přes `resolveFunction()` a spol. se tedy vždycky vrátíte k symbolu, na který jste se ptali. `isAliasFree()` odpoví na otázku, kterou si klade každý, kdo chce import doplnit: je tohle jméno tady ještě volné?
+`getShortName()` vezme v úvahu aliasy, prefixové importy i jmenný prostor a vrátí nejkratší zápis, který na tom místě znamená totéž. To "znamená totéž" je tvrdá podmínka: kde je jméno obsazené importem, vrátí radši delší zápis. S `use function X\count;` v souboru tak globální `count` dostane `'\count'`, protože holé `count` by na tom místě znamenalo `X\count`. Ze stejného důvodu dostane globální funkce nebo konstanta ve jmenném prostoru holé jméno jen tehdy, když resolver ví, co jmenné prostory deklarují mimo soubor; bez té znalosti by holé `count` mohlo znamenat `App\count` z jiného souboru. Přečtením zpátky přes `resolveFunction()` a spol. se tedy vždycky vrátíte k symbolu, na který jste se ptali. `isAliasFree()` odpoví na otázku, kterou si klade každý, kdo chce import doplnit: je tohle jméno tady ještě volné?
 
 A ještě jedna dvojice, tentokrát o deklaracích v souboru:
 

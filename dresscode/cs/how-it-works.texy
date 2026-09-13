@@ -46,7 +46,7 @@ Nejdřív ohlásit, teprve pak opravit
 
 Všimněte si, že `report()` stojí uvnitř podmínky. Není to náhoda, ale pravidlo, které jádro nástroje vynucuje: **kód se smí změnit až poté, co pravidlo porušení ohlásilo a hlášení prošlo.** Jádro spáruje každou změnu stromu s hlášením; pravidlo, které něco změní potichu, kontrakt poruší a dozvíte se to.
 
-Díky tomu má potlačení skutečnou váhu. Když napíšete `// dresscode:ignore`, pravidlo pro danou cestu vypnete nebo porušení zná baseline, nezmizí jen hláška ve výpisu, ale opravdu se neprovede ani oprava. Nespoléhá se přitom na dobrou vůli autora pravidla: pravidlo, které by opravovalo i potlačené místo, neprojde vlastním testem.
+Díky tomu má potlačení skutečnou váhu. Když napíšete `// dresscode:ignore` nebo pravidlo pro danou cestu vypnete, nezmizí jen hláška ve výpisu, ale opravdu se neprovede ani oprava. Nespoléhá se přitom na dobrou vůli autora pravidla: pravidlo, které by opravovalo i potlačené místo, neprojde vlastním testem.
 
 Na témž místě stojí i **rizikové opravy**. Oprava, která může změnit chování kódu, se ohlásí s příznakem rizika, a dokud ji běh nedovolí, hlášení neprojde a pravidlo kód nechá. Riziko bývá vlastnost místa: `get_class($x)` na `$x::class` je bezpečné, dokud `$x` nemůže být `null`, takže totéž pravidlo v témž průchodu opraví, co bezpečně umí, a rizikový výskyt jen vypíše. Pravidlo, které bezpečné místo z kódu poznat nemůže (`strict-call` neví, jestli kód na volném porovnání v `in_array()` nespoléhá), to o sobě řekne jednou a riziková je pak každá jeho oprava. Svolení nedává zapnutí pravidla, ale projekt, když pravidlo uvede v klíči `fixRisky`; přepínač `--fix-risky` dovolí všechny rizikové opravy na jeden běh.
 
@@ -100,14 +100,21 @@ Verze PHP je vlastnost projektu
 Pravidlo, které zapisuje syntaxi novějšího PHP (třeba `0o755` z PHP 8.1), se nesmí zapnout v projektu, který na takové verzi ještě neběží. DressCode proto cílovou verzi bere z projektu, ne z interpretu, na kterém běží on sám: z klíče `php` v konfiguraci, jinak z `require.php` v `composer.json`, jinak předpokládá PHP 8.0 jako nejnižší verzi, pro kterou se dá psát. Stejný soubor tak dostane stejný verdikt na jakémkoli počítači. Pravidlo pro novější syntaxi se pod svou verzí samo vynechá, takže to preset ani vy hlídat nemusíte.
 
 
+Jmenné prostory zná projekt
+===========================
+
+Nekvalifikované `strlen()` uvnitř jmenného prostoru `App` je podle PHP funkce `App\strlen()`, pokud za běhu existuje, jinak globální `strlen()`. Z jednoho souboru se to poznat nedá, a tak by každá oprava, která stojí na tom, že jde o známou globální funkci, byla jen odhad. DressCode to proto nechává říct projektu: klíče `namespacedFunctions` a `namespacedConstants` vyjmenují, co váš kód ve jmenných prostorech deklaruje, nebo řeknou `none`. Tu znalost dostane analýza, která jména překládá pro všechna pravidla, takže z ní těží každé pravidlo včetně vašich, a opravy, které byly rizikové jen kvůli téhle nejistotě, rizikové být přestanou. Celý příběh i s kouskem historie PHP popisuje stránka [Funkce a konstanty ve jmenných prostorech |namespaces].
+
+
 Co si z toho odnést
 ===================
 
 - Pravidla zapínáte a nastavujete jménem, které vidíte ve výpisu. Nic jiného než jméno a volby k nastavení není.
 - Na pořadí pravidel v konfiguraci nezáleží.
 - Když nějaké pravidlo vypnete, může se objevit hlášení jiného, které se k tomu místu dosud nedostalo. Je to totéž místo v kódu, jen ho teď hlásí někdo jiný.
-- Výjimka pro cestu i pro řádek vypíná i opravu, ne jen hlášku; totéž dělá baseline.
+- Výjimka pro cestu i pro řádek vypíná i opravu, ne jen hlášku. Baseline opravě nebrání, jen nehlásí, co zatím opravit nejde.
 - Oprava, která může změnit chování kódu, se jen ohlásí, dokud pravidlo neuvedete v klíči `fixRisky`.
+- Když napíšete `namespacedFunctions` a `namespacedConstants`, přestanou být rizikové opravy, které stály jen na odhadu, jestli je funkce globální.
 
 
 Slovníček
@@ -124,7 +131,7 @@ Pojmy, které se v dokumentaci opakují a stojí za to je mít v ruce. Anglický
 | rozšíření | extension | balíček, který se přihlásí do konfigurace a přinese vlastní pravidla a presety |
 | riziková oprava | risky fix | oprava, která může změnit chování kódu; udělá se jen u pravidla uvedeného v klíči `fixRisky` nebo s `--fix-risky`, jinak se ohlásí |
 | potlačení | suppression | vypnutí pravidla na jednom řádku, v bloku nebo v celém souboru komentářem `dresscode:ignore` |
-| baseline | baseline | soupis porušení, která v projektu jsou dnes a nemají se hlásit |
+| baseline | baseline | soupis porušení, která zatím opravit nejde a nemají se hlásit; díky ní zapnete pravidlo, které kód ještě nesplňuje |
 | jádro | engine | ta část nástroje, která pouští pravidla, rozhoduje spory a skládá výstup |
 | průchod | pass | jedno projití stromu všemi pravidly jedné fáze |
 | fáze | stage | `Structure`, `Formatting` a `Cleanup`; průchody jdou v tomto pořadí |

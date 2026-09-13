@@ -2,7 +2,7 @@ Potlačení pravidel a baseline
 *****************************
 
 .[perex]
-Jak vypnout pravidlo na jednom řádku, v bloku nebo v celém souboru, proč potlačení zastaví i opravu, a jak nasadit DressCode na velký projekt bez obřího commitu díky baseline.
+Jak vypnout pravidlo na jednom řádku, v bloku nebo v celém souboru, proč potlačení zastaví i opravu, a jak díky baseline zapnout pravidlo, které váš kód zatím nesplňuje.
 
 
 Čtyři úrovně
@@ -17,9 +17,9 @@ Výjimky z pravidel osobně nemám rád a do kódu je nepíšu; když už, tak v
 | celý soubor | `dresscode:ignore-file` | v kódu |
 | cesta | `excludePaths`, přepis v `overrides` | v konfiguraci |
 
-Vedle nich stojí **baseline**, která není výjimka z pravidla, ale z času: zapíše porušení, která v projektu jsou dnes, a hlásí jen ta nová.
+Vedle nich stojí **baseline**, která není výjimka z pravidla, ale z času: zapíše porušení, která dnes opravit neumíte, a hlásí jen ta nová.
 
-Ať zvolíte kteroukoli, platí jedna věc: **potlačené porušení se neopraví.** Pravidlo smí kód změnit jen poté, co porušení ohlásilo a hlášení prošlo, a hlídá to jádro nástroje, ne autor pravidla. Potlačení tedy není jen ticho ve výpisu, ale skutečné vypnutí. Totéž platí pro baseline: co zná, se neopraví, takže `fix` změní přesně to, co `check` hlásí.
+Ať zvolíte kteroukoli úroveň, platí jedna věc: **potlačené porušení se neopraví.** Pravidlo smí kód změnit jen poté, co porušení ohlásilo a hlášení prošlo, a hlídá to jádro nástroje, ne autor pravidla. Potlačení tedy není jen ticho ve výpisu, ale skutečné vypnutí. Baseline je jiný případ a opravě nebrání nikdy, jak popisuje [její oddíl |#Baseline].
 
 
 Potlačení na řádku
@@ -93,16 +93,25 @@ overrides:
 Baseline
 ========
 
-Na projektu s tisíci porušeními by první `fix` znamenal jeden obří commit. Někdy je to přesně to, co chcete udělat a mít za sebou. Někdy ne: kód se právě reviduje na jiné větvi, tým na to nemá týden, nebo chcete nové pravidlo zapnout jen pro nově psaný kód. Pro tyhle případy je baseline, tedy soupis porušení, která se dnes nemají hlásit.
+Nový standard nasadíte jedním commitem: `dresscode fix` opraví, co opravit jde, a výsledek commitnete samostatně, jak popisuje [Začínáme |getting-started#Automatická oprava]. Po takovém commitu ale může zůstat něco, co za vás žádný nástroj neudělá. Pravidlo `type-hint-required` chce u každého parametru typ a vy máte tři sta funkcí bez něj. U každé je potřeba rozmyslet, jaký typ tam patří, a to jsou týdny práce. Dokud pravidlo nezapnete, přibývají s každým commitem další.
+
+Právě na tohle je baseline: soupis porušení, která dnes opravit neumíte. Pravidlo díky ní zapnete hned, stará porušení počkají, až na ně dojde, a každé nové se ohlásí. Totéž platí pro rizikovou opravu, kterou projekt zatím nepřijal, nebo pro řádek, který je delší, než pravidlo dovolí, a rozlámat ho za vás nejde.
+
+U statické analýzy je baseline samozřejmost, PHPStan ji má léta. PHP CS Fixer ani PHP_CodeSniffer ji ale nemají a žádost o ni se u obou zadrhla na téže otázce: co s ní má dělat automatická oprava? DressCode odpovídá jednoduše: **baseline obsahuje jen to, co oprava nechá.** Co opravit jde, se opraví, a baseline hlídá zbytek.
+
+Proto se generuje nad kódem, na kterém už `fix` nemá co dělat. Oba příkazy vezmou cesty z klíče `paths` v konfiguraci; můžete je také vypsat za příkaz:
 
 ```shell
+dresscode fix
 dresscode check --generate-baseline
 ```
 
 /--pre .[terminal]
-Baseline with 1408 violations written to dresscode-baseline.neon.
+Baseline with 312 violations written to dresscode-baseline.neon.
 Name it in the configuration to make it apply.
 \--
+
+Na pořadí záleží. Kdyby `fix` ještě něco změnil, generování nic nezapíše a vyzve vás, abyste ho pustili napřed; do baseline nepatří nic, co jde opravit. Stejně tak nejde generovat s `--fix-risky`: rizikové opravy, které projekt nepřijal v klíči [`fixRisky` |configuration#Varování a rizikové opravy], do baseline patří, protože je nástroj bez vašeho svolení neudělá.
 
 Soubor vznikne vedle konfigurace a ve stejném formátu (`.neon` vedle `dresscode.neon`, `.php` vedle `dresscode.php`). Platit začne ve chvíli, kdy ho konfigurace pojmenuje:
 
@@ -116,15 +125,17 @@ Uvnitř je pro každý soubor seznam porušení s pravidlem, zprávou a otiskem:
 files:
 	src/Cart.php:
 		-
-			rule: dresscode/strict-comparison
-			message: 'The == comparison must be written ''==='''
+			rule: dresscode/type-hint-required
+			message: 'Parameter $id has no type hint nor @param annotation'
 			fingerprint: a91a46b053d6d827
 ```
 
-Otisk se počítá z pravidla, zprávy a obsahu řádku, ne z jeho čísla, takže baseline přežije úpravy jinde v souboru. Porušení, která jsou v baseline, se nehlásí ani neopravují, a to už ve chvíli, kdy je pravidlo hlásí: jádro hlášení zamítne stejně, jako by na řádku stál `dresscode:ignore`, a pravidlo kód nechá. První `fix` nad souborem s baseline proto změní jen to, co by `check` vypsal, a ne celý soubor, což je přesně to, co chcete od hooku po dvouřádkové úpravě. Migrace velkého projektu se tím stává prací po kusech: vyškrtnete z baseline, co chcete opravit, a `fix` opraví právě to. Shrnutí běhu porušení v baseline přizná, aby nikdo nežil v domnění, že je uklizeno:
+Otisk se počítá z pravidla, zprávy a obsahu řádku, ne z jeho čísla, takže baseline přežije úpravy jinde v souboru. Porušení, která baseline zná, se nehlásí, a shrnutí běhu je přizná, aby nikdo nežil v domnění, že je uklizeno:
 
 /--pre .[terminal]
-OK  1408 violations in the baseline in 214 files
+OK  312 violations in the baseline in 214 files
 \--
 
-Když nějaké porušení z baseline zmizí, protože ho někdo opravil, běh upozorní, že položka už ničemu neodpovídá (`1 entry of the baseline no longer matches a violation; regenerate it`); stačí baseline vygenerovat znovu. Upozorní jen na položky souborů, které zpracoval, a při `--only` jen na položky pravidel, která běžela, takže kontrola části projektu nehlásí jako zastaralé to, na co se neptala. Baseline se má zmenšovat, a jakmile je prázdná, smažte řádek z konfigurace a soubor s ním.
+Baseline nikdy nebrání opravě. Komentář `dresscode:ignore` říká "tady pravidlo nemá pravdu", a proto zastaví i opravu. Baseline říká "tohle zatím neumíme", a co už umíme, není důvod nechávat. Když se porušení z baseline stane opravitelným, třeba proto, že projekt přijal rizikové opravy daného pravidla, `fix` ho opraví jako každé jiné.
+
+Když nějaké porušení z baseline zmizí, protože ho někdo opravil, nebo ho opravil `fix`, jakmile to šlo, běh upozorní, že položka už ničemu neodpovídá (`1 entry of the baseline no longer matches a violation; regenerate it`). Pusťte `fix` a baseline vygenerujte znovu. Běh přitom upozorní jen na položky souborů, které zpracoval, a při `--only` jen na položky pravidel, která běžela, takže kontrola části projektu nehlásí jako zastaralé to, na co se neptala. Baseline se má zmenšovat, a jakmile je prázdná, smažte řádek z konfigurace a soubor s ním.

@@ -49,7 +49,7 @@ Přepínače
 | `--fix-risky` | udělá [rizikové opravy |configuration#Varování a rizikové opravy] všech pravidel, nejen těch, která konfigurace jmenuje v klíči `fixRisky`; ohlásí se tak jako tak |
 | `--max-warnings <n>` | víc než `n` [varování |configuration#Varování a rizikové opravy] znamená exit kód `1`; bez něj varování exit kód nemění |
 | `--stdin <cesta>` | čte kód ze standardního vstupu, jako by to byl soubor na dané cestě; `fix` pak opravený kód vypíše na standardní výstup |
-| `--generate-baseline` | zapíše nalezená porušení do [baseline |suppressing#Baseline] místo hlášení; jen u `check` |
+| `--generate-baseline` | zapíše porušení, která oprava nechá, do [baseline |suppressing#Baseline] místo hlášení; jen u `check` a nad kódem, na kterém `fix` nemá co opravit |
 | `--file <cesta>` | u `config`: co platí pro tenhle jeden soubor, včetně přepisů v `overrides` |
 | `--json` | u `config`: totéž jako data |
 | `--output <soubor>` | u `standard`: zapíše dokument do souboru místo na výstup |
@@ -151,6 +151,7 @@ Standard   nette, as given
 Indent     tab 100% of 32 files
 Quotes     single 100% of 591 strings
 Conditions no conditions
+Namespaced none declared in 35 files
 Dry run    2 of 35 sampled files would change
 
 dresscode.neon written.
@@ -175,6 +176,9 @@ presets:
 
 indent: tab  # tab 100% of 32 files
 
+namespacedFunctions: none
+namespacedConstants: none
+
 rules:
 	string-quotes: single  # single 100% of 591 strings
 
@@ -186,6 +190,8 @@ fileExtensions:
 	- php
 	- phpt
 ```
+
+Vedle tří rozhodnutí zapíše `init` i klíče `namespacedFunctions` a `namespacedConstants`. Tady nejde o většinu, ale o úplnost, a tak vzorek nestačí: `init` projde všechny soubory v cestách, najde funkce a konstanty deklarované ve jmenných prostorech a napíše jejich seznam, nebo `none`, když žádné nejsou. Co ty klíče znamenají, popisuje stránka [Funkce a konstanty ve jmenných prostorech |namespaces].
 
 Standard `init` neměří: vezme ten, který mu dáte přepínačem `--preset`, a bez něj napíše `per` s komentářem, že ostatní tři jsou `psr12`, `nette` a `symfony`. Cesty bere z adresářů `src`, `tests`, `app` a `lib`, které v kořeni opravdu jsou.
 
@@ -263,7 +269,7 @@ Cache a paralelní běh
 
 DressCode si pamatuje každý soubor, který prošel čistě: jeho cestu a otisk obsahu, a spolu s nimi otisk konfigurace, která pro něj platí (včetně přepisů pro jeho cestu), cílové verze PHP, baseline a verzí nainstalovaných balíčků. Cesta v klíči je proto, že tentýž obsah může ve dvou souborech dostat dva verdikty, třeba kvůli přepisu nebo pravidlu, které se na cestu dívá. Soubor se stejnou cestou, obsahem a konfigurací příště přeskočí; jakmile se kterákoli z těch věcí změní, zpracuje ho znovu. Počty ve shrnutí i varování o zastaralých položkách baseline vyjdou s cache stejně jako bez ní. Obsah, který zapsal `fix`, si DressCode zapamatuje jen v projektu bez baseline. Cache leží v systémovém dočasném adresáři, nebo tam, kam ukazuje `cacheDir` v konfiguraci; `--no-cache` ji pro jeden běh obejde.
 
-Soubory, které cache nepokryje, se rozdělí mezi pracovní procesy. Výchozí počet odpovídá počtu procesorů, nejvýš však jeden proces na čtyři soubory, protože spuštění procesu něco stojí. `--jobs 1` běží bez nich, což se hodí při ladění vlastního pravidla, a `--jobs 8` se vyplatí na stroji s mnoha jádry, kde by výchozí odhad byl zbytečně nízký. S procesy běží i `--generate-baseline`, takže první příkaz velkého projektu netrvá déle než ostatní.
+Soubory, které cache nepokryje, se rozdělí mezi pracovní procesy. Výchozí počet odpovídá počtu procesorů, nejvýš však jeden proces na čtyři soubory, protože spuštění procesu něco stojí. `--jobs 1` běží bez nich, což se hodí při ladění vlastního pravidla, a `--jobs 8` se vyplatí na stroji s mnoha jádry, kde by výchozí odhad byl zbytečně nízký. S procesy běží i `--generate-baseline`, takže generování netrvá déle než kontrola.
 
 
 Standardní vstup

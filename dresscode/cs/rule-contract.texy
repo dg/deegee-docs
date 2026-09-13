@@ -70,7 +70,7 @@ if ($context->report($node, 'The var_dump() call must not stay in the code')) {
 }
 ```
 
-`report()` vrátí `false`, pokud je porušení na svém řádku potlačené komentářem, pokud ho zná baseline, nebo pokud je oprava riziková a běh ji nedovolil; pak se nesmí nic měnit. Nespoléhá se přitom na dobrou vůli: strom počítá své změny a jádro každou změnu spáruje s hlášením ze stejného volání. Změna bez hlášení, nebo po hlášení, které vrátilo `false`, je porušený kontrakt. Za běhu je z toho varování, s přepínačem `--strict-rules` a v `RuleTester`u chyba.
+`report()` vrátí `false`, pokud je porušení na svém řádku potlačené komentářem, nebo pokud je oprava riziková a běh ji nedovolil; pak se nesmí nic měnit. Porušení, které zná baseline, `report()` nezamítne: nehlásí se, ale pravidlo ho opravit smí. Nespoléhá se přitom na dobrou vůli: strom počítá své změny a jádro každou změnu spáruje s hlášením ze stejného volání. Změna bez hlášení, nebo po hlášení, které vrátilo `false`, je porušený kontrakt. Za běhu je z toho varování, s přepínačem `--strict-rules` a v `RuleTester`u chyba.
 
 Oprava, která může změnit chování kódu jen v některém výskytu, se hlásí s `risky: true` právě u toho výskytu:
 
@@ -80,7 +80,15 @@ if ($context->report($node, 'The class name must be obtained with $x::class', ri
 }
 ```
 
-Takové hlášení vrátí `false`, dokud projekt pravidlo neuvede v klíči `risky` nebo běh nedostane `--fix-risky`; pravidlo pak kód nechá a porušení s příznakem rizika zůstane mezi tím, co `fix` neopravil. Totéž pravidlo v témž průchodu opraví bezpečný výskyt a rizikový jen ohlásí. Pravidlo, jehož riziková je každá oprava, nepíše `risky: true` ke každému hlášení, ale jednou do `RuleInfo`. Fixtura s `// risky` v hlavičce ukazuje, jak pravidlo opravuje, když smí, a je zároveň důkaz pro referenci, že pravidlo takové opravy má.
+Takové hlášení vrátí `false`, dokud projekt pravidlo neuvede v klíči `fixRisky` nebo běh nedostane `--fix-risky`; pravidlo pak kód nechá a porušení s příznakem rizika zůstane mezi tím, co `fix` neopravil. Totéž pravidlo v témž průchodu opraví bezpečný výskyt a rizikový jen ohlásí. Pravidlo, jehož riziková je každá oprava, nepíše `risky: true` ke každému hlášení, ale jednou do `RuleInfo`. Fixtura s `// risky` v hlavičce ukazuje, jak pravidlo opravuje, když smí, a je zároveň důkaz pro referenci, že pravidlo takové opravy má.
+
+Výskyt, pro který pravidlo opravu nemá a jen ho hlásí, ohlaste s `fixable: false`. `report()` pak vrátí `false` vždy a hlášení nikdy není rizikové. Jinak by rizikové hlášení bez opravy vypadalo jako oprava, která čeká na svolení, a souhrn by radil `--fix-risky`, přestože by se nic neopravilo. Třeba `dresscode/strict-call` explicitní `false` v `in_array()` jen hlásí, protože ho autor kódu napsal vědomě:
+
+```php
+$context->report($strict, 'The in_array() call must pass $strict = true', fixable: false);
+```
+
+Na zapomenutou deklaraci upozorní `RuleTester`: fixtura s `// risky`, po jejímž běhu zůstane rizikové porušení, selže, protože oprava byla povolená a přesto se neudělala.
 
 Hlášení se váže na uzel nebo na token. Problém, který leží v bílých znacích nebo v komentáři, ohlaste s příslušnou trivia (`report($token, $message, trivia: $trivia)`), aby porušení dostalo řádek té trivia a `dresscode:ignore` na tom řádku ho našel; jinak spadne na řádek tokenu. Závažnost je `Severity::Error`; `Severity::Warning` je pro nález, který nemá shodit build, a stejný účinek dá uživateli klíč `warnings` v konfiguraci, který změkčí kterékoli pravidlo.
 
@@ -161,6 +169,19 @@ if ($resolver->isGlobalFunctionCall($node, 'var_dump')) {
 ```
 
 Jádro analýzu vytvoří napoprvé a drží ji, dokud se strom nezmění; po každé změně vzniká znovu, takže nikdy nečtete zastaralý stav. Vestavěné jsou `PhpSyntax\Analyses\NameResolver` (jmenný prostor, importy, překlad jmen), `PhpSyntax\Analyses\Scope` (funkce, třída, dostupnost `$this`) a `DressCode\Analyses\PhpDoc` (dokumentační komentáře jako strom z parseru phpDocu). Vlastní analýza s konstruktorem nad `FileNode` se nikde neregistruje; jen ta, která potřebuje továrnu, se zapisuje do konfigurace klíčem `analyses`.
+
+`NameResolver` ví i to, co v jednom souboru vidět nejde: které funkce a konstanty projekt deklaruje ve jmenných prostorech, jak to říkají klíče `namespacedFunctions` a `namespacedConstants`. `isGlobalFunctionCall()` s tím počítá sám. Když klíč chybí, stojí odpověď jen na předpokladu, že nekvalifikované jméno je globální, a to prozradí `isUncertain()`. Pravidlo, jehož oprava na tom předpokladu stojí, ji u takového výskytu ohlásí jako rizikovou:
+
+```php
+if (
+	$resolver->isGlobalFunctionCall($node, 'is_null')
+	&& $context->report($node, 'The is_null() call must be a comparison with null', risky: $resolver->isUncertain($node->name))
+) {
+	// ...
+}
+```
+
+Jméno funkce, které pravidlo do kódu zapisuje, neskládejte z řetězce, ale vezměte z `$resolver->getShortName('count', SymbolKind::Function, $node)`: podle importů a konfigurace řekne, jestli se má napsat `count()`, nebo `\count()`. Proč na tom záleží, popisuje stránka [Funkce a konstanty ve jmenných prostorech |namespaces].
 
 
 Testování
