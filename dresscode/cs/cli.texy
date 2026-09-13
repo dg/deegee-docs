@@ -46,7 +46,7 @@ Přepínače
 | `--preset <název>` | přidá preset; lze uvést vícekrát |
 | `--rule <název>=on` nebo `=off` | zapne nebo vypne pravidlo pro tenhle běh; lze uvést vícekrát |
 | `--only <název>` | zúží běh na jmenovaná pravidla; jméno presetu znamená všechna jeho pravidla. Lze uvést vícekrát, viz [níže |#Jedno pravidlo najednou: --only] |
-| `--fix-risky` | udělá [rizikové opravy |configuration#Varování a rizikové opravy] všech pravidel, nejen těch, která konfigurace jmenuje v klíči `risky`; ohlásí se tak jako tak |
+| `--fix-risky` | udělá [rizikové opravy |configuration#Varování a rizikové opravy] všech pravidel, nejen těch, která konfigurace jmenuje v klíči `fixRisky`; ohlásí se tak jako tak |
 | `--max-warnings <n>` | víc než `n` [varování |configuration#Varování a rizikové opravy] znamená exit kód `1`; bez něj varování exit kód nemění |
 | `--stdin <cesta>` | čte kód ze standardního vstupu, jako by to byl soubor na dané cestě; `fix` pak opravený kód vypíše na standardní výstup |
 | `--generate-baseline` | zapíše nalezená porušení do [baseline |suppressing#Baseline] místo hlášení; jen u `check` |
@@ -82,6 +82,7 @@ Rules      146 of 159 run
       emptyBodies                     ownLine                 dresscode/nette-style (over dresscode/per sameLine)
   dresscode/line-length                       the configuration
       limit                           100                     the configuration
+  dresscode/strict-call                       dresscode/types, risky fixes only reported
   ...
 
 Not running
@@ -90,7 +91,7 @@ Not running
   6 more that no preset or rule of the configuration mentions
 \--
 
-U každého pravidla stojí vrstva, která ho zapnula, u každé volby, kterou některá vrstva jmenovala, výsledná hodnota, kdo ji nastavil a co tím přebil. Pravidlo, které neběží, říká proč: vypnul ho preset nebo konfigurace, chybí mu verze PHP, nebo o něm nikdo nemluvil. `--file cesta` ukáže totéž pro jeden soubor, tedy i s přepisy, které pro něj platí, a `--json` dá výstup jako data pro nástroje.
+U každého pravidla stojí vrstva, která ho zapnula, u každé volby, kterou některá vrstva jmenovala, výsledná hodnota, kdo ji nastavil a co tím přebil. Pravidlo s [rizikovými opravami |configuration#Varování a rizikové opravy] navíc říká, jestli jste je přijali (`risky fixes accepted`), nebo jestli se jen ohlásí (`risky fixes only reported`). Pravidlo, které neběží, říká proč: vypnul ho preset nebo konfigurace, chybí mu verze PHP, zapíná ho jen přepis, nebo o něm nikdo nemluvil. `--file cesta` ukáže totéž pro jeden soubor, tedy i s přepisy, které pro něj platí, a `--json` dá výstup jako data pro nástroje.
 
 
 Vysvětlení pravidla: explain
@@ -163,7 +164,7 @@ Měří se tři rozhodnutí, a každé jinou jednotkou, podle toho, jak často s
 - **uvozovky** po řetězcích, protože se rozhodují u každého znovu. Pravidlo je obousměrné, takže jedno spuštění spočítá řetězce psané dvojitě a druhé ty jednoduché a jmenovatel je jejich součet;
 - **tvar víceřádkové podmínky** po podmínkách; třetí běh, který povolí oba tvary, spočítá podmínky, které nejsou ani v jednom.
 
-Zapíše se jen to, co kód říká dost jasně. Hodnota, se kterou souhlasí aspoň 70 % míst, se napíše jako hodnota i s procenty. Kde hranice nedosáhne žádná, ale obě dohromady ano, napíše se u tvaru podmínky tolerance `[perLine, compact]`, tedy "oba tvary projdou"; u uvozovek, kde tolerance nedává smysl, se napíše `keep`. A kde ani to ne, nenapíše se nic a rozhoduje standard. Klíč `risky` nenapíše `init` nikdy: souhlas s opravami, které mohou změnit chování kódu, se z kódu změřit nedá.
+Zapíše se jen to, co kód říká dost jasně. Hodnota, se kterou souhlasí aspoň 70 % míst, se napíše jako hodnota i s procenty. Kde hranice nedosáhne žádná, ale obě dohromady ano, napíše se u tvaru podmínky tolerance `[perLine, compact]`, tedy "oba tvary projdou"; u uvozovek, kde tolerance nedává smysl, se napíše `keep`. A kde ani to ne, nenapíše se nic a rozhoduje standard. Klíč `fixRisky` nenapíše `init` nikdy: souhlas s opravami, které mohou změnit chování kódu, se z kódu změřit nedá.
 
 ```neon
 # Written by dresscode init from 35 of the 35 files. A number is the share of the places a decision
@@ -211,10 +212,10 @@ Formáty výstupu
 
 Přepínač `--format` volí celý tvar výstupu, ne jeho detail; formáty se nekombinují.
 
-`console` je výchozí volba pro terminál: hlavička s konfigurací, cílovou verzí PHP a rozsahem kontroly, pak jednotlivé soubory s porušeními (řádek, sloupec, zpráva, pravidlo) a nakonec shrnutí. Porušení pravidla z klíče `warnings` má značku `warning` místo `error` a shrnutí ho počítá zvlášť. U `check` shrnutí řekne i to, kolik porušení by po `fix` zbylo a kolik z nich jsou rizikové opravy, které čekají na svolení:
+`console` je výchozí volba pro terminál: hlavička s konfigurací, cílovou verzí PHP a rozsahem kontroly, pak jednotlivé soubory s porušeními (řádek, sloupec, zpráva, pravidlo) a nakonec shrnutí. Porušení pravidla z klíče `warnings` má značku `warning` místo `error` a shrnutí ho počítá zvlášť. U `check` shrnutí řekne i to, kolik porušení by po `fix` zbylo a kolik z nich jsou rizikové opravy, které čekají na svolení, a u kterých pravidel:
 
 /--pre .[terminal]
-FOUND  36 violations, 2 warnings, a fix leaves 5, 3 of them risky, fixed with --fix-risky or once their rules are named in risky in 12 of 214 files
+FOUND  36 violations, 2 warnings, a fix leaves 5, 3 of them risky (strict-call, strict-comparison), fixed with --fix-risky or once their rules are named in fixRisky in 12 of 214 files
 \--
 
 `fix` vypíše každý soubor, který přepsal, s poznámkou `rewritten` a pod ním to, co opravený text pořád porušuje, s řádky a sloupci v opraveném souboru. Které porušení oprava odstranila, se z výsledného textu poznat nedá, a tak shrnutí počítá nalezená a zbylá porušení; co přesně se změnilo, ukáže `--diff`:
