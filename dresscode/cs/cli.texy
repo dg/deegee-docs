@@ -46,7 +46,7 @@ Přepínače
 | `--preset <název>` | přidá preset; lze uvést vícekrát |
 | `--rule <název>=on` nebo `=off` | zapne nebo vypne pravidlo pro tenhle běh; lze uvést vícekrát |
 | `--only <název>` | zúží běh na jmenovaná pravidla; jméno presetu znamená všechna jeho pravidla. Lze uvést vícekrát, viz [níže |#Jedno pravidlo najednou: --only] |
-| `--fix-risky` | udělá i [rizikové opravy |configuration#Varování a rizikové opravy]; bez něj se jen ohlásí, pokud konfigurace neříká `risky: yes` |
+| `--fix-risky` | udělá [rizikové opravy |configuration#Varování a rizikové opravy] všech pravidel, nejen těch, která konfigurace jmenuje v klíči `risky`; ohlásí se tak jako tak |
 | `--max-warnings <n>` | víc než `n` [varování |configuration#Varování a rizikové opravy] znamená exit kód `1`; bez něj varování exit kód nemění |
 | `--stdin <cesta>` | čte kód ze standardního vstupu, jako by to byl soubor na dané cestě; `fix` pak opravený kód vypíše na standardní výstup |
 | `--generate-baseline` | zapíše nalezená porušení do [baseline |suppressing#Baseline] místo hlášení; jen u `check` |
@@ -163,7 +163,7 @@ Měří se tři rozhodnutí, a každé jinou jednotkou, podle toho, jak často s
 - **uvozovky** po řetězcích, protože se rozhodují u každého znovu. Pravidlo je obousměrné, takže jedno spuštění spočítá řetězce psané dvojitě a druhé ty jednoduché a jmenovatel je jejich součet;
 - **tvar víceřádkové podmínky** po podmínkách; třetí běh, který povolí oba tvary, spočítá podmínky, které nejsou ani v jednom.
 
-Zapíše se jen to, co kód říká dost jasně. Hodnota, se kterou souhlasí aspoň 70 % míst, se napíše jako hodnota i s procenty. Kde hranice nedosáhne žádná, ale obě dohromady ano, napíše se u tvaru podmínky tolerance `[perLine, compact]`, tedy "oba tvary projdou"; u uvozovek, kde tolerance nedává smysl, se napíše `keep`. A kde ani to ne, nenapíše se nic a rozhoduje standard. `risky: yes` nenapíše `init` nikdy.
+Zapíše se jen to, co kód říká dost jasně. Hodnota, se kterou souhlasí aspoň 70 % míst, se napíše jako hodnota i s procenty. Kde hranice nedosáhne žádná, ale obě dohromady ano, napíše se u tvaru podmínky tolerance `[perLine, compact]`, tedy "oba tvary projdou"; u uvozovek, kde tolerance nedává smysl, se napíše `keep`. A kde ani to ne, nenapíše se nic a rozhoduje standard. Klíč `risky` nenapíše `init` nikdy: souhlas s opravami, které mohou změnit chování kódu, se z kódu změřit nedá.
 
 ```neon
 # Written by dresscode init from 35 of the 35 files. A number is the share of the places a decision
@@ -211,15 +211,25 @@ Formáty výstupu
 
 Přepínač `--format` volí celý tvar výstupu, ne jeho detail; formáty se nekombinují.
 
-`console` je výchozí volba pro terminál: hlavička s konfigurací, cílovou verzí PHP a rozsahem kontroly, pak jednotlivé soubory s porušeními (řádek, sloupec, zpráva, pravidlo) a nakonec shrnutí. Porušení pravidla z klíče `warnings` má značku `warning` místo `error` a shrnutí ho počítá zvlášť; stejně zvlášť počítá rizikové opravy, které čekají na svolení:
+`console` je výchozí volba pro terminál: hlavička s konfigurací, cílovou verzí PHP a rozsahem kontroly, pak jednotlivé soubory s porušeními (řádek, sloupec, zpráva, pravidlo) a nakonec shrnutí. Porušení pravidla z klíče `warnings` má značku `warning` místo `error` a shrnutí ho počítá zvlášť. U `check` shrnutí řekne i to, kolik porušení by po `fix` zbylo a kolik z nich jsou rizikové opravy, které čekají na svolení:
 
 /--pre .[terminal]
-FOUND  36 violations, 2 warnings, 34 of them fixable, 3 of them risky, run with --fix-risky to have them fixed in 12 files
+FOUND  36 violations, 2 warnings, a fix leaves 5, 3 of them risky, fixed with --fix-risky or once their rules are named in risky in 12 of 214 files
+\--
+
+`fix` vypíše každý soubor, který přepsal, s poznámkou `rewritten` a pod ním to, co opravený text pořád porušuje, s řádky a sloupci v opraveném souboru. Které porušení oprava odstranila, se z výsledného textu poznat nedá, a tak shrnutí počítá nalezená a zbylá porušení; co přesně se změnilo, ukáže `--diff`:
+
+/--pre .[terminal]
+src/Cart.php  rewritten
+src/Order.php  rewritten
+  error  12:1  The line is 133 characters long, the limit is 120  line-length
+
+FIXED  36 violations found, 1 remaining in 12 of 214 files
 \--
 
 Barvy se vypnou samy, jakmile výstup nejde do terminálu.
 
-`github` se zvolí sám, když běh probíhá jako krok GitHub Actions. Každé porušení je anotace, která se ukáže přímo v diffu pull requestu.
+`github` se zvolí sám, když běh probíhá jako krok GitHub Actions. Každé porušení je anotace, která se ukáže přímo v diffu pull requestu; u `fix` jsou to porušení, která oprava nechala.
 
 `bare` je pro Git hooky a nástroje, které výstup čtou: bez hlavičky a bez shrnutí, jen porušení, která zůstala na uživateli, ve stejném rozvržení jako `console`, a u každého přepsaného souboru řádek `rewritten`. Čistý běh nevypíše vůbec nic.
 
@@ -230,9 +240,9 @@ src/Order.php
   error  12:1  The line is 133 characters long, the limit is 120  line-length
 \--
 
-`json` je strojově čitelný a jeho tvar se v minoritních verzích nemění: pole `files` s porušeními (pravidlo, zpráva, řádek, sloupec, závažnost, zda je opravitelné, zda je rizikové, otisk), `summary` s počty včetně rizikových oprav, které čekají, a porušení v baseline, a `warnings`.
+`json` je strojově čitelný a jeho tvar se v minoritních verzích nemění. Pole `files` má u každého souboru nalezená porušení `violations` (pravidlo, zpráva, řádek, sloupec, závažnost, zda je oprava riziková, otisk) a porušení `remaining`, která zbudou po opravě, s pozicemi v opraveném textu. Dál následuje `summary` s počty, mezi nimi `remaining`, rizikové opravy, které čekají, soubory se syntaktickou chybou (`syntaxErrors`) a porušení v baseline, a nakonec `warnings`.
 
-`checkstyle` je XML, kterému rozumí Jenkins, nástroj `cs2pr` a další nástroje pro CI.
+`checkstyle` je XML, kterému rozumí Jenkins, nástroj `cs2pr` a další nástroje pro CI; u `fix` v něm stejně jako u `github` jsou porušení, která oprava nechala.
 
 
 Exit kódy
@@ -240,7 +250,7 @@ Exit kódy
 
 | kód | význam |
 |---|---|
-| `0` | čisto; u `fix` také tehdy, když všechno opravil; varování bez prahu `--max-warnings` exit kód nemění |
+| `0` | čisto; u `fix` také tehdy, když opravený text už nic neporušuje; varování bez prahu `--max-warnings` exit kód nemění |
 | `1` | zůstala porušení, soubor nejde parsovat, nebo je varování víc, než `--max-warnings` dovolí |
 | `2` | selhání: špatná konfigurace, neznámé pravidlo, pravidlo, které vyhodilo výjimku nebo se s jiným zacyklilo |
 
@@ -250,7 +260,7 @@ Selhání jednoho souboru běh nezastaví: soubor se ohlásí jako selhavší, n
 Cache a paralelní běh
 =====================
 
-DressCode si pamatuje otisk obsahu každého souboru, který prošel čistě, a spolu s ním otisk konfigurace, která pro něj platí (včetně přepisů pro jeho cestu), cílové verze PHP, baseline a verzí nainstalovaných balíčků. Soubor se stejným obsahem a stejnou konfigurací příště přeskočí; jakmile se kterákoli z těch věcí změní, zpracuje ho znovu. Cache leží v systémovém dočasném adresáři, nebo tam, kam ukazuje `cacheDir` v konfiguraci; `--no-cache` ji pro jeden běh obejde.
+DressCode si pamatuje každý soubor, který prošel čistě: jeho cestu a otisk obsahu, a spolu s nimi otisk konfigurace, která pro něj platí (včetně přepisů pro jeho cestu), cílové verze PHP, baseline a verzí nainstalovaných balíčků. Cesta v klíči je proto, že tentýž obsah může ve dvou souborech dostat dva verdikty, třeba kvůli přepisu nebo pravidlu, které se na cestu dívá. Soubor se stejnou cestou, obsahem a konfigurací příště přeskočí; jakmile se kterákoli z těch věcí změní, zpracuje ho znovu. Počty ve shrnutí i varování o zastaralých položkách baseline vyjdou s cache stejně jako bez ní. Obsah, který zapsal `fix`, si DressCode zapamatuje jen v projektu bez baseline. Cache leží v systémovém dočasném adresáři, nebo tam, kam ukazuje `cacheDir` v konfiguraci; `--no-cache` ji pro jeden běh obejde.
 
 Soubory, které cache nepokryje, se rozdělí mezi pracovní procesy. Výchozí počet odpovídá počtu procesorů, nejvýš však jeden proces na čtyři soubory, protože spuštění procesu něco stojí. `--jobs 1` běží bez nich, což se hodí při ladění vlastního pravidla, a `--jobs 8` se vyplatí na stroji s mnoha jádry, kde by výchozí odhad byl zbytečně nízký. S procesy běží i `--generate-baseline`, takže první příkaz velkého projektu netrvá déle než ostatní.
 

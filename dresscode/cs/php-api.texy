@@ -30,14 +30,14 @@ $result = $runner->run($files, fix: false, reporter: new JsonReporter(STDOUT));
 exit($result->getExitCode());
 ```
 
-`Loader::load()` najde `dresscode.neon` nebo `dresscode.php` od zadaného adresáře směrem nahoru (nebo vezme soubor, který mu určíte) a vrátí konfiguraci i s vrstvami rozšíření a kořenový adresář projektu; bez konfiguračního souboru platí výchozí preset, nebo konfigurace, kterou předáte třetím argumentem. `Runner::findFiles()` rozvine cesty podle klíčů `paths`, vyloučení a přípon z konfigurace, `run()` je zpracuje a výsledky posílá reporteru soubor po souboru.
+`Loader::load()` najde `dresscode.neon` nebo `dresscode.php` od zadaného adresáře směrem nahoru (nebo vezme soubor, který mu určíte) a vrátí konfiguraci i s vrstvami rozšíření a kořenový adresář projektu; bez konfiguračního souboru platí výchozí preset, nebo konfigurace, kterou předáte třetím argumentem. `Runner::findFiles()` rozvine cesty podle klíčů `paths`, vyloučení a přípon z konfigurace, `run()` je zpracuje a výsledky posílá reporteru soubor po souboru. Pravidlo nebo analýzu, kterou konfigurace staví closurou, popisuje jen text konfiguračního souboru, a proto `createRunner()` takový běh cachuje, jen když dostane cestu k tomu souboru v argumentu `configFile`.
 
 .[caution]
 `RunnerFactory` je zatím označená `@internal`, takže se její podoba může v minoritní verzi změnit. Je to jediné hrubé místo tohohle API a zároveň jediná cesta, jak `Runner` postavit. Komu to vadí, ať volá rovnou [celý příkaz |#Vlastní příkaz], jehož rozhraní stabilní je.
 
-`RunResult` obsahuje `FileResult` pro každý soubor a k tomu souhrnná čísla: `countViolations()`, `countFixable()`, `countRiskyDeferred()` (rizikové opravy, které čekají na svolení), `countRemaining()` (co zůstalo na uživateli, s volitelnou závažností), `countChangedFiles()`, `countErrors()` (soubory, které nejdou parsovat), `countFailures()` (soubory, kde pravidlo selhalo), vlastnost `baselined` s počtem porušení, která umlčela baseline, a `getExitCode()` podle stejných pravidel jako na příkazové řádce.
+`RunResult` obsahuje `FileResult` pro každý soubor a k tomu souhrnná čísla: `countViolations()` (porušení souborů, jak byly načtené), `countLeftAfterFix()` (kolik jich po opravě zbude, v `check` i ve `fix`), `countRemaining()` (co zůstalo na uživateli: v `check` všechna porušení, ve `fix` ta, která oprava nechala), `countRiskyDeferred()` (rizikové opravy, které čekají na svolení), `countChangedFiles()`, `countSyntaxErrors()` (soubory, které nejdou parsovat), `countFailures()` (soubory, kde pravidlo selhalo), vlastnost `baselined` s počtem porušení, která umlčela baseline, a `getExitCode()` podle stejných pravidel jako na příkazové řádce. První tři počty přijmou volitelnou závažnost, `Severity::Error` nebo `Severity::Warning`.
 
-Kdo konfiguraci staví v PHP místo načítání ze souboru, má na objektu `Config` totéž, co umí NEON, včetně přepisů pro část projektu (`override()`), pravidel, která jen varují (`warnings()`), a svolení k rizikovým opravám (`risky()`).
+Kdo konfiguraci staví v PHP místo načítání ze souboru, má na objektu `Config` totéž, co umí NEON, včetně přepisů pro část projektu (`override()`), pravidel, která jen varují (`warnings()`), a pravidel, jejichž rizikové opravy projekt přijímá (`risky()` se jmény nebo třídami).
 
 
 Jeden soubor nebo řetězec
@@ -55,9 +55,9 @@ foreach ($result->violations as $violation) {
 $fixed = $result->output;
 ```
 
-`processFile()` nikdy nezapisuje. Cesta říká, která pravidla pro kód platí (podle ní se vyhodnotí přepisy pro cesty), `$result->output` je opravený kód a `$result->isChanged()` řekne, jestli se od vstupu liší. Naproti tomu `processPath()` soubor přečte a s `fix: true` i zapíše. Ani jedno nepoužívá cache.
+`processFile()` nikdy nezapisuje. Cesta říká, která pravidla pro kód platí (podle ní se vyhodnotí přepisy pro cesty), `$result->output` je opravený kód, `$result->isChanged()` řekne, jestli se od vstupu liší, a `$result->remaining` jsou porušení, která opravený kód pořád má. Naproti tomu `processPath()` soubor přečte a s `fix: true` i zapíše. Ani jedno nepoužívá cache.
 
-`FileResult` nese cestu, původní kód, výstup, seznam objektů `Violation` (pravidlo, zpráva, řádek, sloupec, závažnost, jestli bylo opraveno, jestli je oprava riziková, otisk pro baseline), varování a případnou chybu parsování nebo selhání pravidla.
+`FileResult` nese cestu, původní kód, výstup, seznam objektů `Violation` nalezených v původním kódu (pravidlo, zpráva, řádek, sloupec, závažnost, jestli je oprava riziková, otisk pro baseline), seznam `remaining` s porušeními výstupu a s pozicemi v něm, tedy přesně s tím, co ohlásí příští kontrola opraveného souboru, dále varování a případnou chybu parsování nebo selhání pravidla.
 
 
 Vlastní reporter

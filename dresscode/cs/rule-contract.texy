@@ -28,6 +28,7 @@ Pravidlo dědí od `DressCode\NodeRule` a nese atribut `#[RuleInfo]`:
 	description: 'Reports calls of var_dump()',
 	minPhpVersion: null,
 	modifiesComments: false,
+	risky: false,
 )]
 final class NoVarDumpRule extends NodeRule
 {
@@ -40,6 +41,7 @@ final class NoVarDumpRule extends NodeRule
 - **Popis** je jedna anglická věta v oznamovacím způsobu o tom, co pravidlo dělá; vypisuje ji `dresscode rules`.
 - **`minPhpVersion`** uveďte tehdy, když pravidlo zapisuje syntaxi, která existuje až od nějaké verze PHP (třeba `0o755` od PHP 8.1). Pod tou verzí se pravidlo samo vynechá a preset ho nemusí hlídat. PHP 8.0 je nejnižší podporovaná verze, takže na nic, co v 8.0 už bylo, se ptát nemusíte.
 - **`modifiesComments`** nastavte na `true` jen tehdy, když pravidlo opravdu mění text komentářů. Jinak `RuleTester` hlídá, že žádný komentář nezmizel ani se nezměnil, což je nejčastější chyba oprav.
+- **`risky`** nastavte na `true`, když může změnit chování kódu každá oprava pravidla, protože bezpečný případ z kódu poznat nejde: `dresscode/strict-call` neví, jestli kód na volném porovnání v `in_array()` nespoléhá. Každé hlášení takového pravidla je pak rizikové, viz [níže |#Nejdřív ohlásit, teprve pak opravit].
 
 
 Které uzly a kdy
@@ -70,7 +72,7 @@ if ($context->report($node, 'The var_dump() call must not stay in the code')) {
 
 `report()` vrátí `false`, pokud je porušení na svém řádku potlačené komentářem, pokud ho zná baseline, nebo pokud je oprava riziková a běh ji nedovolil; pak se nesmí nic měnit. Nespoléhá se přitom na dobrou vůli: strom počítá své změny a jádro každou změnu spáruje s hlášením ze stejného volání. Změna bez hlášení, nebo po hlášení, které vrátilo `false`, je porušený kontrakt. Za běhu je z toho varování, s přepínačem `--strict-rules` a v `RuleTester`u chyba.
 
-Oprava, která může změnit chování kódu, se hlásí s `risky: true`:
+Oprava, která může změnit chování kódu jen v některém výskytu, se hlásí s `risky: true` právě u toho výskytu:
 
 ```php
 if ($context->report($node, 'The class name must be obtained with $x::class', risky: true)) {
@@ -78,7 +80,7 @@ if ($context->report($node, 'The class name must be obtained with $x::class', ri
 }
 ```
 
-Bez `risky: yes` v konfiguraci nebo `--fix-risky` na příkazové řádce vrátí takové hlášení `false`, pravidlo kód nechá a porušení se vypíše jako rizikové a neopravitelné. Riziko je vlastnost výskytu, ne pravidla: totéž pravidlo v témž průchodu opraví bezpečný výskyt a rizikový jen ohlásí, a fixtura s `// risky` v hlavičce je pak důkaz pro referenci, že pravidlo takové opravy má.
+Takové hlášení vrátí `false`, dokud projekt pravidlo neuvede v klíči `risky` nebo běh nedostane `--fix-risky`; pravidlo pak kód nechá a porušení s příznakem rizika zůstane mezi tím, co `fix` neopravil. Totéž pravidlo v témž průchodu opraví bezpečný výskyt a rizikový jen ohlásí. Pravidlo, jehož riziková je každá oprava, nepíše `risky: true` ke každému hlášení, ale jednou do `RuleInfo`. Fixtura s `// risky` v hlavičce ukazuje, jak pravidlo opravuje, když smí, a je zároveň důkaz pro referenci, že pravidlo takové opravy má.
 
 Hlášení se váže na uzel nebo na token. Problém, který leží v bílých znacích nebo v komentáři, ohlaste s příslušnou trivia (`report($token, $message, trivia: $trivia)`), aby porušení dostalo řádek té trivia a `dresscode:ignore` na tom řádku ho našel; jinak spadne na řádek tokenu. Závažnost je `Severity::Error`; `Severity::Warning` je pro nález, který nemá shodit build, a stejný účinek dá uživateli klíč `warnings` v konfiguraci, který změkčí kterékoli pravidlo.
 

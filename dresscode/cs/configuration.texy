@@ -90,7 +90,7 @@ eol: LF
 
 Hodnota `indent` je počet mezer, nebo `tab`. Hodnota `eol` je `LF` nebo `CRLF` (velkými písmeny, jak se ty zkratky píšou; `lf` je chyba), dále `majority` pro sjednocení každého souboru na jeho převažující konec řádku (výchozí), nebo `platform` pro konec řádku stroje, na kterém DressCode běží.
 
-**Cílová verze PHP** je vlastnost projektu a čte se z `composer.json`; pravidla pro novější syntaxi se pod ní sama vynechají. Přepisujte ji jen tehdy, když se od `composer.json` liší. Uvozovky psát můžete a nemusíte, obojí je správně:
+**Cílová verze PHP** je vlastnost projektu a čte se z `composer.json` jako nejnižší verze, kterou dovoluje `require.php`; pravidla pro novější syntaxi se pod ní sama vynechají. DressCode rozumí běžným zápisům omezení: `^8.1`, `~8.1`, `>=8.1` s horní mezí i bez ní, `8.1 - 8.3` a jejich kombinacím přes `||`. Z jiného tvaru, třeba `<8.4` nebo `*`, nejnižší verzi poznat nejde, a tak platí výchozí PHP 8.0. Přepisujte ji tedy jen tehdy, když se od `composer.json` liší, nebo když ji z něj DressCode nepřečte. Uvozovky psát můžete a nemusíte, obojí je správně:
 
 ```neon
 php: 8.2
@@ -163,10 +163,14 @@ warnings:
 	- dresscode/line-length
 ```
 
-Riziková oprava je taková, která může změnit, co kód dělá: `get_class($x)` na `$x::class` je bezpečné, dokud `$x` nemůže být `null`. Není to vlastnost pravidla, ale konkrétního místa: totéž pravidlo opraví, co bezpečně umí, a rizikový výskyt jen ohlásí. Ve výpisu je takové porušení označené jako rizikové a shrnutí řekne, kolik oprav čeká. Klíč `risky` je dovolí pro každý běh, přepínač `--fix-risky` pro jeden:
+Riziková oprava je taková, která může změnit, co kód dělá. Většinou je to vlastnost konkrétního místa: `get_class($x)` na `$x::class` je bezpečné, dokud `$x` nemůže být `null`, takže `dresscode/modern-class-name-reference` opraví, co bezpečně umí, a rizikový výskyt jen ohlásí. Jiné pravidlo ale bezpečné místo z kódu poznat nemůže, a pak je riziková každá jeho oprava: `dresscode/strict-call` doplní do `in_array()` parametr `$strict = true`, a kód, který spoléhal na volné porovnání, pak může najít něco jiného. Shrnutí řekne, kolik rizikových oprav čeká, a ve formátu `json` má každé takové porušení příznak `risky`.
+
+Zapnout pravidlo, ať jménem, nebo presetem, ještě neznamená souhlasit s jeho rizikovými opravami. Souhlas dává projekt klíčem `risky`, seznamem pravidel, jejichž rizikové opravy přijímá; `fix` pak udělá jen ty a ostatní ohlásí. Preset tenhle souhlas dát nemůže, protože určuje jen pravidla. Git hook nebo editor proto nepotřebují žádný přepínač: opraví, co projekt přijal, a zbytek ohlásí. Přepínač `--fix-risky` dovolí rizikové opravy všech pravidel na jeden běh:
 
 ```neon
-risky: yes
+risky:
+	- dresscode/strict-call
+	- dresscode/modern-class-name-reference
 ```
 
 Bez toho se rizikové místo hlásí jako každé jiné porušení, které se neopravilo, a exit kód je `1`. Ticho by znamenalo, že "rizikové" je synonymum pro "ignorované".
