@@ -8,7 +8,7 @@ Konfigurace je jeden soubor v kořeni projektu: buď `dresscode.neon`, tedy [NEO
 Konfigurační soubor
 ===================
 
-Oba formáty umějí totéž: každý klíč NEONu odpovídá jedné metodě třídy `DressCode\Config`. Jediné, co se do NEONu nevejde, jsou anonymní funkce (closures), a ty patří do PHP nebo do rozšíření. Následující dva soubory dělají přesně totéž:
+Oba formáty umějí totéž: každý klíč NEONu odpovídá jedné metodě třídy `DressCode\Config` a každá metoda jednomu klíči. Kde PHP předává objekt nebo callback, napíše se v NEONu [entita |#Objekty a callbacky]. Následující dva soubory dělají přesně totéž:
 
 ```neon
 presets:
@@ -69,7 +69,7 @@ Nastavení se skládá z vrstev a vyšší vrstva přepisuje nižší tam, kde n
 2. rozšíření (extensions) v pořadí zápisu,
 3. presety v pořadí zápisu, přičemž potomek přebírá rodiče,
 4. klíče vašeho konfiguračního souboru,
-5. bloky `for` pro soubor, který jejich vzorům odpovídá,
+5. přepisy (`overrides`) pro soubor, který odpovídá jejich cestám,
 6. příkazová řádka (`--preset`, `--rule`).
 
 Vyšší vrstva mění jen to, co sama říká. **Mapa voleb se slévá po klíčích**: když preset nastaví pravidlu `dresscode/braces-position` devět voleb a vy uvedete jednu, platí ta vaše a zbylých osm zůstane, jak je nastavil preset. **Skalár a seznam naopak nahrazují celou hodnotu**: `multiLine: [arguments]` u `dresscode/trailing-comma` znamená jen argumenty, ať preset říkal cokoli, takže kdo chce přidávat, opíše i zděděné položky. A **`keep` na úrovni pravidla maže všechno**, co o něm vrstvy pod ním řekly; mapa uvedená v další vrstvě pak začíná znovu od výchozích hodnot pravidla. Odkud každá hodnota přišla a co přebila, vypíše [`dresscode config` |cli#Co konfigurace znamená: config].
@@ -85,10 +85,10 @@ extensions:
 
 ```neon
 indent: 4
-eol: lf
+eol: LF
 ```
 
-Hodnota `indent` je počet mezer, nebo `tab`. Hodnota `eol` je `lf`, `crlf`, dále `majority` pro sjednocení každého souboru na jeho převažující konec řádku (výchozí), nebo `platform` pro konec řádku stroje, na kterém DressCode běží.
+Hodnota `indent` je počet mezer, nebo `tab`. Hodnota `eol` je `LF` nebo `CRLF` (velkými písmeny, jak se ty zkratky píšou; `lf` je chyba), dále `majority` pro sjednocení každého souboru na jeho převažující konec řádku (výchozí), nebo `platform` pro konec řádku stroje, na kterém DressCode běží.
 
 **Cílová verze PHP** je vlastnost projektu a čte se z `composer.json`; pravidla pro novější syntaxi se pod ní sama vynechají. Přepisujte ji jen tehdy, když se od `composer.json` liší. Uvozovky psát můžete a nemusíte, obojí je správně:
 
@@ -142,15 +142,15 @@ Na jeden běh se pravidlo zapíná a vypíná z příkazové řádky: `--rule dr
 Jiná pravidla pro část projektu
 ===============================
 
-Testy mívají jinou hlavičku než zdrojáky, generovaný kód jiné limity. Blok `for` je další vrstva nad klíčem `rules`, která platí jen pro soubory odpovídající vzorům `files`:
+Testy mívají jinou hlavičku než zdrojáky, generovaný kód jiné limity. Přepis v klíči `overrides` je další vrstva nad klíčem `rules`, která platí jen pro soubory odpovídající cestám v `paths`:
 
 ```neon
-for:
-	- files: [tests/**.phpt]
+overrides:
+	- paths: [tests/**.phpt]
 	  rules: {dresscode/blank-lines: {afterImports: 2}, dresscode/strict-types-required: keep}
 ```
 
-Vzory mají stejnou syntaxi jako `excludePaths` a počítají se od kořene projektu. Bloků může být víc a soubor, který odpovídá několika, dostane jejich vrstvy v pořadí zápisu; slévají se stejně jako každá jiná vrstva, takže `{afterImports: 2}` změní jeden klíč a ostatní čísla z presetu zůstanou. Rozdíl proti `excludeRulePaths`: tam pravidlo pro cestu mizí, tady dostane jinou hodnotu. Co pro konkrétní soubor nakonec platí, ukáže `dresscode config --file tests/CartTest.phpt`.
+Cesty mají stejnou syntaxi jako `excludePaths` a počítají se od kořene projektu. Přepisů může být víc a soubor, který odpovídá několika, dostane jejich vrstvy v pořadí zápisu; slévají se stejně jako každá jiná vrstva, takže `{afterImports: 2}` změní jeden klíč a ostatní čísla z presetu zůstanou. Hodnota `keep` pravidlo pro tyto soubory vypne, jako tady `dresscode/strict-types-required`, a pozdější přepis ho pro soubory, které odpovídají oběma, může zase zapnout. Překlep ve jménu pravidla se ohlásí hned na začátku běhu, i když přepisu žádný soubor neodpovídá. Co pro konkrétní soubor nakonec platí, ukáže `dresscode config --file tests/CartTest.phpt`.
 
 
 Varování a rizikové opravy
@@ -191,17 +191,63 @@ excludePaths:
 
 Vzor s lomítkem je ukotvený ke kořeni, takže `tests/fixtures` je právě ten jeden adresář. Vzor bez lomítka odpovídá jménu souboru nebo adresáře v jakékoli hloubce, takže `fixtures` vynechá každý adresář toho jména. Hvězdička zastupuje cokoli kromě lomítka, dvě hvězdičky i lomítka, takže `tests/**.phpt` jsou všechny testy v libovolné hloubce.
 
-Jednotlivé pravidlo lze vypnout jen pro některé cesty; zbytek pravidel takový soubor zkontroluje normálně:
+Jednotlivé pravidlo vypnete jen pro některé cesty [přepisem |#Jiná pravidla pro část projektu] s hodnotou `keep`; zbytek pravidel takový soubor zkontroluje normálně:
 
 ```neon
-excludeRulePaths:
-	dresscode/strict-comparison: [legacy]
-	dresscode/line-length: [tests]
+overrides:
+	- paths: [legacy]
+	  rules: {dresscode/strict-comparison: keep}
 ```
 
-Pravidlo, které má pro část projektu platit jen s jinou hodnotou, nevypínejte; dejte mu tu hodnotu v [bloku `for` |#Jiná pravidla pro část projektu].
+Pravidlo, které má pro část projektu platit jen s jinou hodnotou, nevypínejte; dejte mu tu hodnotu v přepisu.
 
-`fileExtensions` říká, které přípony se berou jako PHP (výchozí je jen `php`); projekt s testy Nette Testeru přidá `phpt`. Vynechat soubor podle jeho obsahu, třeba generovaný kód podle hlavičky, umí anonymní funkce `skipWhen()`, takže tohle nastavení patří do `dresscode.php` nebo do rozšíření.
+`fileExtensions` říká, které přípony se berou jako PHP (výchozí je jen `php`); projekt s testy Nette Testeru přidá `phpt`. Soubor podle jeho obsahu, třeba generovaný kód podle hlavičky, vynechá `skipWhen`, kterému předáte callback jako [entitu |#Objekty a callbacky]:
+
+```neon
+skipWhen: App\CodeStyle\GeneratedFilter::isGenerated(...)
+```
+
+Callback dostane obsah souboru a jeho cestu a vrátí `true`, když se má soubor přeskočit.
+
+
+Objekty a callbacky
+===================
+
+Kde zápis v PHP předává objekt nebo callback, napíše se v NEONu entita. Vypadá jako volání v PHP a znáte ji třeba z konfigurace Nette DI:
+
+- `App\CodeStyle\Filter(8.1, strict: true)` vytvoří objekt; argumenty mohou být pojmenované,
+- `App\CodeStyle\Filter::create(8.1)` zavolá statickou metodu a použije, co vrátí,
+- `App\CodeStyle\Filter::isGenerated(...)` předá samotnou metodu jako callback,
+- `App\CodeStyle\Filter(8.1)::withLimit(100)` zavolá metodu na tom, co vrátil předchozí článek řetězu.
+
+Argumentem může být i další entita. Entitu přijímají čtyři klíče:
+
+```neon
+extensions:
+	- App\CodeStyle\Extension(strict: true)
+
+skipWhen: App\CodeStyle\GeneratedFilter::isGenerated(...)
+
+rules:
+	App\CodeStyle\CacheKeyRule: App\CodeStyle\CacheKeyRule(App\CodeStyle\Keys::load())
+
+analyses:
+	- App\CodeStyle\Analyses\Imports
+	App\CodeStyle\Analyses\Calls: App\CodeStyle\Analyses\Calls::create(...)
+```
+
+V PHP je to totéž, jen napsané jako kód:
+
+```php
+return Config::create()
+	->extension(new App\CodeStyle\Extension(strict: true))
+	->skipWhen(App\CodeStyle\GeneratedFilter::isGenerated(...))
+	->enable(App\CodeStyle\CacheKeyRule::class, fn() => new App\CodeStyle\CacheKeyRule(App\CodeStyle\Keys::load()))
+	->analysis(App\CodeStyle\Analyses\Imports::class)
+	->analysis(App\CodeStyle\Analyses\Calls::class, App\CodeStyle\Analyses\Calls::create(...));
+```
+
+Rozšíření, `skipWhen` a továrna analýzy se vyhodnotí hned při načtení konfigurace. U pravidla je entita recept: pravidlo s vlastními závislostmi se podle něj postaví pokaždé, když ho DressCode potřebuje, třeba zvlášť pro soubory každého přepisu. Při načtení se jen ověří, že třída nebo metoda existuje, takže překlep je chyba konfigurace hned, ne až během kontroly.
 
 
 Další klíče
@@ -209,6 +255,8 @@ Další klíče
 
 - `baseline`: soubor se soupisem porušení, která se nemají hlásit ani opravovat; jak vzniká a kdy se hodí, popisuje [Potlačení pravidel a baseline |suppressing#Baseline].
 - `cacheDir`: kam si DressCode ukládá, které soubory už prošly čistě; výchozí je systémový dočasný adresář.
-- `analyses`: registrace vlastní analýzy pro [vlastní pravidla |rule-contract#Analýzy].
+- `analyses`: registrace vlastní analýzy pro [vlastní pravidla |rule-contract#Analýzy]; analýza, kterou jádro samo nepostaví, dostane továrnu jako [entitu |#Objekty a callbacky].
+- `registerRules` a `registerPresets`: seznamy tříd, jejichž jména (třeba `acme/house`) mají být k dispozici, aniž by se pravidla nebo presety zapnuly. Obvykle to za vás udělá rozšíření; bez registrace se vlastní pravidlo uvádí názvem třídy.
+- `only`: zúží běh na jmenovaná pravidla a presety stejně jako přepínač [`--only` |cli#Jedno pravidlo najednou: --only], který ho na příkazové řádce nahradí.
 
 Co z toho všeho nakonec platí, ukáže `dresscode config`: u každého pravidla, které běží, volby s hodnotou, vrstvou, která ji nastavila, a s tím, co přebila, a u pravidla, které neběží, důvod. `dresscode rules` vypíše všechna známá pravidla, hvězdičkou označí ta, která v aktuální konfiguraci platí, a u každého uvede jména pravidel jiných nástrojů, která pokrývá.

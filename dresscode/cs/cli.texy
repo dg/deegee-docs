@@ -50,7 +50,7 @@ Přepínače
 | `--max-warnings <n>` | víc než `n` [varování |configuration#Varování a rizikové opravy] znamená exit kód `1`; bez něj varování exit kód nemění |
 | `--stdin <cesta>` | čte kód ze standardního vstupu, jako by to byl soubor na dané cestě; `fix` pak opravený kód vypíše na standardní výstup |
 | `--generate-baseline` | zapíše nalezená porušení do [baseline |suppressing#Baseline] místo hlášení; jen u `check` |
-| `--file <cesta>` | u `config`: co platí pro tenhle jeden soubor, včetně bloků `for` |
+| `--file <cesta>` | u `config`: co platí pro tenhle jeden soubor, včetně přepisů v `overrides` |
 | `--json` | u `config`: totéž jako data |
 | `--output <soubor>` | u `standard`: zapíše dokument do souboru místo na výstup |
 | `--no-cache` | zpracuje každý soubor, i ten, o kterém se ví, že je čistý |
@@ -90,7 +90,7 @@ Not running
   6 more that no preset or rule of the configuration mentions
 \--
 
-U každého pravidla stojí vrstva, která ho zapnula, u každé volby, kterou některá vrstva jmenovala, výsledná hodnota, kdo ji nastavil a co tím přebil. Pravidlo, které neběží, říká proč: vypnul ho preset nebo konfigurace, chybí mu verze PHP, nebo o něm nikdo nemluvil. `--file cesta` ukáže totéž pro jeden soubor, tedy i s bloky `for`, které pro něj platí, a `--json` dá výstup jako data pro nástroje.
+U každého pravidla stojí vrstva, která ho zapnula, u každé volby, kterou některá vrstva jmenovala, výsledná hodnota, kdo ji nastavil a co tím přebil. Pravidlo, které neběží, říká proč: vypnul ho preset nebo konfigurace, chybí mu verze PHP, nebo o něm nikdo nemluvil. `--file cesta` ukáže totéž pro jeden soubor, tedy i s přepisy, které pro něj platí, a `--json` dá výstup jako data pro nástroje.
 
 
 Vysvětlení pravidla: explain
@@ -201,9 +201,9 @@ dresscode fix --only dresscode/string-quotes
 dresscode fix --only modern --only imports
 ```
 
-Hodí se při přechodu na DressCode a u velkých úklidů: jedno pravidlo, jeden commit, jedno review. Filtruje až to, k čemu konfigurace dojde, takže pravidlo nezapíná ani nepřenastavuje: na to je `--rule`, a ten se uplatní dřív. Jméno, které v téhle konfiguraci nic nespouští, je chyba, ne tiše prázdný běh.
+Hodí se při přechodu na DressCode a u velkých úklidů: jedno pravidlo, jeden commit, jedno review. Filtruje až to, k čemu konfigurace dojde, takže pravidlo nezapíná ani nepřenastavuje: na to je `--rule`, a ten se uplatní dřív. Jméno, které v téhle konfiguraci nic nespouští, je chyba, ne tiše prázdný běh. Totéž natrvalo říká klíč `only` v konfiguraci; přepínač ho pro jeden běh nahradí.
 
-`fix --only` opraví jen to jedno pravidlo a zbytku se nedotkne, takže příští úplný `fix` klidně změní víc; to je záměr, ne nedokončená práce. Ostatní pravidla mezitím ve výpisu `dresscode config` říkají `left out by --only`. Baseline se zúženým během generovat nedá, protože by zapomněla, co našla ostatní pravidla.
+`fix --only` opraví jen to jedno pravidlo a zbytku se nedotkne, takže příští úplný `fix` klidně změní víc; to je záměr, ne nedokončená práce. Ostatní pravidla mezitím ve výpisu `dresscode config` říkají `the run is narrowed to other rules`. Baseline se zúženým během generovat nedá, protože by zapomněla, co našla ostatní pravidla.
 
 
 Formáty výstupu
@@ -250,7 +250,7 @@ Selhání jednoho souboru běh nezastaví: soubor se ohlásí jako selhavší, n
 Cache a paralelní běh
 =====================
 
-DressCode si pamatuje otisk obsahu každého souboru, který prošel čistě, a spolu s ním otisk konfigurace, která pro něj platí (včetně bloků `for`), cílové verze PHP, baseline a verzí nainstalovaných balíčků. Soubor se stejným obsahem a stejnou konfigurací příště přeskočí; jakmile se kterákoli z těch věcí změní, zpracuje ho znovu. Cache leží v systémovém dočasném adresáři, nebo tam, kam ukazuje `cacheDir` v konfiguraci; `--no-cache` ji pro jeden běh obejde.
+DressCode si pamatuje otisk obsahu každého souboru, který prošel čistě, a spolu s ním otisk konfigurace, která pro něj platí (včetně přepisů pro jeho cestu), cílové verze PHP, baseline a verzí nainstalovaných balíčků. Soubor se stejným obsahem a stejnou konfigurací příště přeskočí; jakmile se kterákoli z těch věcí změní, zpracuje ho znovu. Cache leží v systémovém dočasném adresáři, nebo tam, kam ukazuje `cacheDir` v konfiguraci; `--no-cache` ji pro jeden běh obejde.
 
 Soubory, které cache nepokryje, se rozdělí mezi pracovní procesy. Výchozí počet odpovídá počtu procesorů, nejvýš však jeden proces na čtyři soubory, protože spuštění procesu něco stojí. `--jobs 1` běží bez nich, což se hodí při ladění vlastního pravidla, a `--jobs 8` se vyplatí na stroji s mnoha jádry, kde by výchozí odhad byl zbytečně nízký. S procesy běží i `--generate-baseline`, takže první příkaz velkého projektu netrvá déle než ostatní.
 
@@ -258,7 +258,7 @@ Soubory, které cache nepokryje, se rozdělí mezi pracovní procesy. Výchozí 
 Standardní vstup
 ================
 
-`--stdin` je rozhraní pro editory a hooky: obsah přijde na standardním vstupu, cesta říká, která pravidla pro něj platí (podle ní se vyhodnotí výjimky pro cesty i bloky `for`), a `fix` vrátí opravený kód na standardní výstup místo toho, aby zapisoval do souboru:
+`--stdin` je rozhraní pro editory a hooky: obsah přijde na standardním vstupu, cesta říká, která pravidla pro něj platí (podle ní se vyhodnotí přepisy pro cesty), a `fix` vrátí opravený kód na standardní výstup místo toho, aby zapisoval do souboru:
 
 ```shell
 git show :src/Cart.php | dresscode check --stdin src/Cart.php
