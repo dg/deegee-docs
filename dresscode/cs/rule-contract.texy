@@ -145,6 +145,22 @@ final class ForbiddenFunctionsRule extends NodeRule implements ConfigurableRule
 
 Jména voleb se píší v camelCase. Mapa voleb se slévá s vrstvou pod ní po klíčích, seznam zadaný v konfiguraci nahrazuje výchozí hodnotu celou; s tím počítejte v popisu volby. Popis vůbec uvádějte jen tam, kde jméno, typ a výchozí hodnota neříkají všechno.
 
+Když pravidlo s danými volbami nic nedělá, třeba proto, že seznam zakázaných funkcí zůstal prázdný, může na to upozornit samo schéma. V `transform()` zavolá `$context->addWarning()`:
+
+```php
+return Expect::structure([
+	'functions' => Expect::listOf('string'),
+])->transform(function (mixed $options, Context $context): mixed {
+	if (((array) $options)['functions'] === []) {
+		$context->addWarning('No function is given, so nothing is reported.', 'acme.noEffect');
+	}
+
+	return $options;
+});
+```
+
+DressCode zprávu vypíše mezi varováními konfigurace jako `Rule acme/forbidden-functions: No function is given, so nothing is reported.`, a to jen jednou, i když se konfigurace řeší pro víc přepisů. Zprávu pište jako celou větu. Stejně se totiž vypíše i varování, které vydá nette/schema samo, třeba u volby označené `deprecated()`.
+
 Volba, která pojmenovává rozhodnutí (tvar, polohu, zarovnání), přijímá i `keep`: pravidlo pak tohle rozhodnutí nevynucuje a zbytek hlídá dál. Volba, která rozhodnutí není (`ignoreImports`, seznam vzorů), `keep` nemá. Pravidlo, které je jedním jediným rozhodnutím, řekne v `RuleInfo` parametrem `decision`, kterou volbu vyplní hodnota zapsaná přímo u pravidla, takže uživatel píše `yoda: forbidden` místo mapy s jedním klíčem.
 
 Pravidlo, u kterého verze PHP rozhoduje o tom, co smí zapsat (ne o tom, jestli vůbec poběží), se zeptá `$context->getPhpVersion()`. Vrací řetězec ve tvaru `major.minor`, který se porovnává funkcí, ne operátory, protože `'8.10' > '8.9'` jako řetězec neplatí:
