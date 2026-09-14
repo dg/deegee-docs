@@ -1,0 +1,210 @@
+Optimalizace funkcí a konstant
+******************************
+
+.[perex]
+PHP váš kód před spuštěním přeloží do instrukcí pro svůj virtuální stroj a u některých funkcí a konstant přitom umí zkrátit cestu: volání nahradí jedinou instrukcí, výsledek spočítá dopředu, nebo funkci zavolá bez obvyklé režie. Podíváme se, co přesně PHP dělá, co mu v tom nejčastěji překáží a jak DressCode zapíše kód tak, aby zkratky platily.
+
+
+Co PHP s kódem dělá, než ho spustí
+==================================
+
+PHP nespouští zdrojový kód tak, jak ho vidíte v editoru. Nejdřív ho přeloží do posloupnosti jednoduchých instrukcí, takzvaných opcodů, a teprve ty provádí virtuální stroj Zend Engine. Se zapnutou OPcache, která je na produkčních serverech běžná, se přeložené instrukce uloží do paměti, aby se soubor nemusel překládat při každém požadavku znovu, a před uložením je ještě projde optimalizátor.
+
+Obyčejné volání funkce je pro virtuální stroj docela dost práce. Třeba `$len = foo($s);` se přeloží zhruba takhle:
+
+```
+INIT_FCALL "foo"     připrav volání
+SEND_VAR $s          předej argument
+DO_ICALL             zavolej funkci
+```
+
+Stroj na zásobníku vytvoří rámec volání, uloží do něj argumenty a zavolá funkci napsanou v C, která si argumenty ještě ověří a přečte. U funkce, která dělá hodně práce, je tahle obsluha zanedbatelná. U funkce jako `strlen()`, která jen přečte délku uloženou u řetězce, je ale mnohonásobně dražší než samotná práce.
+
+Proto má PHP pro řadu funkcí zkratky. A skoro všechny mají stejnou podmínku: PHP musí už při překladu vědět, kterou funkci voláte.
+
+
+Když PHP ví, co voláte
+======================
+
+Kompilátor PHP zná zhruba tři desítky základních funkcí a jejich volání umí nahradit přímo instrukcí. Napište `\strlen($s)` a z celého volání zbude jediný řádek:
+
+```
+T1 = STRLEN $s
+```
+
+Žádný rámec a žádné předávání argumentů. Podobnou zkratku mají i další funkce:
+
+- `is_array()`, `is_string()`, `is_int()`, `is_null()` a ostatní `is_*()` se promění v prostou kontrolu typu,
+- `intval()`, `strval()`, `boolval()` a `floatval()` v přetypování,
+- `count()`, `gettype()`, `get_class()`, `array_key_exists()`, `defined()` nebo `func_get_args()` ve vlastní instrukce,
+- `in_array()` s polem řetězců nebo čísel zapsaným přímo v kódu ve vyhledání v předem sestavené hashovací tabulce, takže nezáleží na tom, jak je pole dlouhé,
+- `sprintf()` s formátem, ve kterém jsou jen `%s` a `%d`, od PHP 8.4 v obyčejné spojení řetězců,
+- `strlen('hello')` nebo `chr(65)` s hodnotou zapsanou přímo v kódu rovnou ve výsledek.
+
+Proč tedy nestačí `strlen($s)` bez lomítka? Kvůli jmenným prostorům. V souboru s `namespace App;` může nekvalifikované `strlen()` za běhu znamenat funkci `App\strlen()`, pokud ji někdo deklaruje. Kompilátor to předem vědět nemůže, a tak vyrobí obecné volání, které se rozhodne až za běhu:
+
+```
+INIT_NS_FCALL_BY_NAME "App\strlen"
+SEND_VAR_EX $s
+V1 = DO_FCALL_BY_NAME
+```
+
+Zkratku kompilátor použije jen tam, kde je jméno jisté: když ho napíšete s úvodním lomítkem jako `\strlen()`, když ho importujete příkazem `use function strlen;`, nebo když soubor žádný jmenný prostor nemá. Proč je nekvalifikované jméno dvojznačné a proč to PHP dopředu vědět nemůže, podrobně vysvětluje stránka [Funkce a konstanty ve jmenných prostorech |namespaces#Jedno jméno, dva významy].
+
+Kolik to dělá? Dvacet milionů volání ve smyčce na PHP 8.5 se zapnutou OPcache a vypnutým JIT:
+
+| volání ve jmenném prostoru | čas |
+|---|---|
+| `strlen($s)` | 384 ms |
+| `\strlen($s)` | 165 ms |
+| `is_array($s)` | 473 ms |
+| `\is_array($s)` | 151 ms |
+
+Se zkratkou je volání dvakrát až třikrát rychlejší. V absolutních číslech je to zhruba deset až patnáct nanosekund na jedno volání, takže v jednom požadavku rozdíl nepoznáte, ve smyčce přes statisíce položek už ano.
+
+
+Co spočítá OPcache předem
+=========================
+
+Optimalizátor OPcache jde ještě o krok dál. Když zná hodnoty všech argumentů už při překladu, funkci rovnou zavolá a do instrukcí zapíše jen výsledek. Tahle funkce:
+
+```php
+function separator(): string
+{
+	return \str_repeat('-', 3);
+}
+```
+
+se přeloží na prosté `RETURN "---"`. Funguje to i přes proměnnou: z `$sep = ', '; return \implode($sep, ['a', 'b']);` zbude jen hotový řetězec `"a, b"`. PHP 8.4 takhle umí předem spočítat přes 170 funkcí, které pro stejné argumenty vracejí vždy stejný výsledek, například `str_repeat()`, `implode()`, `strtoupper()`, `substr()`, `trim()` nebo `version_compare()`.
+
+Zvlášť se OPcache stará o funkce, které zjišťují, co v PHP je: `function_exists('mb_strlen')`, `extension_loaded('intl')`, `is_callable('strlen')`, `defined('PHP_EOL')` nebo `constant('PHP_INT_SIZE')`. Když odpověď zná, zapíše rovnou `true` nebo hodnotu konstanty. U `function_exists()` ovšem jen tehdy, když funkce opravdu existuje: chybějící funkce se může objevit později, třeba po načtení dalšího souboru, a tak zápornou odpověď nechá na dobu běhu.
+
+I tady platí stejná podmínka jako výš: jméno funkce musí být jisté.
+
+
+Konstanty se dosadí rovnou
+==========================
+
+Konstanty, které definuje PHP nebo jeho rozšíření, jako `PHP_EOL`, `PHP_INT_MAX`, `PHP_VERSION_ID` nebo `E_ALL`, se za běhu nemění. Kompilátor proto místo nich rovnou zapíše jejich hodnotu, takže `'a' . \PHP_EOL` se přeloží na hotový řetězec. Víc než samotné dosazení ale znamená to, co umožní dál: optimalizátor OPcache s hodnotou počítá a dokáže vyhodit celou větev kódu.
+
+```php
+if (\PHP_VERSION_ID >= 80400) {
+	// kód pro nové PHP
+} else {
+	// kód pro starší PHP
+}
+```
+
+Na PHP 8.5 z celé podmínky zbude jen první větev a druhá se do instrukcí vůbec nedostane. Stejně dopadne třeba `if (\PHP_OS_FAMILY === 'Windows')`.
+
+A zase platí, že jméno musí být jisté. Nekvalifikované `PHP_VERSION_ID` ve jmenném prostoru může být `App\PHP_VERSION_ID`, [stejně jako u funkcí |namespaces#Jedno jméno, dva významy], a tak ho PHP hledá až za běhu a podmínka zůstane v instrukcích celá. Pomůže `\PHP_VERSION_ID` nebo `use const PHP_VERSION_ID;`. Jedinou výjimkou jsou `true`, `false` a `null`, které PHP dosadí vždy.
+
+Globální konstanty, které definujete sami, PHP se zapnutou OPcache nedosazuje, protože jejich hodnota nemusí být při každém požadavku stejná.
+
+
+Volání bez rámce
+================
+
+PHP 8.4 přidalo ještě jednu zkratku, tentokrát pro devatenáct často používaných funkcí: `str_contains()`, `str_starts_with()`, `strpos()`, `strstr()`, `substr()`, `str_replace()`, `strtr()`, `trim()`, `implode()`, `in_array()`, `preg_match()`, `preg_replace()`, `min()`, `max()`, `class_exists()`, `property_exists()`, `dirname()`, `dechex()` a `is_numeric()`. Každá z nich má vedle běžné podoby ještě zvláštní variantu, které virtuální stroj předá argumenty napřímo, bez rámce volání. PHP jim říká frameless funkce.
+
+Tahle zkratka jako jediná funguje i s nekvalifikovaným jménem ve jmenném prostoru. Kompilátor vyrobí obě cesty a vybere si mezi nimi za běhu:
+
+```
+JMP_FRAMELESS "app\str_contains"               když App\str_contains() neexistuje, skoč dolů
+INIT_NS_FCALL_BY_NAME "App\str_contains"       obecné volání
+...
+V1 = FRAMELESS_ICALL_2(str_contains) $s "x"    volání bez rámce
+```
+
+Odpověď na otázku, jestli `App\str_contains()` existuje, si PHP při prvním průchodu zapamatuje, takže každé další volání stojí jen jeden skok. Import tu skoro nic nepřidá.
+
+
+Co zkratky vypne
+================
+
+Žádná ze zkratek pro funkce neplatí, když má volání pojmenované nebo rozbalené argumenty. Pro takové volání kompilátor vždy vyrobí obecné volání.
+
+Pojmenovaný argument se píše hlavně kvůli čitelnosti, `in_array($role, $roles, strict: true)` na první pohled říká, co znamená `true`. Jenže PHP pak funkci zavolá obecně a parametr ještě dohledá podle jména:
+
+| volání | čas |
+|---|---|
+| `\in_array('c', $list, strict: true)` | 677 ms |
+| `\in_array('c', $list, true)` | 499 ms |
+| `\in_array('c', ['a', 'b', 'c', 'd'], true)` | 170 ms |
+
+Druhý řádek je volání bez rámce, třetí instrukce s předem sestavenou hashovací tabulkou. Pojmenovaný argument zdrží dokonce víc než nekvalifikované jméno: `str_contains($s, 'x')` bez lomítka ve jmenném prostoru trvá 304 ms, `\str_contains($s, needle: 'x')` 462 ms.
+
+Rozbalené argumenty, třeba `\strlen(...$args)`, zkratku vypnou taky, protože kompilátor předem neví, kolik argumentů přijde. A volání bez rámce má navíc každá funkce jen pro určitý počet argumentů: `preg_match($pattern, $s)` ho má, `preg_match($pattern, $s, $matches)` už ne.
+
+
+Jak s tím pomůže DressCode
+==========================
+
+Hlídat to všechno ručně by bylo úmorné. Proto to za vás udělá preset `dresscode/optimizations`, který přidáte ke svému standardu:
+
+```neon
+presets:
+	- nette
+	- optimizations
+```
+
+Žádný standard ho sám nezapíná. Preset zapne tahle pravidla:
+
+- `name-notation` s volbou `optimizedFunctions: import` doplní `use function` u funkcí, se kterými zachází zvlášť kompilátor nebo OPcache, a jen u nich. Jak pravidlo importy zapisuje, popisuje stránka [o jmenných prostorech |namespaces#Proč importovat globální funkce].
+- `optimized-call-notation` přepíše pojmenované argumenty funkcí, které PHP volá bez rámce, na poziční a ohlásí rozbalené argumenty ve funkcích se zkratkou. Pojmenovaný argument přepíše jen tehdy, když stojí na místě svého parametru, takže se význam volání nezmění.
+- `no-is-null`, `no-conversion-functions`, `no-settype` a `no-dirname-of-file` nahradí volání jazykovou konstrukcí: `is_null($x)` porovnáním `$x === null`, `intval($x)` přetypováním `(int) $x`, `settype()` přiřazením přetypované hodnoty a `dirname(__FILE__)` konstantou `__DIR__`. Jazyková konstrukce žádnou zkratku nepotřebuje, je rychlá vždy a na jmenném prostoru nezáleží.
+
+Takhle vypadá funkce před opravou:
+
+```php
+namespace App;
+
+function isAllowed(array $roles, ?string $role): bool
+{
+	if (is_null($role)) {
+		return false;
+	}
+
+	return in_array($role, $roles, strict: true) && strlen($role) > 2;
+}
+```
+
+A takhle po ní:
+
+```php
+namespace App;
+
+use function in_array, strlen;
+
+
+function isAllowed(array $roles, ?string $role): bool
+{
+	if ($role === null) {
+		return false;
+	}
+
+	return in_array($role, $roles, true) && strlen($role) > 2;
+}
+```
+
+Konstanty preset neimportuje. Jestli chcete i `use const PHP_VERSION_ID;` a podobné, nastavte pravidlu `name-notation` volbu `globalConstants`, třeba se vzorem `'PHP_*': import`.
+
+Všechny tyhle opravy stojí na tom, že jde o globální funkci PHP. Pokud konfigurace neříká `nameResolution: certain`, DressCode je proto ohlásí jako rizikové a udělá je jen se svolením. Podrobnosti jsou na stránce [o jmenných prostorech |namespaces#Řekněte DressCode, co je co].
+
+DressCode přitom nehledí na verzi PHP, pro kterou kód píšete. Zkratku, kterou přidala až novější verze, zapíše stejně: starší PHP ji jen nevyužije, nic se nerozbije, a až na novější PHP přejdete, kód bude připravený.
+
+
+Nečekejte zázraky
+=================
+
+Tyhle zkratky zrychlí jednotlivé volání o nanosekundy. Webová aplikace ale většinu času čeká na databázi, síť nebo disk, a tak se odezva stránky znatelně nezmění. Poznáte je v kódu, který se točí v těsných smyčkách: v parserech, šablonovacích systémech, při zpracování velkých polí nebo v knihovnách volaných tisíckrát za požadavek. Dobrá zpráva je, že vás nestojí nic. DressCode je zapíše sám a kód zůstane stejně čitelný, jen s pár importy navíc a s `true` místo `strict: true`.
+
+
+Shrnutí
+=======
+
+- PHP kód před spuštěním překládá do instrukcí a u desítek funkcí a u konstant umí zkrátit cestu: volání nahradí instrukcí, výsledek spočítá předem, nebo funkci zavolá bez rámce.
+- Skoro všechny zkratky potřebují jisté jméno: `\strlen()`, `use function strlen;` nebo soubor bez jmenného prostoru. Totéž platí pro konstanty jako `PHP_VERSION_ID`.
+- Volání bez rámce z PHP 8.4 funguje i s nekvalifikovaným jménem ve jmenném prostoru.
+- Pojmenované a rozbalené argumenty vypnou všechny zkratky.
+- Preset `dresscode/optimizations` zapíše kód tak, aby zkratky platily, a chová se stejně pro všechny verze PHP.
