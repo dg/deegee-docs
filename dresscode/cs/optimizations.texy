@@ -102,6 +102,16 @@ A zase platí, že jméno musí být jisté. Nekvalifikované `PHP_VERSION_ID` v
 Globální konstanty, které definujete sami, PHP se zapnutou OPcache nedosazuje, protože jejich hodnota nemusí být při každém požadavku stejná.
 
 
+Jen tam, kde to kompilátor využije
+----------------------------------
+
+Nejjednodušší by bylo napsat lomítko nebo import před každou konstantu, kterou PHP zná. Tak to běžné nástroje dělají, lomítko píšou před každou vestavěnou konstantu. Jenže samotné dosazení hodnoty ušetří jen načtení konstanty, v našem měření zhruba 2,5 nanosekundy. Opravdový užitek přichází až tam, kde s hodnotou kompilátor dál počítá: v podmínce, jejíž mrtvou větev OPcache vyhodí, nebo ve výrazu, který se celý spočítá předem, jako `ENT_QUOTES | ENT_HTML5`.
+
+DressCode proto sleduje, jak konstanta v kódu stojí. `PHP_VERSION_ID` v podmínce `if (PHP_VERSION_ID >= 80400)` dostane `use const`, protože z instrukcí zmizí celá větev. `E_USER_DEPRECATED` předané do `trigger_error()` zůstane, jak je, protože tam by import přinesl jen řádek navíc v hlavičce.
+
+Změřili jsme to na rozsáhlém open-source kódu s téměř třemi tisíci soubory. Holá konstanta PHP v něm stojí na 627 místech, ale kompilátor s její hodnotou počítá jen na 117 z nich. Import všeho by do hlaviček přidal 457 řádků ve 136 souborech. DressCode jich doplní 82 ve 40 souborech, tedy více než pětkrát méně, a zachytí přitom každé místo, kde na tom opravdu záleží.
+
+
 Volání bez rámce
 ================
 
@@ -150,7 +160,7 @@ presets:
 
 Žádný standard ho sám nezapíná. Preset zapne tahle pravidla:
 
-- `name-fallback` s volbami `optimizedFunctions: qualified` a `optimizedConstants: qualified` nenechá holé funkce, se kterými zachází zvlášť kompilátor nebo OPcache, ani konstanty, které deklaruje PHP. Zapíše je tvarem, jaký chce váš standard, a když ten nic neříká, doplní `use function` a `use const`. Podrobně to popisuje stránka [o jmenných prostorech |namespaces#Holé, nebo kvalifikované: name-fallback].
+- `name-fallback` s volbami `optimizedFunctions: qualified` a `optimizedConstants: qualified` nenechá holé funkce, se kterými zachází zvlášť kompilátor nebo OPcache, ani konstanty, se kterými kompilátor počítá. Zapíše je tvarem, jaký chce váš standard, a když ten nic neříká, doplní `use function` a `use const`. Podrobně to popisuje stránka [o jmenných prostorech |namespaces#Holé, nebo kvalifikované: name-fallback].
 - `optimized-call-notation` přepíše pojmenované argumenty funkcí, které PHP volá bez rámce, na poziční a ohlásí rozbalené argumenty ve funkcích se zkratkou. Pojmenovaný argument přepíše jen tehdy, když stojí na místě svého parametru, takže se význam volání nezmění.
 - `no-is-null`, `no-conversion-functions`, `no-settype` a `no-dirname-of-file` nahradí volání jazykovou konstrukcí: `is_null($x)` porovnáním `$x === null`, `intval($x)` přetypováním `(int) $x`, `settype()` přiřazením přetypované hodnoty a `dirname(__FILE__)` konstantou `__DIR__`. Jazyková konstrukce žádnou zkratku nepotřebuje, je rychlá vždy a na jmenném prostoru nezáleží.
 
@@ -187,7 +197,7 @@ function isAllowed(array $roles, ?string $role): bool
 }
 ```
 
-Stejně naloží s konstantami: `PHP_VERSION_ID` ve jmenném prostoru dostane `use const PHP_VERSION_ID;`, takže podmínku nad ní může OPcache spočítat předem. Na styl, tedy import proti lomítku, preset nesahá: ten nechává na standardu, a tak se hodí ke kterémukoli.
+Stejně naloží s konstantami, ale jen tam, kde s nimi kompilátor opravdu počítá. `PHP_VERSION_ID` v podmínce `if (PHP_VERSION_ID >= 80400)` nebo příznaky v `ENT_QUOTES | ENT_HTML5` dostanou `use const`, protože výraz se pak spočítá předem. Konstanta, která stojí jen jako argument, třeba `E_USER_DEPRECATED` v `trigger_error()`, nebo se porovnává s proměnnou, zůstane, jak je: literál by jí ušetřil jen samotné načtení. Proč je to lepší než import všeho, ukazuje [měření výše |#Jen tam, kde to kompilátor využije]. Na styl, tedy import proti lomítku, preset nesahá: ten nechává na standardu, a tak se hodí ke kterémukoli.
 
 Všechny tyhle opravy stojí na tom, že jde o globální funkci PHP. Pokud konfigurace neříká `nameResolution: certain`, DressCode je proto ohlásí jako rizikové a udělá je jen se svolením. Podrobnosti jsou na stránce [o jmenných prostorech |namespaces#Řekněte DressCode, co je co].
 
@@ -207,4 +217,4 @@ Shrnutí
 - Skoro všechny zkratky potřebují jisté jméno: `\strlen()`, `use function strlen;` nebo soubor bez jmenného prostoru. Totéž platí pro konstanty jako `PHP_VERSION_ID`.
 - Volání bez rámce z PHP 8.4 funguje i s nekvalifikovaným jménem ve jmenném prostoru.
 - Pojmenované a rozbalené argumenty vypnou všechny zkratky.
-- Preset `dresscode/optimizations` zapíše kód tak, aby zkratky platily, a chová se stejně pro všechny verze PHP.
+- Preset `dresscode/optimizations` zapíše kód tak, aby zkratky platily: optimalizované funkce kvalifikuje vždy, konstanty PHP jen tam, kde s nimi kompilátor počítá, a chová se stejně pro všechny verze PHP.
