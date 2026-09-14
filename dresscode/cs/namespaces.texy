@@ -134,7 +134,7 @@ src/Utils/helpers.php
 
 Tohle stačí, protože deklaraci na rozdíl od volání poznat jde: stojí v souboru, který DressCode kontroluje. Pozor jen na cesty vyloučené z kontroly. Funkci deklarovanou třeba v testech, které DressCode vynechává, ohlásit nemůže, a pokud ji kód volá bez importu, zapište ji do seznamu sami. S `uncertain` pravidlo mlčí, protože není co hlídat, a kdybyste ho s `certain` přesto nechtěli, vypnete ho v klíči `rules` jako kterékoli jiné.
 
-Ani první seznam nemusíte psát ručně. [`dresscode init` |cli#Konfigurace naměřená z kódu: init] projde všechny soubory v cestách projektu, najde funkce a konstanty deklarované ve jmenných prostorech a zapíše jejich seznamy spolu s `nameResolution: certain`.
+Ani první seznam nemusíte psát ručně. [`dresscode init` |cli#Konfigurace naměřená z kódu: init] projde všechny soubory v cestách projektu, najde funkce a konstanty deklarované ve jmenných prostorech a zapíše jejich seznamy spolu s `nameResolution: certain`. Když některý soubor nejde naparsovat, co deklaruje, zůstává neznámé, a tak `init` jistotu nezapíše a v komentáři ten soubor jmenuje.
 
 .[note]
 Do budoucna se nabízí, aby nový záznam do konfigurace zapsal rovnou `dresscode fix`, místo aby na něj pravidlo jen upozornilo.
@@ -176,6 +176,8 @@ use function count;
 use function in_array;
 ```
 
+Import zapíše tak, jak soubor importy už píše: do příkazu, který jich vyjmenovává víc, a na místo, kam patří podle abecedy. Pravidla o tvaru a pořadí importů pak nemají co hlásit.
+
 Na první pohled zbytečnost, `count()` by fungovalo i bez importu. Jde ale o rychlost. Když kompilátor PHP narazí ve jmenném prostoru na nekvalifikované `strlen($s)`, neví, jestli za běhu nebude existovat `App\strlen()`, a tak vyrobí obecné volání, které se rozhodne až za běhu. Když ví, že jde o globální funkci, protože je importovaná nebo zapsaná jako `\strlen()`, může u zhruba tří desítek základních funkcí volání vynechat úplně: `strlen()` se promění v jedinou instrukci virtuálního stroje, `is_array()` v prostou kontrolu typu a `in_array()` s polem zapsaným přímo v kódu ve vyhledání v hashovací tabulce. V kódu, který se točí ve smyčkách, je to znát. U několika dalších funkcí, třeba u `function_exists('mb_strlen')`, spočítá výsledek už při kompilaci optimalizátor OPcache.
 
 Právě tyhle funkce tvoří sadu `optimizedFunctions`, takže se importují jen ty, u kterých to něco přináší. `assert()` mezi nimi není, protože ho PHP přeloží zvlášť, ať je importovaný, nebo ne.
@@ -201,7 +203,7 @@ rules:
 			'PHP_*': import             # use const PHP_EOL; ... PHP_EOL
 ```
 
-Když o jménu mluví víc klíčů, rozhoduje nejkonkrétnější odpověď: přesně napsané jméno má přednost před vzorem, delší vzor před kratším a obojí před prostou hodnotou klíče. Při shodě vyhraje konkrétnější klíč, a tak v ukázce dostane `\Exception` lomítko, přestože `classes` říká import. Na pořadí zápisu nezáleží: když preset importuje `'PHP_*'` a váš projekt napíše `PHP_EOL: backslash`, přesné jméno vyhraje. Samotné `name-notation: true` nedělá nic a DressCode na to upozorní.
+Když o jménu mluví víc klíčů, rozhoduje nejkonkrétnější odpověď: přesně napsané jméno má přednost před vzorem, delší vzor před kratším a obojí před prostou hodnotou klíče. Při shodě vyhraje konkrétnější klíč, a tak v ukázce dostane `\Exception` lomítko, přestože `classes` říká import. Na pořadí zápisu nezáleží: když preset importuje `'PHP_*'` a váš projekt napíše `PHP_EOL: backslash`, přesné jméno vyhraje. Mapa se s hodnotou vrstvy pod sebou slévá, jako by ta hodnota byla vzor `*`, takže projekt nad presetem se `globalFunctions: [backslash, bare]` může napsat jen `globalFunctions: {strlen: import}` a platí obojí. Prostá hodnota naopak vrstvu pod sebou nahradí celou i s jejími vzory. Samotné `name-notation: true` nedělá nic a DressCode na to upozorní.
 
 A tady se vracíme ke jmenným prostorům. Import `use function strlen;` přišpendlí volání ke globální funkci. Kdyby projekt měl vlastní `App\strlen()`, import by změnil chování. S `uncertain` proto DressCode každý přechod mezi holým jménem a importem nebo zpětným lomítkem považuje za rizikový. S `certain` ví, že `App\strlen()` neexistuje, a pravidlo import prostě doplní. Funkci ze seznamu přirozeně neimportuje.
 
