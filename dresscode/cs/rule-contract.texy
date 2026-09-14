@@ -188,18 +188,19 @@ Jádro analýzu vytvoří napoprvé a drží ji, dokud se strom nezmění; po ka
 
 Pravidlo, které do souboru zapisuje kód, o jehož tvaru rozhoduje jiné pravidlo, se může zeptat přímo toho pravidla. `$context->findRule(ImportNotationRule::class)` vrátí jeho instanci tak, jak je pro soubor nakonfigurovaná, nebo `null`, když na soubor neběží. Tak `name-notation` přidá import funkce do existujícího `use function`, když `import-notation` chce importy spojené, a jinak mu dá vlastní příkaz.
 
-`NameResolver` ví i to, co v jednom souboru vidět nejde: které funkce a konstanty projekt deklaruje ve jmenných prostorech, jak to říkají klíče `namespaces` a `nameResolution`. `isGlobalFunctionCall()` s tím počítá sám. Když projekt neřekl `nameResolution: certain`, stojí odpověď jen na předpokladu, že nekvalifikované jméno je globální, a to prozradí `isUncertain()`. Pravidlo, jehož oprava na tom předpokladu stojí, ji u takového výskytu ohlásí jako rizikovou:
+`NameResolver` ví i to, co v jednom souboru vidět nejde: které funkce a konstanty projekt deklaruje ve jmenných prostorech, jak to říkají klíče `namespaces` a `nameResolution`. `isGlobalFunctionCall()` s tím počítá sám. Když projekt neřekl `nameResolution: certain`, stojí odpověď jen na předpokladu, že nekvalifikované jméno je globální, a to prozradí `getUnqualifiedResolution()` odpovědí `UnqualifiedResolution::Uncertain`. Ptá se jen na nekvalifikované jméno, protože jméno s lomítkem do globálního prostoru nepadá. Pravidlo, jehož oprava na tom předpokladu stojí, ji u takového výskytu ohlásí jako rizikovou:
 
 ```php
-if (
-	$resolver->isGlobalFunctionCall($node, 'is_null')
-	&& $context->report($node, 'The is_null() call must be a comparison with null', risky: $resolver->isUncertain($node->name->text, SymbolKind::Function, $node))
-) {
-	// ...
+if ($resolver->isGlobalFunctionCall($node, 'is_null')) {
+	$uncertain = $node->name->isUnqualified()
+		&& $resolver->getUnqualifiedResolution($node->name->text, SymbolKind::Function, $node) === UnqualifiedResolution::Uncertain;
+	if ($context->report($node, 'The is_null() call must be a comparison with null', risky: $uncertain)) {
+		// ...
+	}
 }
 ```
 
-Jméno funkce, které pravidlo do kódu nově zapisuje a které žádné původní jméno nenahrazuje, neskládejte z řetězce, ale vezměte z `$resolver->getShortName('count', SymbolKind::Function, $node)`: podle importů a konfigurace řekne, jestli se má napsat `count()`, nebo `\count()`. Když jméno nahrazuje jiné, jako `sizeof()` na `count()`, napište ho stejně jako to původní, s lomítkem nebo bez něj. Holé jméno ale jen tehdy, když ho soubor neimportuje ani nedeklaruje, což řekne `isAliasFree('count', SymbolKind::Function, $node)`, a když pro ně `isUncertain()` neodpoví `true` tam, kde pro původní jméno odpovídá `false`. Jinak patří před jméno lomítko. Proč na tom záleží, popisuje stránka [Funkce a konstanty ve jmenných prostorech |namespaces].
+Jméno funkce, které pravidlo do kódu nově zapisuje a které žádné původní jméno nenahrazuje, neskládejte z řetězce, ale vezměte z `$resolver->getShortName('count', SymbolKind::Function, $node)`: podle importů a konfigurace řekne, jestli se má napsat `count()`, nebo `\count()`. Když jméno nahrazuje jiné, jako `sizeof()` na `count()`, napište ho stejně jako to původní, s lomítkem nebo bez něj. Holé jméno ale jen tehdy, když ho soubor neimportuje ani nedeklaruje, což řekne `isAliasFree('count', SymbolKind::Function, $node)`, a když není méně jisté než to původní: `getUnqualifiedResolution()` pro nové jméno odpoví `Global`, nebo pro původní `Uncertain`. Jinak patří před jméno lomítko. Proč na tom záleží, popisuje stránka [Funkce a konstanty ve jmenných prostorech |namespaces].
 
 
 Testování

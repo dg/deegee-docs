@@ -23,7 +23,7 @@ NameResolver
 
 Překládá jména podle jmenného prostoru a importů, s tím, co PHP dělá za běhu: nekvalifikovaná funkce nebo konstanta, která ve jmenném prostoru není, spadne do globálního.
 
-Importy platí v bloku, ve kterém jsou napsané, kdežto deklarace patří celému jmennému prostoru. Druhý blok `namespace A { }` téhož souboru proto vidí funkci, kterou deklaroval ten první, ale ne to, co si první blok importoval. Co soubor nedeklaruje, o tom resolver sám neví nic: pád do globálního prostoru je pak odhad podle toho, co je v souboru vidět, ne znalost symbolu. Z odhadu se stane znalost, když resolveru při vytvoření předáte objekt `NamespacedSymbols`: seznam funkcí a konstant, které jmenné prostory deklarují mimo soubor, a příznak `complete`, že jiné nejsou. Seznamy přitom mohou být prázdné, a přesně tak to vypadá v projektu, který ve jmenných prostorech žádné funkce ani konstanty nemá. Jestli konkrétní odpověď stojí jen na odhadu, řekne `isUncertain()`.
+Importy platí v bloku, ve kterém jsou napsané, kdežto deklarace patří celému jmennému prostoru. Druhý blok `namespace A { }` téhož souboru proto vidí funkci, kterou deklaroval ten první, ale ne to, co si první blok importoval. Co soubor nedeklaruje, o tom resolver sám neví nic: pád do globálního prostoru je pak odhad podle toho, co je v souboru vidět, ne znalost symbolu. Z odhadu se stane znalost, když resolveru při vytvoření předáte objekt `NamespacedSymbols`: seznam funkcí a konstant, které jmenné prostory deklarují mimo soubor, a příznak `complete`, že jiné nejsou. Seznamy přitom mohou být prázdné, a přesně tak to vypadá v projektu, který ve jmenných prostorech žádné funkce ani konstanty nemá. Jestli konkrétní odpověď stojí jen na odhadu, řekne `getUnqualifiedResolution()`.
 
 ```php
 $symbols = new PhpSyntax\Analyses\NamespacedSymbols(
@@ -45,12 +45,12 @@ $resolver->resolveFunction($name);
 $resolver->resolveConstant($name);
 
 $resolver->isGlobalFunctionCall($node, 'sizeof');   // volání globální funkce, případně té jedné
-$resolver->isUncertain('count', PhpSyntax\SymbolKind::Function, $node); // true, když pád do globálního stojí jen na odhadu
+$resolver->getUnqualifiedResolution('count', PhpSyntax\SymbolKind::Function, $node); // Global, Namespaced, nebo Uncertain, když pád do globálního stojí jen na odhadu
 ```
 
 `isGlobalFunctionCall()` je otázka, kterou si dřív každý nástroj řešil sám a většinou hůř: uzel musí být volání funkce se jménem (ne `$f()` ani `$obj->f()`), jméno nesmí být klíčové slovo a po překladu musí být globální. Tak se pozná, že `count($a)` uvnitř `namespace App` opravdu volá `count`, a ne `App\count`, pokud taková funkce není importovaná, deklarovaná v souboru ani uvedená v `NamespacedSymbols`.
 
-Nástroj, který podle odpovědi mění kód, se má zeptat i na `isUncertain()`. Takhle rozhoduje [DressCode |dresscode:namespaces], jestli je oprava riziková: s odhadem ano, se znalostí ne.
+Nástroj, který podle odpovědi mění kód, se má zeptat i na `getUnqualifiedResolution()`. Takhle rozhoduje [DressCode |dresscode:namespaces], jestli je oprava riziková: s odpovědí `Uncertain` ano, s `Global` nebo `Namespaced` ne. Metoda přijímá jen nekvalifikované jméno, protože jméno s lomítkem do globálního prostoru nepadá, a na jiné vyhodí `InvalidArgumentException`. Odpověď `Global` přitom říká, že jméno míří do globálního prostoru, ne nutně na symbol toho jména: import s aliasem ho může přesměrovat jinam.
 
 Jméno, které jste právě naparsovali a ve stromu ještě nestojí, samo neví, kde bude; kde ho chcete přeložit, řekne druhý argument:
 
