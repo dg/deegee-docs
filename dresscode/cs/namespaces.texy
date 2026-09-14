@@ -174,18 +174,24 @@ presets:
 Vlastní preset dodá takové seznamy klíčem `namespaces` svého profilu (viz [vlastní preset |presets-and-extensions#Preset]) a seznamy všech presetů se sčítají s tím, co napíšete vy. Klíč `nameResolution` ale preset nastavit nemůže: framework zná, váš projekt ne.
 
 
-Proč importovat globální funkce
-===============================
+Jak se píšou globální jména
+===========================
 
-S tím souvisí pravidlo `dresscode/name-notation`, které v souborech ve jmenných prostorech rozhoduje, jak se píšou jména tříd, funkcí a konstant. Třeba s touhle konfigurací:
+S tím souvisejí dvě pravidla, protože jde o dvě různé otázky. Pravidlo `dresscode/name-fallback` rozhoduje, jestli globální funkce nebo konstanta smí stát holá a spoléhat na pád do globálního jména. Pravidlo `dresscode/name-notation` rozhoduje, jak se píše jméno, které na pád nespoléhá: importem, nebo s úvodním lomítkem. Obě pravidla samy nerozhodují o ničem: co jim neřeknete, nechají být.
+
+
+Holé, nebo kvalifikované: name-fallback
+---------------------------------------
+
+Třeba s touhle konfigurací:
 
 ```neon
 rules:
-	name-notation:
-		optimizedFunctions: import
+	name-fallback:
+		optimizedFunctions: qualified
 ```
 
-doplňuje řádky jako tenhle:
+doplňuje pravidlo řádky jako tenhle:
 
 ```php
 namespace App;
@@ -194,38 +200,52 @@ use function count;
 use function in_array;
 ```
 
-Import zapíše tak, jak soubor importy už píše: do příkazu, který jich vyjmenovává víc, a na místo, kam patří podle abecedy. Pravidla o tvaru a pořadí importů pak nemají co hlásit.
-
 Na první pohled zbytečnost, `count()` by fungovalo i bez importu. Jde ale o rychlost. Když kompilátor PHP narazí ve jmenném prostoru na nekvalifikované `strlen($s)`, neví, jestli za běhu nebude existovat `App\strlen()`, a tak vyrobí obecné volání, které se rozhodne až za běhu. Když ví, že jde o globální funkci, může u zhruba tří desítek základních funkcí volání vynechat úplně a u několika dalších spočítá výsledek už při překladu optimalizátor OPcache. Co přesně PHP dělá a jak velký je to rozdíl, popisuje stránka [Optimalizace funkcí a konstant |optimizations].
 
-Právě tyhle funkce tvoří sadu `optimizedFunctions`, takže se importují jen ty, u kterých to něco přináší. `assert()` mezi nimi není, protože ho PHP přeloží zvlášť, ať je importovaný, nebo ne.
+Klíče jdou od obecného ke zvláštnímu:
 
-Pravidlo samo nerozhoduje o ničem: co mu neřeknete, nechá být. Klíče jdou od obecného ke zvláštnímu:
+| klíč | o jakých jménech rozhoduje |
+|---|---|
+| `functions`, `constants` | o všech globálních funkcích a konstantách |
+| `optimizedFunctions` | o funkcích, se kterými kompilátor nebo OPcache zachází zvlášť |
+| `optimizedConstants` | o konstantách, které deklaruje PHP a jejichž hodnotu kompilátor rovnou dosadí |
+
+Hodnota `qualified` říká, že jméno na pád spoléhat nesmí, `fallback`, že má stát holé, a `keep`, že se o jménu nerozhoduje. `assert()` mezi optimalizovanými funkcemi není, protože ho PHP přeloží zvlášť, ať je importovaný, nebo ne.
+
+Jméno, které kvalifikuje, zapíše pravidlo tvarem, jaký chce `name-notation`, a když to o jménu nic neříká, importem. Import zapíše tak, jak soubor importy už píše: do příkazu, který jich vyjmenovává víc, a na místo, kam patří podle abecedy, takže pravidla o tvaru a pořadí importů pak nemají co hlásit. Kde import přidat nejde, třeba proto, že je jméno zabrané, napíše úvodní lomítko. Holé naopak udělá jméno jen tam, kde holé jméno opravdu dosáhne na globální funkci, a import, který už nikdo nepotřebuje, odebere.
+
+A tady se vracíme ke jmenným prostorům. Import `use function strlen;` přišpendlí volání ke globální funkci. Kdyby projekt měl vlastní `App\strlen()`, import by změnil chování. S `uncertain` proto DressCode každý přechod mezi holým jménem a importem nebo zpětným lomítkem považuje za rizikový. S `certain` ví, že `App\strlen()` neexistuje, a pravidlo import prostě doplní. Funkci ze seznamu přirozeně neimportuje.
+
+
+Import, nebo lomítko: name-notation
+-----------------------------------
+
+Tohle pravidlo rozhoduje o jménech, která jsou jistá: o třídách, o jménech z jiných jmenných prostorů a o globálních funkcích a konstantách, které už kvalifikované jsou. Oba tvary znamenají totéž, takže žádná jeho oprava riziková není. Holou globální funkci ani konstantu nechá být, ta patří pravidlu `name-fallback`.
 
 | klíč | o jakých jménech rozhoduje |
 |---|---|
 | `classes`, `functions`, `constants` | o všech třídách, funkcích a konstantách |
 | `globalClasses`, `globalFunctions`, `globalConstants` | jen o těch z globálního jmenného prostoru |
-| `optimizedFunctions` | o globálních funkcích, se kterými kompilátor nebo OPcache zachází zvlášť |
 
-Hodnotou klíče je tvar, jakým se jméno píše: `import`, `backslash` pro `\strlen()`, u globálních funkcí a konstant ještě `bare` pro holé `strlen()`, které spoléhá na pád do globálního jména, a `keep`, když se o jménu nerozhoduje. Místo jednoho tvaru můžete dát seznam: každý tvar ze seznamu je pak v pořádku a jméno zapsané jinak se přepíše na první z nich. A místo tvaru můžete dát mapu ze jména nebo ze vzoru s hvězdičkou na tvar:
+Hodnotou klíče je tvar, jakým se jméno píše: `import`, `backslash` pro `\strlen()` a `keep`, když se o jménu nerozhoduje.
+
+U obou pravidel můžete místo prosté hodnoty dát mapu ze jména nebo ze vzoru s hvězdičkou na hodnotu:
 
 ```neon
 rules:
 	name-notation:
 		classes: import                 # use App\Model\User; ... User
 		globalClasses: backslash        # \Exception
-		optimizedFunctions: import      # use function strlen; ... strlen()
-		globalFunctions: [backslash, bare]
-		globalConstants:
-			'PHP_*': import             # use const PHP_EOL; ... PHP_EOL
+		globalFunctions: import         # use function strlen; ... strlen()
+	name-fallback:
+		optimizedFunctions: qualified
+		constants:
+			'PHP_*': qualified          # use const PHP_EOL; ... PHP_EOL
 ```
 
-Když o jménu mluví víc klíčů, rozhoduje nejkonkrétnější odpověď: přesně napsané jméno má přednost před vzorem, delší vzor před kratším a obojí před prostou hodnotou klíče. Při shodě vyhraje konkrétnější klíč, a tak v ukázce dostane `\Exception` lomítko, přestože `classes` říká import. Na pořadí zápisu nezáleží: když preset importuje `'PHP_*'` a váš projekt napíše `PHP_EOL: backslash`, přesné jméno vyhraje. Mapa se s hodnotou vrstvy pod sebou slévá, jako by ta hodnota byla vzor `*`, takže projekt nad presetem se `globalFunctions: [backslash, bare]` může napsat jen `globalFunctions: {strlen: import}` a platí obojí. Prostá hodnota naopak vrstvu pod sebou nahradí celou i s jejími vzory. Samotné `name-notation: true` nedělá nic a DressCode na to upozorní.
+Když o jménu mluví víc klíčů, rozhoduje nejkonkrétnější odpověď: přesně napsané jméno má přednost před vzorem, delší vzor před kratším a obojí před prostou hodnotou klíče. Při shodě vyhraje konkrétnější klíč, a tak v ukázce dostane `\Exception` lomítko, přestože `classes` říká import. Na pořadí zápisu nezáleží: když preset kvalifikuje `'PHP_*'` a váš projekt napíše `PHP_EOL: fallback`, přesné jméno vyhraje. Mapa se s hodnotou vrstvy pod sebou slévá, jako by ta hodnota byla vzor `*`, takže projekt nad presetem se `globalFunctions: backslash` může napsat jen `globalFunctions: {strlen: import}` a platí obojí. Prostá hodnota naopak vrstvu pod sebou nahradí celou i s jejími vzory. Samotné `name-notation: true` nebo `name-fallback: true` nedělá nic a DressCode na to upozorní.
 
-A tady se vracíme ke jmenným prostorům. Import `use function strlen;` přišpendlí volání ke globální funkci. Kdyby projekt měl vlastní `App\strlen()`, import by změnil chování. S `uncertain` proto DressCode každý přechod mezi holým jménem a importem nebo zpětným lomítkem považuje za rizikový. S `certain` ví, že `App\strlen()` neexistuje, a pravidlo import prostě doplní. Funkci ze seznamu přirozeně neimportuje.
-
-Jméno bez úvodního lomítka, třeba `Model\User` s `use App\Model;`, pravidlo nechá být, protože se čte relativně k importu nebo k jmennému prostoru souboru. Soubor bez jmenného prostoru nechá celý: úvodní lomítko tam odebere pravidlo `no-leading-backslash-in-global-namespace` a jméno zůstane kvalifikované.
+Jméno bez úvodního lomítka, třeba `Model\User` s `use App\Model;`, pravidla nechají být, protože se čte relativně k importu nebo k jmennému prostoru souboru. Soubor bez jmenného prostoru nechají celý: úvodní lomítko tam odebere pravidlo `no-leading-backslash-in-global-namespace` a jméno zůstane kvalifikované.
 
 
 Shrnutí
