@@ -30,14 +30,28 @@ $result = $runner->run($files, fix: false, reporter: new JsonReporter(STDOUT));
 exit($result->getExitCode());
 ```
 
-`Loader::load()` najde `dresscode.neon` nebo `dresscode.php` od zadaného adresáře směrem nahoru (nebo vezme soubor, který mu určíte) a vrátí konfiguraci i s vrstvami rozšíření a kořenový adresář projektu; bez konfiguračního souboru platí výchozí preset, nebo konfigurace, kterou předáte třetím argumentem. `Runner::findFiles()` rozvine cesty podle klíčů `paths`, vyloučení a přípon z konfigurace, `run()` je zpracuje a výsledky posílá reporteru soubor po souboru. Pravidlo nebo analýzu, kterou konfigurace staví closurou, popisuje jen text konfiguračního souboru, a proto `createRunner()` takový běh cachuje, jen když dostane cestu k tomu souboru v argumentu `configFile`.
+`Loader::load()` najde `dresscode.neon` nebo `dresscode.php` od zadaného adresáře směrem nahoru (nebo vezme soubor, který mu určíte) a vrátí konfiguraci a kořenový adresář projektu; bez konfiguračního souboru platí výchozí preset, nebo konfigurace, kterou předáte třetím argumentem. `Runner::findFiles()` rozvine cesty podle klíčů `paths`, vyloučení (i těch z rozšíření) a přípon z konfigurace, `run()` je zpracuje a výsledky posílá reporteru soubor po souboru. Pravidlo nebo analýzu, kterou konfigurace staví closurou, popisuje jen text konfiguračního souboru, a proto `createRunner()` takový běh cachuje, jen když dostane cestu k tomu souboru v argumentu `configFile`.
 
 .[caution]
 `RunnerFactory` je zatím označená `@internal`, takže se její podoba může v minoritní verzi změnit. Je to jediné hrubé místo tohohle API a zároveň jediná cesta, jak `Runner` postavit. Komu to vadí, ať volá rovnou [celý příkaz |#Vlastní příkaz], jehož rozhraní stabilní je.
 
 `RunResult` obsahuje `FileResult` pro každý soubor, jen bez kódu a výstupu, aby velký projekt nezůstal celý v paměti (ty dostane reporter v `reportFile()`), a k tomu souhrnná čísla: `countViolations()` (porušení souborů, jak byly načtené), `countLeftAfterFix()` (kolik jich po opravě zbude, v `check` i ve `fix`), `countRemaining()` (co zůstalo na uživateli: v `check` všechna porušení, ve `fix` ta, která oprava nechala), `countRiskyDeferred()` (rizikové opravy, které čekají na svolení) a `listRiskyDeferredRules()` (jména jejich pravidel), `countChangedFiles()`, `countSyntaxErrors()` (soubory, které nejdou parsovat), `countFailures()` (soubory, kde pravidlo selhalo), vlastnost `baselined` s počtem porušení, která umlčela baseline, a `getExitCode()` podle stejných pravidel jako na příkazové řádce. První tři počty přijmou volitelnou závažnost, `Severity::Error` nebo `Severity::Warning`.
 
-Kdo konfiguraci staví v PHP místo načítání ze souboru, má na objektu `Config` totéž, co umí NEON, včetně přepisů pro část projektu (`override()`), pravidel, která jen varují (`warnings()`), a pravidel, jejichž rizikové opravy projekt přijímá (`fixRisky()` se jmény nebo třídami).
+Kdo konfiguraci staví v PHP místo načítání ze souboru, napíše `new Config(...)` se stejnými klíči jako NEON a přepisy pro část projektu jako objekty `Override`. Metoda `createRunner()` přijme navíc profil `commandLine`, který leží nad vším jako přepínače `--preset` a `--rule`, a seznam `only`, který běh zúží jako `--only`:
+
+```php
+use DressCode\Config;
+use DressCode\Config\RunnerFactory;
+use DressCode\Override;
+use DressCode\Profile;
+
+$config = new Config(
+	presets: ['dresscode/nette'],
+	overrides: [new Override(['tests'], nameResolution: 'uncertain')],
+	paths: ['src', 'tests'],
+);
+$runner = new RunnerFactory()->createRunner($config, getcwd(), commandLine: new Profile(rules: ['dresscode/line-length' => false]));
+```
 
 
 Jeden soubor nebo řetězec
@@ -110,7 +124,7 @@ Kdo balí DressCode do vlastní binárky (tak vznikl příkaz `ecs` v Nette Codi
 use DressCode\Config;
 use DressCode\Console\Application;
 
-$application = new Application(defaultConfig: Config::create()->extension(Nette\CodingStandard\Extension::class));
+$application = new Application(defaultConfig: new Config(extensions: [Nette\CodingStandard\Extension::class], presets: ['dresscode/nette']));
 exit($application->run($argv));
 ```
 

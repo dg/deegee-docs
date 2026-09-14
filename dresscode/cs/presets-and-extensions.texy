@@ -2,91 +2,96 @@ Vlastní preset a rozšíření
 **************************
 
 .[perex]
-Jak zabalit vlastní pravidla a styl do presetu, jak z něj udělat rozšíření (extension), rozdávat ho přes Composer a nechat uživatele zapnout ho jediným řádkem.
+Jak zabalit vlastní pravidla a styl do presetu, jak k němu přidat rozšíření (extension), rozdávat obojí přes Composer a nechat uživatele zapnout to jediným řádkem, pro celý projekt nebo jen pro jeho část.
 
 
 Preset
 ======
 
-Preset je třída s atributem `#[PresetInfo]`, která vrátí sadu pravidel s volbami a může vycházet z jiných presetů:
+Preset je třída s atributem `#[PresetInfo]` a jedinou metodou `getProfile()`. Ta vrátí [profil |configuration#Jeden tvar pro projekt, jeho části i presety]: tytéž klíče, které píšete do konfigurace, jen zapsané v PHP.
 
 ```php
 namespace Acme\CodeStyle;
 
 use DressCode\Preset;
-use DressCode\PresetContext;
 use DressCode\PresetInfo;
 use DressCode\Presets\Per;
+use DressCode\Profile;
 
-#[PresetInfo('acme/house', 'The Acme house style', indent: 'tab', eol: 'LF')]
+
+#[PresetInfo('acme/house', 'The Acme house style')]
 final class HousePreset implements Preset
 {
-	public function getRules(PresetContext $context): array
+	public function getProfile(): Profile
 	{
-		return [
-			'dresscode/ordered-imports' => true,
-			'dresscode/line-length' => ['limit' => 100],
-			'dresscode/yoda' => 'forbidden',
-			'dresscode/no-alternative-syntax' => 'keep',
-			ExceptionMessagePeriodRule::class => true,
-			'dresscode/octal-notation' => version_compare($context->getPhpVersion(), '8.1', '>='),
-		];
-	}
-
-
-	public function getNamespacedDeclarations(): array
-	{
-		return [];
-	}
-
-
-	public function getParents(): array
-	{
-		return [Per::class];
+		return new Profile(
+			presets: [Per::class],
+			indent: 'tab',
+			eol: 'LF',
+			rules: [
+				'dresscode/ordered-imports' => true,
+				'dresscode/line-length' => ['limit' => 100],
+				'dresscode/yoda' => 'forbidden',
+				'dresscode/no-alternative-syntax' => 'keep',
+				ExceptionMessagePeriodRule::class => true,
+			],
+		);
 	}
 }
 ```
 
-- Rodičovské presety se použijí nejdřív. Položka, kterou potomek uvede znovu, se s rodičem slévá stejně jako v [konfiguraci |configuration#Presety a vrstvy]: mapa mění jen volby, které jmenuje, skalár a seznam nahrazují celou hodnotu, `keep` položku maže. Pořadí pravidel odpovídá pořadí první zmínky.
+- `presets` jsou presety, ze kterých ten váš vychází. Použijí se nejdřív, každý jen jednou, a uvést je můžete třídou i jménem. Položka, kterou váš preset uvede znovu, se s nimi slévá stejně jako v [konfiguraci |configuration#Presety a vrstvy]: mapa mění jen volby, které jmenuje, skalár a seznam nahrazují celou hodnotu, `keep` položku maže. Pořadí pravidel odpovídá pořadí první zmínky.
 - Vestavěná pravidla lze uvést jménem, vlastní názvem třídy; jméno vlastního pravidla se zaregistruje při první zmínce.
-- Hodnotou je `true`, `keep` (nebo `false`), hodnota rozhodnutí u pravidla, které má jediné (`'dresscode/yoda' => 'forbidden'`), mapa voleb, nebo továrna `fn(): Rule` pro pravidlo se závislostmi.
-- `indent` a `eol` v atributu `PresetInfo` je styl, se kterým preset počítá; konfigurace projektu ho může přepsat.
-- Metoda `getNamespacedDeclarations()` vrací funkce a konstanty, které framework presetu deklaruje ve jmenném prostoru, do kterého kód projektu píše, jako pole s klíči `functions` a `constants`, třeba `['functions' => ['Symfony\Component\DependencyInjection\Loader\Configurator\{service, param, env}']]`; preset, který žádné nezná, vrátí `[]`. Položky se zapisují jako v příkazu `use` a sčítají se s konfigurací projektu. Klíč `nameResolution` preset nastavit nemůže, o vlastním kódu rozhoduje projekt; viz [Funkce a konstanty ve jmenných prostorech |namespaces#Úlomky znají svůj framework].
+- Hodnotou pravidla je `true`, `keep` (nebo `false`), hodnota rozhodnutí u pravidla, které má jediné (`'dresscode/yoda' => 'forbidden'`), mapa voleb, nebo továrna `fn(): Rule` pro pravidlo se závislostmi.
+- `indent` a `eol` jsou styl, se kterým preset počítá; konfigurace projektu nebo přepis ho může změnit.
+- `namespaces` vyjmenuje funkce a konstanty, které framework presetu deklaruje ve jmenném prostoru, do kterého kód projektu píše, třeba `['functions' => ['Symfony\Component\DependencyInjection\Loader\Configurator\{service, param, env}']]`. Položky se zapisují jako v příkazu `use` a sčítají se s konfigurací projektu; viz [Funkce a konstanty ve jmenných prostorech |namespaces#Úlomky znají svůj framework].
+- Rozhodnutí projektu preset udělat nemůže: klíče `php`, `nameResolution`, `fixRisky` a `warnings` nechává projektu. Preset, který by je nastavil, DressCode odmítne s chybou `Preset acme/house sets fixRisky, which is a decision of the project, not of a standard.`
 - `fragment: true` v atributu říká, že preset je úlomek: jen hygiena bez jediného rozhodnutí o rozvržení kódu, takže ho uživatel může položit nad kterýkoli standard. Takový preset nemá styl a v rodičích nesmí mít nic, co by rozvržení určovalo.
 
-Poslední řádek ukázky je vlastně zbytečný: pravidlo s `minPhpVersion` se pod svou verzí vynechá samo. `PresetContext` se hodí spíš tam, kde má preset pod různými verzemi PHP zapínat různá pravidla nebo jim dávat jiné volby. Verze je řetězec ve tvaru `major.minor` a porovnává se funkcí `version_compare()`.
+Na verzi PHP preset myslet nemusí: pravidlo s `minPhpVersion` se pod svou verzí vynechá samo.
 
-Preset se dá zapnout názvem třídy, dokud nemá rozšíření, které mu dá jméno:
+Preset se dá zapnout názvem třídy, nebo ho uvedete v klíči `extensions` a zapnete ho jeho jménem. Protože je to profil, dá se zapnout i jen pro část projektu, v [přepisu |configuration#Jiný profil pro část projektu]:
 
 ```neon
-presets:
+extensions:
 	- Acme\CodeStyle\HousePreset
+
+presets:
+	- dresscode/per
+
+overrides:
+	- paths: [src]
+	  presets: [acme/house]
 ```
 
 
 Rozšíření
 =========
 
-Rozšíření (extension) je to, co balíček dodá místo konfiguračního souboru: třída s metodou `__invoke()`, která dostane prázdný objekt `Config` a nastaví do něj, co uzná za vhodné. Takhle vypadá rozšíření Nette Coding Standardu:
+Rozšíření (extension) je to, co balíček přinese projektu, který ho uvede v klíči `extensions`: třída s rozhraním `DressCode\Extension`, jejíž metoda `getConfig()` vrátí konfiguraci. Ta smí nastavit jen čtyři klíče, `extensions`, `analyses`, `excludePaths` a `skipWhen`. Takhle vypadá rozšíření Nette Coding Standardu:
 
 ```php
 namespace Nette\CodingStandard;
 
 use DressCode\Config;
 
-final class Extension
+
+final class Extension implements \DressCode\Extension
 {
-	public function __invoke(Config $config): void
+	public function getConfig(): Config
 	{
-		$config
-			->registerPresets([Presets\CleanCode::class, Presets\OptimizeFn::class, Presets\Types::class])
-			->excludePaths(['expected', 'tmp', 'fixtures*'])
-			->skipWhen(PhpVersionFilter::create());
+		return new Config(
+			extensions: [Presets\CleanCode::class, Presets\OptimizeFn::class, Presets\Types::class],
+			excludePaths: ['expected', 'tmp', 'fixtures*'],
+			skipWhen: PhpVersionFilter::create(),
+		);
 	}
 }
 ```
 
-Všimněte si, co tam **není**: žádné volání `preset()`. Rozšíření dělá jména dostupnými a nastavuje výchozí hodnoty, ale který styl se nakonec použije, je rozhodnutí projektu. Uživatel rozšíření zapne jedním řádkem a presety si vybere sám:
+Presety a pravidla, které rozšíření uvede ve svém klíči `extensions`, dostanou svá jména. Vyloučené cesty se přidají k cestám projektu, filtr `skipWhen` přeskočí soubor, i když má projekt vlastní filtr, a analýzu stejné třídy, kterou si projekt postaví sám, má projekt. Rozšíření, které uvádí jiné rozšíření, se vyhodnotí až po něm a každá třída se použije jen jednou.
+
+Všimněte si, co tam **není**: rozšíření nezapne žádný preset ani pravidlo a nenastaví styl. Rozšíření, které by nastavilo `presets`, `rules` nebo jiný klíč projektu, DressCode odmítne s chybou `Extension ... sets presets, which is for the project to decide`. Který styl se použije, je rozhodnutí projektu, a proto ho vždycky přečtete v jeho vlastním souboru. Uživatel rozšíření zapne jedním řádkem a presety si vybere sám, klidně pro každou část projektu jiné:
 
 ```neon
 extensions:
@@ -95,9 +100,11 @@ extensions:
 presets:
 	- dresscode/nette
 	- nette/clean-code
-```
 
-Rozšíření může nastavit cokoli, co umí `Config`: zaregistrovat pravidla (`registerRules()`) a presety (`registerPresets()`), zapnout preset, přidat vyloučené cesty, přípony souborů, filtr `skipWhen` podle obsahu souboru nebo analýzu s továrnou. Všechno, co nastaví, je vrstva **pod** konfigurací projektu, takže to projekt může přepsat. Výjimkou jsou vyloučené cesty, které se jen sčítají. Na pořadí rozšíření v konfiguraci nezáleží a rozšíření, které zapnulo jiné rozšíření, se použije jen jednou.
+overrides:
+	- paths: [src]
+	  presets: [nette/optimize-fn]
+```
 
 Filtr `skipWhen`, továrnu pravidla se závislostmi i továrnu analýzy ale zapíše i samotný `dresscode.neon`, a to [entitou |configuration#Objekty a callbacky]. Rozšíření se hodí tam, kde nastavení nese balíček a projekt ho jen zapne.
 
@@ -119,16 +126,4 @@ Balíček s presetem nebo s pravidly je obyčejný Composer balíček, který vy
 }
 ```
 
-Uvnitř jsou třídy pravidel, presety, rozšíření a fixtury s testy. Jména pravidel nesou vendor balíčku (`acme/…`), aby se nesrazila s jinými. A kdo chce, aby uživatel po `composer require` nemusel psát ani řádek `extensions`, přidá do `composer.json` balíčku záznam, podle kterého si DressCode rozšíření najde sám:
-
-```json
-{
-	"extra": {
-		"dresscode": {
-			"extensions": ["Acme\\CodeStyle\\Extension"]
-		}
-	}
-}
-```
-
-Automaticky nalezené rozšíření se chová stejně jako ručně zapsané. U každého pravidla pak `dresscode rules` řekne, odkud přišlo.
+Uvnitř jsou třídy pravidel, presety, rozšíření a fixtury s testy. Jména pravidel i presetů nesou vendor balíčku (`acme/…`), aby se nesrazila s jinými. Uživatel pak přidá do `extensions` jediný řádek s vaším rozšířením a všechno ostatní si vybere jménem.

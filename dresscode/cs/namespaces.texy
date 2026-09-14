@@ -82,17 +82,17 @@ nameResolution: certain
 
 Tím DressCode ví, že každé nekvalifikované jméno funkce nebo konstanty, které soubor neimportuje ani sám nedeklaruje, je globální. Ne "nejspíš", ale jistě.
 
-Když nějaké funkce nebo konstanty máte, vyjmenujete je klíči `namespacedFunctions` a `namespacedConstants`. Zápis je stejný jako v příkazu `use`, včetně skupin ve složených závorkách. Položku se skupinou dejte do uvozovek, jinak by ji NEON četl jako mapu:
+Když nějaké funkce nebo konstanty máte, vyjmenujete je v klíči `namespaces`, funkce pod `functions` a konstanty pod `constants`. Zápis je stejný jako v příkazu `use`, včetně skupin ve složených závorkách. Položku se skupinou dejte do uvozovek, jinak by ji NEON četl jako mapu:
 
 ```neon
 nameResolution: certain
 
-namespacedFunctions:
-	- 'App\Utils\{format, parse}'
-	- App\Legacy\helper
-
-namespacedConstants:
-	- 'App\{VERSION, DEBUG}'
+namespaces:
+	functions:
+		- 'App\Utils\{format, parse}'
+		- App\Legacy\helper
+	constants:
+		- 'App\{VERSION, DEBUG}'
 ```
 
 Funkci ze seznamu pak DressCode čte jako funkci z jmenného prostoru všude, kde se v tom jmenném prostoru volá bez importu. U funkcí nezáleží na velikosti písmen vůbec, u konstant jen v jejich vlastním jméně, v jmenném prostoru ne, přesně jako v PHP.
@@ -125,11 +125,11 @@ Všechna pravidla tak čtou každé jméno stejně a výsledek nezávisí na tom
 Nová funkce neproklouzne
 ========================
 
-Seznam by nebyl k ničemu, kdyby zastaral. Proto ho hlídá pravidlo `dresscode/no-unlisted-namespaced-declaration`, které zapne sám klíč `nameResolution: certain`. Ohlásí funkci deklarovanou ve jmenném prostoru, která v `namespacedFunctions` chybí, a totéž udělá pro `const` a pro `define('App\X', ...)`. Počítá i s deklarací uvnitř podmínky, třeba s polyfillem v `if (!function_exists(...))`. Jakmile někdo do projektu přidá funkci `App\Utils\slugify()`, `dresscode check` upozorní, že patří do konfigurace:
+Seznam by nebyl k ničemu, kdyby zastaral. Proto ho hlídá pravidlo `dresscode/no-unlisted-namespaced-declaration`, které zapne sám klíč `nameResolution: certain`. Ohlásí funkci deklarovanou ve jmenném prostoru, která v seznamu `namespaces.functions` chybí, a totéž udělá pro `const` a pro `define('App\X', ...)`. Počítá i s deklarací uvnitř podmínky, třeba s polyfillem v `if (!function_exists(...))`. Jakmile někdo do projektu přidá funkci `App\Utils\slugify()`, `dresscode check` upozorní, že patří do konfigurace:
 
 /--pre .[terminal]
 src/Utils/helpers.php
-  error  12:10  Function App\Utils\slugify() must be listed in namespacedFunctions  no-unlisted-namespaced-declaration
+  error  12:10  Function App\Utils\slugify() must be listed in namespaces.functions  no-unlisted-namespaced-declaration
 \--
 
 Tohle stačí, protože deklaraci na rozdíl od volání poznat jde: stojí v souboru, který DressCode kontroluje. Pozor jen na cesty vyloučené z kontroly. Funkci deklarovanou třeba v testech, které DressCode vynechává, ohlásit nemůže, a pokud ji kód volá bez importu, zapište ji do seznamu sami. S `uncertain` pravidlo mlčí, protože není co hlídat, a kdybyste ho s `certain` přesto nechtěli, vypnete ho v klíči `rules` jako kterékoli jiné.
@@ -138,6 +138,24 @@ Ani první seznam nemusíte psát ručně. [`dresscode init` |cli#Konfigurace na
 
 .[note]
 Do budoucna se nabízí, aby nový záznam do konfigurace zapsal rovnou `dresscode fix`, místo aby na něj pravidlo jen upozornilo.
+
+
+Pomocné funkce v testech
+========================
+
+Testy si často deklarují pomocné funkce přímo ve svém jmenném prostoru, třeba `App\Tests\createUser()`. Psát je do konfigurace nemá smysl a hlídat je taky ne. Pro takovou část projektu stačí [přepis |configuration#Jiný profil pro část projektu], který řekne, že tam seznamy úplné nejsou:
+
+```neon
+nameResolution: certain
+
+overrides:
+	- paths: [tests]
+	  nameResolution: uncertain
+```
+
+Soubory v `tests` pak DressCode čte opatrně: opravy, které stojí na tom, že je funkce globální, se tam jen ohlásí jako rizikové a pravidlo `no-unlisted-namespaced-declaration` tam mlčí. Zdrojáky v `src` přitom dál těží z jistoty. Funguje to proto, že kód v `src` pomocné funkce testů nevolá, takže na význam jmen v `src` nemají vliv.
+
+Jedna výjimka stojí za pozornost: trik s podvržením funkce, o kterém byla řeč [výš |#Proč to pálí nástroje]. Když test deklaruje `App\time()`, aby kód ve jmenném prostoru `App` zavolal podvrh, týká se to volání v `src`, ne v testech. Taková funkce proto patří do seznamu `namespaces.functions` projektu, aby ji pravidla v `src` nechala být.
 
 
 Úlomky znají svůj framework
@@ -153,7 +171,7 @@ presets:
 	- symfony-configurator
 ```
 
-Vlastní preset dodá takové seznamy metodou `getNamespacedDeclarations()` (viz [vlastní preset |presets-and-extensions#Preset]) a seznamy všech presetů se sčítají s tím, co napíšete vy. Klíč `nameResolution` ale preset nastavit nemůže: framework zná, váš projekt ne.
+Vlastní preset dodá takové seznamy klíčem `namespaces` svého profilu (viz [vlastní preset |presets-and-extensions#Preset]) a seznamy všech presetů se sčítají s tím, co napíšete vy. Klíč `nameResolution` ale preset nastavit nemůže: framework zná, váš projekt ne.
 
 
 Proč importovat globální funkce
@@ -214,7 +232,8 @@ Shrnutí
 =======
 
 - Nekvalifikovaná funkce nebo konstanta ve jmenném prostoru znamená podle PHP buď tu z jmenného prostoru, nebo globální, a z jednoho souboru se to poznat nedá.
-- Napište do konfigurace `nameResolution: certain` a případně seznamy `namespacedFunctions` a `namespacedConstants`. Chování všech pravidel je pak jednoznačné a opravy, které stály na odhadu, přestanou být rizikové.
+- Napište do konfigurace `nameResolution: certain` a případně seznamy v klíči `namespaces`. Chování všech pravidel je pak jednoznačné a opravy, které stály na odhadu, přestanou být rizikové.
+- Část projektu, kde seznamy úplné nejsou, třeba testy s pomocnými funkcemi, dostane v přepisu `nameResolution: uncertain`.
 - Bez toho je DressCode opatrný a takové opravy dělá jen se svolením v `fixRisky` nebo s `--fix-risky`.
 - Novou deklaraci ve jmenném prostoru ohlásí `no-unlisted-namespaced-declaration`; první seznamy napíše `dresscode init`.
 - Funkci z jmenného prostoru volejte přes `use function`. Když se její soubor nenačte, dozvíte se to hned.
