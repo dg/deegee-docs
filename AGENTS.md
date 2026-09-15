@@ -215,6 +215,10 @@ Custom anchors are useful when:
 - You want a stable anchor that won't change if you rename the heading
 - You need to match an existing link from another page
 
+**Page names and links to the root:**
+- A page must not be named with two letters (`ci`, `db`): a two-letter link target is read as a language code
+- A link from a nested page to a page at the root of the package is written `/configuration`, not `../configuration`, which is not resolved
+
 ## Documentation Guidelines
 
 Follow the same documentation standards as the Nette documentation:
@@ -241,6 +245,8 @@ Translate domain terms that have established Czech equivalents:
 
 These pages follow the style of the Nette documentation, known for its **friendly, approachable language** that remains **technically precise**. This style is a core part of the brand and must be maintained across all documentation.
 
+A package may depart from this style where its subject calls for it. The departures are written in `docs/style/<package>.md`: where such a file says something, it takes precedence over this section, and where it is silent, this section holds. Read it before writing pages of that package.
+
 ### Key Principles
 
 1. **Friendly and approachable** – Write as if explaining to a colleague, not writing a technical manual
@@ -266,6 +272,7 @@ The good example explains what the tool does and why it matters. The bad example
 - Use concrete examples instead of abstract descriptions
 - Anticipate questions and answer them proactively
 - Avoid jargon; when technical terms are necessary, explain them
+- Keep the voice out of reference parts (option lists, generated catalogs, tables of facts)
 
 ### Structure Guidelines
 
