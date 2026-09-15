@@ -2,7 +2,7 @@ Příkazová řádka
 ***************
 
 .[perex]
-Příkazy `check` a `fix`, výpis toho, co konfigurace znamená, vysvětlení pravidla s příkladem, standard projektu jako dokument, převod cizí konfigurace, všechny přepínače, formáty výstupu pro terminál i pro CI, exit kódy, cache a paralelní běh.
+Příkazy `check` a `fix`, výpis toho, co konfigurace znamená, vysvětlení pravidel s příkladem na terminál i jako dokument, převod cizí konfigurace, všechny přepínače, formáty výstupu pro terminál i pro CI, exit kódy, cache a paralelní běh.
 
 
 Příkazy
@@ -12,8 +12,7 @@ Příkazy
 dresscode check [cesty...]
 dresscode fix [cesty...]
 dresscode config
-dresscode explain <pravidlo>
-dresscode standard
+dresscode explain [pravidlo]
 dresscode rules
 dresscode init
 dresscode import <soubor>
@@ -24,8 +23,7 @@ dresscode lsp
 - `check` ohlásí porušení a nic nezapíše.
 - `fix` opraví, co pravidla umějí, a zbytek ohlásí. Soubor se zapíše jen tehdy, když se změnil a výsledek se znovu naparsuje na totéž; soubor se syntaktickou chybou nebo s pravidlem, které selhalo, zůstane nedotčený, a stejně tak soubor, který mezitím uložil editor nebo jiný nástroj.
 - `config` vypíše, k čemu konfigurace vede: která pravidla běží, s jakými volbami, kdo je nastavil a co přebil, a proč ostatní neběží. Viz [níže |#Co konfigurace znamená: config].
-- `explain` řekne o jednom pravidle, k čemu je, jaké má v tomhle projektu volby a ukáže příklad před opravou a po ní. Viz [níže |#Vysvětlení pravidla: explain].
-- `standard` napíše z konfigurace coding standard projektu jako Markdown. Viz [níže |#Standard jako dokument: standard].
+- `explain` řekne o pravidle, k čemu je, jaké má v tomhle projektu volby a ukáže příklad před opravou a po ní; bez jména pravidla totéž o všech pravidlech, která běží. Viz [níže |#Vysvětlení pravidel: explain].
 - `rules` vypíše všechna známá pravidla: hvězdičkou označí ta, která v aktuální konfiguraci platí, a u každého uvede fázi, popis a jména pravidel jiných nástrojů, která pokrývá. Hodí se, když hledáte, jak se co jmenuje.
 - `init` napíše `dresscode.neon` podle toho, jak je projekt psaný: odsazení, uvozovky a tvar podmínek změří na vzorku souborů. Viz [níže |#Konfigurace naměřená z kódu: init].
 - `import` převede konfiguraci PHP CS Fixeru nebo PHP_CodeSniffer, viz [Přechod na DressCode |migration#2. Přeložte konfiguraci].
@@ -52,7 +50,7 @@ Přepínače
 | `--generate-baseline` | zapíše porušení, která oprava nechá, do [baseline |suppressing#Baseline] místo hlášení; jen u `check` a nad kódem, na kterém `fix` nemá co opravit |
 | `--file <cesta>` | u `config`: co platí pro tenhle jeden soubor, včetně přepisů v `overrides` |
 | `--json` | u `config`: totéž jako data |
-| `--output <soubor>` | u `standard`: zapíše dokument do souboru místo na výstup |
+| `--output <soubor>` | u `explain`: zapíše vysvětlení do souboru jako Markdown |
 | `--no-cache` | zpracuje každý soubor, i ten, o kterém se ví, že je čistý |
 | `--jobs <n>` | počet pracovních procesů; `1` znamená běh v jediném procesu |
 | `--strict-rules` | pravidlo, které poruší svůj kontrakt, je chyba, ne varování; pro vývoj vlastních pravidel |
@@ -94,7 +92,7 @@ Not running
 U každého pravidla stojí vrstva, která ho zapnula, u každé volby, kterou některá vrstva jmenovala, výsledná hodnota, kdo ji nastavil a co tím přebil. Pravidlo s [rizikovými opravami |configuration#Varování a rizikové opravy] navíc říká, jestli jste je přijali (`risky fixes accepted`), nebo jestli se jen ohlásí (`risky fixes only reported`). Pravidlo, které neběží, říká proč: vypnul ho preset nebo konfigurace, chybí mu verze PHP, zapíná ho jen přepis, nebo o něm nikdo nemluvil. `--file cesta` ukáže totéž pro jeden soubor, tedy i s přepisy, které pro něj platí, a `--json` dá výstup jako data pro nástroje.
 
 
-Vysvětlení pravidla: explain
+Vysvětlení pravidel: explain
 ============================
 
 Jméno pravidla ve výpisu je odkaz, ne vysvětlení. `dresscode explain <pravidlo>` k němu dá popis, fázi, volby s hodnotou a vrstvou, která ji v tomhle projektu nastavila, a příklad kódu před opravou a po ní:
@@ -123,16 +121,13 @@ Example
 Příklad je fixtura pravidla, kterou jeho autor vybral jako ukázku, takže ho testovací sada pouští proti pravidlu a ukázka nemůže zastarat. Pravidlo, které jen hlásí, má příklad bez "becomes". Diff toho, co by `fix` udělal s vaším kódem, ukáže `check --diff`.
 
 
-Standard jako dokument: standard
-================================
-
-Coding standard se obvykle sepíše a konfigurace nástroje se z něj opisuje. `dresscode standard` jde obráceně: z efektivní konfigurace vypíše dokument, ve kterém je každé pravidlo, které běží, jeho volby, jak je má tenhle projekt, a příklad, seskupeno podle oblastí kódu. Takový dokument nemůže zastarat, protože je z téže konfigurace, kterou CI kontroluje kód.
+Bez jména pravidla `dresscode explain` vysvětlí všechna pravidla, která v projektu běží. S `--output` je zapíše do souboru jako Markdown: z čeho se konfigurace skládá a u každého pravidla popis, volby, jak je má tenhle projekt, a příklad, seskupeno podle oblastí kódu.
 
 ```shell
-dresscode standard --output docs/coding-standard.md
+dresscode explain --output docs/rules.md
 ```
 
-Dokument o sobě říká, že je to jen ta část standardu, kterou vynucuje nástroj: zvyklosti z code review a všechno, na co žádné pravidlo není, v něm nejsou. Kdo ho commituje, může v CI hlídat, že odpovídá konfiguraci, stejně jako se hlídá vygenerovaný kód.
+Dokument vzniká z téže konfigurace, kterou se kontroluje kód. Zvyklosti z code review a všechno, na co žádné pravidlo není, v něm nejsou.
 
 
 Konfigurace naměřená z kódu: init
