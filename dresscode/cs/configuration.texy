@@ -14,10 +14,11 @@ Oba formáty umějí přesně totéž: každý klíč NEONu je pojmenovaný argu
 presets:
 	- dresscode/per
 
+lineLength: 100
+
 rules:
 	dresscode/ordered-imports: true
-	dresscode/line-length:
-		limit: 100
+	dresscode/line-length: true
 	dresscode/useless-else: keep
 
 paths:
@@ -35,9 +36,10 @@ use DressCode\Config;
 
 return new Config(
 	presets: ['dresscode/per'],
+	lineLength: 100,
 	rules: [
 		'dresscode/ordered-imports' => true,
-		'dresscode/line-length' => ['limit' => 100],
+		'dresscode/line-length' => true,
 		'dresscode/useless-else' => 'keep',
 	],
 	paths: ['src', 'tests'],
@@ -61,7 +63,7 @@ Nejdůležitější věc, kterou o konfiguraci DressCode potřebujete vědět: t
 |---|---|
 | `presets` | ze kterých presetů se vychází |
 | `rules` | která pravidla běží a s jakými volbami |
-| `indent`, `eol` | odsazení a konec řádku |
+| `indent`, `eol`, `lineLength` | odsazení, konec řádku a nejdelší řádek |
 | `php` | pro jakou verzi PHP je kód psaný |
 | `namespaces` | které funkce a konstanty deklarují jmenné prostory |
 | `nameResolution` | jestli jsou ty seznamy úplné |
@@ -74,7 +76,7 @@ Jen čtyři klíče zůstávají rozhodnutím projektu a preset je nastavit nem�
 
 | klíče | konfigurace | přepis | preset | rozšíření |
 |---|---|---|---|---|
-| `presets`, `rules`, `indent`, `eol`, `namespaces` | ano | ano | ano | ne |
+| `presets`, `rules`, `indent`, `eol`, `lineLength`, `namespaces` | ano | ano | ano | ne |
 | `php`, `nameResolution`, `fixRisky`, `warnings` | ano | ano | ne | ne |
 | `overrides`, `paths`, `fileExtensions`, `baseline`, `cacheDir` | ano | ne | ne | ne |
 | `extensions`, `excludePaths`, `skipWhen`, `analyses` | ano | ne | ne | ano |
@@ -103,7 +105,7 @@ Pro každý soubor se profily skládají do vrstev, od nejnižší po nejvyšš�
 
 Preset, který už leží níž, se podruhé nepokládá. Vyšší vrstva mění jen to, co sama říká, a jak to změní, záleží na druhu hodnoty:
 
-- **Hodnota** (`indent`, `eol`, `php`, `nameResolution`) platí z nejvyšší vrstvy, která ji uvádí.
+- **Hodnota** (`indent`, `eol`, `lineLength`, `php`, `nameResolution`) platí z nejvyšší vrstvy, která ji uvádí.
 - **Seznam** (`namespaces`, `fixRisky`, `warnings`) se přes vrstvy sčítá. Přepis pro testy tak k seznamu projektu přidává a nic z něj neubere.
 - **Volby pravidla** se slévají. **Mapa voleb se slévá po klíčích**: když preset nastaví pravidlu `dresscode/braces-position` devět voleb a vy uvedete jednu, platí ta vaše a zbylých osm zůstane, jak je nastavil preset. **Skalár a seznam naopak nahrazují celou hodnotu**: `multiLine: [arguments]` u `dresscode/trailing-comma` znamená jen argumenty, ať preset říkal cokoli, takže kdo chce přidávat, opíše i zděděné položky. A **`keep` na úrovni pravidla maže všechno**, co o něm vrstvy pod ním řekly; mapa uvedená v další vrstvě pak začíná znovu od výchozích hodnot pravidla.
 
@@ -113,14 +115,17 @@ Odkud každá hodnota přišla a co přebila, vypíše [`dresscode config` |cli#
 Styl, verze PHP a jmenné prostory
 =================================
 
-**Styl** je odsazovací jednotka a konec řádku, každé pod svým klíčem. Platí ten z nejvyšší vrstvy, která ho říká, obvykle tedy ze standardu, a když ho neříká žádná, pak tabulátor a ten konec řádku, který v souboru převládá. Určit si ho samozřejmě můžete sami:
+**Styl** je odsazovací jednotka, konec řádku a délka řádku, každé pod svým klíčem. Každé platí z nejvyšší vrstvy, která ho říká, obvykle tedy ze standardu, a když ho neříká žádná, pak tabulátor, ten konec řádku, který v souboru převládá, a žádný limit délky. Určit si ho samozřejmě můžete sami:
 
 ```neon
 indent: 4
 eol: LF
+lineLength: 100
 ```
 
 Hodnota `indent` je počet mezer, nebo `tab`. Hodnota `eol` je `LF` nebo `CRLF` (velkými písmeny, jak se ty zkratky píšou; `lf` je chyba), dále `majority` pro sjednocení každého souboru na jeho převažující konec řádku (výchozí), nebo `platform` pro konec řádku stroje, na kterém DressCode běží.
+
+Hodnota `lineLength` je nejdelší řádek, který projde, v šířce, jak ho vidíte: tabulátor se počítá do další zarážky. `false` délku neomezuje, i když ji vrstva pod ním nastavila. Standardy `dresscode/psr12`, `dresscode/per` a `dresscode/nette` mají 120 znaků, `dresscode/symfony` žádný limit. Délka je jedna pro všechna pravidla, která ji potřebují: [`dresscode/line-length` |rules/line-length] ohlásí širší řádek, `dresscode/multi-line-signature` a `dresscode/multi-line-condition` rozlomí signaturu a podmínku na řádku širším než limit, `dresscode/binary-operator-spacing` nepřitáhne přiřazení na řádek levé strany, kdyby tím řádek limit přesáhl, a `dresscode/multi-line-array` podle ní skládá položky dlouhého pole za sebe.
 
 **Cílová verze PHP** je vlastnost projektu a čte se z `composer.json` jako nejnižší verze, kterou dovoluje `require.php`; pravidla pro novější syntaxi se pod ní sama vynechají. DressCode rozumí běžným zápisům omezení: `^8.1`, `~8.1`, `>=8.1` s horní mezí i bez ní, `8.1 - 8.3` a jejich kombinacím přes `||`. Z jiného tvaru, třeba `<8.4` nebo `*`, nejnižší verzi poznat nejde, a tak platí výchozí PHP 8.0. Starší verzi než PHP 8.0 DressCode nepodporuje: když ji projekt dovoluje nebo ji nastavíte, zkontroluje kód jako PHP 8.0 a upozorní, že oprava může zapsat syntaxi, kterou starší PHP nezná. Klíč `php` tedy uvádějte jen tehdy, když se verze od `composer.json` liší, nebo když ji z něj DressCode nepřečte. Do přepisu ho napište, když má část projektu běžet na jiném PHP. Uvozovky psát můžete a nemusíte, obojí je správně:
 

@@ -2,7 +2,7 @@ line-length
 ***********
 
 .[perex]
-Řádek delší než limit se ohlásí; opravit ho pravidlo neumí.
+Řádek širší než délka řádku z konfigurace se ohlásí; opravit ho pravidlo neumí.
 
 Jen hlásí · v žádném presetu · pokrývá `Generic.Files.LineLength`, `SlevomatCodingStandard.Files.LineLength` .[rule-info]
 
@@ -10,9 +10,9 @@ Jen hlásí · v žádném presetu · pokrývá `Generic.Files.LineLength`, `Sle
 Co pravidlo hlídá
 =================
 
-Pravidlo změří každý řádek souboru a ohlásí ty, které přesahují limit. Šířka se počítá tak, jak řádek vidíte: tabulátor se počítá na svou šířku podle stylu, ne za jeden znak. Neměří se řádky, které jsou obsahem a zalomením by změnily význam: vnitřek heredocu, víceřádkový řetězec a HTML mimo PHP tagy. Dlouhý řádek uvnitř víceřádkového komentáře se hlásí na řádku, kde ten komentář začíná.
+Pravidlo změří každý řádek souboru a ohlásí ty, které jsou širší než [`lineLength` |/configuration#Styl, verze PHP a jmenné prostory]. Ta hodnota říká nejdelší řádek, který ještě projde: s `lineLength: 120` projde řádek o 120 znacích a ohlásí se až ten o 121. Standardy `dresscode/psr12`, `dresscode/per` a `dresscode/nette` ji nastavují na 120, `dresscode/symfony` délku neomezuje, a když ji neurčí žádná vrstva, pravidlo nehlásí nic. Šířka se počítá tak, jak řádek vidíte: tabulátor se počítá do další zarážky podle stylu, ne za jeden znak. Neměří se řádky, které jsou obsahem a zalomením by změnily význam: vnitřek heredocu, víceřádkový řetězec a HTML mimo PHP tagy. Dlouhý řádek uvnitř víceřádkového komentáře se hlásí na řádku, kde ten komentář začíná.
 
-Pravidlo běží jako poslední, až po pravidlech, která umějí dlouhé řádky zalomit (`multi-line-call`, `multi-line-condition`, `multi-line-array` a další). Co ohlásí, je tedy to, co nic zalomit nedokázalo, a zbývá to na vás: rozdělit výraz, pojmenovat mezivýsledek, zkrátit řetězec. Obě strany měří šířku stejně, tabulátor do další zarážky podle stylu, a hranice na sebe navazují: `multi-line-condition` láme podmínku od šířky `minLineLength`, což je výchozích 121, a tohle pravidlo hlásí řádek o jeden znak užší.
+Pravidlo běží jako poslední, až po pravidlech, která umějí dlouhé řádky zalomit (`multi-line-signature`, `multi-line-condition` a další). Co ohlásí, je tedy to, co nic zalomit nedokázalo, a zbývá to na vás: rozdělit výraz, pojmenovat mezivýsledek, zkrátit řetězec. Délku řádku berou všechna tato pravidla z téže hodnoty a měří ji stejně, tabulátor do další zarážky podle stylu.
 
 Protože jde o hlášení bez opravy, bývá tohle pravidlo první, které projekt zapíše do klíče [`warnings` |/configuration#Varování a rizikové opravy]: dlouhý řádek se vypíše a spočítá, ale build kvůli němu nespadne.
 
@@ -20,12 +20,13 @@ Protože jde o hlášení bez opravy, bývá tohle pravidlo první, které proje
 Příklad
 =======
 
-Limit je tu snížený, aby se příklad vešel na stránku; výchozí je 120 znaků.
+Délka je tu snížená na 60 znaků, aby se příklad vešel na stránku.
 
 ```neon
+lineLength: 60
+
 rules:
-	dresscode/line-length:
-		limit: 60
+	dresscode/line-length: true
 ```
 
 ```php .[before]
@@ -35,27 +36,11 @@ $message = sprintf('%s has %d unread messages', $user->name, $count);  // The li
 $greeting = 'Hello';
 ```
 
-Import je delší než limit, ale nehlásí se: nejde rozdělit na víc řádků a volba `ignoreImports` ho vynechává.
+Import je širší než 60 znaků, ale nehlásí se: nejde rozdělit na víc řádků a volba `ignoreImports` ho vynechává.
 
 
 Volby
 =====
-
-
-limit .[option]
----------------
-
-`int`, výchozí `120`. Největší povolená šířka řádku ve znacích.
-
-```neon
-rules:
-	dresscode/line-length:
-		limit: 80
-```
-
-```php .[before]
-$title = $translator->translate('order.confirmation.subject', ['number' => $order->id]);  // The line is 88 characters long, the limit is 80
-```
 
 
 ignoreImports .[option]
@@ -64,9 +49,10 @@ ignoreImports .[option]
 `bool`, výchozí `true`. Řádek s `use` se nehlásí, protože import nejde zalomit.
 
 ```neon
+lineLength: 60
+
 rules:
 	dresscode/line-length:
-		limit: 60
 		ignoreImports: false
 ```
 
@@ -81,9 +67,10 @@ ignorePatterns .[option]
 Seznam řetězců, výchozí `[]`. Regulární výrazy; řádek, kterému některý odpovídá, se nehlásí. Hodí se pro řádky s URL nebo pro tabulky dat, které by zalomením ztratily čitelnost.
 
 ```neon
+lineLength: 60
+
 rules:
 	dresscode/line-length:
-		limit: 60
 		ignorePatterns: ['~https?://~']
 ```
 
