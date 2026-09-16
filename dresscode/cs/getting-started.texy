@@ -8,7 +8,7 @@ Za pět minut máte nástroj nainstalovaný, projekt zkontrolovaný a většinu 
 Instalace
 =========
 
-DressCode je nástroj, ne knihovna, takže nejlepší je nainstalovat ho **mimo projekt**, který kontroluje. Nejjednodušší je globální instalace:
+DressCode je nástroj, ne knihovna, takže ho můžete nainstalovat **mimo projekt**, který kontroluje. Nejjednodušší je globální instalace:
 
 ```shell
 composer global require dresscode/dresscode
@@ -23,7 +23,7 @@ composer create-project dresscode/dresscode temp/dresscode
 temp/dresscode/bin/dresscode check src
 ```
 
-A do třetice: DressCode lze přidat i jako vývojovou závislost projektu (`composer require --dev dresscode/dresscode`) a spouštět z `vendor/bin/dresscode`. Funguje to, ale platíte za to tím, že se závislosti nástroje mísí se závislostmi projektu. Sám DressCode vyžaduje PHP 8.4 nebo novější, takže by na 8.4 musel běžet i váš projekt, i kdyby mu jinak stačilo starší PHP.
+A do třetice: DressCode lze přidat jako vývojovou závislost projektu (`composer require --dev dresscode/dresscode`) a spouštět z `vendor/bin/dresscode`. Tuhle cestu chcete, jakmile máte v projektu i PHPStan: DressCode se ho pak ptá na typy kódu a dokáže třeba přepsat zastaralé API knihoven podle toho, čím proměnná opravdu je, viz [Typy z PHPStanu |types]. Počítejte jen s tím, že DressCode vyžaduje PHP 8.4 nebo novější, takže by na 8.4 musel běžet i váš projekt, i kdyby mu jinak stačilo starší PHP.
 
 To je totiž věc, která se plete nejčastěji: **verze PHP, na které běží nástroj, a verze PHP, pro kterou je psaný váš kód, jsou dvě různá čísla.** Když je DressCode nainstalovaný mimo projekt, může běžet třeba na PHP 8.5 a přitom kontrolovat kód psaný pro PHP 8.1. Cílovou verzi si přečte z `composer.json` vašeho projektu a pravidla se jí řídí, takže vám do kódu nikdy nenapíše syntaxi, kterou by projekt neuměl přeložit. Platí to od PHP 8.0; starší verze DressCode nepodporuje a upozorní na to.
 
@@ -101,6 +101,22 @@ Opravu udělejte jako samostatný commit bez jiných změn. Je to jeden z těch 
 Druhé spuštění je rychlejší než první: DressCode si pamatuje obsah souborů, které prošly čistě, a pokud se nezměnil ani obsah, ani konfigurace, nezpracovává je znovu.
 
 
+Přechod na novější PHP
+======================
+
+DressCode kód nejen formátuje, ale i přepisuje na novější PHP. Když v `composer.json` zvednete `require.php`, začnou pravidla skupiny `dresscode/modern` psát, co nová verze přinesla, a ve stejném běhu to zformátuje váš standard. Standard `dresscode/nette` tuhle skupinu pravidel obsahuje, k ostatním ji přidáte v konfiguraci:
+
+```php .[before]
+return $article === null ? null : $article->getAuthor();
+```
+
+```php .[after]
+return $article?->getAuthor();
+```
+
+Takhle to jde od PHP 8.0 až po PHP 8.6, které teprve vyjde. Co všechno se přepíše a jak na přechod v praxi, popisuje [Přechod na novější PHP |upgrading-php]; převod kódu při aktualizaci Nette a dalších knihoven [Aktualizace knihoven |upgrading-libraries].
+
+
 Konfigurace v NEONu
 ===================
 
@@ -124,6 +140,7 @@ Kam dál
 =======
 
 - [Jak DressCode funguje |how-it-works], pokud chcete rozumět tomu, proč se nástroj chová, jak se chová.
+- [Přechod na novější PHP |upgrading-php] a [Typy z PHPStanu |types], pokud chcete kód nejen formátovat, ale i aktualizovat.
 - [Přechod na DressCode |migration], pokud dnes používáte PHP CS Fixer, PHP_CodeSniffer nebo Slevomat.
 - [Editory a IDE |editors], aby se porušení ukazovala rovnou při psaní a ne až v terminálu.
 - [Průběžná integrace |continuous-integration], aby styl hlídal i server.

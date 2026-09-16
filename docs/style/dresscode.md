@@ -12,13 +12,13 @@ The voice depends on the kind of text:
 
 | text | voice |
 |---|---|
-| guide pages (getting started, how it works, configuration, CLI, extending, editors, continuous integration, hooks, migration) | the author, addressing the reader |
+| guide pages (getting started, how it works, configuration, CLI, extending, editors, continuous integration, hooks, migration, upgrading PHP, upgrading libraries, types) | the author, addressing the reader |
 | rule page, section "Co pravidlo hlídá" | the same voice, used sparingly: only where there is something to say (why a fix is safe, why a standard wants the brace on the next line) |
 | rule page, examples, options and the line of facts | nobody; facts and literal messages |
 | generated pages (the rule index, the presets reference) | nobody |
 
 - **The author speaks.** The first person is used only where it is true of the author: years of using PHP CS Fixer and PHP_CodeSniffer, not liking exceptions in code, watching for something in code review. The text never claims someone else wrote the tool and never plays an enthusiastic discoverer of it.
-- **The voice is graded.** It is strongest on the home page, in getting started, in the custom rule tutorial, on the page about porting rules and on the migration pages. Elsewhere it carries at most one personal sentence per section, and the configuration, the CLI and the reference pages stay calm.
+- **The voice is graded.** It is strongest on the home page, in getting started, in the custom rule tutorial, on the page about porting rules, on the migration pages and on the pages about upgrading code. Elsewhere it carries at most one personal sentence per section, and the configuration, the CLI and the reference pages stay calm.
 - **Enthusiasm is carried by an example, not by an adjective.** At most one superlative, and only after the demonstration. Most of the text is calm, so that one or two places can be strong.
 - **A joke only when it rests on an observation and is new.** A weak joke is worse than none. What is meant to be funny must be funny by the situation, not by the wording, because irony, puns and idioms do not survive translation into eight languages.
 - **The thing first, then the explanation.** Short sentences, one thought per paragraph, a concrete number instead of an adjective ("4.5× shorter", not "much shorter"), no passive voice.
@@ -42,7 +42,8 @@ Before a page is done, count and check: how many comparisons with other tools, h
 
 - **PER Coding Style 3.1** is written in full, with a link to php-fig at its first mention on a page; the preset is `dresscode/per`.
 - **nikic/PHP-Parser** is written exactly like this, with a link to GitHub at its first mention on a page.
-- **Installation** is recommended globally or with `create-project`, because DressCode is a tool, not a library; installing it as a development dependency is mentioned together with its cost, the PHP version the tool requires is then forced on the project. The PHP version of the tool and the target PHP version of the checked project are two different numbers.
+- **Installation** is offered in three ways: globally, with `create-project`, and as a development dependency. The last one is the way to get the types from the PHPStan of the project, so a page about types installs both into the project; its cost, the PHP version the tool requires forced on the project, is mentioned together with it. The PHP version of the tool and the target PHP version of the checked project are two different numbers.
+- **Updating code** is said on every page where a reader decides whether to use the tool (home, getting started, how it works, migration): DressCode formats and upgrades code in one run, to newer PHP and to new versions of libraries.
 - **A preset is chosen** in the configuration file or with `--preset` on the command line; never write as if only one of them existed.
 - **Czech terms.** At the first mention on a page, the English term follows the Czech one in parentheses ("potlačení (suppression)"). A term that is also the name of a class or a configuration key keeps its English form. The glossary for readers at the end of `how-it-works` must agree with this table.
 
@@ -52,6 +53,10 @@ Before a page is done, count and check: how many comparisons with other tools, h
 | violation | porušení | "nález" for a single report of it, never "chyba" |
 | fix / check | oprava / kontrola | the commands stay `fix` and `check` |
 | preset, standard | preset, standard | |
+| rule group | skupina pravidel | a preset added to a standard that turns on the rules of one intent (`dresscode/modern`, `dresscode/cleanup`); the key stays `presets` |
+| types | typy | what the PHPStan of the project knows about the code; the key is `types: phpstan` |
+| deprecated | zastaralé | as in the Nette documentation; the annotation stays `@deprecated` |
+| promoted property | vlastnost deklarovaná v konstruktoru | English in parentheses at the first mention |
 | profile | profil | |
 | override | přepis | |
 | extension | rozšíření | `extensions` is the configuration key |

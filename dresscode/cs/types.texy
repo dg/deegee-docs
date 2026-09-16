@@ -1,0 +1,169 @@
+Typy z PHPStanu
+***************
+
+{{description: S PHPStanem v projektu zná DressCode typy vašeho kódu: přepíše zastaralé API knihoven, doplní #[\Override] a pozná, že řetězec je jméno existující třídy. Stačí jeden řádek konfigurace.}}
+
+.[perex]
+Bezztrátový strom zná ve vašem kódu každou mezeru, ale neví, že `$form` je formulář. Máte-li v projektu PHPStan, DressCode se ho zeptá, a tím dostane schopnosti, které nástroj na styl kódu nemívá: přepíše zastaralé API podle toho, čím proměnná opravdu je, doplní `#[\Override]` k metodě, která přepisuje rodiče, a pozná, že řetězec je jméno existující třídy.
+
+
+Co strom sám neví
+=================
+
+Pravidlo nad stromem vidí, že na řádku stojí přístup ke konstantě `$form::FILLED`. Nevidí ale, čím je `$form`. Když je to formulář z Nette, jehož třída u konstanty říká `@deprecated use Form::Filled`, má se řádek přepsat. Když je to cokoli jiného, nesmí se na něj sáhnout. Z jednoho souboru se to poznat nedá a oprava, která hádá, je horší než žádná.
+
+Odpověď zná statická analýza a PHPStan ji ve vašem projektu nejspíš už dělá. DressCode proto typy nepočítá sám. Zeptá se PHPStanu, který máte nainstalovaný, s vaší konfigurací `phpstan.neon` a s rozšířeními, která v ní máte. Odpovědi jsou tedy stejně dobré jako analýza, které už dnes věříte, a rozumí i magii vašeho frameworku, pokud jí rozumí vaše rozšíření PHPStanu.
+
+
+Zapnutí
+=======
+
+PHPStan i DressCode patří do projektu, aby se DressCode ptal právě toho PHPStanu a té konfigurace, kterou projekt používá:
+
+```shell
+composer require --dev phpstan/phpstan dresscode/dresscode
+```
+
+Počítejte s tím, že DressCode vyžaduje PHP 8.4 nebo novější, takže na něm musí běžet i váš projekt. Pro jakou verzi PHP je kód psaný, je jiné číslo a může zůstat nižší, viz [Instalace |getting-started#Instalace].
+
+A konfigurace řekne, odkud se typy berou:
+
+```neon
+types: phpstan
+```
+
+To je všechno. Klíč `types` je rozhodnutí projektu, stejně jako verze PHP, a preset ho nastavit nemůže. Když ho uvedete a PHPStan v projektu chybí, DressCode skončí hned při startu:
+
+/--pre .[terminal]
+The configuration sets 'types: phpstan', but phpstan/phpstan is not installed in the project.
+\--
+
+
+Co tím získáte
+==============
+
+Takhle vypadá presenter, který používá zastaralé API Nette a několik starších zvyklostí. Zpráva každého nálezu stojí v komentáři na jeho řádku:
+
+```php .[before]
+final class SignPresenter extends Presenter
+{
+	protected function startup(): void  // The method overriding Nette\Application\UI\Presenter::startup() must be marked with #[\Override]
+	{
+		parent::startup();
+		$this->invalidateControl();  // Method Nette\Application\UI\Presenter::invalidateControl() is deprecated: use redrawControl()
+	}
+
+
+	protected function createComponentSignInForm(): Form
+	{
+		$form = new Form;
+		$form->addText('name')
+			->addRule($form::FILLED, 'Enter your name');  // Constant Nette\Forms\Form::FILLED is deprecated: use Form::Filled
+		return $form;
+	}
+
+
+	public function isAnonymous(string $name): bool
+	{
+		return strlen($name) === 0;  // The empty string must be tested with === '', not through strlen()
+	}
+
+
+	public function getRepositoryClass(): string
+	{
+		return 'App\Model\UserRepository';  // The class name must be written as App\Model\UserRepository::class, not as a string
+	}
+}
+```
+
+Po opravě:
+
+```php .[after]
+final class SignPresenter extends Presenter
+{
+	#[\Override]
+	protected function startup(): void
+	{
+		parent::startup();
+		$this->redrawControl();
+	}
+
+
+	protected function createComponentSignInForm(): Form
+	{
+		$form = new Form;
+		$form->addText('name')
+			->addRule($form::Filled, 'Enter your name');
+		return $form;
+	}
+
+
+	public function isAnonymous(string $name): bool
+	{
+		return $name === '';
+	}
+
+
+	public function getRepositoryClass(): string
+	{
+		return App\Model\UserRepository::class;
+	}
+}
+```
+
+Každý z pěti nálezů potřeboval vědět něco, co v souboru není:
+
+- **Zastaralé API** přepisuje `dresscode/no-deprecated-members` podle anotace `@deprecated` v kódu knihovny. Rozhoduje přitom třída, která konstantu nebo metodu deklaruje, ne zápis, takže se `$form::FILLED` přepíše stejně jako `Form::FILLED`. Jak to funguje u celých knihoven, popisuje [Aktualizace knihoven |upgrading-libraries].
+- **`#[\Override]`** z PHP 8.3 doplní `dresscode/override-attribute-required` k metodě, která přepisuje metodu rodiče nebo rozhraní. PHP pak samo ohlásí chybu, kdyby rodič metodu přejmenoval a vaše metoda by potichu přestala cokoli přepisovat.
+- **Jméno třídy v řetězci** přepíše `dresscode/class-name-reference-for-string-literal` na `::class` jen tehdy, když třída toho jména v projektu opravdu existuje. Editor pak jméno najde, až budete třídu přejmenovávat. Pravidlo `class_keyword` PHP CS Fixeru podle vlastní dokumentace tohle poznat nemůže, protože nad tokeny neví, jaké třídy projekt má.
+- **Test prázdného řetězce** `strlen($name) === 0` přepíše `dresscode/no-manual-empty-string-test` na `$name === ''` jen tam, kde je `$name` určitě řetězec. U jiné hodnoty by se oba zápisy chovaly jinak.
+
+K tomu `dresscode/useless-overriding-method` smaže metodu, která jen předá své parametry stejnojmenné metodě rodiče. Typy prozradí, jestli ji volající od rodičovské vůbec rozezná: rodič ji musí deklarovat se stejnou viditelností, parametry i návratovým typem. Oprava je riziková (risky fix), protože rodič, který čte `func_get_args()`, by pak dostal i argumenty navíc a z výpisu zásobníku zmizí jeden řádek; udělá se, až pravidlo uvedete v klíči `fixRisky`.
+
+`#[\Override]` doplňuje skupina pravidel `dresscode/types`, kterou obsahuje i standard `dresscode/nette`. Nepleťte si ji s klíčem `types`: skupina se jmenuje podle typů, které se zapisují do kódu, klíč říká, odkud se typy kódu zjišťují. Ostatní pravidla zapínáte jménem:
+
+```neon
+types: phpstan
+
+presets:
+	- dresscode/nette
+
+rules:
+	dresscode/no-deprecated-members: true
+	dresscode/class-name-reference-for-string-literal: true
+	dresscode/no-manual-empty-string-test: true
+	dresscode/useless-overriding-method: true
+```
+
+
+Jak to spolu funguje
+====================
+
+DressCode kvůli typům neopouští svůj strom. Vytiskne ho, nechá PHPStan zparsovat vytištěný text a spočítat typy, a každou odpověď připíše ke správnému uzlu podle její pozice v souboru. Pravidla se pak ptají přímo: co je tohle volání zač, kterou metodu ten přístup volá, co o ní říká její deklarace. PHPStan přitom nic nepřepisuje a nic nehlásí, jen odpovídá. Přepisuje dál DressCode, se všemi mezerami a komentáři na svém místě.
+
+Stojí to čas: každý soubor projde dvěma parsery a PHPStan pro něj počítá typy, takže běh s `types: phpstan` je znatelně pomalejší než bez nich. Cache výsledků ale platí dál, a tak to pocítíte hlavně při prvním běhu a po změně konfigurace.
+
+
+Bez PHPStanu
+============
+
+Bez klíče `types` DressCode funguje dál, jen pravidla, která typy potřebují, neběží. Když je zapíná preset, vynechají se potichu, takže `dresscode/nette` můžete mít i v projektu bez PHPStanu. `dresscode config` u nich uvede důvod:
+
+/--pre .[terminal]
+Not running
+  dresscode/override-attribute-required   it needs the types of the code and the configuration sets no types
+\--
+
+Když ale takové pravidlo zapnete jménem, je to chyba konfigurace. Chtěli jste něco, co běh dát nemůže, a běh bez pravidla by vám lhal, že je kód v pořádku:
+
+/--pre .[terminal]
+Rule dresscode/no-deprecated-members needs the types of the code: set 'types: phpstan' in the configuration, with phpstan/phpstan installed in the project.
+\--
+
+
+Kam dál
+=======
+
+- [Aktualizace knihoven |upgrading-libraries], kde typy přepisují kód po aktualizaci Nette a dalších knihoven.
+- [Přechod na novější PHP |upgrading-php], pro zbytek přepisů na novější verzi jazyka.
+- [Konfigurace |configuration], kde se klíč `types` skládá s presety a přepisy.

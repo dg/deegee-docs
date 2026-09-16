@@ -1,0 +1,174 @@
+Aktualizace knihoven
+********************
+
+{{description: Když knihovna přejmenuje třídu, konstantu nebo metodu, DressCode přepíše váš kód za vás. Pro Nette nese balíček nette/dresscode-rules migrace všech knihoven za osm let, od Nette 2.4 po současné verze.}}
+
+.[perex]
+Když knihovna přejmenuje třídu, konstantu nebo metodu, DressCode přepíše váš kód za vás. Pozná to z anotací `@deprecated` v kódu knihovny i ze souboru `deprecations.neon`, do kterého si knihovna zapisuje, co která její verze změnila. Pro Nette je připravený balíček `nette/dresscode-rules` s migracemi všech knihoven Nette za posledních osm let, od přechodu z Nette 2.4 na 3.0 až po současné verze.
+
+
+Když knihovna označí API za zastaralé
+=====================================
+
+Dobře udržovaná knihovna staré API nesmaže ze dne na den. Nejdřív ho označí anotací, třeba `@deprecated use Form::Filled`, a smaže ho až v některé další verzi. Po `composer update` tak máte ve vendoru staré i nové API vedle sebe a anotace říká, jak se z jednoho dostat na druhé.
+
+S [typy z PHPStanu |types] tohle DressCode přečte a zápis přepíše. Rozhoduje přitom třída, která konstantu nebo metodu deklaruje, ne to, jak je v kódu zapsaná, takže se přepíše `Form::FILLED`, `$form::FILLED` i `self::FILLED` v potomkovi formuláře. Autor knihovny k tomu nemusí dodat nic víc než své anotace. Z anotací se takhle přepisují konstanty, metody a vlastnosti; přejmenované třídy DressCode zná ze souboru `deprecations.neon`, o kterém je další oddíl. Kde anotace náhradu neřekne tak, aby se dala zapsat, nález se ohlásí i s textem anotace a kód zůstane, jak byl.
+
+
+Když zastaralé API zmizí
+========================
+
+Anotace pomůže jen do chvíle, kdy knihovna staré API opravdu smaže. Projekt, který jednu hlavní verzi přeskočí, po aktualizaci ve vendoru žádnou anotaci nenajde, jen chybějící třídu. Proto může knihovna nést soubor `deprecations.neon`, ve kterém změny zůstanou zapsané i po smazání. Takhle začíná soubor knihovny `nette/forms`:
+
+```neon
+package: nette/forms
+
+since 3.0:
+	no-deprecated-members:
+		Nette\Forms\Controls\BaseControl::setAttribute: setHtmlAttribute
+		Nette\Forms\Controls\TextInput::setType: setHtmlType
+
+since 3.1:
+	no-deprecated-classes:
+		Nette\Forms\IControl: Nette\Forms\Control
+		Nette\Forms\IFormRenderer: Nette\Forms\FormRenderer
+		Nette\Forms\ISubmitterControl: Nette\Forms\SubmitterControl
+```
+
+Každá sekce `since` říká, co přinesla daná verze knihovny, a platí jen tehdy, když máte nainstalovanou aspoň ji. Kterou verzi máte, DressCode zjistí z `vendor/composer/installed.json`, takže nic nenastavujete. Soubor najde sám, stačí, že ho knihovna uvede ve svém `composer.json`.
+
+Tohle je kód, který pořád používá rozhraní `IControl` a konstantu `FILLED`, v projektu s `nette/forms` 3.2:
+
+```php .[before]
+use Nette\Forms\Form;
+use Nette\Forms\IControl;  // Class Nette\Forms\IControl is deprecated: use Nette\Forms\Control
+
+
+final class RequiredRule
+{
+	public function apply(IControl $control, Form $form): string  // Class Nette\Forms\IControl is deprecated: use Nette\Forms\Control
+	{
+		return $form::FILLED;  // Constant Nette\Forms\Form::FILLED is deprecated: use Form::Filled
+	}
+}
+```
+
+Po opravě:
+
+```php .[after]
+use Nette\Forms\Form;
+use Nette\Forms\Control;
+
+
+final class RequiredRule
+{
+	public function apply(Control $control, Form $form): string
+	{
+		return $form::Filled;
+	}
+}
+```
+
+Import se přepsal na místě; do abecedního pořadí ho srovná váš standard, pokud řazení importů zapíná. Odkud se která náhrada vzala, prozradí `dresscode config`: u každé položky uvede jako původ `deprecations.neon of nette/forms`.
+
+
+Nette: osm let migrací v jednom balíčku
+=======================================
+
+Pro Nette je připravený balíček `nette/dresscode-rules`, který nese migrace všech knihoven Nette za posledních osm let, od přechodu z Nette 2.4 na 3.0 až po současné verze. Je v něm všechno, co Nette mezi verzemi přejmenovalo nebo přesunulo: rozhraní, která přišla o předponu `I` (z `IRouter` je `Nette\Routing\Router`), `Nette\Configurator` přesunutý do `Nette\Bootstrap\Configurator`, konstanty přepsané z velkých písmen na `Filled`, `Required` a další, metody jako `invalidateControl()`, ze které je `redrawControl()`. A k tomu pravidla pro změny, které se přejmenováním zapsat nedají, třeba `addUpload()` s příznakem pro víc souborů, ze kterého je `addMultiUpload()`.
+
+```shell
+composer require --dev nette/dresscode-rules
+```
+
+Balíček DressCode po instalaci najde sám, takže ho nikam neregistrujete. Přejmenování, která nese, se uplatní v pravidlech `dresscode/no-deprecated-classes` a `dresscode/no-deprecated-members`, a ta stačí zapnout. Druhé z nich potřebuje [typy z PHPStanu |types], proto konfigurace uvádí i klíč `types`:
+
+```neon
+types: phpstan
+
+rules:
+	dresscode/no-deprecated-classes: true
+	dresscode/no-deprecated-members: true
+```
+
+Pravidla balíčku pro složitější změny vypíše `dresscode rules` a zapínají se stejně jako vestavěná, jménem. Každá změna přitom nese verzi, ve které přišla. Aplikaci psanou pro Nette 2.4 tak můžete převést po jedné hlavní verzi: nainstalovat Nette 3.0, pustit `dresscode fix`, commitnout a pokračovat další verzí. Nebo rovnou nainstalovat současné verze a projít celou cestu jedním `fix`.
+
+Tohle za osm let Nette ještě nikdy nemělo. Aktualizace, která dřív znamenala číst changelog a hledat v kódu každé přejmenování, je teď jeden běh a jeden diff, ve kterém vidíte přesně to, co se změnilo, zformátované podle vašeho standardu.
+
+
+Vlastní přejmenování v projektu
+===============================
+
+Totéž, co knihovny, můžete udělat s vlastním kódem. Přejmenovali jste třídu, kterou používá půl projektu, nebo jste globální funkci přesunuli do jmenného prostoru? Pravidla `dresscode/replaced-classes` a `dresscode/replaced-functions` dostanou mapu, co čím nahradit, a přepíšou každý výskyt:
+
+```neon
+rules:
+	dresscode/replaced-classes:
+		App\Model\Customer: App\Model\Client
+	dresscode/replaced-functions:
+		formatPrice: App\Utils\formatPrice
+```
+
+```php .[before]
+use App\Model\Customer;  // The project writes App\Model\Client instead of App\Model\Customer
+
+
+final class OrderMailer
+{
+	public function describe(Customer $customer, float $total): string  // The project writes App\Model\Client instead of App\Model\Customer
+	{
+		return $customer->getName() . ': ' . \formatPrice($total);  // The project writes App\Utils\formatPrice() instead of formatPrice()
+	}
+}
+```
+
+```php .[after]
+use App\Model\Client;
+
+
+final class OrderMailer
+{
+	public function describe(Client $customer, float $total): string
+	{
+		return $customer->getName() . ': ' . \App\Utils\formatPrice($total);
+	}
+}
+```
+
+Třída se přepíše všude, kde stojí: v importu, v typu, za `new`, u statického přístupu i v atributu. Oprava není riziková, protože mění přesně to, co jste sami zadali; rizikové je jen nekvalifikované volání funkce ve jmenném prostoru, které může za běhu dojít k funkci toho prostoru. Když jsou obě funkce z PHP, zapíše se náhrada jen tam, kde nová funkce vezme všechny argumenty volání, takže vás mapa nedostane ke kódu, který by spadl na jiném počtu nebo pořadí parametrů. Parametry vlastních funkcí DressCode nezná, a tak u nich bere mapu za slovo.
+
+
+Pro autory knihoven
+===================
+
+Chcete, aby DressCode uživatelům vaší knihovny přepsal kód při aktualizaci? Přidejte do kořene knihovny soubor `deprecations.neon` a uveďte ho v jejím `composer.json`:
+
+```json
+{
+	"extra": {
+		"dresscode": {
+			"deprecations": "deprecations.neon"
+		}
+	}
+}
+```
+
+Knihovna kvůli tomu na DressCode nijak nezávisí a nic neinstaluje. Soubor začíná klíčem `package` se jménem balíčku a pokračuje sekcemi `since <verze>`. Klíč sekce se píše `since 3.10`, ne holé `3.10`, protože to by NEON přečetl jako číslo 3.1. V každé sekci stojí mapy dvou pravidel: `no-deprecated-classes` mapuje starou třídu, rozhraní nebo výčet na nové, obojí plně kvalifikované, a `no-deprecated-members` mapuje starou konstantu, metodu nebo vlastnost na novou. Člen se píše tak, jak ho čte PHP:
+
+| zápis | co to je |
+|---|---|
+| `App\Form::FILLED` | konstanta nebo metoda |
+| `"App\Form::size()"` | metoda tam, kde má třída i konstantu stejného jména; se závorkami patří do uvozovek |
+| `App\Form::$items` | vlastnost |
+
+Novým jménem je samotné jméno, když člen zůstává v téže třídě, nebo `Třída::jméno`, když se přesunul jinam. Přejmenování v téže třídě DressCode přepíše; přesun do jiné třídy jen ohlásí i s novým místem a úpravu nechá na vás.
+
+Soubor jen doplňuje volby pravidel, žádné pravidlo nezapne; o tom rozhoduje uživatel ve své konfiguraci. A pro kořenový balíček platí všechny sekce bez ohledu na verzi, takže když pustíte `dresscode check` přímo v repozitáři knihovny, soubor se načte a zkontroluje a překlep v něm se ukáže dřív, než vydáte novou verzi.
+
+
+Kam dál
+=======
+
+- [Typy z PHPStanu |types], bez kterých se nepřepíšou konstanty a metody.
+- [Přechod na novější PHP |upgrading-php], když s knihovnou zvedáte i verzi PHP.
+- [Konfigurace |configuration#Rozšíření], jak DressCode najde rozšíření a data nainstalovaných balíčků.
