@@ -42,8 +42,9 @@ Přepínače
 | `-f`, `--format <název>` | formát výstupu, viz níže |
 | `--diff` | u `check` ukáže, co by `fix` změnil; u `fix` to, co změnil |
 | `--preset <název>` | přidá preset; lze uvést vícekrát |
+| `--group <název>` | přidá [skupinu pravidel |configuration#Skupiny pravidel], třeba `cleanup` nebo `modernization`; lze uvést vícekrát |
 | `--rule <název>=on` nebo `=off` | zapne nebo vypne pravidlo pro tenhle běh; lze uvést vícekrát |
-| `--only <název>` | zúží běh na jmenovaná pravidla; jméno presetu znamená všechna jeho pravidla. Lze uvést vícekrát, viz [níže |#Jedno pravidlo najednou: --only] |
+| `--only <název>` | zúží běh na jmenovaná pravidla; jméno presetu nebo skupiny znamená všechna jejich pravidla. Lze uvést vícekrát, viz [níže |#Jedno pravidlo najednou: --only] |
 | `--fix-risky` | udělá [rizikové opravy |configuration#Varování a rizikové opravy] všech pravidel, nejen těch, která konfigurace jmenuje v klíči `fixRisky`; ohlásí se tak jako tak |
 | `--max-warnings <n>` | víc než `n` [varování |configuration#Varování a rizikové opravy] znamená exit kód `1`; bez něj varování exit kód nemění |
 | `--stdin <cesta>` | čte kód ze standardního vstupu, jako by to byl soubor na dané cestě; `fix` pak opravený kód vypíše na standardní výstup |
@@ -57,21 +58,22 @@ Přepínače
 | `--no-color` | výstup bez barev |
 | `--version`, `--help` | verze, nápověda |
 
-U `--preset`, `--rule` a `explain` můžete jméno vestavěného presetu nebo pravidla zkrátit o předponu `dresscode/`: `--preset nette` je totéž co `--preset dresscode/nette`.
+U `--preset`, `--rule` a `explain` můžete jméno vestavěného presetu nebo pravidla zkrátit o předponu `dresscode/`: `--preset nette` je totéž co `--preset dresscode/nette`. Jména skupin vendora nemají a píšou se vždycky sama: `--group cleanup`.
 
 
 Co konfigurace znamená: config
 ==============================
 
-Konfigurace je pár řádků, ale to, co z nich vzejde, je sto padesát pravidel s volbami z několika vrstev. `dresscode config` to vypíše tak, jak to vidí běh: čte totéž vyřešení, kterým se řídí pravidla i cache, takže nemůže tvrdit něco jiného, než co se opravdu stane.
+Konfigurace je pár řádků, ale to, co z nich vzejde, je sto sedmdesát pravidel s volbami z několika vrstev. `dresscode config` to vypíše tak, jak to vidí běh: čte totéž vyřešení, kterým se řídí pravidla i cache, takže nemůže tvrdit něco jiného, než co se opravdu stane.
 
 /--pre .[terminal]
 DRESS|CODE 1.0
 Config     /var/www/shop/dresscode.neon
 Target     PHP 8.2 from composer.json
-Presets    dresscode/psr12, dresscode/per, dresscode/nette-style, dresscode/cleanup, dresscode/modern, dresscode/types, dresscode/phpdoc, dresscode/imports, dresscode/classes, dresscode/nette
-Style      a tab, the line ending each file mostly has, lines of up to 120 characters
-Rules      146 of 159 run
+Presets    dresscode/psr12, dresscode/per, dresscode/nette-style, dresscode/nette
+Groups     cleanup, modernization, types, deprecations, correctness
+Style      a tab, the line ending each file mostly has, lines of up to 140 characters
+Rules      172 of 199 run
 
   dresscode/name-casing                       dresscode/nette
       classes                         PascalCase              dresscode/nette
@@ -79,16 +81,17 @@ Rules      146 of 159 run
   dresscode/braces-position                   dresscode/nette-style
       emptyBodies                     ownLine                 dresscode/nette-style (over dresscode/per sameLine)
   dresscode/line-length                       the configuration
-  dresscode/strict-call                       dresscode/types, risky fixes only reported
+  dresscode/strict-call                       group correctness, risky fixes only reported
   ...
 
 Not running
   dresscode/useless-else                  turned off by dresscode/nette
   dresscode/octal-notation                it needs PHP 8.1 and the target is 8.0
+  dresscode/no-deprecated-members         it needs the types of the code and the configuration sets no types
   6 more that no preset or rule of the configuration mentions
 \--
 
-U každého pravidla stojí vrstva, která ho zapnula, u každé volby, kterou některá vrstva jmenovala, výsledná hodnota, kdo ji nastavil a co tím přebil. Pravidlo s [rizikovými opravami |configuration#Varování a rizikové opravy] navíc říká, jestli jste je přijali (`risky fixes accepted`), nebo jestli se jen ohlásí (`risky fixes only reported`). Pravidlo, které neběží, říká proč: vypnul ho preset nebo konfigurace, chybí mu verze PHP, zapíná ho jen přepis, nebo o něm nikdo nemluvil. `--file cesta` ukáže totéž pro jeden soubor, tedy i s přepisy, které pro něj platí, a `--json` dá výstup jako data pro nástroje.
+Řádek `Groups` říká, ke kterým [skupinám pravidel |configuration#Skupiny pravidel] se konfigurace doresolvovala, a pravidlo, které zapnula skupina, má jako vrstvu `group <jméno>`. U každého pravidla stojí vrstva, která ho zapnula, u každé volby, kterou některá vrstva jmenovala, výsledná hodnota, kdo ji nastavil a co tím přebil. Pravidlo s [rizikovými opravami |configuration#Varování a rizikové opravy] navíc říká, jestli jste je přijali (`risky fixes accepted`), nebo jestli se jen ohlásí (`risky fixes only reported`). Pravidlo, které neběží, říká proč: vypnul ho preset nebo konfigurace, chybí mu verze PHP, typy nebo knihovna, kterou hlídá, zapíná ho jen přepis, nebo o něm nikdo nemluvil. `--file cesta` ukáže totéž pro jeden soubor, tedy i s přepisy, které pro něj platí, a `--json` dá výstup jako data pro nástroje.
 
 
 Vysvětlení pravidel: explain
@@ -196,14 +199,14 @@ Než se soubor zapíše, `init` si ho sám přečte a nechá vyřešit, jestli z
 Jedno pravidlo najednou: --only
 ===============================
 
-`--only` zúží běh na vyjmenovaná pravidla. Jméno presetu znamená všechna pravidla, která skládá, a přepínač se dá uvést vícekrát:
+`--only` zúží běh na vyjmenovaná pravidla. Jméno presetu znamená všechna pravidla, která skládá, jméno [skupiny |configuration#Skupiny pravidel] všechna pravidla té skupiny, a přepínač se dá uvést vícekrát:
 
 ```shell
 dresscode fix --only dresscode/string-quotes
-dresscode fix --only modern --only imports
+dresscode fix --only cleanup --only modernization
 ```
 
-Hodí se při přechodu na DressCode a u velkých úklidů: jedno pravidlo, jeden commit, jedno review. Filtruje až to, k čemu konfigurace dojde, takže pravidlo nezapíná ani nepřenastavuje: na to je `--rule`, a ten se uplatní dřív. Jméno, které v téhle konfiguraci nic nespouští, je chyba, ne tiše prázdný běh. Totéž natrvalo říká klíč `only` v konfiguraci; přepínač ho pro jeden běh nahradí.
+Hodí se při přechodu na DressCode a u velkých úklidů: jedno pravidlo, jeden commit, jedno review. Filtruje až to, k čemu konfigurace dojde, takže pravidlo nezapíná ani nepřenastavuje: na to je `--rule`, a ten se uplatní dřív. Jméno, které v téhle konfiguraci nic nespouští, je chyba, ne tiše prázdný běh. Klíč konfiguračního souboru to není: je to rozhodnutí jednoho běhu, ne projektu.
 
 `fix --only` opraví jen to jedno pravidlo a zbytku se nedotkne, takže příští úplný `fix` klidně změní víc; to je záměr, ne nedokončená práce. Ostatní pravidla mezitím ve výpisu `dresscode config` říkají `the run is narrowed to other rules`. Baseline se zúženým během generovat nedá, protože by zapomněla, co našla ostatní pravidla.
 

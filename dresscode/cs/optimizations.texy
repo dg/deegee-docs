@@ -150,19 +150,27 @@ Rozbalené argumenty, třeba `\strlen(...$args)`, zkratku vypnou taky, protože 
 Jak s tím pomůže DressCode
 ==========================
 
-Hlídat to všechno ručně by bylo úmorné. Proto to za vás udělá preset `dresscode/optimizations`, který přidáte ke svému standardu:
+Hlídat to všechno ručně by bylo úmorné. Proto to za vás udělá [skupina pravidel |configuration#Skupiny pravidel] `optimized-calls`, kterou přidáte ke svému standardu:
 
 ```neon
 presets:
 	- nette
-	- optimizations
+
+groups:
+	- optimized-calls
+
+rules:
+	dresscode/name-fallback:
+		optimizedFunctions: qualified
+		optimizedConstants: qualified
 ```
 
-Žádný standard ho sám nezapíná. Preset zapne tahle pravidla:
+Žádný standard ji sám nezapíná. Skupina obsahuje tahle pravidla:
 
-- `name-fallback` s volbami `optimizedFunctions: qualified` a `optimizedConstants: qualified` nenechá holé funkce, se kterými zachází zvlášť kompilátor nebo OPcache, tam, kde je volání s danými argumenty opravdu zrychlí, ani konstanty, se kterými kompilátor počítá. Zapíše je tvarem, jaký chce váš standard, a když ten nic neříká, doplní `use function` a `use const`. Podrobně to popisuje stránka [o jmenných prostorech |namespaces#Holé, nebo kvalifikované: name-fallback].
 - `optimized-call-notation` přepíše pojmenované argumenty funkcí, které PHP volá bez rámce, na poziční a ohlásí rozbalené argumenty ve funkcích se zkratkou. Pojmenovaný argument přepíše jen tehdy, když stojí na místě svého parametru, takže se význam volání nezmění.
 - `no-is-null`, `no-conversion-functions`, `no-settype` a `no-dirname-of-file` nahradí volání jazykovou konstrukcí: `is_null($x)` porovnáním `$x === null`, `intval($x)` přetypováním `(int) $x`, `settype()` přiřazením přetypované hodnoty a `dirname(__FILE__)` konstantou `__DIR__`. Jazyková konstrukce žádnou zkratku nepotřebuje, je rychlá vždy a na jmenném prostoru nezáleží.
+
+Ve skupině naopak není `name-fallback`, které rozhoduje o tom, jak se v celém projektu píšou jména globálních funkcí a konstant. To je rozhodnutí o vzhledu kódu a takové skupina nedělá, proto je v ukázce zapnuté jménem. S volbami `optimizedFunctions: qualified` a `optimizedConstants: qualified` nenechá holé funkce, se kterými zachází zvlášť kompilátor nebo OPcache, tam, kde je volání s danými argumenty opravdu zrychlí, ani konstanty, se kterými kompilátor počítá. Zapíše je tvarem, jaký chce váš standard, a když ten nic neříká, doplní `use function` a `use const`. Podrobně to popisuje stránka [o jmenných prostorech |namespaces#Holé, nebo kvalifikované: name-fallback].
 
 Takhle vypadá funkce před opravou:
 
@@ -217,4 +225,4 @@ Shrnutí
 - Skoro všechny zkratky potřebují jisté jméno: `\strlen()`, `use function strlen;` nebo soubor bez jmenného prostoru. Totéž platí pro konstanty jako `PHP_VERSION_ID`.
 - Volání bez rámce z PHP 8.4 funguje i s nekvalifikovaným jménem ve jmenném prostoru.
 - Pojmenované a rozbalené argumenty vypnou všechny zkratky.
-- Preset `dresscode/optimizations` zapíše kód tak, aby zkratky platily: optimalizované funkce kvalifikuje vždy, konstanty PHP jen tam, kde s nimi kompilátor počítá, a chová se stejně pro všechny verze PHP.
+- Skupina `optimized-calls` a k ní pravidlo `name-fallback` zapíšou kód tak, aby zkratky platily: optimalizované funkce kvalifikují vždy, konstanty PHP jen tam, kde s nimi kompilátor počítá, a chovají se stejně pro všechny verze PHP.

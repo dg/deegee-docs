@@ -2,7 +2,7 @@ Jak DressCode funguje
 *********************
 
 .[perex]
-Kontrola i oprava stylu kódu stojí na jednom nápadu: nástroj nevidí ploché pole tokenů, ale syntaktický strom, ve kterém nic nechybí. Odtud plyne všechno ostatní, od přesnosti oprav přes presety až po to, proč tu nejsou priority pravidel. Na konci najdete slovníček pojmů, které se v dokumentaci opakují.
+Kontrola i oprava stylu kódu stojí na jednom nápadu: nástroj nevidí ploché pole tokenů, ale syntaktický strom, ve kterém nic nechybí. Odtud plyne všechno ostatní, od přesnosti oprav přes standardy a skupiny pravidel až po to, proč tu nejsou priority pravidel. Na konci najdete slovníček pojmů, které se v dokumentaci opakují.
 
 
 Syntaktický strom místo pole tokenů
@@ -51,10 +51,10 @@ Díky tomu má potlačení skutečnou váhu. Když napíšete `// dresscode:igno
 Na témž místě stojí i **rizikové opravy**. Oprava, která může změnit chování kódu, se ohlásí s příznakem rizika, a dokud ji běh nedovolí, hlášení neprojde a pravidlo kód nechá. Riziko bývá vlastnost místa: `get_class($x)` na `$x::class` je bezpečné, dokud `$x` nemůže být `null`, takže totéž pravidlo v témž průchodu opraví, co bezpečně umí, a rizikový výskyt jen vypíše. Pravidlo, které bezpečné místo z kódu poznat nemůže (`strict-call` neví, jestli kód na volném porovnání v `in_array()` nespoléhá), to o sobě řekne jednou a riziková je pak každá jeho oprava. Svolení nedává zapnutí pravidla, ale projekt, když pravidlo uvede v klíči `fixRisky`; přepínač `--fix-risky` dovolí všechny rizikové opravy na jeden běh.
 
 
-Presety a standardy
-===================
+Standardy a skupiny pravidel
+============================
 
-DressCode nemá vlastní názor na styl kódu. Má katalog pravidel a jejich voleb, a **preset** je pojmenovaná sada pravidel s volbami. Čtyři z vestavěných presetů jsou **standardy**, které rozhodují o všem:
+DressCode nemá vlastní názor na styl kódu. Má katalog pravidel a jejich voleb a dvě cesty, jak z něj vybrat: standard řekne, jak má kód vypadat, skupina řekne, co po něm chcete kromě vzhledu. Standard je **preset**, tedy pojmenovaná sada pravidel s volbami. Čtyři vestavěné standardy rozhodují o všem:
 
 | preset | co je to |
 |---|---|
@@ -63,26 +63,31 @@ DressCode nemá vlastní názor na styl kódu. Má katalog pravidel a jejich vol
 | `dresscode/nette` | [Nette Coding Standard |contributing:coding-standard], tedy PER s tabulátory a několika odchylkami |
 | `dresscode/symfony` | Symfony Coding Standards podle sady `@Symfony` z PHP CS Fixeru |
 
-Ke standardu se přidávají **skupiny pravidel**, což jsou také presety. O rozvržení kódu nerozhodují a nenastavují nic, o čem rozhoduje standard; každá zapíná pravidla jednoho záměru, a proto se hodí ke kterémukoli standardu:
+Ke standardu se přidávají **skupiny pravidel**. Nejsou to presety a nemají volby ani styl: skupina je jméno záměru a zapne každé pravidlo, které ten záměr plní, s jeho výchozími volbami. Skupin je právě šest a víc jich nebude, protože jejich jména jsou uzavřený výčet:
 
 | skupina | co zapíná |
 |---|---|
-| `dresscode/modern` | přepis kódu na syntaxi a funkce novějšího PHP, od PHP 8.0 po PHP 8.6, vždy jen do cílové verze projektu |
-| `dresscode/cleanup` | odstranění kódu, který tam je zbytečně |
-| `dresscode/types` | typy zapsané tam, kde je čte PHP, včetně `#[\Override]` a `never` |
-| `dresscode/phpdoc` | doc komentáře bez toho, co už říkají typy |
-| `dresscode/imports` | importy, které říkají, co soubor používá |
-| `dresscode/classes` | členy tříd, které říkají, čím jsou |
-| `dresscode/optimizations` | volání ve tvaru, který PHP optimalizuje už při kompilaci |
+| `cleanup` | kód, který je tam pro nic |
+| `modernization` | konstrukce, kterou cílová verze PHP umí, tam kde totéž říká starší zápis |
+| `types` | typy zapsané tam, kde je čte PHP |
+| `deprecations` | co cílová verze PHP nebo knihovna zavrhla či zrušila |
+| `correctness` | to, co je nejspíš omyl |
+| `optimized-calls` | volání ve tvaru, který PHP optimalizuje už při kompilaci |
 
-Projekt si tedy vezme jeden standard, přidá skupiny, které chce, a jednotlivá pravidla zapne nebo nastaví v konfiguraci. `dresscode/symfony-configurator` žádné pravidlo nezapíná, jen vyjmenuje funkce, které Symfony deklaruje ve svém jmenném prostoru. A standard `dresscode/nette` sám je složený právě takhle: PER, rozvržení `dresscode/nette-style`, šest skupin pravidel a k tomu volby knihoven Nette.
+Projekt si tedy vezme jeden standard, přidá skupiny, které chce, a jednotlivá pravidla zapne nebo nastaví v konfiguraci:
 
 ```neon
 presets:
 	- dresscode/per
-	- dresscode/modern
-	- dresscode/cleanup
+
+groups:
+	- cleanup
+	- modernization
 ```
+
+Skupina leží pod pravidly téhož profilu, takže projekt má vždycky poslední slovo, a žádné pravidlo nejmenuje: to, které tu běžet nemůže, protože cílí na novější PHP nebo chce typy, z ní tiše vypadne. Rozhodnutí o vzhledu kódu do skupiny nepatří, stejně jako politika, ke které seznam dodává projekt; taková pravidla vybírá standard, nebo je zapnete jménem. Podrobnosti popisuje [Konfigurace |configuration#Skupiny pravidel].
+
+Standard `dresscode/nette` je ze všeho toho složený: PER, rozvržení `dresscode/nette-style`, pět skupin a k tomu volby knihoven Nette. Preset `dresscode/symfony-configurator` naopak žádné pravidlo nezapíná, jen vyjmenuje funkce, které Symfony deklaruje ve svém jmenném prostoru.
 
 Kde se pravidlo se specifikací rozchází, dostane volbu, ne výjimku schovanou v presetu. Tytéž volby má tedy k dispozici i váš vlastní preset.
 
@@ -118,7 +123,7 @@ Verze PHP je vlastnost projektu
 
 Pravidlo, které zapisuje syntaxi novějšího PHP (třeba `0o755` z PHP 8.1), se nesmí zapnout v projektu, který na takové verzi ještě neběží. DressCode proto cílovou verzi bere z projektu, ne z interpretu, na kterém běží on sám: z klíče `php` v konfiguraci (část projektu může mít v přepisu jinou), jinak z `require.php` v `composer.json`, jinak předpokládá PHP 8.0 jako nejnižší verzi, pro kterou se dá psát. Starší verzi z konfigurace nebo z `composer.json` zvedne na PHP 8.0 a varuje, protože pravidla se na to, co PHP 8.0 už umí, neptají. Stejný soubor tak dostane stejný verdikt na jakémkoli počítači. Pravidlo pro novější syntaxi se pod svou verzí samo vynechá, takže to preset ani vy hlídat nemusíte.
 
-Totéž funguje i obráceně: když verzi zvednete, pravidla skupiny `dresscode/modern` přepíšou kód na to, co nová verze přinesla, od `str_contains()` z PHP 8.0 po `clamp()` z PHP 8.6. Jak na to, popisuje [Přechod na novější PHP |upgrading-php].
+Totéž funguje i obráceně: když verzi zvednete, pravidla skupiny `modernization` přepíšou kód na to, co nová verze přinesla, od `str_contains()` z PHP 8.0 po `clamp()` z PHP 8.6. Jak na to, popisuje [Přechod na novější PHP |upgrading-php].
 
 
 Typy zná PHPStan
@@ -142,7 +147,7 @@ Co si z toho odnést
 - Výjimka pro cestu i pro řádek vypíná i opravu, ne jen hlášku. Baseline opravě nebrání, jen nehlásí, co zatím opravit nejde.
 - Oprava, která může změnit chování kódu, se jen ohlásí, dokud pravidlo neuvedete v klíči `fixRisky`.
 - Když napíšete `nameResolution: certain`, přestanou být rizikové opravy, které stály jen na odhadu, jestli je funkce globální.
-- Se skupinou `dresscode/modern` zapnete zvednutím verze PHP v `composer.json` přepis kódu na novou verzi; na nic, co cílová verze nemá, DressCode nesáhne.
+- Se skupinou `modernization` zapnete zvednutím verze PHP v `composer.json` přepis kódu na novou verzi; na nic, co cílová verze nemá, DressCode nesáhne.
 - S `types: phpstan` se pravidla můžou ptát na typy a zapnou se ta, která bez nich nejdou.
 
 
@@ -155,11 +160,11 @@ Pojmy, které se v dokumentaci opakují a stojí za to je mít v ruce. Anglický
 |---|---|---|
 | pravidlo | rule | třída, která hlídá jednu vlastnost kódu, a obvykle ji umí i opravit; má jméno tvaru `dresscode/no-empty-comment` |
 | porušení | violation | jeden nález pravidla: soubor, řádek, sloupec a zpráva |
-| preset | preset | pojmenovaný profil: sada pravidel s volbami a případně stylem; nejčastěji standard, nebo skupina pravidel |
+| preset | preset | pojmenovaný profil: sada pravidel s volbami a případně stylem; nejčastěji standard |
 | standard | standard | preset, který rozhoduje o celém stylu kódu a který si projekt vezme za základ: `dresscode/per`, `dresscode/psr12`, `dresscode/nette`, `dresscode/symfony` |
-| skupina pravidel | rule group | preset, který se přidává ke standardu a zapíná pravidla jednoho záměru, třeba `dresscode/modern` nebo `dresscode/cleanup`; píše se do klíče `presets` |
+| skupina pravidel | rule group | jméno záměru, které zapne každé pravidlo toho záměru s výchozími volbami; je jich šest a píšou se do klíče `groups` |
 | typy | types | co o výrazech, třídách a metodách ví PHPStan projektu; DressCode se na ně ptá, když konfigurace řekne `types: phpstan` |
-| profil | profile | to, co rozhoduje o zpracování souboru: presety, pravidla, styl, verze PHP, typy, jmenné prostory, rizikové opravy a varování; má ho projekt, přepis i preset |
+| profil | profile | to, co rozhoduje o zpracování souboru: presety, skupiny, pravidla, styl, verze PHP, typy, jmenné prostory, rizikové opravy a varování; má ho projekt, přepis i preset |
 | přepis | override | profil pro část projektu, který platí pro soubory odpovídající jeho cestám |
 | rozšíření | extension | třída z balíčku, kterou projekt uvede v konfiguraci; přinese pravidla a presety pod jmény, vyloučené cesty a filtr souborů |
 | riziková oprava | risky fix | oprava, která může změnit chování kódu; udělá se jen u pravidla uvedeného v klíči `fixRisky` nebo s `--fix-risky`, jinak se ohlásí |

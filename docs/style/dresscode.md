@@ -53,7 +53,7 @@ Before a page is done, count and check: how many comparisons with other tools, h
 | violation | porušení | "nález" for a single report of it, never "chyba" |
 | fix / check | oprava / kontrola | the commands stay `fix` and `check` |
 | preset, standard | preset, standard | |
-| rule group | skupina pravidel | a preset added to a standard that turns on the rules of one intent (`dresscode/modern`, `dresscode/cleanup`); the key stays `presets` |
+| rule group | skupina pravidel | the name of an intent that turns on every rule carrying it, with its default options; the six names (`cleanup`, `modernization`, `types`, `deprecations`, `correctness`, `optimized-calls`) are written bare, without a vendor, and go in the key `groups` |
 | types | typy | what the PHPStan of the project knows about the code; the key is `types: phpstan` |
 | deprecated | zastaralé | as in the Nette documentation; the annotation stays `@deprecated` |
 | promoted property | vlastnost deklarovaná v konstruktoru | English in parentheses at the first mention |
