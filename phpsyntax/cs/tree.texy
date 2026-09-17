@@ -93,12 +93,15 @@ $name->shortName;   // 'Order'
 $name->role;        // SymbolKind::ClassLike, Function nebo Constant podle místa ve stromu
 $name->isKeyword();
 $name->isDeclaration();   // zavádí jméno symbol (use, namespace), místo aby na něj odkazovalo?
+$name->isReference();     // odkazuje na symbol, který má smysl překládat?
 $name->equals('App\Model\Order');
 ```
 
 Vlastnost `text` je zapisovatelná a je to nejkratší cesta, jak jméno přepsat: `$call->name->text = 'count'` jméno přetokenizuje na nové a všechno kolem nechá, jak bylo. Nové jméno mimo strom vyrobí `NameNode::fromText('Nette\Utils\Strings')`, jméno členu pak `IdentifierNode::fromText('render')`.
 
 Role se odvozuje z místa ve stromu: totéž `Foo` je třída za `new`, funkce před `(` a konstanta jinde. Třídu a jmenný prostor drží PHP v jedné tabulce jmen, takže obojí je `ClassLike`; `use Foo;` totiž zavádí zároveň třídu `Foo` i prefix `Foo\Bar` a rozlišit to nejde. Co jméno znamená doopravdy, tedy včetně importů a jmenného prostoru, říká až analýza `NameResolver`, viz [Analýzy |analyses].
+
+Role ale říká jen to, do které tabulky jmen zápis patří, ne jestli na nějaký symbol vůbec odkazuje. Na to je `isReference()` a odpoví `false` ve třech případech: jméno symbol zavádí (`use`, `namespace`), pojmenovává vestavěný typ tam, kde se píše typ (`int`, `array`), nebo je to `self`, `static` či `parent` na místě třídy, protože ta zastupují konkrétní třídu jen tam, kde jsou napsaná. Klíčové slovo na místě jména naopak reference je: `readonly(...)` volá funkci toho jména. Právě na tohle se ptejte, než jméno pošlete resolveru, viz [Analýzy |analyses#NameResolver].
 
 `IdentifierNode` je jméno členu, návěští, hooku nebo aliasu (`->name`, `::CONST`, `as Alias`), také jeden token, i když je to rezervované slovo. Slot, který drží jméno, se jmenuje `name`, takže text typu se čte `$type->name->text`.
 

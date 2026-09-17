@@ -42,11 +42,20 @@ Tisk uzlu
 Vedle celého souboru se dá vytisknout i kterýkoli jednotlivý uzel. Slouží k tomu dvě věci, které se snadno pletou:
 
 ```php
-Printer::print($node);   // včetně trivií na okrajích, tedy i s odsazením a komentářem nad uzlem
-$node->text;             // jen text uzlu, od prvního tokenu po poslední
+Printer::print($node);       // včetně trivií na okrajích, tedy i s odsazením a komentářem nad uzlem
+Printer::printText($node);   // jen text uzlu, od prvního tokenu po poslední
+$node->text;                 // totéž kratším zápisem
 ```
 
-`Printer::print()` je to, co drží round trip, tedy zaručenou shodu vytištěného stromu s původním souborem. Proto u prvního příkazu souboru vytiskne i `<?php`, které visí jako trivia před ním. `$node->text` je uzel sám: `return sizeof($this->orders) > 0 ? $sum : 0;` bez odsazení před ním a bez konce řádku za ním. Do hlášek a do porovnávání patří `text`, do zápisu souboru `print()`.
+`Printer::print()` je to, co drží round trip, tedy zaručenou shodu vytištěného stromu s původním souborem. Proto u prvního příkazu souboru vytiskne i `<?php`, které visí jako trivia před ním. `printText()` je uzel sám: `return sizeof($this->orders) > 0 ? $sum : 0;` bez odsazení před ním a bez konce řádku za ním. Do hlášek a do ladění patří `text`, do zápisu souboru `print()`.
+
+Obě metody navíc umí vytisknout jiný text, než jaký token nese, aniž by se strom změnil. Druhý argument je funkce, která dostane token a vrátí text k vytištění, nebo `null`, když má zůstat ten původní; trivia zůstávají vždycky.
+
+```php
+$code = Printer::print($file, fn(Token $token) => $token->text === 'sizeof' ? 'count' : null);
+```
+
+To je pro všechno, co má změnu jen ukázat, ne provést: náhled opravy, diff, hláška s návrhem. Kdo chce změnu doopravdy, sáhne na strom, viz [Úpravy |mutation].
 
 
 Fragmenty

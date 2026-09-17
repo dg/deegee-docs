@@ -48,6 +48,18 @@ $resolver->isGlobalFunctionCall($node, 'sizeof');   // volání globální funkc
 $resolver->getUnqualifiedResolution('count', PhpSyntax\SymbolKind::Function, $node); // Global, Namespaced, nebo Uncertain, když pád do globálního stojí jen na odhadu
 ```
 
+`resolveClass()`, `resolveFunction()` i `resolveConstant()` chtějí jméno, které na nějaký symbol opravdu odkazuje, a ne každé `NameNode` takové je: `int` v typu pojmenovává vestavěný typ, `Foo` v `use Foo;` symbol teprve zavádí a `self` zastupuje třídu jen tam, kde je napsané. Na takové jméno resolver vyhodí `InvalidArgumentException`, místo aby ho tiše přečetl jako třídu jmenného prostoru a vrátil nesmysl `App\int`. Kdo prochází všechna jména v souboru, ptá se proto napřed [isReference() |tree#Jména]:
+
+```php
+foreach ($file->find(NameNode::class) as $name) {
+	if ($name->isReference() && $name->role === PhpSyntax\SymbolKind::ClassLike) {
+		echo $resolver->resolveClass($name);
+	}
+}
+```
+
+Jedna odchylka tu je: `resolveClass()` na `self`, `static` a `parent` nespadne, ale vrátí je tak, jak jsou zapsané.
+
 `isGlobalFunctionCall()` je otázka, kterou si dřív každý nástroj řešil sám a většinou hůř: uzel musí být volání funkce se jménem (ne `$f()` ani `$obj->f()`), jméno nesmí být klíčové slovo a po překladu musí být globální. Tak se pozná, že `count($a)` uvnitř `namespace App` opravdu volá `count`, a ne `App\count`, pokud taková funkce není importovaná, deklarovaná v souboru ani uvedená v `NamespacedSymbols`.
 
 Nástroj, který podle odpovědi mění kód, se má zeptat i na `getUnqualifiedResolution()`. Takhle rozhoduje [DressCode |dresscode:namespaces], jestli je oprava riziková: s odpovědí `Uncertain` ano, s `Global` nebo `Namespaced` ne. Metoda přijímá jen nekvalifikované jméno, protože jméno s lomítkem do globálního prostoru nepadá, a na jiné vyhodí `InvalidArgumentException`. Odpověď `Global` přitom říká, že jméno míří do globálního prostoru, ne nutně na symbol toho jména: import s aliasem ho může přesměrovat jinam.
@@ -81,7 +93,7 @@ $resolver->getDeclaredName($class);          // 'App\Cart' z uzlu deklarace
 $resolver->findDeclaration('App\Cart', $kind); // ClassLikeNode, nebo null
 ```
 
-`findDeclaration()` hledá mezi symboly jednoho druhu, protože PHP drží třídu, funkci a konstantu stejného jména odděleně: `SymbolKind::ClassLike` najde třídu, rozhraní, trait nebo výčet, `Function` funkci a `Constant` položku příkazu `const`. Velikost písmen bere tak jako PHP, tedy u konstanty ji rozlišuje jen v jejím vlastním jméně, a úvodní backslash mu nevadí. `getDeclaredName()` vrátí jméno i pro takovou konstantu; konstanta třídy do jmenného prostoru nic nezavádí, a proto dostane `null`.
+`findDeclaration()` hledá mezi symboly jednoho druhu, protože PHP drží třídu, funkci a konstantu stejného jména odděleně: `SymbolKind::ClassLike` najde třídu, rozhraní, trait nebo výčet, `Function` funkci a `Constant` položku příkazu `const`. Velikost písmen bere tak jako PHP, tedy u konstanty ji rozlišuje jen v jejím vlastním jméně, a úvodní backslash mu nevadí. Počítají se i deklarace vnořené v podmínce nebo v těle funkce, a když soubor totéž jméno deklaruje víckrát, třeba pod `if (!function_exists(...))`, dostanete tu první. `getDeclaredName()` vrátí jméno i pro takovou konstantu; konstanta třídy do jmenného prostoru nic nezavádí, a proto dostane `null`.
 
 
 Scope

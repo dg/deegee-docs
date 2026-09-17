@@ -100,6 +100,7 @@ Pár otázek si nad kódem položí každý, kdo ho upravuje, a odpovědět na n
 
 ```php
 $a->matches($b);            // jsou ty dva uzly stejné, token po tokenu, bez ohledu na mezery?
+$node->getTokenTexts();     // a podle čeho se to pozná: texty tokenů, bez trivií
 $expr->isRepeatableRead();  // dá se výraz vyhodnotit podruhé, aniž by se něco změnilo?
 $expr->getAccessKind();     // jak na něj rodič sahá: přes ->, [], (...) nebo ::?
 $expr->isDereferenced();    // táž otázka bez druhu: sahá na něj rodič vůbec?
@@ -112,6 +113,8 @@ $expr->toValue();           // a jaká
 ```
 
 `matches()` porovnává texty tokenů, ne trivia, takže `$a->b` a `$a -> b` si odpovídají. `isRepeatableRead()` říká `true` pro proměnné, přístupy k vlastnostem a prvkům, konstanty a literály, a `false` pro volání, `new`, přiřazení, `++` a cokoli, co může mít vedlejší účinek. Dohromady odpovídají na otázku "opakuje tenhle ternár svou podmínku a smím ji vyhodnotit jen jednou". Odpověď je ale syntaktická: co jazyk za takovým čtením spustí sám, na to strom nevidí, ať jde o magický getter nebo hook za `->`, `ArrayAccess` za `[]`, nebo `__toString()` za interpolovaným řetězcem. Kdo si tohle dovolit nemůže, potřebuje typy, a ty syntaxe nezná.
+
+Texty, podle kterých `matches()` porovnává, dostanete i samostatně jako `getTokenTexts()`. Je to tvar, kterým se kód klíčuje do mapy nebo porovnávají dvě jeho verze, protože na vysázení v něm nezáleží. Měřit se z něj ale nedá: délku kódu čtěte z `$node->text`, který drží zápis i s mezerami tak, jak v souboru stojí.
 
 `isRedundant()` na uzlu `ParenthesizedNode` je z těch otázek nejpracnější a odpovídá se na ni nejčastěji špatně: záleží na prioritě a asociativitě operátoru uvnitř i vně závorek, na tom, jestli se na výsledek přistupuje jako na objekt nebo pole, a na několika zvláštních případech. Každý uzel zapsaný operátorem proto implementuje rozhraní `OperatorNode` s metodou `getPrecedence()`, která vrátí sílu vazby a stranu, ke které se operátor kloní; `isRedundant()` z toho složí odpověď. Kde si jistá není, odpoví `false`.
 
