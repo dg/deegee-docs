@@ -38,7 +38,7 @@ $replacement->object = $call->object;  // a tak si z něj vezmu, co potřebuju
 
 Co z takového podstromu zbude, je odpad, ne materiál: pořád ukazuje na uzel, který jste si vzali, takže ho už nikam nevkládejte. Kdyby se přesto do souboru dostal, ohlásí to index při prvním dotazu výjimkou `The node was taken out of the subtree, clone it first.`, protože jinak by tentýž uzel stál v souboru dvakrát.
 
-Vyzvednutý uzel si s sebou nese trivia z místa, odkud přišel, úplně stejně jako klon. Když ho vkládáte jinam, vyčistěte mu okraje: `$node->setEdgeTrivia([], [])`.
+Vyzvednutý uzel si s sebou nese trivia z místa, odkud přišel, úplně stejně jako klon. Když ho vkládáte jinam, vyčistěte mu okraje: `$node->setEdgeTrivia([], [])`. Kopii cizího uzlu pro nové místo rovnou s prázdnými okraji dá `$node->withoutEdgeTrivia()`.
 
 Co nemá hook, hlídá jazyk: text a trivia tokenu jsou `private(set)` a mění se jeho metodami ([Trivia |trivia#Zápis]), položky seznamu jsou `protected(set)` a mění se metodami seznamu, a `parent` si zapisuje strom sám. Rozbít strom zápisem mimo API tedy nejde.
 
@@ -64,7 +64,42 @@ $ternary->condition->replaceWith($parser->parseExpression('$a !== []'));
 
 Fragment z parseru má okraje prázdné, takže při přiřazení se ztratí mezera, která patřila starému uzlu. Přiřazení proto použijte tam, kde slot plníte poprvé nebo kde si trivia řešíte sami; všude jinde sáhněte po `replaceWith()`.
 
+`replaceWith()` navíc hlídá švy. Když nový uzel skončí těsně u tokenu, se kterým by ho lexer přečetl jako jednu věc, vloží mezi ně mezeru:
+
+```php
+// echo 'a'.$n;
+$var->replaceWith($parser->parseExpression('119'));
+// echo 'a'. 119;     bez té mezery by z '.' a '119' bylo číslo .119
+```
+
+Ptá se na to metodou `Lexer::canAdjoin($left, $right)`, tedy jestli se dva texty tokenů smí napsat těsně vedle sebe. Zeptejte se jí i vy pokaždé, když mezeru mezi tokeny naopak ubíráte: z `- -$a` se bez ní stane `--$a`, tedy dekrementace. Zápis do slotu přiřazením se na švy neptá, protože tam si trivia řešíte sami.
+
 `remove()` odstraní položku seznamu i s jejím oddělovačem a s tím, co na něm visí: uzel, který stál na řádcích sám, vezme řádky s sebou, jinak zůstane okolní mezera a po čárce nezbude mezera navíc. Komentáře uvnitř odstraňovaného uzlu se podle `CommentPolicy` přesunou k následujícímu tokenu (výchozí), k předchozímu, nebo zahodí; ztratit komentář mlčky nejde. Komentář, který stál na začátku řádku, si bere i odsazení, takže po `Drop` nezůstane řádek s pouhým tabulátorem.
+
+
+Výraz místo výrazu
+==================
+
+Výraz vkládaný mezi operátory je zvláštní případ, protože operátory mají priority a `replaceWith()` zapíše, co dostane, doslova. Odtud pochází celá třída tichých chyb ve významu:
+
+```php
+// $s = ucfirst($a ?? $b) . 'x';   a z toho volání chceme jen jeho argument
+$call->replaceWith($operand);
+// $s = $a ?? $b . 'x';            což PHP čte jako $a ?? ($b . 'x')
+```
+
+`ExpressionNode::replaceWithExpression()` udělá totéž, ale závorky kolem nového výrazu nechá všude, kde je [`isRedundant()` |traversal#Otázky, které si klade každý nástroj] za zbytečné neprohlásí:
+
+```php
+$call->replaceWithExpression($operand);
+// $s = ($a ?? $b) . 'x';
+```
+
+Pravidlo, podle kterého mezi nimi volit: `replaceWith()` tam, kde je místo ohraničené oddělovači, tedy argument volání, větev matche nebo operand `return`u. `replaceWithExpression()` všude, kde je to místo operandem operátoru nebo se do něj sahá přes `->`, `[]`, `()` a `::`.
+
+Nejvíc to bolí u šablon operátorů, protože špatný výsledek je pořád platné PHP a nikdo si ho nevšimne. Dosadit `$a ?? $b` do `0 |> ucfirst(...)` obyčejným `replaceWith()` dá `$a ?? $b |> ucfirst(...)`, a to PHP čte jako `$a ?? ($b |> ucfirst(...))`.
+
+Odpověď se odvozuje z místa, kde uzel stojí, takže `replaceWithExpression()` funguje i v odpojeném fragmentu. Vždycky je to ale odpověď o tom jednom místě.
 
 
 Seznamy
@@ -97,7 +132,21 @@ Nový uzel
 
 Nový kód se nestaví z tokenů, parsuje se z řetězce: `parseExpression()`, `parseStatement()`, `parseType()`, `parseName()` a obecné [`parseFragment()` |parsing#Fragmenty] vrátí odpojený uzel s prázdnými trivia na okrajích, připravený k vložení. Samotné jméno vyrobí i `NameNode::fromText()` a `IdentifierNode::fromText()`, řetězec `StringNode::fromValue()`. Konstruktory uzlů jsou `@internal`: jejich parametry kopírují gramatiku a další verze PHP je může rozšířit, takže na ně nespoléhejte.
 
-Kdo chce místo psaní řetězce klonovat existující uzel nebo si vzít kus jiného, musí mu nejdřív vyčistit okraje metodou `setEdgeTrivia()`. Klon i vyzvednutý uzel si totiž nesou úvodní trivia z místa, odkud přišly, a u prvního příkazu souboru je mezi nimi i `<?php`, které by se ve výstupu objevilo dvakrát.
+Řetězec ale neunese uzly, které už máte v ruce. Pro to, co se skládá z nich, jsou tovární metody `of()`: volání (`FunctionCallNode`, `MethodCallNode`, `StaticMethodCallNode`, `NewNode`), jednořádkový seznam argumentů (`ArgumentListNode`), binární operace (`BinaryOpNode`) a závorky (`ParenthesizedNode`).
+
+```php
+// trim($name)  →  htmlspecialchars(trim($name))
+$call->replaceWith(FunctionCallNode::of(
+	NameNode::fromText('htmlspecialchars'),
+	ArgumentListNode::of($call->withoutEdgeTrivia()),
+));
+```
+
+Továrna vyrobí tokeny operátorů a oddělovačů sama, uzlům, které dostane, vyčistí okraje a adoptuje si je; posílejte jí proto kopii, ne uzel ze živého stromu. A sama dá do závorek to, do čeho by se jinak sáhnout nedalo, takže `MethodCallNode::of($parser->parseExpression('new Foo'), 'bar')` napíše `(new Foo)->bar()`. Totéž dělá operace se svými operandy: `BinaryOpNode::of($a, '.', $c)`, kde `$a` je výraz `$x ?? $y`, napíše `($x ?? $y) . $c`. Výsledkem je přesně ten strom, jaký by parser vrátil pro týž text.
+
+Závorky, které chcete v kódu mít kvůli čtenáři, napíšete `ParenthesizedNode::of($expr)`. Ty, které tam mají být kvůli prioritě, řeší [`replaceWithExpression()` |#Výraz místo výrazu] za vás.
+
+Kopii existujícího uzlu pro jiné místo berte metodou `withoutEdgeTrivia()`, která dá hlubokou kopii bez rodiče a s prázdnými okraji. Prostý `clone` i vyzvednutý uzel si totiž nesou úvodní trivia z místa, odkud přišly, a u prvního příkazu souboru je mezi nimi i `<?php`, které by se ve výstupu objevilo dvakrát.
 
 Nejmenší možná úprava bývá změna textu jednoho tokenu a často stačí:
 

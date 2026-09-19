@@ -120,7 +120,9 @@ Texty, podle kterých `matches()` porovnává, dostanete i samostatně jako `get
 
 Vedle priority nese uzel ještě jednu vlastnost. Operátor, který nemá levý operand a jehož pravý sahá, kam mu kód dovolí, se hlásí rozhraním `RightExtendingNode`: šipková funkce, `throw`, `print`, `yield`, `yield from` a `include`. Před sebou nemůže pohltit nic, takže všude, kde za závorkami už nic nestojí, jsou zbytečné bez ohledu na to, jak volně ten výraz váže. `$f = (fn() => 1)` je tedy totéž co `$f = fn() => 1`, kdežto `(fn() => 1) + 2` závorky potřebuje, protože bez nich by tělo funkce pohltilo i tu dvojku.
 
-Prioritou to ale nekončí. Ukázkový případ, na kterém se ruční implementace spálí: `::` bere nalevo **jméno třídy**, takže `FOO::class` je řetězec `'FOO'`, kdežto `(FOO)::class` je třída objektu, který ta konstanta drží. Ty závorky tedy nejsou zbytečné, teprve ony z jména dělají výraz. Totéž platí pro `(FOO)::BAR`, `(FOO)::m()`, `(FOO)::$p` a pro `true` a `null`, která se také píšou jako jména. Cokoli jiného nalevo od `::` je výraz tak jako tak, a `->` ani `[]` si na jméno nedělají nárok, takže `(FOO)->x` a `(FOO)[0]` závorky pustí.
+"Za závorkami" přitom neznamená hned vedle nich. Hledá se první token nejbližšího předka, který ty závorky nekončí, takže `$a + (yield $b) + 1` si je nechá, i když `yield` ten sčítanec končí: za celým sčítáním pořád stojí `+ 1`. Nic před sebou nebere ani prefixový operátor (`!`, `-`, `@`, přetypování), takže zleva váže těsně a `(bool) (!$a)` i `$a ** (-$b)` závorky pustí. A co by naopak mohlo pohltit, co za závorkami následuje, není jen výraz v nich, ale kterýkoli operátor, kterým končí: `(@include $f) !== false` si je nechá kvůli `include`, který uvnitř stojí na konci.
+
+Prioritou to ale nekončí. Ukázkový případ, na kterém se ruční implementace spálí: `::` bere nalevo **jméno třídy**, takže `FOO::class` je řetězec `'FOO'`, kdežto `(FOO)::class` je třída objektu, který ta konstanta drží. Ty závorky tedy nejsou zbytečné, teprve ony z jména dělají výraz. Totéž platí pro `(FOO)::BAR`, `(FOO)::m()`, `(FOO)::$p` a pro `true` a `null`, která se také píšou jako jména. Cokoli jiného nalevo od `::` je výraz tak jako tak, a `->` ani `[]` si na jméno nedělají nárok, takže `(FOO)->x` a `(FOO)[0]` závorky pustí. Podobnou výjimku má pipe: napravo od `|>` přijímá šipkovou funkci jedině v závorkách, takže `$a |> (fn($b) => $b)` si je nechá.
 
 Právě proto se `isDereferenceable()` ptá, **co** za tím výrazem stojí, a bere `AccessKind`: `Member` pro `->` a `[]`, `Call` pro `(...)` a `ClassName` pro `::`. Odpověď se totiž případ od případu liší, jak je vidět na `FOO`: `FOO->x` projde, `FOO()` je volání úplně jiné věci a `FOO::class` je jméno třídy.
 
@@ -134,5 +136,7 @@ if ($paren->isRedundant()) {
 	$paren->replaceWith($paren->expression); // ($a * $b) + $c  →  $a * $b + $c
 }
 ```
+
+Z druhé strany se na tutéž otázku ptá [`replaceWithExpression()` |mutation#Výraz místo výrazu]: kdo vkládá výraz místo výrazu, dostane závorky doplněné přesně tam, kde by je `isRedundant()` za zbytečné neprohlásil, a prioritami se zabývat nemusí.
 
 `hasValue()` a `toValue()` odpovídají na "co je tu napsáno za hodnotu": skaláry, `null`, `true`, `false`, pole i s vnořením a rozbalením, unární plus a minus u čísla, závorky a heredoc bez interpolace. Jméno konstanty hodnota **není**, ani `PHP_INT_MAX`, ani `self::FOO`: co znamená, závisí na kódu okolo, a to už syntaxe neví. `toValue()` nad výrazem, který hodnotu nemá, vyhodí `LogicException`, protože `null` je platná hodnota a musí jít odlišit od "žádná".
