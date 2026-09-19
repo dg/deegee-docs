@@ -138,7 +138,7 @@ Skupin je právě šest a jiné jméno je chyba, která vypíše seznam platnýc
 | `correctness` | to, co je nejspíš omyl | `no-duplicate-assignment`, `no-unreachable-catch` |
 | `optimized-calls` | volání ve tvaru, který PHP optimalizuje už při kompilaci | `optimized-call-notation`, `no-is-null` |
 
-Který standard které skupiny nese a co je v nich za pravidla, najdete v [přehledu presetů |presets-reference] a v [přehledu pravidel |rules/@home]; každá stránka pravidla má svou skupinu v řádku faktů pod perexem. Standard `dresscode/nette` zapíná `cleanup`, `modernization`, `types`, `deprecations` a `correctness`, ostatní standardy žádnou; skupinu si k nim přidáte sami.
+Který standard které skupiny nese a co je v nich za pravidla, najdete v [přehledu presetů |presets-reference] a v [přehledu pravidel |rules/@home]; každá stránka pravidla má svou skupinu v řádku faktů pod perexem. Standard `dresscode/nette` zapíná `cleanup`, `types` a `correctness`, ostatní standardy žádnou; skupinu si k nim přidáte sami. Skupiny `modernization` a `deprecations` nenese žádný standard, protože co nová verze píše líp a co zrušila, je věc aktualizace, kterou si pustíte, až ji budete chtít.
 
 Šest jmen je celý seznam, který se musíte naučit, a nepovyroste: jména jsou uzavřený výčet, takže je nerozšíří ani balíček s vlastními pravidly. Jeho pravidlo se přihlásí do jedné z těch šesti skupin a projektu, který ji zapnul, začne pracovat bez jediného řádku navíc. Katalog roste, seznam jmen ne.
 
@@ -185,6 +185,13 @@ php: 8.2
 Zápis `php: '8.2'` znamená totéž. Verze bez uvozovek je pro NEON číslo a DressCode ho čte jako verzi, jejíž minor je jednociferný, což každé vydané PHP mělo: `php: 8` i `php: 8.0` tedy znamenají 8.0.
 
 Stejně jako verzi PHP může pravidlo vyžadovat i **balíček** v nějaké verzi, když hlídá jeho API; pravidlo pro nové API `nette/forms` 3.3 se v projektu, který ho nemá, prostě nespustí. Verze balíčku se čte z `composer.json` a z instalovaných balíčků vedle něj a měří se tím, na čem projekt stojí: u balíčku, který si projekt vyžaduje sám, je to nejnižší verze, kterou jeho omezení dovolí, protože kód psaný pro novější by se rozbil všude, kam to omezení pustí starší. U balíčku, který přišel jen s jiným, rozhoduje ta nainstalovaná. Pravidlo se tedy zapne, až když zvednete omezení ve svém `composer.json`.
+
+Verzi balíčku, pro kterou má být kód napsaný, můžete říct i přímo klíčem `packages`. Má přednost před `composer.json` a hodí se při [aktualizaci knihoven |upgrading-libraries#Po jedné verzi, nebo najednou], kdy kód převádíte na novou verzi, zatímco je ve vendoru ještě ta stará. Verzi pište v uvozovkách, protože NEON by `3.10` přečetl jako číslo 3.1. Klíč patří jen do konfigurace projektu, preset ani přepis ho nemají:
+
+```neon
+packages:
+	nette/forms: '3.3'
+```
 
 **Funkce a konstanty ve jmenných prostorech**, které projekt deklaruje, vyjmenuje klíč `namespaces` se seznamy `functions` a `constants`, a klíč `nameResolution: certain` řekne, že jiné nejsou. DressCode pak ví, jestli nekvalifikované `strlen()` ve jmenném prostoru znamená globální funkci, a opravy, které na tom stojí, přestanou být [rizikové |#Varování a rizikové opravy]. Položky se píšou jako v příkazu `use`, i se skupinami, které patří do uvozovek. Bez `nameResolution` platí `uncertain` a takové opravy čekají na svolení. Proč na tom tolik záleží, vysvětluje stránka [Funkce a konstanty ve jmenných prostorech |namespaces].
 
@@ -376,7 +383,7 @@ Rozšíření o tom, jak se kód píše, nerozhoduje: nezapne preset ani pravidl
 
 V klíči `extensions` může stát i třída pravidla nebo presetu. Tím dostane své jméno: pravidlo pak zapnete jménem v `rules`, na jeden běh v `--rule` a potlačíte ho v komentáři `dresscode:ignore`, preset zapnete jménem v `presets`, obojí v konfiguraci i v přepisu. Jak rozšíření napsat, popisuje [Vlastní preset a rozšíření |presets-and-extensions#Rozšíření].
 
-Balíček může své rozšíření ohlásit i sám, ve svém `composer.json` pod klíčem `extra.dresscode.extension`. DressCode ho pak po instalaci najde v `vendor/composer/installed.json` a do `extensions` ho psát nemusíte. Stejně najde soubor `deprecations.neon`, který knihovna uvede pod `extra.dresscode.deprecations` a ve kterém stojí, co její verze přejmenovaly, viz [Aktualizace knihoven |upgrading-libraries]. Ani jedno přitom žádné pravidlo nezapne: pravidla z balíčku jen dostanou svá jména a data se uplatní jen v pravidlech, která jste zapnuli sami, ať jménem, nebo skupinou `deprecations`. Živý příklad nese `nette/forms`: po jeho instalaci ví `dresscode/no-deprecated-classes`, že se z `Nette\Forms\IControl` stalo `Nette\Forms\Control`, a vy jste neudělali nic než to pravidlo zapnuli.
+Balíček může své rozšíření ohlásit i sám, ve svém `composer.json` pod klíčem `extra.dresscode.extension`. DressCode ho pak po instalaci najde v `vendor/composer/installed.json` a do `extensions` ho psát nemusíte. Stejně najde soubory `upgrading.neon`, které balíček uvede pod `extra.dresscode.upgrading` a ve kterých stojí, co verze knihoven přejmenovaly nebo zrušily, viz [Aktualizace knihoven |upgrading-libraries]. Ani jedno přitom žádné pravidlo nezapne: pravidla z balíčku jen dostanou svá jména a data se uplatní jen v pravidlech, která jste zapnuli sami, ať jménem, nebo skupinou `deprecations`. Po instalaci balíčku `dresscode/rules-nette` tak ví `dresscode/replaced-classes`, že se z `Nette\Forms\IControl` stalo `Nette\Forms\Control`, a vy jste neudělali nic než to pravidlo zapnuli.
 
 
 Objekty a callbacky

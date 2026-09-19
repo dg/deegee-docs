@@ -1,0 +1,87 @@
+Dibi a Texy
+***********
+
+{{description: Balíček dresscode/rules-deegee nese migrace Dibi od verze 4.1 a Texy od verze 3.0, které DressCode přepíše nebo ohlásí.}}
+
+.[perex]
+Balíček `dresscode/rules-deegee` nese migrace databázové vrstvy Dibi od verze 4.1 a Texy od verze 3.0: přejmenované třídy a konstanty, metody přesunuté do `Texy\Helpers`, přejmenované parametry a API, které zmizelo bez náhrady.
+
+
+Instalace
+=========
+
+```shell
+composer require --dev dresscode/rules-deegee
+```
+
+Do konfigurace typy a skupinu `deprecations`, jak popisuje [Aktualizace knihoven |upgrading-libraries#Zapnutí]:
+
+```neon
+types: phpstan
+
+groups:
+	- deprecations
+```
+
+
+Co se opraví
+============
+
+Repozitář psaný pro Dibi 4 a Texy 3.1 v projektu na současných verzích:
+
+```php .[before]
+public function insert(array $data): int
+{
+	$this->db->query('INSERT INTO articles', $data);
+	return $this->db->insertId();  // Method Dibi\Connection::insertId() is replaced by Connection::getInsertId()
+}
+
+
+public function render(string $text): string
+{
+	$html = $this->texy->process($text);
+	return $this->texy->unProtect($html);  // Method Texy\Texy::unProtect() is replaced by Texy::unprotect()
+}
+
+
+public function getColumnType(): string
+{
+	return Type::DATETIME;  // Constant Dibi\Type::DATETIME is replaced by Type::DateTime
+}
+```
+
+Po `dresscode fix`:
+
+```php .[after]
+public function insert(array $data): int
+{
+	$this->db->query('INSERT INTO articles', $data);
+	return $this->db->getInsertId();
+}
+
+
+public function render(string $text): string
+{
+	$html = $this->texy->process($text);
+	return $this->texy->unprotect($html);
+}
+
+
+public function getColumnType(): string
+{
+	return Type::DateTime;
+}
+```
+
+Z Dibi se opraví konstanty `Dibi\Type`, `Fluent` a ovladačů přepsané z velkých písmen, `affectedRows()` a `insertId()` na `getAffectedRows()` a `getInsertId()` i u statické fasády `dibi`, `DibiExtension22` na `DibiExtension3` a konstruktory `FileLogger` a `Panel` s filtrem `null`. Z Texy třídy s předponou `Texy` na jmenný prostor `Texy\`, pomocné metody `Texy` a `Utf` přesunuté do `Texy\Helpers`, konstanty `HtmlElement` a přejmenované parametry `Modifier`. Hlásí se, co zmizelo bez náhrady, třeba metody modulů Texy, které se ve verzi 3.2 staly privátními, a výstupní režimy HTML4 a XHTML.
+
+
+Co balíček pokrývá
+==================
+
+| knihovna | verze |
+|---|---|
+| `dibi/dibi` | 4.1 až 5.1 |
+| `texy/texy` | 3.0 až 3.2 |
+
+Jak postupovat po jedné hlavní verzi, popisuje [Aktualizace knihoven |upgrading-libraries#Po jedné verzi, nebo najednou].

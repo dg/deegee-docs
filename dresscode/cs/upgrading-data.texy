@@ -1,0 +1,246 @@
+Mapy náhrad
+***********
+
+{{description: Jak se píšou mapy pravidel, která přepisují kód na nové API: klíče se členy a tvarem argumentů, hodnoty jako výraz PHP, soubor upgrading.neon a balíček pravidel pro celý ekosystém.}}
+
+.[perex]
+Pravidla, která přepisují kód na nové API, dostávají mapu: co bylo a co psát místo toho. Stejnou mapu napíšete do konfigurace projektu, když přejmenováváte vlastní kód, a stejnou nese soubor `upgrading.neon` knihovny nebo balíčku pravidel. Tahle stránka je referencí jejího zápisu, pro projekt i pro autory knihoven.
+
+
+Kde mapy stojí
+==============
+
+V konfiguraci projektu jsou mapy volbami pravidel:
+
+```neon
+rules:
+	dresscode/replaced-classes:
+		App\Model\Customer: App\Model\Client
+	dresscode/replaced-members:
+		App\Model\Order::getTotalPrice: getTotal
+```
+
+V souboru `upgrading.neon` stojí tytéž mapy v sekcích podle verzí, viz [dál |#Soubor upgrading.neon]. Mapy ze všech míst se slévají: soubory nainstalovaných balíčků leží pod presety i pod konfigurací, takže projekt má poslední slovo. Položku, kterou chcete zrušit, přepíšete hodnotou `keep`:
+
+```neon
+rules:
+	dresscode/replaced-members:
+		Nette\Forms\Form::FILLED: keep
+```
+
+Samotná mapa žádné pravidlo nezapne. Pravidla se zapínají jménem nebo [skupinou |configuration#Skupiny pravidel] `deprecations`.
+
+
+Jak se píše člen
+================
+
+Klíče map s členy (`replaced-members`, `replaced-calls`, `named-arguments-for-flags`, `forbidden-members`) píšou člen tak, jak ho čte PHP, třídu vždy plně kvalifikovanou:
+
+| zápis | co to je |
+|---|---|
+| `App\Form::FILLED` | konstanta nebo metoda s jakýmikoli argumenty |
+| `App\Form::MAX` | jméno bez malého písmene je jen konstanta, na metodu `max()` nesedí |
+| `App\Form::$items` | vlastnost |
+| `'App\Form::size()'` | volání bez argumentů |
+| `'App\Form::size(...$args)'` | metoda s jakýmikoli argumenty, tam kde má třída i konstantu stejného jména |
+| `'App\Form::add($name, $label, true)'` | volání s argumenty tohoto tvaru |
+| `'App\Form::__construct($a)'` | vytvoření objektu |
+| `'App\Html->text()'` | metoda, která není statická, pro třídu, jejíž pozdější verze má statickou metodu téhož jména |
+
+Klíč se závorkou nebo s dolarem patří v NEONu do apostrofů. Holé `App\Form::size(...)` je chyba, protože v PHP je to first-class callable; volání s jakýmikoli argumenty se píše `size(...$args)`.
+
+Klíč sedí na přístup přes kterýkoli podtyp třídy, přes rozhraní i trait, a přes `self::`, `static::` i `parent::`. Rozhoduje typ toho, na čem se člen volá, takže DressCode pozná i člen, který knihovna mezitím smazala. Kde přijímač může být i něco jiného, třeba `Form|stdClass`, nesedí nic. Konstruktor sedí na vytvoření třídy samé, potomka bez vlastního konstruktoru a na `parent::__construct()`; potomek s vlastním konstruktorem je jiná třída. Vlastnost, kterou si potomek deklaruje sám, když ji třída klíče nemá, je jiná vlastnost.
+
+Tvar argumentů zapisuje, jak vypadají argumenty volání:
+
+- `$name` je jakýkoli výraz,
+- literál (`true`, `0`, `'array'`) sedí na stejnou hodnotu, ať je zapsaná jakkoli,
+- `name: $x` sedí na argument předaný tímto jménem,
+- `...` a `...$rest` jsou zbylé argumenty; bez nich volání žádné další mít nesmí.
+
+Poziční položka vezme i argument předaný jménem parametru, pokud metodu něco deklaruje. Když na volání sedí víc klíčů jedné metody, rozhoduje ten s víc literály.
+
+
+replaced-classes a replaced-functions
+=====================================
+
+Mapují starou třídu, rozhraní nebo výčet na nové, obojí plně kvalifikované, a starou funkci na novou:
+
+```neon
+dresscode/replaced-classes:
+	Nette\Forms\IControl: Nette\Forms\Control
+dresscode/replaced-functions:
+	formatPrice: App\Utils\formatPrice
+```
+
+Třída se přepíše v importu, v typu, za `new`, u statického přístupu, v `instanceof` i v atributu, a nové jméno se zapíše, jak ho soubor dosáhne, přes import tam, kde volné je. Když má běh [typy |types], třída, kterou projekt nemá, se jen ohlásí. Funkce se zapíše plně kvalifikovaná; jsou-li obě funkce z PHP, jen tam, kde nová vezme všechny argumenty volání.
+
+
+replaced-members
+================
+
+Člen, který se jmenuje jinak a používá se stejně. Hodnotou je:
+
+| hodnota | co to je |
+|---|---|
+| `Filled` | nové jméno v téže třídě |
+| `App\Helpers::create` | člen jiné třídy, jen u statického přístupu a konstanty |
+| `$items` | nová vlastnost |
+| `\str_contains` | globální funkce, na kterou se změnila metoda |
+
+```neon
+dresscode/replaced-members:
+	Nette\Forms\Form::FILLED: Filled
+	Nette\Application\UI\Control::invalidateControl: redrawControl
+	Nette\Utils\Strings::contains: \str_contains
+```
+
+Deklarace metody pod starým jménem v potomkovi se přejmenuje taky, protože by jinak nic nepřepisovala. Kde přepis zahodí výraz, na kterém se člen volal (`getForm()::FILLED` přesunuté do jiné třídy), je oprava riziková. Volání instanční metody přes objekt do jiné třídy přesunout nejde a ohlásí se s důvodem.
+
+
+replaced-calls
+==============
+
+Volání, které se píše jinak. Klíč nese tvar argumentů a hodnota je výraz PHP, do kterého se dosadí jeho placeholdery:
+
+```neon
+dresscode/replaced-calls:
+	'Nette\Forms\Container::addUpload($name, $label, true)': 'addMultiUpload($name, $label)'
+	'Nette\Forms\Controls\BaseControl::getOption($key, $default)': 'getOption($key) ?? $default'
+	'Nette\Utils\Callback::closure($callable)': '\Closure::fromCallable($callable)'
+	'Nette\Http\Response::setExpiration(time: $t)': 'setExpiration(expire: $t)'
+```
+
+- **Holé volání** `addMultiUpload(...)` je volání na tom, na čem bylo původní, stejným způsobem: `->`, `?->` nebo `::`.
+- **Kvalifikované jméno** `\Closure::fromCallable()` je funkce nebo třída sama za sebe; třídu DressCode zapíše přes importy projektu.
+- **`...`** zapíše argumenty, které klíč nechal nepojmenované, a **`...$args`** ty, za které stojí variadický placeholder, nebo hodnoty pole, za které stojí obyčejný.
+- **Konstruktor** zapsaný jako `new Třída(...)` té třídy, kterou klíč nahrazuje, zachová třídu z kódu, takže se opraví i potomek a `parent::__construct()`.
+
+Vlastnost dostane výraz pro čtení a pro zápis, v němž `$value` je přiřazovaná hodnota:
+
+```neon
+dresscode/replaced-calls:
+	Nette\Forms\Form::$action: {get: 'getAction()', set: 'setAction($value)'}
+```
+
+A magická metoda je klíčem pro syntaxi, kterou ji PHP volá: `__get($name)` je čtení vlastnosti, kterou třída nedeklaruje, `__set($name, $value)` zápis do ní, `__isset()` a `__unset()` to, co říká jejich jméno, a `offsetGet($key)`, `offsetSet($key, $value)`, `offsetExists()` a `offsetUnset()` totéž pro `$object[$key]`. Zápis `$object[] = $value` je `offsetSet(null, $value)`.
+
+Oprava není riziková, když se každý argument vyhodnotí jednou jako předtím. Kde výraz argument vyhodnotí jen někdy, vůbec nebo v jiném pořadí, je riziková, pokud vyhodnocení argumentu něco dělá; kde by ho vyhodnotil dvakrát, volání se jen ohlásí. Když na totéž volání sedí klíč `replaced-calls` i prosté přejmenování v `replaced-members`, vyhrává tvar argumentů.
+
+
+named-arguments-for-flags
+=========================
+
+Metoda, která místo celého čísla příznaků bere pojmenované argumenty. Klíč je volání s placeholderem příznaků na konci, nebo na konci před `...`; hodnota mapuje každý příznak na argumenty, na které se změní:
+
+```neon
+dresscode/named-arguments-for-flags:
+	'Nette\Utils\Json::encode($value, $flags)':
+		Nette\Utils\Json::PRETTY: {pretty: true}
+		Nette\Utils\Json::ESCAPE_UNICODE: {asciiSafe: true}
+	'Nette\Utils\Strings::split($subject, $pattern, $flags, ...)':
+		PREG_SPLIT_NO_EMPTY: {skipEmpty: true}
+		PREG_SPLIT_DELIM_CAPTURE: {}
+```
+
+Z `Json::encode($data, Json::PRETTY | Json::ESCAPE_UNICODE)` se stane `Json::encode($data, pretty: true, asciiSafe: true)`. Konstanta se pozná podle třídy, která ji deklaruje, takže sedí i `self::PRETTY` nebo `$json::PRETTY`. Hodnota `{}` je příznak, který metoda teď dělá vždy. Poziční argument za příznaky dostane jméno svého parametru. Příznak, který mapa nezná, nebo proměnná na místě příznaků se jen ohlásí, a literál na tom místě, třeba `true` nebo `0`, je už nové API a zůstane.
+
+
+attribute-for-annotation
+========================
+
+Anotace, kterou knihovna čte jako atribut. Klíčem je jméno anotace bez `@`, hodnotou třída atributu, případně i s argumenty:
+
+```neon
+dresscode/attribute-for-annotation:
+	persistent: Nette\Application\Attributes\Persistent
+	crossOrigin: Nette\Application\Attributes\Requires(sameOrigin: false)
+```
+
+Anotace zmizí z phpDocu, atribut se zapíše nad deklaraci a jeho třída se naimportuje.
+
+
+forbidden-classes a forbidden-members
+=====================================
+
+Co náhradu nemá, nebo ji musí napsat člověk. Hodnotou je anglická věta, která doplní hlášku `… is forbidden:` a řekne, co napsat místo toho:
+
+```neon
+dresscode/forbidden-members:
+	Nette\Http\Request::getReferer: 'use getOrigin(), which reads the Origin header and gives only the scheme, the host and the port instead of the whole URL of the referring page'
+dresscode/forbidden-classes:
+	Nette\Forms\FormFactory: 'the class and its DI service are gone, create the form with new Nette\Forms\Form'
+```
+
+Klíče mají stejný tvar jako u ostatních map, včetně tvaru argumentů a magických metod. Metoda, kterou pod zakázaným jménem deklaruje potomek, se ohlásí taky. Mapy se hodí i pro náhradu, která mění typ nebo chování, třeba řetězec za výčet nebo iterátor za pole: tu by oprava tiše změnila.
+
+
+Hodnota jako kód v NEONu
+========================
+
+Hodnotu `replaced-calls` pište jako řetězec s kódem PHP v apostrofech; apostrof uvnitř se zdvojí: `'isMethod(''POST'')'`. NEON sice přečte `isMethod(POST)` bez apostrofů jako entitu, ale v jejích argumentech je holé slovo řetězcem, `Class::NAME` konstantou třídy a `$name` placeholderem. Globální konstantu, operátor nebo cokoli dalšího entita neunese. Stejně tak jméno, které by NEON přečetl jako literál, `False` nebo `Null`, patří do apostrofů.
+
+
+Soubor upgrading.neon
+=====================
+
+Knihovna nebo balíček pravidel nese mapy v souboru `upgrading.neon`, který uvede ve svém `composer.json`:
+
+```json
+{
+	"extra": {
+		"dresscode": {
+			"upgrading": "upgrading.neon"
+		}
+	}
+}
+```
+
+Balíček, který nese data několika knihoven, uvede seznam souborů, jeden na knihovnu, třeba `upgrading/forms.neon`. Soubor začíná klíčem `package` se jménem balíčku, o jehož verzích mluví, a pokračuje sekcemi `since <verze>`:
+
+```neon
+package: nette/http
+
+since 3.2.3:
+	replaced-members:
+		Nette\Http\FileUpload::IMAGE_MIME_TYPES: keep
+	forbidden-members:
+		Nette\Http\FileUpload::IMAGE_MIME_TYPES: 'there is no replacement, isImage() decides by the image types the PHP build supports'
+
+since 3.2.1:
+	replaced-members:
+		Nette\Http\FileUpload::IMAGE_MIME_TYPES: ImageMimeTypes
+		Nette\Http\IRequest::POST: Post
+```
+
+- **Sekce** pište od nejnovější verze, jak je píše i průvodce upgradem; slévají se podle verzí bez ohledu na pořadí v souboru a pozdější má poslední slovo.
+- **Verze** se píše bez koncových nul, `since 3.1`, a klíč `since 3.10` je text, takže se nepromění v číslo 3.1.
+- **Co pozdější verze vzala zpět**, dostane v její sekci `keep`, případně i zákaz, jako `IMAGE_MIME_TYPES` v ukázce.
+- **Řetěz** přes verze se píše po článcích, `REALPATH` na `Realpath` a v další verzi `Realpath` na `RealPath`; kód se přepíše rovnou na konec řetězu.
+
+Soubor jen doplňuje volby pravidel a žádné pravidlo nezapne. Pro kořenový balíček platí všechny sekce bez ohledu na verzi, takže `dresscode check` v repozitáři knihovny soubor načte a chybu v něm ohlásí dřív, než vydáte novou verzi.
+
+
+Kontrola dat
+============
+
+Třída `DressCode\Testing\UpgradingTester` zkontroluje soubor proti knihovně, která je v projektu nainstalovaná: pravidla všechny sekce přijmou, náhrady, ke kterým sekce při nainstalované verzi dojdou, existují, a řetězy nekončí v kruhu. Chyby vrátí jako věty, takže ji zavoláte z testu v jakémkoli frameworku:
+
+```php
+Assert::same([], DressCode\Testing\UpgradingTester::check(__DIR__ . '/../upgrading/forms.neon', __DIR__ . '/..'));
+```
+
+Nejlepší kontrolou je ale vzorek: kus kódu ve starém API, jak ho píše uživatel, a výstup `dresscode fix` s hláškami, zapsaný vedle a přečtený. Na něm uvidíte, co data opravdu udělají, i to, co by udělala špatně.
+
+
+Balíček pravidel pro ekosystém
+==============================
+
+Data celého ekosystému patří do jednoho balíčku, pojmenovaného `dresscode/rules-<ekosystém>`: `dresscode/rules-nette`, `dresscode/rules-deegee` pro Dibi a Texy. Knihovna tak data nemusí nést sama a balíček je může doplňovat i pro starší verze, které už nikdo nevydá. Stavba takového balíčku:
+
+- `composer.json` s typem `dresscode-extension`, závislostí na `dresscode/dresscode`, knihovnami ekosystému v `require-dev` (lint je potřebuje nainstalované) a soubory pod `extra.dresscode.upgrading`,
+- adresář `upgrading/` s jedním souborem na knihovnu,
+- testy: kontrola každého souboru přes `UpgradingTester` a vzorek na knihovnu,
+- a pravidla s kódem tam, kde změnu mapou vyjádřit nejde, ohlášená jako [rozšíření |presets-and-extensions#Rozšíření] pod `extra.dresscode.extension`.
+
+Vzorem je balíček [dresscode/rules-nette |https://github.com/dg/dresscode-rules-nette].

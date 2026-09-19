@@ -1,0 +1,113 @@
+Knihovny Nette
+**************
+
+{{description: Balíček dresscode/rules-nette nese migrace všech dvaceti knihoven Nette od verzí 3.0 po současné: přes 900 přejmenování, přesunů a změněných volání, které DressCode přepíše nebo ohlásí.}}
+
+.[perex]
+Balíček `dresscode/rules-nette` nese migrace všech dvaceti knihoven Nette od verzí 3.0 po současné. Je v něm přes 900 položek: rozhraní, která přišla o předponu `I`, konstanty přepsané z velkých písmen, přejmenované metody a parametry, magické vlastnosti nahrazené gettery, příznaky nahrazené pojmenovanými argumenty. Zhruba 670 z nich DressCode rovnou opraví, zbytek ohlásí i s tím, co napsat místo toho.
+
+
+Instalace
+=========
+
+```shell
+composer require --dev dresscode/rules-nette
+```
+
+A do konfigurace typy a skupinu `deprecations`, jak popisuje [Aktualizace knihoven |upgrading-libraries#Zapnutí]:
+
+```neon
+types: phpstan
+
+groups:
+	- deprecations
+```
+
+Balíček nic neregistruje a žádné pravidlo nezapne sám. Data každé knihovny se uplatní jen tehdy, když ji projekt má, a jen ty verze, na které projekt dosáhne.
+
+
+Co se opraví
+============
+
+Tohle je model psaný pro Nette 3.0, v projektu na současných verzích:
+
+```php .[before]
+public function add(string $code): void
+{
+	$section = $this->session->getSection('cart');
+	$items = $section->items ?? [];  // Method Nette\Http\SessionSection::__get() is replaced by get($name), which no longer asks first whether it is set, as ?? does
+	$items[] = Strings::match($code, '~^[A-Z]+-\d+$~', PREG_OFFSET_CAPTURE);  // Static method Nette\Utils\Strings::match() takes captureOffset: true instead of `PREG_OFFSET_CAPTURE`
+	$section->items = $items;  // Method Nette\Http\SessionSection::__set() is replaced by set($name, $value)
+	$section->source = $this->request->getQuery('utm_source', 'direct');  // Method Nette\Http\SessionSection::__set() is replaced by set($name, $value)
+	                                                                      // Method Nette\Http\IRequest::getQuery() is replaced by getQuery($key) ?? $default
+}
+```
+
+Po `dresscode fix`:
+
+```php .[after]
+public function add(string $code): void
+{
+	$section = $this->session->getSection('cart');
+	$items = $section->items ?? [];
+	$items[] = Strings::match($code, '~^[A-Z]+-\d+$~', captureOffset: true);
+	$section->set('items', $items);
+	$section->set('source', $this->request->getQuery('utm_source') ?? 'direct');
+}
+```
+
+První řádek zůstal: čtení vlastnosti nalevo od `??` se u `SessionSection` nejdřív ptá, jestli je nastavená, a `get()` se neptá. Oprava je proto [riziková |configuration#Varování a rizikové opravy] a udělá se, až pravidlo `dresscode/replaced-calls` uvedete v klíči `fixRisky`.
+
+Co všechno balíček opravuje:
+
+- **přejmenované třídy a rozhraní**: `Nette\Configurator` na `Nette\Bootstrap\Configurator`, `IRouter` na `Nette\Routing\Router`, `IControl` na `Nette\Forms\Control` a další; přepíše se import, typ, `new`, `instanceof` i atribut,
+- **konstanty** přepsané z velkých písmen: `Form::FILLED` na `Form::Filled`, `IResponse::S404_NOT_FOUND` na `IResponse::S404_NotFound`, `Presenter::INVALID_LINK_WARNING` na `InvalidLinkWarning`, i s řetězy přes víc verzí,
+- **přejmenované metody**: `invalidateControl()` na `redrawControl()`, `getUnsafeValues()` na `getUntrustedValues()`, `Strings::contains()` na `str_contains()`,
+- **přejmenované parametry** u volání s pojmenovanými argumenty: `setExpiration(time: ...)` na `setExpiration(expire: ...)`, `Arrays::map(callback: ...)` na `Arrays::map(transformer: ...)`, i v `parent::__construct()` potomka,
+- **výchozí hodnota za `??`**: `getParameter('page', 1)` na `getParameter('page') ?? 1`, stejně u `getQuery()`, `getPost()`, `getCookie()`, `getHeader()` a `getOption()`,
+- **magické vlastnosti** na gettery a settery: `$form->action`, `$control->caption`, `$section->user`, `$section['user']`,
+- **příznaky** na pojmenované argumenty: `Json::encode($value, Json::PRETTY)`, `Strings::match()`, `matchAll()`, `split()` a `Arrays::grep()` s konstantami `PREG_*`,
+- **volání jiného tvaru**: `addUpload($name, $label, true)` na `addMultiUpload()`, `getValues(true)` na `getValues('array')`, `Callback::closure()` na `Closure::fromCallable()`,
+- **anotace** na atributy: `@persistent` a `@crossOrigin` v presenterech, `@filter` a `@function` ve třídách parametrů šablon Latte.
+
+
+Co zůstane na vás
+=================
+
+Kde náhrada není, nebo se používá jinak, DressCode místo ohlásí a řekne, co napsat. Třeba hook `attached()`, který komponenty nahradily callbackem metody `monitor()`, metody `Url` a `UrlScript`, které se přesunuly jinam, nebo třídy, které zmizely bez náhrady:
+
+```
+Method Nette\ComponentModel\Component::attached() is forbidden: the hook is no longer called, pass its logic as the second argument of monitor(), the attached callback
+Method Nette\Http\UrlScript::setPath() is forbidden: Nette\Http\UrlScript is immutable, take a changed copy with withPath()
+```
+
+Co knihovna jen tiše označila jako zastaralé, v datech není; s typy to ohlásí, a kde anotace náhradu řekne, i přepíše `dresscode/no-deprecated-members`. Změny chování, konfigurace v NEONu a syntaxe šablon Latte data nezachytí vůbec, ty najdete v průvodcích upgradem jednotlivých knihoven.
+
+
+Co balíček pokrývá
+==================
+
+| knihovna | verze |
+|---|---|
+| `nette/application` | 3.0 až 3.3 |
+| `nette/assets` | 1.0 |
+| `nette/bootstrap` | 3.0 až 3.2 |
+| `nette/caching` | 3.0 až 3.4 |
+| `nette/component-model` | 3.0 až 4.0 |
+| `nette/database` | 3.0 až 3.2 |
+| `nette/di` | 3.0 až 3.2 |
+| `nette/forms` | 3.0 až 3.3 |
+| `nette/http` | 3.0 až 3.4 |
+| `nette/mail` | 3.1 až 4.1 |
+| `nette/neon` | 3.2 až 3.4 |
+| `nette/php-generator` | 3.3 až 4.2 |
+| `nette/robot-loader` | 3.2 až 4.1 |
+| `nette/routing` | 3.0 až 3.1 |
+| `nette/schema` | 1.2 až 1.3 |
+| `nette/security` | 3.0 až 3.2 |
+| `nette/tester` | 2.2 až 2.6 |
+| `nette/utils` | 3.0 až 4.0 |
+| `latte/latte` | 3.0 až 3.1 |
+| `tracy/tracy` | 2.6 až 2.10 |
+
+Verze říkají, ve kterých vydáních knihovna něco změnila, co data zachycují; na novější verzi knihovny, která už nic nepřejmenovala, se nečeká. Aplikaci na Nette 2.4 převedete stejně, jen začnete verzí 3.0, a jak postupovat po jedné hlavní verzi, popisuje [Aktualizace knihoven |upgrading-libraries#Po jedné verzi, nebo najednou].
