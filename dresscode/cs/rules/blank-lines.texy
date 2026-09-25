@@ -14,7 +14,7 @@ Prázdné řádky jsou to, co dělá soubor čitelným na první pohled: hlavič
 
 - **hlavička souboru**: za otevíracím tagem, kolem `namespace`, za importy a mezi jejich skupinami, před první deklarací;
 - **třída**: mezi metodami (v rozhraní zvlášť), před první a za poslední metodou, za otevírací a před zavírací závorkou třídy, kolem `use` traitů, mezi vlastnostmi, konstantami a případy výčtu, před dokumentovaným členem a mezi dokumentačním komentářem či atributem a deklarací;
-- **blok**: za otevírací a před zavírací závorkou těla funkce nebo řídicí struktury;
+- **blok**: za otevírací a před zavírací závorkou těla funkce nebo řídicí struktury, mezi větvemi `if` a `try` a mezi případy `switch`;
 - **příkazy**: kolem třídy nebo funkce deklarované mezi příkazy, před příkazem daného druhu a za ním, třeba prázdný řádek před `return`.
 
 Každá volba je buď počet prázdných řádků, nebo rozsah `[min, max]` s otevřeným koncem zapsaným jako `null`, nebo `keep`, které dané místo nechá, jak je. Rozsah se hodí tam, kde chcete připustit dvojí zápis: `betweenMembers: [0, 1]` dovolí psát vlastnosti těsně pod sebe i oddělené jedním řádkem, ale dva už ne. Počet, který do rozsahu nespadá, pravidlo posune k nejbližší povolené hodnotě.
@@ -602,6 +602,64 @@ function add(Item $item): void
 function add(Item $item): void
 {
 	$this->items[] = $item;
+}
+```
+
+
+betweenBranches .[option]
+-------------------------
+
+Počet, rozsah, `keep` nebo `paragraphed`, výchozí `keep`. Před zavírací závorkou větve `if` nebo `try`, za kterou pokračuje `else`, `elseif`, `catch` nebo `finally`; na tomto místě má přednost před `beforeBlockBrace`. Hodnota `paragraphed` dá jeden prázdný řádek před každou takovou závorku řetězu, jehož některá větev je prázdným řádkem rozdělená do odstavců, a ostatní řetězy nechá být. Bez něj by se poslední příkaz oddělený od předchozích opticky přilepil k `} else` pod sebou. Rozhoduje se za celý řetěz, takže jsou jeho větve buď všechny oddělené, nebo žádná; prázdnou větev pravidlo nerozvolňuje. Tuto hodnotu volí `dresscode/nette-style`.
+
+```php .[before]
+if ($order->isPaid()) {
+	$this->ship($order);
+
+	return;
+} elseif ($order->isExpired()) {  // Expected 1 blank line before the closing brace, 0 found
+	$this->cancel($order);
+}
+```
+
+```php .[after]
+if ($order->isPaid()) {
+	$this->ship($order);
+
+	return;
+
+} elseif ($order->isExpired()) {
+	$this->cancel($order);
+}
+```
+
+
+betweenCases .[option]
+----------------------
+
+Počet, rozsah, `keep` nebo `paragraphed`, výchozí `keep`. Před `case` nebo `default` ve `switch`, kterému předchází případ s příkazy; skupina `case 1:` `case 2:` bez příkazů zůstává pohromadě. Hodnota `paragraphed` dá jeden prázdný řádek před každý takový `case` ve `switch`, jehož některý případ je rozdělený do odstavců. Komentář hned pod příkazy, třeba `// no break`, patří k případu nad ním, takže prázdný řádek jde pod něj; komentář oddělený prázdným řádkem patří k `case` pod ním. Tuto hodnotu volí `dresscode/nette-style`.
+
+```php .[before]
+switch ($status) {
+	case Status::New:
+		$this->validate($order);
+
+		break;
+	case Status::Paid:  // Expected 1 blank line before the case, 0 found
+		$this->ship($order);
+		break;
+}
+```
+
+```php .[after]
+switch ($status) {
+	case Status::New:
+		$this->validate($order);
+
+		break;
+
+	case Status::Paid:
+		$this->ship($order);
+		break;
 }
 ```
 
