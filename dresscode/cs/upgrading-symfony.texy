@@ -1,0 +1,154 @@
+Symfony
+*******
+
+{{description: Balíček dresscode/rules-symfony nese migrace komponent Symfony od verze 6.0 po současnou: přes 650 přejmenování, přesunů, změněných volání a anotací, které DressCode přepíše nebo ohlásí.}}
+
+.[perex]
+Balíček `dresscode/rules-symfony` nese migrace padesáti komponent a mostů Symfony od verze 6.0 po současnou. Je v něm přes 650 položek: přejmenované třídy a metody, konstanty `MASTER_REQUEST` přepsané na `MAIN_REQUEST`, anotace SensioFrameworkExtraBundle převedené na atributy frameworku, výchozí jméno příkazu na atribut `#[AsCommand]`. Zhruba 440 z nich DressCode rovnou opraví, zbytek ohlásí i s tím, co napsat místo toho.
+
+
+Instalace
+=========
+
+```shell
+composer require --dev dresscode/rules-symfony
+```
+
+A do konfigurace typy a skupinu `deprecations`, jak popisuje [Aktualizace knihoven |upgrading-libraries#Zapnutí]:
+
+```neon
+types: phpstan
+
+groups:
+	- deprecations
+```
+
+Balíček žádné pravidlo nezapne sám. Data každé komponenty se uplatní jen tehdy, když ji projekt má, a jen ty verze, na které projekt dosáhne. Projekt, který vyžaduje celé `symfony/symfony`, má ve své verzi všechny komponenty, které ten balíček nahrazuje.
+
+
+Co se opraví
+============
+
+Tohle je příkaz a controller psaný pro Symfony 5.4, v projektu na současných verzích:
+
+```php .[before]
+class ReportCommand extends Command
+{
+	protected static $defaultName = 'app:report';  // Property Symfony\Component\Console\Command\Command::$defaultName is replaced by the attribute #[Symfony\Component\Console\Attribute\AsCommand]
+	protected static $defaultDescription = 'Sends the daily report';  // Property Symfony\Component\Console\Command\Command::$defaultDescription is replaced by the attribute #[Symfony\Component\Console\Attribute\AsCommand]
+
+
+	protected function execute(InputInterface $input, OutputInterface $output): int
+	{
+		$request = $this->requestStack->getMasterRequest();  // Method Symfony\Component\HttpFoundation\RequestStack::getMasterRequest() is replaced by RequestStack::getMainRequest()
+		$output->writeln($request->get('day'));  // Method Symfony\Component\HttpFoundation\Request::get() is forbidden: read the bag the value comes from, the attributes, query or request property, such as query->get()
+		return Command::SUCCESS;
+	}
+}
+
+
+class ReportController extends AbstractController
+{
+	/** @Security("is_granted('ROLE_ADMIN')") */  // Annotation @Security is replaced by the attribute #[Symfony\Component\Security\Http\Attribute\IsGranted]
+	public function show(): Response
+	{
+		return new Response($this->getUser()->getUsername());  // Method Symfony\Component\Security\Core\User\UserInterface::getUsername() is replaced by getUserIdentifier()
+	}
+}
+```
+
+Po `dresscode fix`:
+
+```php .[after]
+#[AsCommand(name: 'app:report', description: 'Sends the daily report')]
+class ReportCommand extends Command
+{
+	protected function execute(InputInterface $input, OutputInterface $output): int
+	{
+		$request = $this->requestStack->getMainRequest();
+		$output->writeln($request->get('day'));
+		return Command::SUCCESS;
+	}
+}
+
+
+class ReportController extends AbstractController
+{
+	#[IsGranted('ROLE_ADMIN')]
+	public function show(): Response
+	{
+		return new Response($this->getUser()->getUserIdentifier());
+	}
+}
+```
+
+Dvě statické vlastnosti se spojily do jednoho atributu a výraz anotace `@Security` se stal rolí atributu `#[IsGranted]`, obojí i s importem. Volání `$request->get()` zůstalo: `Request::get()` hledá hodnotu v atributech, v query i v těle požadavku, a z které z nich ji váš kód čte, musíte rozhodnout vy.
+
+Co všechno balíček opravuje:
+
+- **přejmenované třídy a rozhraní**: `Symfony\Component\Security\Core\Security` na `Symfony\Bundle\SecurityBundle\Security`, `TaggedIterator` na `AutowireIterator`, most Sendinblue na Brevo a další; přepíše se import, typ, `new`, `instanceof` i atribut,
+- **přejmenované členy**: `getMasterRequest()` na `getMainRequest()`, `HttpKernelInterface::MASTER_REQUEST` na `MAIN_REQUEST`, `getUsername()` na `getUserIdentifier()`, `Application::add()` na `addCommand()`,
+- **volání jiného tvaru**: parametr, který dostal jiné jméno (`new UriSigner($secret, parameter: ...)` na `hashParameter:`), klíč pole voleb přejmenovaný na místě (`mirror()` s `copy_on_windows` na `follow_symlinks`), funkce konfigurace kontejneru `ref()` na `service()`,
+- **anotace SensioFrameworkExtraBundle** na atributy frameworku: `@Route`, `@Cache`, `@IsGranted` a `@Template`, a `@Security`, jehož výraz jen volá `is_granted()`, na `#[IsGranted]`; anotace routingu a serializeru z jmenného prostoru `Annotation` na atributy z `Attribute`,
+- **člen třídy na atribut**: `$defaultName` a `$defaultDescription` příkazu, i přepsané `getDefaultName()`, na `#[AsCommand]`, a rozhraní `MessageHandlerInterface` na `#[AsMessageHandler]`,
+- **resolver argumentů controlleru** psaný proti `ArgumentValueResolverInterface` na `ValueResolverInterface`: jeho `supports()` se stane podmínkou na začátku `resolve()`,
+- **signatury** potomků tříd frameworku, návratové typy a parametry, které komponenta doplnila (`execute(): int` příkazu); ty píše pravidlo `dresscode/override-signature` z deklarací nainstalované verze, bez dat.
+
+Anotaci `@Security` a resolver převádějí pravidla `symfony/is-granted-for-security-annotation` a `symfony/value-resolver-for-argument-value-resolver`, která balíček přináší a zapne je táž skupina. Zbytek dělají pravidla jádra DressCode, podle dat, a signatury i bez nich.
+
+
+Co zůstane na vás
+=================
+
+Kde náhrada není, nebo se používá jinak, DressCode místo ohlásí a řekne, co napsat. Třeba služby, které controller dřív bral z kontejneru, nebo rozhraní, místo kterého patří atributy na jednotlivé metody:
+
+```
+Method Symfony\Bundle\FrameworkBundle\Controller\AbstractController::getDoctrine() is forbidden: use a constructor or action argument typed with Doctrine\Persistence\ManagerRegistry
+Class Symfony\Component\Messenger\Handler\MessageSubscriberInterface is forbidden: write the attribute AsMessageHandler on each method that handles a message, with what getHandledMessages() yields for it as its arguments
+```
+
+Co komponenta jen tiše označila jako zastaralé, v datech není; s typy to ohlásí, a kde anotace náhradu řekne, i přepíše `dresscode/no-deprecated-members`. Změny chování, konfigurace v YAML a šablony Twig data nezachytí vůbec, ty najdete v průvodcích `UPGRADE-*.md` repozitáře Symfony.
+
+
+Co balíček pokrývá
+==================
+
+| komponenta | verze |
+|---|---|
+| `symfony/asset`, `symfony/asset-mapper` | 6.0 až 7.1 |
+| `symfony/browser-kit`, `symfony/dom-crawler` | 6.0 až 7.4 |
+| `symfony/cache` | 6.0 až 7.1 |
+| `symfony/config` | 6.0 až 7.4 |
+| `symfony/console` | 6.0 až 7.4 |
+| `symfony/dependency-injection` | 6.0 až 8.1 |
+| `symfony/doctrine-bridge` | 6.0 až 8.2 |
+| `symfony/event-dispatcher` | 6.0 |
+| `symfony/expression-language` | 7.1 |
+| `symfony/filesystem`, `symfony/finder` | 6.0 až 8.2 |
+| `symfony/form` | 6.0 až 8.1 |
+| `symfony/framework-bundle` | 6.0 až 7.4 |
+| `symfony/html-sanitizer` | 7.4 |
+| `symfony/http-client` | 6.0 až 8.1 |
+| `symfony/http-foundation` | 6.0 až 8.1 |
+| `symfony/http-kernel` | 6.0 až 8.2 |
+| `symfony/intl` | 6.0 |
+| `symfony/json-streamer`, `symfony/type-info` | 7.2 až 8.1 |
+| `symfony/lock` | 6.0 až 6.3 |
+| `symfony/mailer`, `symfony/mime`, `symfony/notifier` | 6.0 až 7.4 |
+| `symfony/messenger` | 6.0 až 6.4 |
+| `symfony/monolog-bridge` | 6.0 až 7.4 |
+| `symfony/options-resolver` | 6.0 |
+| `symfony/property-access`, `symfony/property-info` | 6.0 až 7.3 |
+| `symfony/routing` | 6.0 až 7.4 |
+| `symfony/security-bundle`, `symfony/security-core`, `symfony/security-csrf` | 6.0 až 7.4 |
+| `symfony/security-http` | 6.0 až 8.1 |
+| `symfony/serializer` | 6.0 až 7.4 |
+| `symfony/string` | 7.4 |
+| `symfony/translation` | 6.2 až 7.4 |
+| `symfony/twig-bridge` | 6.2 až 7.2 |
+| `symfony/validator` | 6.0 až 8.2 |
+| `symfony/var-dumper`, `symfony/var-exporter` | 6.2 až 7.3 |
+| `symfony/workflow` | 6.0 až 7.3 |
+| mosty `brevo-mailer`, `brevo-notifier`, `mail-pace-mailer`, `sevenio-notifier`, `google-chat-notifier`, `slack-notifier` | 6.0 až 7.3 |
+
+Verze říkají, ve kterých vydáních komponenta něco změnila, co data zachycují. Data vyřazeného mostu stojí pod mostem, který ho nahradil: přejmenování Sendinblue na Brevo se uplatní v projektu, který už má `symfony/brevo-mailer`. Aplikaci na Symfony 5.4 převedete stejně, jen začnete verzí 6.0, a jak postupovat po jedné hlavní verzi, popisuje [Aktualizace knihoven |upgrading-libraries#Po jedné verzi, nebo najednou].
