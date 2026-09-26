@@ -2,7 +2,7 @@ Parsování a tisk
 ****************
 
 .[perex]
-Jak zdrojový kód naparsovat, co dělat se syntaktickou chybou, jak se novější syntaxe PHP čte i na starším běhu, jak naparsovat samotný fragment kódu a jak strom vytisknout zpátky.
+Jak zdrojový kód naparsovat, co dělat se syntaktickou chybou, jak se novější syntaxe PHP čte i na starším běhu, jak naparsovat samotný fragment kódu, jak strom vytisknout zpátky a co o kódu řekne nástroj pro příkazovou řádku.
 
 
 Parsování souboru
@@ -33,7 +33,18 @@ try {
 Novější syntaxe na starším PHP
 ==============================
 
-Parser rozumí syntaxi PHP 8.5 i tehdy, když sám běží na PHP 8.4. Tokenizér starší verze novou syntaxi nezná, a tak ji lexer napodobí: přepíše tokeny tam, kde by je novější PHP vydalo jinak (operátor `|>`, přetypování `(void)`). Děje se to samo podle verze interpretu a nic se nenastavuje. Obráceně to ale neplatí: kód psaný pro PHP 8.5 zůstane kódem pro PHP 8.5 a parser sám o tom, na které verzi má projekt běžet, neříká nic.
+Parser rozumí syntaxi PHP 8.5 i tehdy, když sám běží na PHP 8.4. Tokenizér starší verze novou syntaxi nezná, a tak ji lexer napodobí: přepíše tokeny tam, kde by je novější PHP vydalo jinak (operátor `|>`, přetypování `(void)`). Děje se to samo podle verze interpretu a nic se nenastavuje. Kdo chce emulaci řídit sám, předá parseru lexer s vlastním seznamem emulátorů. Emulátor je třída s rozhraním `PhpSyntax\Lexer\Emulator`; knihovna má `Emulators\PipeOperator` pro `|>` a `Emulators\VoidCast` pro `(void)`, prázdný seznam emulaci vypne:
+
+```php
+use PhpSyntax\Lexer\{Emulators, Lexer};
+
+$parser = new Parser(new Lexer([new Emulators\PipeOperator]));   // jen operátor |>
+$parser = new Parser(new Lexer([]));      // jen to, co umí tokenizér běžícího PHP
+Lexer::createHostEmulators();             // emulátory, které by lexer zvolil sám
+new Lexer()->tokenize($code);             // samotné tokeny i s trivia, bez stromu
+```
+
+Emulace nic nepřevádí mezi verzemi: kód se syntaxí PHP 8.5 zůstane i ve stromu kódem, který potřebuje PHP 8.5, a na které verzi PHP má projekt běžet, parser neřeší.
 
 
 Tisk uzlu
@@ -42,7 +53,9 @@ Tisk uzlu
 Vedle celého souboru se dá vytisknout i kterýkoli jednotlivý uzel. Slouží k tomu dvě věci, které se snadno pletou:
 
 ```php
-Printer::print($node);       // včetně trivií na okrajích, tedy i s odsazením a komentářem nad uzlem
+use PhpSyntax\Printer;
+
+Printer::print($node);       // včetně trivia na okrajích, tedy i s odsazením a komentářem nad uzlem
 Printer::printText($node);   // jen text uzlu, od prvního tokenu po poslední
 $node->text;                 // totéž kratším zápisem
 ```
@@ -52,10 +65,14 @@ $node->text;                 // totéž kratším zápisem
 Obě metody navíc umí vytisknout jiný text, než jaký token nese, aniž by se strom změnil. Druhý argument je funkce, která dostane token a vrátí text k vytištění, nebo `null`, když má zůstat ten původní; trivia zůstávají vždycky.
 
 ```php
+use PhpSyntax\Token;
+
 $code = Printer::print($file, fn(Token $token) => $token->text === 'sizeof' ? 'count' : null);
 ```
 
-To je pro všechno, co má změnu jen ukázat, ne provést: náhled opravy, diff, hláška s návrhem. Kdo chce změnu doopravdy, sáhne na strom, viz [Úpravy |mutation].
+Funkce vidí jen token, takže tahle nahradí každý token s textem `sizeof`, i jméno metody `$o->sizeof()`. Kde na tom záleží, zeptejte se na rodiče: `$token->parent?->parent instanceof PhpSyntax\Nodes\Expression\FunctionCallNode`.
+
+Hodí se to pro všechno, co má změnu jen ukázat, ne provést: náhled opravy, diff, hláška s návrhem. Kdo chce změnu doopravdy, sáhne na strom, viz [Úpravy |mutation].
 
 
 Fragmenty
@@ -73,6 +90,8 @@ $name = $parser->parseName('Nette\Utils\Strings');
 Tyhle čtyři metody jsou zkratky s přesným návratovým typem. Cokoli dalšího, co ve zdrojáku nestojí samo o sobě, naparsujete tak, že řeknete, jaký uzel chcete: knihovna zná obal, do kterého ho musí zasadit, aby dával smysl.
 
 ```php
+use PhpSyntax\Nodes\{ArrayItemNode, MatchArmNode, ParameterNode};
+
 $param = $parser->parseFragment(ParameterNode::class, 'int $x = 1');
 $arm = $parser->parseFragment(MatchArmNode::class, '1, 2 => true');
 $item = $parser->parseFragment(ArrayItemNode::class, "'key' => \$value");
@@ -80,7 +99,7 @@ $item = $parser->parseFragment(ArrayItemNode::class, "'key' => \$value");
 
 Funguje to pro parametr, argument, člen třídy, položku pole, import, větev matche, skupinu atributů, `catch`, `elseif`, položku `use` closure, statickou proměnnou, položku konstanty a hook; třída odvozená od některé z nich se parsuje ve stejném obalu.
 
-Fragment je odpojený uzel bez rodiče a bez původních pozic, s prázdnými trivia na okrajích, takže se dá rovnou vložit; kam a jak, říká stránka [Úpravy stromu |mutation]. Vstup, ze kterého by něco přebývalo, parser odmítne a řekne proč: `$a, $b` zadané jako jeden parametr skončí hláškou `The code is not a single parameter.`
+Fragment je odpojený uzel bez rodiče a bez původních pozic, s prázdnými trivia na okrajích, takže se dá rovnou vložit; kam a jak, říká stránka [Úpravy stromu |mutation]. Vstup, ze kterého by něco přebývalo, parser odmítne a řekne proč: `$a, $b` zadané jako jeden parametr skončí `ParseException` s hláškou `The code is not a single parameter.` Třídu, pro kterou žádný obal neexistuje, třeba `FileNode`, odmítne výjimkou `InvalidArgumentException`.
 
 Konstruktory uzlů jsou `@internal`, protože jejich parametry kopírují sloty gramatiky a do těch může další verze PHP přidávat. Co se skládá z uzlů, které už v ruce máte, a do řetězce se tedy nevejde, postaví tovární metody `of()`, viz [Nový uzel |mutation#Nový uzel].
 
@@ -95,7 +114,7 @@ $code = Printer::print($file);
 $code = (string) $file;
 ```
 
-Tisk nemá žádnou logiku: projde strom a spojí texty tokenů s jejich trivia. Proto platí, že vytištěný nezměněný strom je původní soubor bajt po bajtu, a proto po úpravě zůstane všechno, na co jste nesáhli, přesně tam, kde bylo. Tisknout lze i jednotlivý uzel, třeba výraz, který jste právě sestavili.
+Tisk nemá žádnou logiku: projde strom a spojí texty tokenů s jejich trivia. Proto platí, že vytištěný nezměněný strom je původní soubor bajt po bajtu, a proto po úpravě zůstane všechno, na co jste nesáhli, přesně tam, kde bylo. Jak vytisknout jednotlivý uzel, říká oddíl [Tisk uzlu |#Tisk uzlu].
 
 První test, který nad PhpSyntax stojí za to udělat, je round trip nad vlastním kódem:
 
@@ -108,4 +127,23 @@ foreach ($files as $path) {
 }
 ```
 
-Nad adresářem `vendor/` běžného projektu nevypíše nic. Kdyby něco vypsal, je to chyba parseru a stojí za nahlášení.
+Nad adresářem `vendor/` běžného projektu nevypíše nic. Kdyby něco vypsal, je to chyba parseru a stojí za nahlášení. Totéž bez psaní kódu udělá příkaz `vendor/bin/phpsyntax check`, viz níže.
+
+
+Příkazová řádka
+===============
+
+S knihovnou se instaluje nástroj `vendor/bin/phpsyntax`. Používá knihovnu stejně jako váš kód a hodí se hlavně k tomu, abyste viděli, jak strom vypadá, než pro něj začnete psát kód:
+
+```shell
+vendor/bin/phpsyntax check src                        # round trip nad každým souborem
+vendor/bin/phpsyntax dump -e '$a?->b(1)' --as=expression   # strom výrazu: uzly, sloty, tokeny a trivia
+vendor/bin/phpsyntax dump src/Foo.php --at=12:5       # jen nejvnitřnější uzel na řádku 12, sloupci 5
+vendor/bin/phpsyntax tokens src/Foo.php               # co z kódu udělá lexer, emulované druhy včetně
+vendor/bin/phpsyntax resolve src/Foo.php              # na co odkazuje každé jméno
+vendor/bin/phpsyntax find MethodCallNode src          # každý výskyt třídy uzlu s pozicí a kódem
+```
+
+Vstupem je soubor, adresář (čte se rekurzivně, soubory s příponou z `--ext`, výchozí `php,phpt,inc`), `-` pro standardní vstup nebo kód přímo v `-e`. `dump` a `find` umí kód přečíst i jako fragment (`--as=expression`, `statement`, `type`, `name` nebo jméno třídy uzlu jako `--as=ParameterNode`). U `dump` výpis zúží `--no-trivia`, `--depth=N` a `--filter=ClassName`, pozice tokenů přidá `-p`. `check` s `--lint` přeskočí, co odmítá i samo PHP, a s `-q` vypíše jen chyby a souhrnný řádek. Úplný seznam voleb vypíše `--help`.
+
+Návratový kód je 0, když je všechno v pořádku, 1 při chybě nebo když `find` nic nenašel, a 2 při chybném zadání.

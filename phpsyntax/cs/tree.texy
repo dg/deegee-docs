@@ -26,12 +26,12 @@ Za přiřazením není žádná magie, ale property hook: uzel si novou hodnotu 
 Jména slotů jedné třídy vypíše konstanta `Slots`, v pořadí zdrojáku:
 
 ```php
-IfNode::Slots;   // ifKeyword, openParen, cond, closeParen, body, colon, stmts, elseifs, else, endKeyword, semicolon
+IfNode::Slots;   // ifKeyword, openParen, condition, closeParen, body, colon, statements, elseifs, else, endKeyword, semicolon
 ```
 
-Že jich je jedenáct, i když `if` má pět částí, je kvůli alternativní syntaxi: zápis `if (…): … endif;` používá tutéž třídu, jen se sloty `colon`, `statements`, `endKeyword` a `semicolon` místo `body`. Prázdné sloty se ve výstupu nikde neobjeví.
+Že jich je jedenáct, i když `if` má pět částí, je kvůli alternativní syntaxi: zápis `if (…): … endif;` používá tutéž třídu, jen se sloty `colon`, `statements`, `endKeyword` a `semicolon` místo `body`. Sloty, které daný zápis nepoužívá, jsou `null`.
 
-Děti uzlu vrací `getChildren()` v pořadí zdrojáku, prázdné sloty vynechané. Je to jediná cesta k dětem: uzel není iterovatelný, aby existoval jeden způsob a byl jím obyčejné pole.
+Děti uzlu vrací `getChildren()` v pořadí zdrojáku; sloty s `null` vynechá, prázdný seznam (třeba `elseifs` u `if` bez `elseif`) ale mezi dětmi je. Je to jediná cesta k dětem: uzel není iterovatelný, aby existoval jeden způsob a byl jím obyčejné pole. Výjimkou jsou jen seznamy, viz níže.
 
 ```php
 foreach ($class->getChildren() as $child) {
@@ -42,7 +42,7 @@ foreach ($class->getChildren() as $child) {
 Dvě pravidla, která šetří překvapení:
 
 - **Tělo řídicí struktury je `StatementNode`**, ne nutně blok: `if ($a) return;` má v `body` přímo `ReturnNode`. Se složenými závorkami je to `BlockNode` se seznamem `statements`.
-- **`else if` je `ElseNode`, jehož tělo je `IfNode`**; `elseif` je `ElseIfNode`. Třídy, rozhraní, traity a výčty jsou různé uzly (`ClassNode`, `InterfaceNode`, `TraitNode`, `EnumNode`), ale všechny i s anonymní třídou implementují `ClassLikeNode`, které slibuje `$name` (u anonymní třídy `null`) a `$members`. Podobně `FunctionLikeNode` slibuje `$params` a `$returnType` u funkce, metody, closure, arrow funkce i hooku. Obě rozhraní se dají použít jako filtr v `find()`.
+- **`else if` je `ElseNode`, jehož tělo je `IfNode`**; `elseif` je `ElseIfNode`. Třídy, rozhraní, traity a výčty jsou různé uzly (`ClassNode`, `InterfaceNode`, `TraitNode`, `EnumNode`), ale všechny i s anonymní třídou implementují `ClassLikeNode`, které slibuje `$name` (u anonymní třídy `null`) a `$members`. Podobně `FunctionLikeNode` slibuje `$parameters` (u hooku bez závorek `null`) a `$returnType` u funkce, metody, closure, arrow funkce i hooku. Obě rozhraní se dají použít jako filtr v `find()`.
 
 
 Tokeny
@@ -64,11 +64,14 @@ Seznamy
 `NodeList<T>` je seznam bez oddělovačů (příkazy, členy třídy, skupiny atributů), `SeparatedNodeList<T>` seznam s oddělovači mezi položkami (parametry, argumenty, položky pole, importy), který si pamatuje i oddělovače a případnou koncovou čárku:
 
 ```php
-$args->getItems();              // list<ArgumentNode|VariadicPlaceholderNode>
+$args = $call->arguments->items;
+$args->getItems();              // list<ArgumentNode|VariadicPlaceholderNode|ArgumentPlaceholderNode>
 $args->getSeparators();         // list<Token>, čárky
 $args->hasTrailingSeparator();  // koncová čárka
 count($args);
+$args->isEmpty();
 $args->indexOf($item);
+$args->findSeparatorOf($item);  // čárka, která s položkou odejde
 
 foreach ($args as $arg) {
 	// seznamy jsou iterovatelné a Countable
@@ -99,7 +102,7 @@ $name->equals('App\Model\Order');
 
 Vlastnost `text` je zapisovatelná a je to nejkratší cesta, jak jméno přepsat: `$call->name->text = 'count'` jméno přetokenizuje na nové a všechno kolem nechá, jak bylo. Nové jméno mimo strom vyrobí `NameNode::fromText('Nette\Utils\Strings')`, jméno členu pak `IdentifierNode::fromText('render')`.
 
-Role se odvozuje z místa ve stromu: totéž `Foo` je třída za `new`, funkce před `(` a konstanta jinde. Třídu a jmenný prostor drží PHP v jedné tabulce jmen, takže obojí je `ClassLike`; `use Foo;` totiž zavádí zároveň třídu `Foo` i prefix `Foo\Bar` a rozlišit to nejde. Co jméno znamená doopravdy, tedy včetně importů a jmenného prostoru, říká až analýza `NameResolver`, viz [Analýzy |analyses].
+Role se odvozuje z místa ve stromu: totéž `Foo` je třída za `new`, v typu, za `extends`, `instanceof` nebo před `::`, funkce před `(` a konstanta jen jako samostatný výraz (`$x = Foo;`). Třídu a jmenný prostor drží PHP v jedné tabulce jmen, takže obojí je `ClassLike`; `use Foo;` totiž zavádí zároveň třídu `Foo` i prefix `Foo\Bar` a rozlišit to nejde. Co jméno znamená doopravdy, tedy včetně importů a jmenného prostoru, říká až analýza `NameResolver`, viz [Analýzy |analyses].
 
 Role ale říká jen to, do které tabulky jmen zápis patří, ne jestli na nějaký symbol vůbec odkazuje. Na to je `isReference()` a odpoví `false` ve třech případech: jméno symbol zavádí (`use`, `namespace`), pojmenovává vestavěný typ tam, kde se píše typ (`int`, `array`), nebo je to `self`, `static` či `parent` na místě třídy, protože ta zastupují konkrétní třídu jen tam, kde jsou napsaná. Klíčové slovo na místě jména naopak reference je: `readonly(...)` volá funkci toho jména. Právě na tohle se ptejte, než jméno pošlete resolveru, viz [Analýzy |analyses#NameResolver].
 
@@ -137,7 +140,7 @@ U heredocu se nejdřív zeptejte `hasInterpolation()`, teprve pak se dá číst 
 Importy
 =======
 
-Příkaz `use` má jedinou třídu `UseNode`, ať je zapsaný jakkoli. Skupinový zápis (`use App\{A, B};`) je jen zápisová varianta téhož příkazu, ne jiný uzel, takže má navíc vyplněné sloty `prefix`, `openBrace` a `closeBrace` a odpoví na `isGroup()`. Každá položka umí říct, co doopravdy importuje a jakého druhu to je, i když prefix a klíčové slovo `function` stojí o patro výš:
+Příkaz `use` má jedinou třídu `UseNode`, ať je zapsaný jakkoli. Skupinový zápis (`use App\{A, B};`) je jen zápisová varianta téhož příkazu, ne jiný uzel, takže má navíc vyplněné sloty `prefix`, `namespaceSeparator`, `openBrace` a `closeBrace` a odpoví na `isGroup()`. Každá položka umí říct, co doopravdy importuje a jakého druhu to je, i když prefix a klíčové slovo `function` stojí o patro výš:
 
 ```php
 $use->kind;                 // SymbolKind::ClassLike, Function nebo Constant
@@ -149,12 +152,18 @@ foreach ($use->items as $item) {
 }
 ```
 
-**Položka znamená to, co říká příkaz, ve kterém stojí**, prefix skupiny v to počítaje. Proto se položka mezi příkazy nestěhuje, ale píše se znovu, a to metodou `addImport()`, která ji zapíše tak, jak ten který příkaz své položky píše: celým jménem v prostém importu, relativně k prefixu ve skupině:
+**Položka znamená to, co říká příkaz, ve kterém stojí**, prefix skupiny v to počítaje. Proto se položka mezi příkazy nestěhuje, ale píše se znovu, a to metodou `addImport()`, která ji přidá do existujícího příkazu a zapíše tak, jak ten který příkaz své položky píše: celým jménem v prostém importu, relativně k prefixu ve skupině:
 
 ```php
-$use->addImport('App\Model\Order');            // use App\Model\Order;
-$use->addImport('App\Model\Order', 'Entity');  // use App\Model\Order as Entity;
+// use App\Model\Item;
+$use->addImport('App\Model\Order');            // use App\Model\Item, App\Model\Order;
+$use->addImport('App\Model\Cart', 'Basket');   // use App\Model\Item, App\Model\Order, App\Model\Cart as Basket;
+
+// use App\Model\{Item};
+$group->addImport('App\Model\Order');          // use App\Model\{Item, Order};
 ```
+
+Nový samostatný příkaz `use` se vyrobí jako každý jiný příkaz, `parseStatement()`, a vloží se do seznamu příkazů, viz [Úpravy stromu |mutation#Seznamy].
 
 Jméno, které pod prefix skupiny nespadá, metoda odmítne výjimkou, místo aby zapsala import, který znamená něco jiného. Bez třetího parametru jde nová položka na konec seznamu.
 
@@ -162,4 +171,4 @@ Jméno, které pod prefix skupiny nespadá, metoda odmítne výjimkou, místo ab
 Kořen
 =====
 
-`FileNode` je kořen: `statements` se všemi příkazy souboru, přičemž příkazy za `namespace App;` jsou vnořené do `NamespaceNode`, takže každý jmenný prostor má své příkazy jako děti. Poslední token souboru je vždy `EndOfFile` s prázdným textem, na kterém visí, co je za posledním příkazem. `FileNode::$revision` roste s každou změnou stromu; hodí se k tomu poznat, že se něco změnilo, ne k počítání změn.
+`FileNode` je kořen: `statements` se všemi příkazy souboru, přičemž příkazy za `namespace App;` jsou vnořené do `NamespaceNode`, takže každý jmenný prostor má své příkazy jako děti. Poslední token souboru je vždy `EndOfFile` s prázdným textem, na kterém visí to, co je za posledním řádkem kódu: prázdné řádky a komentáře pod ním. Komentář na řádku posledního příkazu patří podle pravidla o trivia k tomu příkazu. `FileNode::$revision` roste s každou změnou stromu; hodí se k tomu poznat, že se něco změnilo, ne k počítání změn.

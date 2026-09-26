@@ -26,7 +26,7 @@ $long = $file->find(StringNode::class, fn(StringNode $s) => strlen($s->value) > 
 
 Filtrem smí být i rozhraní, takže `find(ClassLikeNode::class)` najde naráz třídy, rozhraní, traity i výčty. Kdo chce úplně všechno a rozhodnout se až v podmínce, napíše `find(Node::class, $condition)`.
 
-`find()` vrací pole, tedy snímek pořízený předem, takže je bezpečné strom během procházení měnit. Prochází uzly, ne tokeny; k tokenu se dostanete přes uzel, ve kterém sedí, přes `getTokens()` celého podstromu, nebo procházením od `getFirstToken()` metodou `getNext()`.
+Obě metody hledají jen mezi potomky, uzel, na kterém je voláte, nevrátí nikdy, a procházejí je v pořadí zdrojáku, rodiče dřív než jeho děti. `find()` vrací pole, tedy snímek pořízený předem, takže je bezpečné strom během procházení měnit. Prochází uzly, ne tokeny; k tokenu se dostanete přes uzel, ve kterém sedí, přes `getTokens()` celého podstromu, nebo procházením od `getFirstToken()` metodou `getNext()`.
 
 
 Traverser
@@ -46,7 +46,7 @@ use PhpSyntax\Traverser;
 
 Callback smí uzel, který dostal, nahradit nebo odstranit; traverser pak do něj ani do jeho náhrady nesestoupí, sourozence odpojené mezitím přeskočí a uzly vložené mezitím nechá dalšímu průchodu. Díky tomu se dá měnit strom přímo během průchodu bez zvláštního režimu.
 
-**Každý `enter` má svůj `leave`**, a to se stejným objektem, i když uzel mezitím ze stromu zmizel. Callback, který si drží hloubku nebo zásobník, tak nemusí řešit chybějící patro. Platí to i pro `StopTraversal`: do dalších uzlů už průchod nevstoupí, ale ty, do kterých vstoupil, cestou ven opustí, ten zastavující včetně. Pozor na to, že `leave` může dostat uzel, který ve stromu už není. Pozná se podle `$node->parent === null` (kromě kořene, ten rodiče nemá nikdy) a `replaceWith()` na něm vyhodí výjimku, takže kdo v `leave` mění strom, ať se na rodiče nejdřív podívá.
+**Každý `enter` má svůj `leave`**, a to se stejným objektem, i když uzel mezitím ze stromu zmizel. Callback, který si drží hloubku nebo zásobník, tak nemusí řešit chybějící patro. Platí to i pro `StopTraversal`: do dalších uzlů už průchod nevstoupí, ale ty, do kterých vstoupil, cestou ven opustí, ten zastavující včetně. Pozor na to, že callback může dostat uzel, který ve stromu už není. Týká se to nejen uzlu, který callback sám odstranil, ale i potomků odstraněného předka: když `enter` odstraní rodiče uzlu, traverser do jeho dětí vstoupí dál, protože ty mají rodiče pořád nastaveného, jen ten už v souboru nestojí. Spolehlivě to pozná `$node->getFile() === null` u průchodu souborem; kdo v callbacku mění strom, ať se na to nejdřív zeptá, jinak upraví jen odpojený podstrom.
 
 Callback může průchod řídit návratovou hodnotou:
 
@@ -60,7 +60,7 @@ Callback může průchod řídit návratovou hodnotou:
 });
 ```
 
-Cokoli jiného, co callback vrátí, průchod ignoruje, takže se nemusíte hlídat, co z něj vypadne.
+`StopTraversal` platí i jako návratová hodnota `leave`. Cokoli jiného, co callback vrátí, průchod ignoruje, jenže obě konstanty jsou obyčejná čísla 1 a 2. Arrow funkce vrací hodnotu svého výrazu, takže třeba `fn($node) => $this->visited++` vrátí postupně 0, 1, 2… a průchod nechtěně ořízne a zastaví; když callback nemá průchod řídit, napište ho jako funkci s tělem, která nevrací nic.
 
 
 Nahoru a do stran
@@ -82,15 +82,27 @@ Pozice
 ======
 
 ```php
-$token->getLine();       // řádek v aktuálním stavu stromu
-$token->getColumn();     // sloupec
+$token->getLine();       // řádek v aktuálním stavu stromu, od 1
+$token->getColumn();     // sloupec od 1, ve znacích UTF-8
 $token->getOffset();     // bajtový offset
 $token->originalLine;    // řádek v původním souboru, nikdy se nemění
+$token->originalOffset;  // bajtový offset v původním souboru
 $node->getStartLine();   // řádky uzlu
 $node->getEndLine();
 ```
 
-Rozdíl mezi `getLine()` a `originalLine` je podstatný, jakmile strom měníte: první sleduje změny, druhé je pozice, kterou zná uživatel ze svého souboru, a právě ta patří do hlášení. U uzlu, který vznikl až za běhu, je `originalLine` rovno `null`. Pozice počítá index tokenů, který se staví líně a po změně stromu se opravuje jen tam, kde je to potřeba, takže dotaz hned po změně stojí tolik, jak daleko od té změny leží.
+Rozdíl mezi `getLine()` a `originalLine` je podstatný, jakmile strom měníte: první sleduje změny, druhé je pozice, kterou zná uživatel ze svého souboru, a právě ta patří do hlášení. U tokenu, který vznikl až za běhu, jsou `originalLine` i `originalOffset` rovny `null`. Aktuální pozice mají jen tokeny stromu, který visí na `FileNode`; v odpojeném podstromu vrátí `getLine()`, `getColumn()`, `getOffset()`, `getStartLine()` i `getEndLine()` hodnotu `null`.
+
+Opačným směrem, od pozice k uzlu, vede index tokenů souboru. Hodí se, když pozici dodá jiný nástroj nebo editor:
+
+```php
+$index = $file->getIndex();
+$index->getOffsetRange($node);                         // [začátek, konec) v bajtech, konec se nepočítá; uzlu i tokenu
+$index->findNode($start, $end, MethodCallNode::class); // největší uzel třídy, jehož text stojí přesně na těch offsetech
+$index->contains($token);                              // stojí token v tomhle souboru?
+```
+
+Soubor, ve kterém uzel nebo token stojí, vrátí `getFile()`, u odpojeného podstromu `null`. Pozice počítá index tokenů, který se staví líně. Pořadí tokenů a řádky po změně stromu opravuje jen tam, kam dotazy sahají, takže dotaz na řádek hned po změně stojí tolik, jak daleko od té změny leží; offsety a sloupce se ale po každé změně přepočítají pro celý soubor.
 
 
 Otázky, které si klade každý nástroj
@@ -100,7 +112,7 @@ Pár otázek si nad kódem položí každý, kdo ho upravuje, a odpovědět na n
 
 ```php
 $a->matches($b);            // jsou ty dva uzly stejné, token po tokenu, bez ohledu na mezery?
-$node->getTokenTexts();     // a podle čeho se to pozná: texty tokenů, bez trivií
+$node->getTokenTexts();     // a podle čeho se to pozná: texty tokenů, bez trivia
 $expr->isRepeatableRead();  // dá se výraz vyhodnotit podruhé, aniž by se něco změnilo?
 $expr->getAccessKind();     // jak na něj rodič sahá: přes ->, [], (...) nebo ::?
 $expr->isDereferenced();    // táž otázka bez druhu: sahá na něj rodič vůbec?
@@ -112,7 +124,7 @@ $expr->hasValue();          // je to zapsaná hodnota, ne výpočet?
 $expr->toValue();           // a jaká
 ```
 
-`matches()` porovnává texty tokenů, ne trivia, takže `$a->b` a `$a -> b` si odpovídají. `isRepeatableRead()` říká `true` pro proměnné, přístupy k vlastnostem a prvkům, konstanty a literály, a `false` pro volání, `new`, přiřazení, `++` a cokoli, co může mít vedlejší účinek. Dohromady odpovídají na otázku "opakuje tenhle ternár svou podmínku a smím ji vyhodnotit jen jednou". Odpověď je ale syntaktická: co jazyk za takovým čtením spustí sám, na to strom nevidí, ať jde o magický getter nebo hook za `->`, `ArrayAccess` za `[]`, nebo `__toString()` za interpolovaným řetězcem. Kdo si tohle dovolit nemůže, potřebuje typy, a ty syntaxe nezná.
+`matches()` porovnává texty tokenů, ne trivia, takže `$a->b` a `$a -> b` si odpovídají. `isRepeatableRead()` říká `true` pro proměnné, přístupy k vlastnostem a prvkům, konstanty a literály, pole z takových položek a to, co z nich udělají závorky nebo unární operátor. Všechno ostatní dostane `false`: volání, `new`, přiřazení, `++` a další, co může mít vedlejší účinek, položka pole s `...`, která může spustit generátor, nebo s `&`, která proměnnou založí, ale i čisté výrazy, na které výčet nepamatuje, třeba `$a + $b`, přetypování, ternár nebo `match`. Odpověď `false` tedy neříká, že vedlejší účinek hrozí, jen že ho metoda nevyloučila. Dohromady odpovídají na otázku "opakuje tenhle ternár svou podmínku a smím ji vyhodnotit jen jednou". Odpověď je ale syntaktická: co jazyk za takovým čtením spustí sám, na to strom nevidí, ať jde o magický getter nebo hook za `->`, `ArrayAccess` za `[]`, nebo `__toString()` za interpolovaným řetězcem. Kdo si tohle dovolit nemůže, potřebuje typy, a ty syntaxe nezná.
 
 Texty, podle kterých `matches()` porovnává, dostanete i samostatně jako `getTokenTexts()`. Je to tvar, kterým se kód klíčuje do mapy nebo porovnávají dvě jeho verze, protože na vysázení v něm nezáleží. Měřit se z něj ale nedá: délku kódu čtěte z `$node->text`, který drží zápis i s mezerami tak, jak v souboru stojí.
 

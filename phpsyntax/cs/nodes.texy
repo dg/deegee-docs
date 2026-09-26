@@ -2,15 +2,145 @@ Přehled uzlů
 ************
 
 .[perex]
-Referenční přehled všech tříd uzlů: popis a sloty i s typem. Slot je pojmenovaný podle role, ne podle textu (`ifKeyword`, `openParen`, `body`), párové oddělovače jsou vždy `open*` a `close*`, seznamy jsou v množném čísle a `?` značí slot, který může být prázdný.
+Referenční přehled všech tříd uzlů: popis, sloty i s typem a veřejné vlastnosti a metody. Slot je pojmenovaný podle role, ne podle textu (`ifKeyword`, `openParen`, `body`), párové oddělovače jsou vždy `open*` a `close*`, seznam uzlů má jméno v množném čísle (`statements`, `members`) a `?` značí slot, který může být prázdný.
 
-Všechny třídy leží v `PhpSyntax\Nodes`. Slot typu `Token` drží jeden token, `NodeList<T>` seznam uzlů bez oddělovačů a `SeparatedNodeList<T>` seznam s oddělovači (čárkami, středníky) mezi položkami. Jak strom číst a měnit, říkají stránky [Uzly a sloty |tree] a [Úpravy stromu |mutation].
+Třídy leží v `PhpSyntax\Nodes` a jeho podprostorech `Statement`, `Expression`, `Member`, `Scalar` a `Type`; jména v typech jsou psaná relativně k `PhpSyntax\Nodes` (`Expression\VariableNode`), třídy mimo něj relativně k `PhpSyntax` (`Token`). Slot typu `Token` drží jeden token, `NodeList<T>` seznam uzlů bez oddělovačů a `SeparatedNodeList<T>` seznam s oddělovači mezi položkami: čárkami, svislítky ve sjednocení typů a v `catch` a ampersandy v průniku typů. U každé třídy jsou nejdřív sloty a pak konstanty, vlastnosti a metody, které třída sama přidává; co umí každý uzel, je u `Node`, co každý výraz, u `ExpressionNode`. Popisy jsou převzaté z dokumentačních komentářů v kódu, proto jsou anglicky. Jak strom číst a měnit, říkají stránky [Uzly a sloty |tree] a [Úpravy stromu |mutation].
+
+
+Bázové třídy a rozhraní
+=======================
+
+Předci a rozhraní, podle kterých se uzly hledají a filtrují (`$file->find(ExpressionNode::class)`). `Node` leží v `PhpSyntax`, `TraitAdaptationNode` v `PhpSyntax\Nodes\Member` a ostatní v `PhpSyntax\Nodes`.
+
+
+Node
+----
+
+Node of the concrete syntax tree; every token of the source is reachable through the children.
+
+- `$parent: ?Node` – The node this one belongs to; only the tree writes it, through `attachTo()`.
+- `$text: string` – The node as it is written, without the trivia on its outer edges, which printing it writes too.
+- `$leadingTrivia: list<Trivia>` – The trivia before the node, which are the leading trivia of its first token; `setEdgeTrivia()` writes them.
+- `$trailingTrivia: list<Trivia>` – The trivia after the node, which are the trailing trivia of its last token; `setEdgeTrivia()` writes them.
+- `getChildren(): list<Node|Token>` – Children in source order, without empty slots.
+- `replaceChild(Node|Token $old, Node|Token $new): void` – Replaces a direct child; the new one must fit the type of the slot.
+- `findSlotOf(Node|Token $child): ?string` – The slot the direct child stands in; null when it is not a child.
+- `setSlot(string $slot, Node|Token|null $value): static` – Writes a slot given by its name, the way an assignment to the property does: the value takes the place of the current one, which leaves the tree; the typed property refuses a value that does not fit the slot.
+- `getFile(): ?FileNode`
+- `getTokens(): list<Token>` – The tokens of the whole subtree in source order; empty for a node without tokens, such as an empty list.
+- `getTokenTexts(): list<string>` – The texts of the tokens of the subtree in source order, the trivia left out: what `matches()` compares two nodes by, and what a tool keys a map by where the layout of the code must not count. The size of the code is measured on `$text`, which keeps the layout.
+- `getFirstToken(): ?Token` – Null only for a node without tokens, such as an empty list.
+- `getLastToken(): ?Token`
+- `getStartLine(): ?int` – Current line of the first token; null for a detached subtree or a node without tokens.
+- `getEndLine(): ?int` – Current line where the last token ends; null as for `getStartLine()`.
+- `getDocComment(): ?Trivia` – Doc comment before the node: the last one in the leading trivia of the first token, or in the trailing trivia of the previous token, where a doc comment stands between two declarations on one line.
+- `replaceTrivia(Trivia $old, Trivia $new): void` – Replaces one trivia of the node, wherever among its tokens it stands, with another in place.
+- `removeTrivia(Trivia $trivia): void` – Removes one trivia of the node, wherever among its tokens it stands, tidying the whitespace around it the way `Token::removeTrivia()` does.
+- `replaceDocComment(Trivia $docComment): void` – Replaces the doc comment of the node (see `getDocComment()`) with the trivia given.
+- `removeDocComment(): void` – Removes the doc comment of the node (see `getDocComment()`) together with the line it stands on.
+- `findAncestor(class-string<T> $class): (T&Node)|null`
+- `findFirst(class-string<T> $class, ?callable $predicate = null): (T&Node)|null` – The first descendant of the class the predicate accepts, in pre-order; null when there is none.
+- `find(class-string<T> $class, ?callable $predicate = null): list<T&Node>` – Descendant nodes of the class the predicate accepts, in pre-order, as a snapshot safe to iterate while mutating the tree.
+- `matches(Node $other): bool` – Whether the tokens of both nodes carry the same texts, whatever the whitespace between them.
+- `hasComment(): bool` – Whether a comment sits anywhere between the first and the last token of the node; the trivia on its outer edges do not count.
+- `getComments(): list<Trivia>` – The comments inside the node, in source order; those on its outer edges are not among them, the same way `hasComment()` does not count them.
+- `setEdgeTrivia(?list<Trivia> $leading = null, ?list<Trivia> $trailing = null): static` – Writes the trivia on the outer edges of the node: before its first token and after its last one. A `null` leaves that edge alone, `[]` clears it, and a node without tokens takes neither.
+- `withoutEdgeTrivia(): static` – A deep copy without a parent and without the trivia on its outer edges, which belong to the place it was copied from.
+- `replaceWith(Node $node): void` – Replaces this node in its parent; the trivia around the old node stay in place around the new one, and where the new one then stands right against a token it would be read together with, `.` against `1` or `return` against `FOO`, a space keeps the two apart.
+- `remove(CommentPolicy $comments = CommentPolicy::MoveToNextToken): void` – Removes this node from its list, together with the separator that goes with it. A node alone on its lines takes the lines with it (indentation and line ending), otherwise the whitespace around stays; its comments, those on its edges included, go where the policy says, each with its indentation and the line ending after it.
+- `__toString(): string` – The node printed back to source, the trivia on its outer edges included; `$text` leaves them out.
+
+
+ClassLikeNode
+-------------
+
+Declaration with members: class, interface, trait, enum, anonymous class; an interface, because an anonymous class stands inside a `new` expression and the rest are statements.
+
+- `$name: ?IdentifierNode`
+- `$members: NodeList<MemberNode>`
+
+
+ExpressionNode
+--------------
+
+Expression, which stands for a value; a destructuring stands where a target is written and is a ListNode, not one of these. Rozšiřuje `Node`.
+
+- `getAccessKind(): ?AccessKind` – How the parent reaches into this expression, null where it does not: `$this->x` and `$this[0]` read a member, `$this()` calls it, `$this::y()` takes it for the name of a class.
+- `isDereferenced(): bool` – Whether the parent reads a member, an element or a static member of this expression, or calls it: `$this->x`, `$this[0]`, `$this::y()`, `$this()`. Such an expression needs parentheses unless the grammar makes it a primary one.
+- `isDereferenceable(AccessKind $by = AccessKind::Member): bool` – Whether what is written after the expression may reach into it with no parentheses around it. A call takes a name or a member written before it for its own, which calls another thing entirely, and `::` takes the name of a class, which a name written there would become.
+- `canNameClass(): bool` – Whether the expression may stand where a class is named: a variable, a static property of a named class and what is read out of either all the way down, a property or an element, and an expression in parentheses; `new f()->b` instantiates f and `new A::B[0]` is no code.
+- `isWritable(): bool` – Whether the expression may stand where a place is assigned to: a variable, an element, a property, reached through a chain PHP writes through. A `?->` anywhere along it rules the write out, a call in the chain included, and so does a chain starting at a value of its own, a literal, a constant, `new` or `clone`, which has no place to write to. It says nothing about reading; that is `isRepeatableRead()`, and the two answer for the two sides of `=`.
+- `isRepeatableRead(): bool` – Whether reading the expression again gives the same value with no side effects: variables, property, constant and offset fetches, literals, arrays of such items and what parentheses or a unary operator make of them, nothing that runs code of its own; an unpacked item may run a generator and one by reference creates the variable, so neither is repeatable. The answer is syntactic, so what the language runs behind such a read is out of sight and does not count: a magic getter or a property hook behind a fetch, an `ArrayAccess` behind an offset, a `__toString()` behind a string that interpolates. Whoever cannot assume that much has to know the types, which a syntax tree does not.
+- `toValue(): mixed` – The value the expression is written as: a scalar, `null`, `true`, `false`, or an array of them. A name standing for a constant is not one, its value being a matter of what the code around it defines. Throws `LogicException` where the expression is written as no value; `hasValue()` tells beforehand.
+- `hasValue(): bool` – Whether the expression is written as a value, which is what `toValue()` gives.
+- `replaceWithExpression(ExpressionNode $expression): void` – Replaces this node by the expression the way `replaceWith()` does, in parentheses where the expression binds looser than the place asks or is reached into there: what `ParenthesizedNode::isRedundant()` does not call needless stays.
+
+
+FunctionLikeNode
+----------------
+
+Declaration with parameters and a body: function, method, closure, arrow function, property hook; an interface, because a closure and an arrow function are expressions and the rest are not.
+
+- `$parameters: ?SeparatedNodeList<ParameterNode>` – Null for a property hook written without parentheses.
+- `$returnType: ?TypeNode` – The return type declared; null where none is, a property hook having none to declare.
+
+
+MemberNode
+----------
+
+Member of a class-like declaration: property, constant, method, trait use, enum case. Rozšiřuje `Node`.
+
+
+OperatorNode
+------------
+
+Expression written with an operator, which is what decides whether parentheses around it are needed. Those whose right operand reaches as far as the code lets it, an arrow function among them, are a RightExtendingNode.
+
+- `const LeftAssociative = -1` – Which side the operator leans to, where an operand of the same precedence may stand.
+- `const NonAssociative = 0`
+- `const RightAssociative = 1`
+- `getPrecedence(): array{int, OperatorNode::LeftAssociative|OperatorNode::NonAssociative|OperatorNode::RightAssociative}` – How tightly the operator binds and which side it leans to; the higher the number the tighter, in the order the precedence declarations of the grammar put the operators.
+
+
+RightExtendingNode
+------------------
+
+Operator written with no left operand, whose right one reaches as far as the code lets it: `fn() => …`, `throw`, `print`, `yield`, `yield from` and `include`. It can capture nothing before itself, so it stands bare however loosely it binds, unless an operator follows it, which its operand would take in; before one it needs parentheses. Rozšiřuje `OperatorNode`.
+
+
+ScalarNode
+----------
+
+Literal written in the source: a number, a string in any of its delimiters, an interpolated string, a boolean, null and a magic constant. What it stands for is `hasValue()` and `toValue()`, which an interpolating string and a magic constant answer no to, standing for what the code around them says. Rozšiřuje `ExpressionNode`.
+
+
+StatementNode
+-------------
+
+Statement: what a file, a block and the body of a control structure consist of. Rozšiřuje `Node`.
+
+
+TraitAdaptationNode
+-------------------
+
+What a trait use says about a method it takes from a trait: an alias or a precedence. The trait slot is left to the two subclasses, an alias being able to leave it out where a precedence has to name it. Rozšiřuje `Node`.
+
+- `$method: IdentifierNode`
+- `$semicolon: Token`
+
+
+TypeNode
+--------
+
+Type written in a declaration: a name, a nullable, a union or an intersection. Rozšiřuje `Node`.
+
+- `allowsNull(): bool` – Whether the type accepts null: ?T, a union with null, and mixed.
 
 
 Společné uzly
 =============
 
-Kořen souboru, jména, seznamy, parametry, argumenty, atributy a části řídicích struktur.
+Kořen souboru, jména, seznamy, parametry, argumenty, atributy a části řídicích struktur; leží přímo v `PhpSyntax\Nodes`.
 
 
 NameNode
@@ -20,13 +150,30 @@ Name of a class, function, constant or namespace: one token of any kind, includi
 
 - `token`: `Token`
 
+- `$text: string` – The name as it is written, the leading backslash and the `namespace` prefix included. Writing it replaces the token with the one the name is written as, so that a qualified name does not stay an identifier; the trivia around it and its place in the original file stay with it.
+- `$kind: NameKind`
+- `$parts: list<string>` – Segments of the name without the leading backslash or the `namespace` prefix.
+- `$shortName: string` – The last segment, which is what an import of the name brings in.
+- `$role: SymbolKind` – Which table of names the name belongs to: functions when called, constants when fetched, what a use item imports, otherwise classes, a namespace among them. It follows the place in the tree, so moving the node changes it, and it says nothing about whether the name refers to a symbol or declares one, which is `isReference()`: whoever resolves names asks that first.
+- `static fromText(string $text): NameNode` – A name written as the text, in the token the name is written as (`Foo`, `A\B`, `\A\B`, `namespace\B`).
+- `isKeyword(): bool` – Whether the name is a keyword the grammar accepts in place of a name (`static`, `array`, `readonly`, `exit`...).
+- `isFullyQualified(): bool`
+- `isUnqualified(): bool`
+- `isSpecialClass(): bool` – Whether the name is self, static or parent, which stand for a class only where they are written.
+- `isDeclaration(): bool` – Whether the name declares or imports a symbol instead of referring to one: a namespace statement or a use.
+- `isReference(): bool` – Whether the name refers to a symbol of its table, one the resolver looks up: not the name a `use` or a `namespace` statement introduces, not `self`, `static` or `parent` where a class is named, which stand for one only where they are written, and not a builtin type where a type is written. A keyword read as a name refers where it stands for a symbol, as `readonly(...)` calls a function of that name, and so does `self()` or the constant `parent`.
+- `equals(string $name): bool` – Whether the name is written the same, letter case aside where PHP ignores it: a constant is compared exactly, its namespace too, although PHP ignores the case there; a class, a function and a namespace are not. The leading backslash is part of the writing and so part of the comparison; whether two names mean the same class is what NameResolver answers.
+
 
 IdentifierNode
 --------------
 
-Identifier of a declaration, member, label, hook, alias or named argument: one token of any kind, including reserved words. Rozšiřuje `Node`.
+Identifier of a declaration, member, label, hook, alias or named argument: one token of any kind, including keywords. Rozšiřuje `Node`.
 
 - `token`: `Token`
+
+- `$text: string` – The identifier as it is written. Whether its letter case matters is up to what it names, so comparing it is left to the caller: a member and a label are case-sensitive, a magic method is not. Writing it takes an identifier and nothing else, so that no whitespace ends up in the text of a token.
+- `static fromText(string $text): IdentifierNode` – An identifier written as the text, which takes an identifier and nothing else.
 
 
 ArgumentListNode
@@ -37,6 +184,10 @@ Parenthesized arguments of a call, instantiation, attribute or exit. Rozšiřuje
 - `openParen`: `Token`
 - `items`: `SeparatedNodeList<ArgumentNode|VariadicPlaceholderNode|ArgumentPlaceholderNode>`
 - `closeParen`: `Token`
+
+- `static of(ExpressionNode ...$values): ArgumentListNode` – A one-line list of positional arguments with the values, which lose the trivia on their edges.
+- `isPartialApplication(): bool` – Whether the list leaves parameters unbound with `?` or `...`, which makes a closure of the call instead of calling it.
+- `findArgument(?string $name, ?int $position): ?ArgumentNode` – The argument the parameter of the name and the position gets: the one written with the name, else the one standing at the position, so that `get_class(object: $o)` reads as the call `get_class($o)` is. Null where the parameter gets none, and where the call does not say which it gets: a `?` placeholder holds a place without being an argument, and an unpacked array stands for as many arguments as it holds, so it takes the answer from a position after it, never from a name, which stands for itself. Whoever knows only one of the two asks with null for the other: the position alone finds no argument written with a name, the name alone none that is not.
 
 
 ArgumentNode
@@ -54,7 +205,7 @@ Argument of a call: optionally named, by reference or unpacked. Rozšiřuje `Nod
 VariadicPlaceholderNode
 -----------------------
 
-The ... placeholder of a first-class callable: f(...). Rozšiřuje `Node`.
+The `...` placeholder of a first-class callable or a partial application: `f(...)`, `f($a, ...)`. Rozšiřuje `Node`.
 
 - `ellipsis`: `Token`
 
@@ -62,7 +213,7 @@ The ... placeholder of a first-class callable: f(...). Rozšiřuje `Node`.
 ArgumentPlaceholderNode
 -----------------------
 
-The ? placeholder of a partial function application, optionally named: f(?), f(name: ?). Rozšiřuje `Node`.
+The `?` placeholder of a partial function application, optionally named: `f(?)`, `f(name: ?)`. Rozšiřuje `Node`.
 
 - `name`: `?IdentifierNode`
 - `colon`: `?Token`
@@ -72,7 +223,7 @@ The ? placeholder of a partial function application, optionally named: f(?), f(n
 ParameterNode
 -------------
 
-Parameter of a function, method, closure or hook; with modifiers it promotes a property. Rozšiřuje `Node`.
+Parameter of a function, method, closure, arrow function or hook; with modifiers it promotes a property. Rozšiřuje `Node`.
 
 - `attributes`: `NodeList<AttributeGroupNode>`
 - `modifiers`: `ModifiersNode`
@@ -85,6 +236,8 @@ Parameter of a function, method, closure or hook; with modifiers it promotes a p
 - `openBrace`: `?Token`
 - `hooks`: `?NodeList<Member\PropertyHookNode>`
 - `closeBrace`: `?Token`
+
+- `isPromoted(): bool` – Whether the parameter declares a property of the class, which its modifiers make it do.
 
 
 AttributeGroupNode
@@ -109,26 +262,62 @@ Attribute with optional arguments. Rozšiřuje `Node`.
 ModifiersNode
 -------------
 
-Modifier keywords in source order (public, static, readonly, abstract, final, var, public(set)...); may be empty. Rozšiřuje `Node`.
+Modifier keywords in source order (`public`, `static`, `readonly`, `abstract`, `final`, `var`, `public(set)`...); may be empty. Rozšiřuje `Node`. Implementuje `Countable`, `IteratorAggregate`.
 
-- `tokens`: `list<Token>`
+- `$visibility: ?Visibility` – The visibility the modifiers declare, null when they declare none, which leaves a member public, a promoted parameter too.
+- `$writeVisibility: ?Visibility` – The visibility for writing, which asymmetric visibility declares apart: `public(set)` and its kin.
+- `$tokens: list<Token>`
+- `isPublic(): bool` – Whether the member is public, which it also is without a visibility of its own.
+- `isProtected(): bool`
+- `isPrivate(): bool`
+- `isStatic(): bool`
+- `isAbstract(): bool`
+- `isFinal(): bool`
+- `isReadonly(): bool`
+- `findToken(int $kind): ?Token` – The modifier token of the kind, null when the modifiers do not have it.
+- `isEmpty(): bool`
+- `has(int $kind): bool`
+- `append(Token $token): void` – Appends a modifier. The first one opens the declaration, so it takes over the leading trivia of the token it now stands before, the open tag and the doc comment among them; one without trailing trivia is kept apart from what follows by a space.
+- `removeToken(Token $token): void` – Removes a modifier. Its leading trivia go to the token after it, which may now open the declaration, and a comment after it stays: after the modifier before it, or on a line of its own above the token after it.
+- `count(): int`
+- `getIterator(): ArrayIterator<int, Token>` – The modifier tokens, as a snapshot safe to iterate while mutating them.
 
 
 NodeList
 --------
 
-Sequence of nodes without separators: statements, members, attribute groups. Rozšiřuje `Node`.
+Sequence of nodes without separators: statements, members, attribute groups. Rozšiřuje `Node`. Implementuje `Countable`, `IteratorAggregate`. Typ položek `T` je podtyp `Node`.
 
-- `items`: `list<Node>`
+- `$items: list<T>` – The items; only the list writes them, through its own methods.
+- `getItems(): list<T>`
+- `isEmpty(): bool`
+- `append(T $item): void` – Appends an item, which takes the place in the lines of the list its neighbor has.
+- `insert(int $index, T $item): void` – Inserts an item at the index. In a list standing in a file, an item that carries no trivia of its own takes the indentation of its neighbor and ends its line the same way.
+- `removeItem(Node $item): void` – Takes the item out with its trivia and tidies nothing; `Node::remove()` takes the lines with it.
+- `indexOf(Node $item): int`
+- `count(): int`
+- `getIterator(): ArrayIterator<int, T>` – The items, as a snapshot safe to iterate while mutating the list.
 
 
 SeparatedNodeList
 -----------------
 
-Sequence of nodes with separator tokens between them and an optional trailing separator: parameters, arguments, array items, imports. An item may be an empty node standing for nothing between two separators `([, $b]` = $x). Rozšiřuje `Node`.
+Sequence of nodes with separator tokens between them and an optional trailing separator: parameters, arguments, array items, imports. An item may be an empty node standing for nothing between two separators (`[, $b] = $x`). Rozšiřuje `Node`. Implementuje `Countable`, `IteratorAggregate`. Typ položek `T` je podtyp `Node`.
 
-- `items`: `list<Node>`
-- `separators`: `list<Token>`
+- `$items: list<T>` – The items; only the list writes them, through its own methods.
+- `$separators: list<Token>` – One before each item but the first, plus an optional trailing one.
+- `getItems(): list<T>`
+- `getSeparators(): list<Token>`
+- `isEmpty(): bool`
+- `hasTrailingSeparator(): bool`
+- `append(T $item, ?Token $separator = null): void` – Appends an item; the separator before it is derived from the existing ones unless given.
+- `insert(int $index, T $item, ?Token $separator = null): void` – Inserts an item at the index. A missing separator is modeled on the existing ones, or on `, ` in a one-line list, and then the item also takes the indentation and the line ending of its neighbor in a multi-line list; a separator given is inserted as it is. The separator is the one that goes with the item (see `findSeparatorOf()`): the one after it, and for the last item the one before it, so what the separators already there carry stays with the items they follow.
+- `setTrailingSeparator(?Token $separator): static`
+- `removeItem(Node $item): void` – Takes the item out with its trivia, together with the separator that goes with it (see `findSeparatorOf()`), and tidies nothing; `Node::remove()` takes the lines with it.
+- `findSeparatorOf(Node $item): ?Token` – The separator that goes when the item goes: the one after it, and for the last item the one before it.
+- `indexOf(Node $item): int`
+- `count(): int`
+- `getIterator(): ArrayIterator<int, T>` – The items without the separators between them, as a snapshot safe to iterate while mutating the list.
 
 
 FileNode
@@ -139,11 +328,14 @@ Root of the tree: the statements of a file and the end-of-file token carrying th
 - `statements`: `NodeList<StatementNode>`
 - `endOfFile`: `Token`
 
+- `$revision: int` – Version of the tree: every write to a slot, a list, or the text or trivia of a token increments it.
+- `getIndex(): TokenIndex`
+
 
 AnonymousClassNode
 ------------------
 
-Anonymous class in a new expression: new class(...) extends A implements B { ... }. Rozšiřuje `Node`. Implementuje `ClassLikeNode`.
+Anonymous class in a `new` expression: `new class(...) extends A implements B { ... }`. Rozšiřuje `Node`. Implementuje `ClassLikeNode`.
 
 - `attributes`: `NodeList<AttributeGroupNode>`
 - `modifiers`: `ModifiersNode`
@@ -156,6 +348,8 @@ Anonymous class in a new expression: new class(...) extends A implements B { ...
 - `openBrace`: `Token`
 - `members`: `NodeList<MemberNode>`
 - `closeBrace`: `Token`
+
+- `$name: ?IdentifierNode`
 
 
 ArrayItemNode
@@ -173,7 +367,7 @@ Item of an array literal or a destructuring list: value with optional key, by re
 EmptyArrayItemNode
 ------------------
 
-Skipped item of a destructuring list `([, $b]` = $x); has no tokens. Rozšiřuje `Node`.
+Skipped item of a destructuring list (`[, $b] = $x`); has no tokens. Rozšiřuje `Node`.
 
 
 MatchArmNode
@@ -191,7 +385,7 @@ Arm of a match expression: the values compared with the subject, or default, and
 ClosureUsesNode
 ---------------
 
-The use (...) clause of a closure. Rozšiřuje `Node`.
+The `use (...)` clause of a closure. Rozšiřuje `Node`.
 
 - `useKeyword`: `Token`
 - `openParen`: `Token`
@@ -211,7 +405,7 @@ Variable captured by a closure, optionally by reference. Rozšiřuje `Node`.
 ElseIfNode
 ----------
 
-elseif branch, in either syntax. Rozšiřuje `Node`.
+`elseif` branch, in either syntax. Rozšiřuje `Node`.
 
 - `elseifKeyword`: `Token`
 - `openParen`: `Token`
@@ -225,7 +419,7 @@ elseif branch, in either syntax. Rozšiřuje `Node`.
 ElseNode
 --------
 
-else branch, in either syntax; else if is an else with an if statement as the body. Rozšiřuje `Node`.
+`else` branch, in either syntax; `else if` is an `else` with an `if` statement as the body. Rozšiřuje `Node`.
 
 - `elseKeyword`: `Token`
 - `body`: `?StatementNode`
@@ -236,7 +430,7 @@ else branch, in either syntax; else if is an else with an if statement as the bo
 CaseNode
 --------
 
-case or default of a switch; the separator is a colon or a semicolon. Rozšiřuje `Node`.
+`case` or `default` of a `switch`; the separator is a colon or a semicolon. Rozšiřuje `Node`.
 
 - `caseKeyword`: `Token`
 - `value`: `?ExpressionNode`
@@ -247,7 +441,7 @@ case or default of a switch; the separator is a colon or a semicolon. Rozšiřuj
 CatchNode
 ---------
 
-catch clause with one or more types and an optional variable. Rozšiřuje `Node`.
+`catch` clause with one or more types and an optional variable. Rozšiřuje `Node`.
 
 - `catchKeyword`: `Token`
 - `openParen`: `Token`
@@ -260,7 +454,7 @@ catch clause with one or more types and an optional variable. Rozšiřuje `Node`
 FinallyNode
 -----------
 
-finally clause. Rozšiřuje `Node`.
+`finally` clause. Rozšiřuje `Node`.
 
 - `finallyKeyword`: `Token`
 - `body`: `Statement\BlockNode`
@@ -289,12 +483,16 @@ Variable of a static statement with an optional initializer. Rozšiřuje `Node`.
 UseItemNode
 -----------
 
-Imported name with an optional alias; the type (function, const) appears only inside a group use. What the item imports is said by the statement it stands in, the prefix of a group included, so an item is not moved from one statement to another but written anew by UseNode::addImport(). Rozšiřuje `Node`.
+Imported name with an optional alias; the type (`function`, `const`) appears only inside a group use. What the item imports is said by the statement it stands in, the prefix of a group included, so an item is not moved from one statement to another but written anew by `UseNode::addImport()`. Rozšiřuje `Node`.
 
 - `type`: `?Token`
 - `name`: `NameNode`
 - `asKeyword`: `?Token`
 - `alias`: `?IdentifierNode`
+
+- `$kind: SymbolKind` – What the item imports: its own type where a group use writes one per item, else what the statement imports.
+- `$fullName: string` – The name the item imports, without a leading backslash: what is written here, and in a group use the prefix of the statement before it.
+- `getStatement(): ?Statement\UseNode` – The import the item belongs to; null for an item that is not in one.
 
 
 ConstItemNode
@@ -310,13 +508,13 @@ Constant of a const statement or a class constant declaration. Rozšiřuje `Node
 Příkazy
 =======
 
-Deklarace a příkazy: `Statement\*` jsou položky seznamu `stmts` souboru, bloku nebo jmenného prostoru.
+Deklarace a příkazy v `PhpSyntax\Nodes\Statement`: položky seznamu `statements` souboru, bloku, jmenného prostoru, větve `case` a alternativní syntaxe, a také tělo řídicí struktury (`body`).
 
 
 NamespaceNode
 -------------
 
-namespace declaration; after "namespace A;" the following statements are nested in it. Rozšiřuje `StatementNode`.
+`namespace` declaration; after `namespace A;` the following statements are nested in it. Rozšiřuje `StatementNode`.
 
 - `namespaceKeyword`: `Token`
 - `name`: `?NameNode`
@@ -329,7 +527,7 @@ namespace declaration; after "namespace A;" the following statements are nested 
 UseNode
 -------
 
-use import of classes, functions or constants, written item by item or as a group under a prefix (use A\{B, C};), which fills the slots the other form leaves empty. Rozšiřuje `StatementNode`.
+`use` import of classes, functions or constants, written item by item or as a group under a prefix (`use A\{B, C};`), which fills the slots the other form leaves empty. Rozšiřuje `StatementNode`.
 
 - `useKeyword`: `Token`
 - `type`: `?Token`
@@ -340,11 +538,15 @@ use import of classes, functions or constants, written item by item or as a grou
 - `closeBrace`: `?Token`
 - `semicolon`: `Token`
 
+- `$kind: SymbolKind` – What the statement imports, which every item without a type of its own imports too.
+- `isGroup(): bool` – Whether the items are written as a group under a prefix, which every one of them imports.
+- `addImport(string $name, ?string $alias = null, ?int $index = null): UseItemNode` – Adds an import of the fully qualified name, written the way the statement writes its items: whole in a plain import, under the prefix in a group, which refuses a name standing outside it. The item imports what the statement imports and goes last unless an index says where.
+
 
 ConstNode
 ---------
 
-const statement outside a class. Rozšiřuje `StatementNode`.
+`const` statement outside a class. Rozšiřuje `StatementNode`.
 
 - `attributes`: `NodeList<AttributeGroupNode>`
 - `constKeyword`: `Token`
@@ -355,7 +557,7 @@ const statement outside a class. Rozšiřuje `StatementNode`.
 HaltCompilerNode
 ----------------
 
-__halt_compiler(); the rest of the file is the data token. Rozšiřuje `StatementNode`.
+`__halt_compiler()`; the rest of the file is the data token. Rozšiřuje `StatementNode`.
 
 - `haltKeyword`: `Token`
 - `openParen`: `Token`
@@ -370,6 +572,8 @@ InlineHtmlNode
 Text outside PHP tags, including a BOM or a hashbang line. Rozšiřuje `StatementNode`.
 
 - `html`: `Token`
+
+- `isPreamble(): bool` – Whether the text is only what may precede the code of a pure PHP file: a byte order mark, a hashbang line, or both.
 
 
 EmptyStatementNode
@@ -402,7 +606,7 @@ Statements in braces. Rozšiřuje `StatementNode`.
 IfNode
 ------
 
-if statement in either syntax; the body is a statement, the alternative syntax fills statements. Rozšiřuje `StatementNode`.
+`if` statement in either syntax; the body is a statement, the alternative syntax fills statements. Rozšiřuje `StatementNode`.
 
 - `ifKeyword`: `Token`
 - `openParen`: `Token`
@@ -420,7 +624,7 @@ if statement in either syntax; the body is a statement, the alternative syntax f
 WhileNode
 ---------
 
-while loop in either syntax. Rozšiřuje `StatementNode`.
+`while` loop in either syntax. Rozšiřuje `StatementNode`.
 
 - `whileKeyword`: `Token`
 - `openParen`: `Token`
@@ -436,7 +640,7 @@ while loop in either syntax. Rozšiřuje `StatementNode`.
 DoWhileNode
 -----------
 
-do-while loop. Rozšiřuje `StatementNode`.
+`do`-`while` loop. Rozšiřuje `StatementNode`.
 
 - `doKeyword`: `Token`
 - `body`: `StatementNode`
@@ -450,7 +654,7 @@ do-while loop. Rozšiřuje `StatementNode`.
 ForNode
 -------
 
-for loop in either syntax. Rozšiřuje `StatementNode`.
+`for` loop in either syntax. Rozšiřuje `StatementNode`.
 
 - `forKeyword`: `Token`
 - `openParen`: `Token`
@@ -470,7 +674,7 @@ for loop in either syntax. Rozšiřuje `StatementNode`.
 ForeachNode
 -----------
 
-foreach loop in either syntax. Rozšiřuje `StatementNode`.
+`foreach` loop in either syntax. Rozšiřuje `StatementNode`.
 
 - `foreachKeyword`: `Token`
 - `openParen`: `Token`
@@ -491,7 +695,7 @@ foreach loop in either syntax. Rozšiřuje `StatementNode`.
 SwitchNode
 ----------
 
-switch statement in either syntax; a semicolon may precede the first case. Rozšiřuje `StatementNode`.
+`switch` statement in either syntax; a semicolon may precede the first case. Rozšiřuje `StatementNode`.
 
 - `switchKeyword`: `Token`
 - `openParen`: `Token`
@@ -509,7 +713,7 @@ switch statement in either syntax; a semicolon may precede the first case. Rozš
 BreakNode
 ---------
 
-break with an optional level. Rozšiřuje `StatementNode`.
+`break` with an optional level. Rozšiřuje `StatementNode`.
 
 - `breakKeyword`: `Token`
 - `expression`: `?ExpressionNode`
@@ -519,7 +723,7 @@ break with an optional level. Rozšiřuje `StatementNode`.
 ContinueNode
 ------------
 
-continue with an optional level. Rozšiřuje `StatementNode`.
+`continue` with an optional level. Rozšiřuje `StatementNode`.
 
 - `continueKeyword`: `Token`
 - `expression`: `?ExpressionNode`
@@ -529,7 +733,7 @@ continue with an optional level. Rozšiřuje `StatementNode`.
 ReturnNode
 ----------
 
-return with an optional value. Rozšiřuje `StatementNode`.
+`return` with an optional value. Rozšiřuje `StatementNode`.
 
 - `returnKeyword`: `Token`
 - `expression`: `?ExpressionNode`
@@ -539,7 +743,7 @@ return with an optional value. Rozšiřuje `StatementNode`.
 GlobalNode
 ----------
 
-global statement. Rozšiřuje `StatementNode`.
+`global` statement. Rozšiřuje `StatementNode`.
 
 - `globalKeyword`: `Token`
 - `variables`: `SeparatedNodeList<ExpressionNode>`
@@ -549,7 +753,7 @@ global statement. Rozšiřuje `StatementNode`.
 StaticNode
 ----------
 
-static variable declaration. Rozšiřuje `StatementNode`.
+`static` variable declaration. Rozšiřuje `StatementNode`.
 
 - `staticKeyword`: `Token`
 - `variables`: `SeparatedNodeList<StaticVariableNode>`
@@ -559,7 +763,7 @@ static variable declaration. Rozšiřuje `StatementNode`.
 EchoNode
 --------
 
-echo statement; the keyword may be the <?= open tag and the semicolon a close tag. Rozšiřuje `StatementNode`.
+`echo` statement; the keyword may be the `<?=` open tag and the semicolon a close tag. Rozšiřuje `StatementNode`.
 
 - `echoKeyword`: `Token`
 - `expressions`: `SeparatedNodeList<ExpressionNode>`
@@ -569,7 +773,7 @@ echo statement; the keyword may be the <?= open tag and the semicolon a close ta
 UnsetNode
 ---------
 
-unset statement. Rozšiřuje `StatementNode`.
+`unset` statement. Rozšiřuje `StatementNode`.
 
 - `unsetKeyword`: `Token`
 - `openParen`: `Token`
@@ -581,7 +785,7 @@ unset statement. Rozšiřuje `StatementNode`.
 DeclareNode
 -----------
 
-declare statement in its three forms: with a body, with a bare semicolon, or with the alternative syntax. Rozšiřuje `StatementNode`.
+`declare` statement in its three forms: with a body, with a bare semicolon, or with the alternative syntax. Rozšiřuje `StatementNode`.
 
 - `declareKeyword`: `Token`
 - `openParen`: `Token`
@@ -597,7 +801,7 @@ declare statement in its three forms: with a body, with a bare semicolon, or wit
 TryNode
 -------
 
-try statement with catches and an optional finally. Rozšiřuje `StatementNode`.
+`try` statement with catches and an optional `finally`. Rozšiřuje `StatementNode`.
 
 - `tryKeyword`: `Token`
 - `body`: `Statement\BlockNode`
@@ -608,7 +812,7 @@ try statement with catches and an optional finally. Rozšiřuje `StatementNode`.
 GotoNode
 --------
 
-goto statement. Rozšiřuje `StatementNode`.
+`goto` statement. Rozšiřuje `StatementNode`.
 
 - `gotoKeyword`: `Token`
 - `label`: `IdentifierNode`
@@ -707,18 +911,21 @@ Enum declaration, optionally backed by a scalar type. Rozšiřuje `StatementNode
 Výrazy
 ======
 
-Vše, co má hodnotu: operátory, volání, přístupy, přiřazení, closures.
+Výrazy v `PhpSyntax\Nodes\Expression`: operátory, volání, přístupy, přiřazení, closure a arrow funkce. Literály mají vlastní sekci [Skaláry |#Skaláry]; destrukturace `ListNode` leží tady, ale výrazem není, protože stojí jen tam, kam se přiřazuje, a hodnotu nemá.
 
 
 VariableNode
 ------------
 
-Variable: $a, $$a, ${expr}; inside a string also a bare name in ${name}. Rozšiřuje `ExpressionNode`.
+Variable: `$a`, `$$a`, `${expr}`; inside a string also a bare name in `${name}`. Rozšiřuje `ExpressionNode`.
 
 - `dollar`: `?Token`
 - `openBrace`: `?Token`
 - `name`: `Token|ExpressionNode`
 - `closeBrace`: `?Token`
+
+- `$plainName: ?string` – The name without the dollar sign; null where the name is an expression (`$$a`, `${expr}`).
+- `isThis(): bool` – Whether the variable is `$this`, the object a method runs on.
 
 
 ArrayAccessNode
@@ -735,7 +942,7 @@ Array or string offset access: `$a[$i]`, `$a[]`. Rozšiřuje `ExpressionNode`.
 PropertyFetchNode
 -----------------
 
-Property access with -> or ?->; the name may be an identifier, a variable or a braced expression. Rozšiřuje `ExpressionNode`.
+Property access with `->` or `?->`; the name may be an identifier, a variable or a braced expression. Rozšiřuje `ExpressionNode`.
 
 - `object`: `ExpressionNode`
 - `operator`: `Token`
@@ -743,11 +950,15 @@ Property access with -> or ?->; the name may be an identifier, a variable or a b
 - `name`: `IdentifierNode|ExpressionNode`
 - `closeBrace`: `?Token`
 
+- `$plainName: ?string` – The name of the property; null where the name is a variable or an expression (`$a->$b`, `$a->{expr}`).
+- `isNullsafe(): bool` – Whether the fetch is written with `?->`, which skips it when the object is null.
+- `isOfThis(): bool` – Whether the property is one of `$this`, with either operator.
+
 
 StaticPropertyFetchNode
 -----------------------
 
-Static property access: A::$b, A::$$b, A::${expr}. The name is written the way a variable is, dollar and braces included, but it names a property. Rozšiřuje `ExpressionNode`.
+Static property access: `A::$b`, `A::$$b`, `A::${expr}`. The name is written the way a variable is, dollar and braces included, but it names a property. Rozšiřuje `ExpressionNode`.
 
 - `class`: `NameNode|ExpressionNode`
 - `doubleColon`: `Token`
@@ -756,11 +967,13 @@ Static property access: A::$b, A::$$b, A::${expr}. The name is written the way a
 - `name`: `Token|ExpressionNode`
 - `closeBrace`: `?Token`
 
+- `$plainName: ?string` – The name of the property without the dollar sign; null where the name is an expression (`$$b`, `${expr}`).
+
 
 ClassConstantFetchNode
 ----------------------
 
-Class constant access: A::B, A::class, A::{expr}. Rozšiřuje `ExpressionNode`.
+Class constant access: `A::B`, `A::class`, `A::{expr}`. Rozšiřuje `ExpressionNode`.
 
 - `class`: `NameNode|ExpressionNode`
 - `doubleColon`: `Token`
@@ -772,7 +985,7 @@ Class constant access: A::B, A::class, A::{expr}. Rozšiřuje `ExpressionNode`.
 ConstantFetchNode
 -----------------
 
-Constant access by name: FOO, \Foo\BAR. Rozšiřuje `ExpressionNode`.
+Constant access by name: `FOO`, `\Foo\BAR`. Rozšiřuje `ExpressionNode`.
 
 - `name`: `NameNode`
 
@@ -785,11 +998,13 @@ Function call by name or on an expression. Rozšiřuje `ExpressionNode`.
 - `name`: `NameNode|ExpressionNode`
 - `arguments`: `ArgumentListNode`
 
+- `static of(NameNode|ExpressionNode $name, ?ArgumentListNode $arguments = null): Expression\FunctionCallNode` – A call of the name, or of the expression, in parentheses where the call would take it for something else.
+
 
 MethodCallNode
 --------------
 
-Method call with -> or ?->. Rozšiřuje `ExpressionNode`.
+Method call with `->` or `?->`. Rozšiřuje `ExpressionNode`.
 
 - `object`: `ExpressionNode`
 - `operator`: `Token`
@@ -798,11 +1013,14 @@ Method call with -> or ?->. Rozšiřuje `ExpressionNode`.
 - `closeBrace`: `?Token`
 - `arguments`: `ArgumentListNode`
 
+- `static of(ExpressionNode $object, string $name, ?ArgumentListNode $arguments = null, bool $nullsafe = false): Expression\MethodCallNode` – A call of the method on the object, in parentheses where it could not be reached into bare.
+- `isNullsafe(): bool` – Whether the call is written with `?->`, which skips it when the object is null.
+
 
 StaticMethodCallNode
 --------------------
 
-Static method call: A::b(), $a::b(), A::{expr}(). Rozšiřuje `ExpressionNode`.
+Static method call: `A::b()`, `$a::b()`, `A::{expr}()`. Rozšiřuje `ExpressionNode`.
 
 - `class`: `NameNode|ExpressionNode`
 - `doubleColon`: `Token`
@@ -810,6 +1028,8 @@ Static method call: A::b(), $a::b(), A::{expr}(). Rozšiřuje `ExpressionNode`.
 - `name`: `IdentifierNode|ExpressionNode`
 - `closeBrace`: `?Token`
 - `arguments`: `ArgumentListNode`
+
+- `static of(NameNode|ExpressionNode $class, string $name, ?ArgumentListNode $arguments = null): Expression\StaticMethodCallNode` – A call of the static method of the class, an expression in parentheses where `::` could not follow it bare.
 
 
 NewNode
@@ -821,11 +1041,13 @@ Instantiation of a named, dynamic or anonymous class. Rozšiřuje `ExpressionNod
 - `class`: `NameNode|ExpressionNode|AnonymousClassNode`
 - `arguments`: `?ArgumentListNode`
 
+- `static of(NameNode|ExpressionNode $class, ?ArgumentListNode $arguments = null): Expression\NewNode` – An instantiation of the class, an expression in parentheses where it could not name one bare; no list is written where none is given.
+
 
 ArrayNode
 ---------
 
-Array literal in either syntax: `[...]` or array(...). A short array standing where a place is assigned to destructures instead, and is a ListNode. Rozšiřuje `ExpressionNode`.
+Array literal in either syntax: `[...]` or `array(...)`. A short array standing where a place is assigned to destructures instead, and is a ListNode. Rozšiřuje `ExpressionNode`.
 
 - `arrayKeyword`: `?Token`
 - `openDelimiter`: `Token`
@@ -884,11 +1106,13 @@ Binary operation; the operator token tells which (arithmetic, comparison, logica
 - `operator`: `Token`
 - `right`: `ExpressionNode`
 
+- `static of(ExpressionNode $left, string $operator, ExpressionNode $right): Expression\BinaryOpNode` – The operation on the two operands, each in parentheses where it binds looser than its side of the operator takes. Throws `InvalidArgumentException` for what is no binary operator.
+
 
 UnaryOpNode
 -----------
 
-Unary operation written before its operand: +, -, !, ~, @; ++ and -- are a PrefixOpNode, the way the grammar tells them apart. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
+Unary operation written before its operand: `+`, `-`, `!`, `~`, `@`; `++` and `--` are a PrefixOpNode, the way the grammar tells them apart. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
 
 - `operator`: `Token`
 - `expression`: `ExpressionNode`
@@ -920,6 +1144,8 @@ Type cast; the cast token keeps its spelling including inner whitespace: ( int )
 - `cast`: `Token`
 - `expression`: `ExpressionNode`
 
+- `$type: string` – The type the cast converts to, in the name PHP knows it by: (integer) is int, (double) and (real) are float.
+
 
 TernaryNode
 -----------
@@ -936,7 +1162,7 @@ Ternary conditional `$a ? $b : $c`, or the elvis form `$a ?: $c` leaving `then` 
 InstanceofNode
 --------------
 
-instanceof check against a name or a dynamic class. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
+`instanceof` check against a name or a dynamic class. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
 
 - `expression`: `ExpressionNode`
 - `instanceofKeyword`: `Token`
@@ -952,11 +1178,14 @@ Expression in parentheses. Rozšiřuje `ExpressionNode`.
 - `expression`: `ExpressionNode`
 - `closeParen`: `Token`
 
+- `static of(ExpressionNode $expression): Expression\ParenthesizedNode` – The expression in parentheses, without the trivia on its edges.
+- `isRedundant(): bool` – Whether the parentheses may go without the code coming to mean anything else: what stands in them binds at least as tightly as the place they stand in asks, and what reaches into them could reach into it bare. Where the answer is not certain it is no.
+
 
 IssetNode
 ---------
 
-isset(...) with one or more variables. Rozšiřuje `ExpressionNode`.
+`isset(...)` with one or more variables. Rozšiřuje `ExpressionNode`.
 
 - `issetKeyword`: `Token`
 - `openParen`: `Token`
@@ -967,7 +1196,7 @@ isset(...) with one or more variables. Rozšiřuje `ExpressionNode`.
 EmptyNode
 ---------
 
-empty(...). Rozšiřuje `ExpressionNode`.
+`empty(...)`. Rozšiřuje `ExpressionNode`.
 
 - `emptyKeyword`: `Token`
 - `openParen`: `Token`
@@ -978,7 +1207,7 @@ empty(...). Rozšiřuje `ExpressionNode`.
 EvalNode
 --------
 
-eval(...). Rozšiřuje `ExpressionNode`.
+`eval(...)`. Rozšiřuje `ExpressionNode`.
 
 - `evalKeyword`: `Token`
 - `openParen`: `Token`
@@ -989,7 +1218,7 @@ eval(...). Rozšiřuje `ExpressionNode`.
 IncludeNode
 -----------
 
-include, include_once, require or require_once; the keyword token tells which. Rozšiřuje `ExpressionNode`. Implementuje `RightExtendingNode`, `OperatorNode`.
+`include`, `include_once`, `require` or `require_once`; the keyword token tells which. Rozšiřuje `ExpressionNode`. Implementuje `RightExtendingNode`, `OperatorNode`.
 
 - `includeKeyword`: `Token`
 - `expression`: `ExpressionNode`
@@ -998,7 +1227,7 @@ include, include_once, require or require_once; the keyword token tells which. R
 ExitNode
 --------
 
-exit or die with optional arguments. Rozšiřuje `ExpressionNode`.
+`exit` or `die` with optional arguments. Rozšiřuje `ExpressionNode`.
 
 - `exitKeyword`: `Token`
 - `arguments`: `?ArgumentListNode`
@@ -1007,7 +1236,7 @@ exit or die with optional arguments. Rozšiřuje `ExpressionNode`.
 PrintNode
 ---------
 
-print expression. Rozšiřuje `ExpressionNode`. Implementuje `RightExtendingNode`, `OperatorNode`.
+`print` expression. Rozšiřuje `ExpressionNode`. Implementuje `RightExtendingNode`, `OperatorNode`.
 
 - `printKeyword`: `Token`
 - `expression`: `ExpressionNode`
@@ -1016,7 +1245,7 @@ print expression. Rozšiřuje `ExpressionNode`. Implementuje `RightExtendingNode
 YieldNode
 ---------
 
-yield, yield $value or yield $key => $value. Rozšiřuje `ExpressionNode`. Implementuje `RightExtendingNode`, `OperatorNode`.
+`yield`, `yield $value` or `yield $key => $value`. Rozšiřuje `ExpressionNode`. Implementuje `RightExtendingNode`, `OperatorNode`.
 
 - `yieldKeyword`: `Token`
 - `key`: `?ExpressionNode`
@@ -1027,7 +1256,7 @@ yield, yield $value or yield $key => $value. Rozšiřuje `ExpressionNode`. Imple
 YieldFromNode
 -------------
 
-yield from expression. Rozšiřuje `ExpressionNode`. Implementuje `RightExtendingNode`, `OperatorNode`.
+`yield from` expression. Rozšiřuje `ExpressionNode`. Implementuje `RightExtendingNode`, `OperatorNode`.
 
 - `yieldFromKeyword`: `Token`
 - `expression`: `ExpressionNode`
@@ -1036,7 +1265,7 @@ yield from expression. Rozšiřuje `ExpressionNode`. Implementuje `RightExtendin
 ThrowNode
 ---------
 
-throw expression. Rozšiřuje `ExpressionNode`. Implementuje `RightExtendingNode`, `OperatorNode`.
+`throw` expression. Rozšiřuje `ExpressionNode`. Implementuje `RightExtendingNode`, `OperatorNode`.
 
 - `throwKeyword`: `Token`
 - `expression`: `ExpressionNode`
@@ -1045,7 +1274,7 @@ throw expression. Rozšiřuje `ExpressionNode`. Implementuje `RightExtendingNode
 CloneNode
 ---------
 
-clone expression; clone(...) with arguments is a function call. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
+`clone` expression; `clone(...)` with arguments is a function call. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
 
 - `cloneKeyword`: `Token`
 - `expression`: `ExpressionNode`
@@ -1054,7 +1283,7 @@ clone expression; clone(...) with arguments is a function call. Rozšiřuje `Exp
 MatchNode
 ---------
 
-match expression. Rozšiřuje `ExpressionNode`.
+`match` expression. Rozšiřuje `ExpressionNode`.
 
 - `matchKeyword`: `Token`
 - `openParen`: `Token`
@@ -1086,7 +1315,7 @@ Anonymous function, optionally static, with captured variables. Rozšiřuje `Exp
 ArrowFunctionNode
 -----------------
 
-Arrow function fn(...) => expr, optionally static. Rozšiřuje `ExpressionNode`. Implementuje `FunctionLikeNode`, `RightExtendingNode`, `OperatorNode`.
+Arrow function `fn(...) => expr`, optionally `static`. Rozšiřuje `ExpressionNode`. Implementuje `FunctionLikeNode`, `RightExtendingNode`, `OperatorNode`.
 
 - `attributes`: `NodeList<AttributeGroupNode>`
 - `staticKeyword`: `?Token`
@@ -1114,7 +1343,7 @@ Command in backticks with interpolation. Rozšiřuje `ExpressionNode`.
 Členy tříd
 ==========
 
-Vlastnosti, konstanty, metody, případy výčtu, hooky a použití traitů.
+Vlastnosti, konstanty, metody, případy výčtu, hooky a použití traitů v `PhpSyntax\Nodes\Member`.
 
 
 PropertyNode
@@ -1141,6 +1370,8 @@ One property of a declaration with an optional default. Rozšiřuje `Node`.
 - `equals`: `?Token`
 - `default`: `?ExpressionNode`
 
+- `$plainName: string` – The name of the property without the dollar sign.
+
 
 PropertyHookNode
 ----------------
@@ -1158,6 +1389,8 @@ Property hook (get, set) with a block body, an arrow body or none. Rozšiřuje `
 - `doubleArrow`: `?Token`
 - `expression`: `?ExpressionNode`
 - `semicolon`: `?Token`
+
+- `$returnType: ?TypeNode`
 
 
 ClassConstNode
@@ -1191,11 +1424,13 @@ Method declaration; abstract and interface methods end with a semicolon instead 
 - `body`: `?Statement\BlockNode`
 - `semicolon`: `?Token`
 
+- `isConstructor(): bool` – Whether the method is the constructor, whose name PHP compares without regard to letter case.
+
 
 TraitUseNode
 ------------
 
-use of traits with optional adaptations in braces. Rozšiřuje `MemberNode`.
+`use` of traits with optional adaptations in braces. Rozšiřuje `MemberNode`.
 
 - `useKeyword`: `Token`
 - `traits`: `SeparatedNodeList<NameNode>`
@@ -1208,7 +1443,7 @@ use of traits with optional adaptations in braces. Rozšiřuje `MemberNode`.
 TraitPrecedenceNode
 -------------------
 
-Trait adaptation A::m insteadof B;. Rozšiřuje `Member\TraitAdaptationNode`.
+Trait adaptation `A::m insteadof B`. Rozšiřuje `Member\TraitAdaptationNode`.
 
 - `trait`: `NameNode`
 - `doubleColon`: `Token`
@@ -1221,7 +1456,7 @@ Trait adaptation A::m insteadof B;. Rozšiřuje `Member\TraitAdaptationNode`.
 TraitAliasNode
 --------------
 
-Trait adaptation m as `[modifier]` `[alias]`;. Rozšiřuje `Member\TraitAdaptationNode`.
+Trait adaptation `m as [modifier] [alias]`. Rozšiřuje `Member\TraitAdaptationNode`.
 
 - `trait`: `?NameNode`
 - `doubleColon`: `?Token`
@@ -1248,7 +1483,7 @@ Enum case with an optional backing value. Rozšiřuje `MemberNode`.
 Skaláry
 =======
 
-Čísla, řetězce a jejich interpolace, magické konstanty; text zůstává tak, jak byl zapsán.
+Čísla, řetězce a jejich interpolace, `true`, `false`, `null` a magické konstanty v `PhpSyntax\Nodes\Scalar`; text zůstává tak, jak byl zapsán.
 
 
 IntegerNode
@@ -1258,27 +1493,34 @@ Integer literal in any base, kept as written. Rozšiřuje `ScalarNode`.
 
 - `token`: `Token`
 
+- `$base: int` – The base the literal is written in: 2, 8, 10 or 16; a leading zero alone is the old octal notation.
+- `$value: int` – The value of the literal; a literal beyond the integer range is a float to PHP, so it is a FloatNode.
+
 
 FloatNode
 ---------
 
-Literal PHP reads as a float, kept as written. That is not the same as float syntax: an integer literal beyond the integer range is a float to PHP whatever its base (0xFFFFFFFFFFFFFFFF as much as 9223372036854775808), and the lexer hands it over as one, so such a literal is a node of this class. Rozšiřuje `ScalarNode`.
+Literal PHP reads as a float, kept as written. That is not the same as float syntax: an integer literal beyond the integer range is a float to PHP whatever its base (`0xFFFFFFFFFFFFFFFF` as much as `9223372036854775808`), and the lexer hands it over as one, so such a literal is a node of this class. Rozšiřuje `ScalarNode`.
 
 - `token`: `Token`
+
+- `$value: float` – The value of the literal, which is also how an integer literal beyond the integer range reaches PHP.
 
 
 BooleanNode
 -----------
 
-Boolean literal, kept in the letter case and with the leading backslash it is written with: true, FALSE, \True. Rozšiřuje `ScalarNode`.
+Boolean literal, kept in the letter case and with the leading backslash it is written with: `true`, `FALSE`, `\True`. Rozšiřuje `ScalarNode`.
 
 - `token`: `Token`
+
+- `$value: bool`
 
 
 NullNode
 --------
 
-Null literal, kept in the letter case and with the leading backslash it is written with: null, NULL, \Null. Rozšiřuje `ScalarNode`.
+Null literal, kept in the letter case and with the leading backslash it is written with: `null`, `NULL`, `\Null`. Rozšiřuje `ScalarNode`.
 
 - `token`: `Token`
 
@@ -1290,19 +1532,26 @@ String literal without interpolation, quotes included. Rozšiřuje `ScalarNode`.
 
 - `token`: `Token`
 
+- `$quote: string` – The delimiter the literal is written with: `'` or `"`, a `b` or `B` prefix left out.
+- `$value: string` – The value of the literal with its escape sequences resolved.
+- `static fromValue(string $value, string $quote = "'"): Scalar\StringNode` – A literal standing for the value, escaped as the delimiter needs it.
+- `setValue(string $value, ?string $quote = null): static` – Writes the literal: the value escaped as the delimiter needs it, in the delimiter given or in the one it has. The two go together, because the delimiter decides how the value is written.
+
 
 UnquotedStringNode
 ------------------
 
-Name of an offset written without quotes inside an interpolated string `("$row[label]")`, which PHP reads as a string; having no delimiter, it stands for itself and holds no escape sequence. Rozšiřuje `ScalarNode`.
+Name of an offset written without quotes inside an interpolated string (`"$row[label]"`), which PHP reads as a string; having no delimiter, it stands for itself and holds no escape sequence. Rozšiřuje `ScalarNode`.
 
 - `token`: `Token`
+
+- `$value: string` – The value of the offset, which is the text as it stands.
 
 
 MagicConstantNode
 -----------------
 
-Magic constant: __LINE__, __FILE__, __DIR__, __CLASS__, __TRAIT__, __METHOD__, __FUNCTION__, __PROPERTY__, __NAMESPACE__. Rozšiřuje `ScalarNode`.
+Magic constant: `__LINE__`, `__FILE__`, `__DIR__`, `__CLASS__`, `__TRAIT__`, `__METHOD__`, `__FUNCTION__`, `__PROPERTY__`, `__NAMESPACE__`. Rozšiřuje `ScalarNode`.
 
 - `token`: `Token`
 
@@ -1326,11 +1575,17 @@ Heredoc or nowdoc; the closing delimiter keeps its indentation, the parts keep t
 - `parts`: `NodeList<Scalar\InterpolatedStringPartNode|Scalar\InterpolationNode|ExpressionNode>`
 - `closeDelimiter`: `Token`
 
+- `$label: string` – The label between <<< and the body, without quotes.
+- `$indentation: string` – The indentation of the closing delimiter, which the body shares.
+- `$value: string` – The text of the body with its escape sequences resolved and the common indentation removed. Throws `LogicException` when the heredoc interpolates; `hasInterpolation()` tells beforehand.
+- `isNowdoc(): bool` – Whether the label is in single quotes, which makes a nowdoc that resolves no escape sequences.
+- `hasInterpolation(): bool` – Whether any part of the body is an interpolation, which leaves the heredoc without a value of its own.
+
 
 InterpolatedStringPartNode
 --------------------------
 
-Literal text between interpolations, whitespace included. What its escape sequences mean depends on the string it stands in, so the string is what resolves them, with PhpSyntax\Escaping. Rozšiřuje `Node`.
+Literal text between interpolations, whitespace included. What its escape sequences mean depends on the string it stands in, so the part keeps them as written and whoever reads it resolves them for that string, as `HeredocNode::$value` does for a heredoc. Rozšiřuje `Node`.
 
 - `token`: `Token`
 
@@ -1338,7 +1593,7 @@ Literal text between interpolations, whitespace included. What its escape sequen
 InterpolationNode
 -----------------
 
-Braced interpolation inside a string: {$expr} or ${name}. Rozšiřuje `Node`.
+Braced interpolation inside a string: `{$expr}`, `${name}`, `${name[expr]}` or `${expr}`. Rozšiřuje `Node`.
 
 - `openBrace`: `Token`
 - `expression`: `ExpressionNode`
@@ -1348,7 +1603,7 @@ Braced interpolation inside a string: {$expr} or ${name}. Rozšiřuje `Node`.
 Typy
 ====
 
-Typové deklarace parametrů, vlastností a návratových hodnot.
+Typové deklarace parametrů, vlastností, konstant třídy a návratových hodnot a typ hodnot výčtu (`enum Suit: string`) v `PhpSyntax\Nodes\Type`.
 
 
 NamedTypeNode
@@ -1357,6 +1612,8 @@ NamedTypeNode
 Type given by a name: builtin (int, static, array, callable) or a class. Rozšiřuje `TypeNode`.
 
 - `name`: `NameNode`
+
+- `isBuiltin(): bool` – Whether the type is one PHP knows itself, self, static and parent among them.
 
 
 NullableTypeNode

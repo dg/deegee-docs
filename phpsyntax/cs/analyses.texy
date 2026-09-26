@@ -32,7 +32,11 @@ $symbols = new PhpSyntax\Analyses\NamespacedSymbols(
 	complete: true,
 );
 $resolver = new PhpSyntax\Analyses\NameResolver($file, $symbols);
+$symbols->hasFunction('App\Utils\format');   // true
+$symbols->hasConstant('app\VERSION');        // true: jmenný prostor bez ohledu na velikost písmen, jméno konstanty přesně
 ```
+
+Jména v `NamespacedSymbols` musí být plná jména symbolů ve jmenném prostoru; holé `format` konstruktor odmítne výjimkou `InvalidArgumentException`, protože globální funkce do seznamu nepatří.
 
 ```php
 $resolver->getNamespace($node);         // 'App\Model', '' v globálním prostoru
@@ -47,6 +51,8 @@ $resolver->resolveConstant($name);
 $resolver->isGlobalFunctionCall($node, 'sizeof');   // volání globální funkce, případně té jedné
 $resolver->getUnqualifiedResolution('count', PhpSyntax\SymbolKind::Function, $node); // Global, Namespaced, nebo Uncertain, když pád do globálního stojí jen na odhadu
 ```
+
+Klíčem pole importů je alias tak, jak ho PHP porovnává: u tříd a funkcí, kde na velikosti písmen nezáleží, malými písmeny (`'strings' => 'Nette\Utils\Strings'`), u konstant tak, jak je zapsaný. Odpověď `getUnqualifiedResolution()` je výčet `PhpSyntax\UnqualifiedResolution`.
 
 `resolveClass()`, `resolveFunction()` i `resolveConstant()` chtějí jméno, které na nějaký symbol opravdu odkazuje, a ne každé `NameNode` takové je: `int` v typu pojmenovává vestavěný typ, `Foo` v `use Foo;` symbol teprve zavádí a `self` zastupuje třídu jen tam, kde je napsané. Na takové jméno resolver vyhodí `InvalidArgumentException`, místo aby ho tiše přečetl jako třídu jmenného prostoru a vrátil nesmysl `App\int`. Kdo prochází všechna jména v souboru, ptá se proto napřed [isReference() |tree#Jména]:
 
@@ -79,7 +85,7 @@ Cesta zpátky je stejně užitečná: jak plné jméno **zapsat** v místě, kde
 $kind = PhpSyntax\SymbolKind::ClassLike;
 
 $resolver->getShortName('Nette\Utils\Strings', $kind, $at);   // 'Strings', je importované
-$resolver->getShortName('App\Model\Order', $kind, $at);       // 'Order'
+$resolver->getShortName('App\Model\Order', $kind, $at);       // 'Order' v namespace App\Model
 $resolver->getShortName('Other\Thing', $kind, $at);           // '\Other\Thing', jinak by se hledalo v namespace
 $resolver->isAliasFree('Strings', $kind, $at);                // false, ten alias už něco znamená
 ```
@@ -104,11 +110,11 @@ Kde ve struktuře kód stojí:
 ```php
 $scope->getFunction($node);           // FunctionLikeNode: funkce, metoda, closure, arrow funkce nebo hook, nebo null
 $scope->getClass($node);              // ClassLikeNode nebo null
-$scope->hasThis($node);               // je tu $this: v nestatické metodě, v closure, která ho zachytila
-$scope->getCapturedVariables($closure);   // proměnné z use (...)
+$scope->hasThis($node);               // je tu $this: v nestatické metodě nebo hooku a v closure uvnitř nich
+$scope->getCapturedVariables($closure);   // proměnné z use (...) i s dolarem: ['$a', '$b']
 ```
 
-`hasThis()` bere v úvahu i to, že closure `$this` zdědí, ale `static function` ne, a že arrow funkce ho vidí vždy, když ho vidí okolí.
+`hasThis()` bere v úvahu i to, že closure i arrow funkce `$this` od okolí převezmou samy, bez `use`, kdežto `static function` a `static fn` ne. Property hook ho má vždy, protože patří k objektu.
 
 
 Vlastní analýza
