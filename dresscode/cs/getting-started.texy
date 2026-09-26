@@ -20,7 +20,7 @@ Do průběžné integrace, kde chcete verzi nástroje přibít na konkrétní č
 
 ```shell
 composer create-project dresscode/dresscode temp/dresscode
-temp/dresscode/bin/dresscode check src
+temp/dresscode/bin/dresscode check
 ```
 
 A do třetice: DressCode lze přidat jako vývojovou závislost projektu (`composer require --dev dresscode/dresscode`) a spouštět z `vendor/bin/dresscode`. Tuhle cestu chcete, jakmile máte v projektu i PHPStan: DressCode se ho pak ptá na typy kódu a dokáže třeba přepsat zastaralé API knihoven podle toho, čím proměnná opravdu je, viz [Typy z PHPStanu |types]. Počítejte jen s tím, že DressCode vyžaduje PHP 8.4 až 8.6, takže by na jedné z těchto verzí musel běžet i váš projekt, i kdyby mu jinak stačilo starší PHP.
@@ -33,23 +33,23 @@ Víc DressCode nepotřebuje: parser a strom, na kterých stojí, jsou samostatn�
 Kontrola kódu
 =============
 
-Řekněte DressCode, kam se má podívat:
+DressCode nemá vlastní styl, a proto bez konfigurace nezačne: kdyby tiše sáhl po jednom ze standardů, první `fix` by v projektu psaném jinak přepsal skoro každý řádek. Nejrychleji mu styl řeknete tak, že ho necháte změřit z kódu, který už máte:
 
 ```shell
-dresscode check src tests
+dresscode init
 ```
 
-Bez další konfigurace platí preset `dresscode/per`, tedy [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/], nástupce PSR-12. Jiný styl vyberete přepínačem `--preset`, ať už jednorázově, nebo než si založíte konfigurační soubor:
+Příkaz změří na vzorku souborů odsazení, uvozovky a tvar podmínek a zapíše do kořene projektu [`dresscode.neon` |#Konfigurace v NEONu]; podrobnosti najdete v popisu [příkazu `init` |cli#Konfigurace naměřená z kódu: init]. Od té chvíle stačí `dresscode check`. Kdo chce nástroj jen vyzkoušet a nic nezakládat, zvolí standard přepínačem `--preset` a vyjmenuje cesty:
 
 ```shell
-dresscode check src --preset dresscode/nette
+dresscode check src tests --preset dresscode/per
 ```
 
 Výstup vypadá takhle:
 
 /--pre .[terminal]
 DRESS|CODE 1.0.0
-Config     none, preset dresscode/per
+Config     /var/www/shop/dresscode.neon
 Target     PHP 8.2 from composer.json
 Checking   214 files in /var/www/shop
 
@@ -83,7 +83,7 @@ Automatická oprava
 Většinu nálezů opraví DressCode sám. Před prvním během si soubory commitněte nebo aspoň mějte čistý pracovní strom, ať v diffu vidíte přesně to, co nástroj změnil:
 
 ```shell
-dresscode fix src tests
+dresscode fix
 ```
 
 /--pre .[terminal]
@@ -121,7 +121,7 @@ Takhle to jde od PHP 8.0 až po PHP 8.6, které teprve vyjde. Co všechno se př
 Konfigurace v NEONu
 ===================
 
-Aby nebylo nutné pokaždé vypisovat cesty a preset, patří do kořene projektu soubor `dresscode.neon`. Napsat si ho můžete sám, nebo ho nechte změřit z kódu, který už máte, příkazem [`dresscode init` |cli#Konfigurace naměřená z kódu: init]. Takhle vypadá ten nejjednodušší:
+Konfigurace projektu je soubor `dresscode.neon` v jeho kořeni. Ten, který zapíše `dresscode init`, můžete dál upravovat, nebo si ho napsat sami. Takhle vypadá ten nejjednodušší:
 
 ```neon
 presets:
@@ -136,7 +136,7 @@ Je to [NEON |https://doc.nette.org/cs/neon], tedy formát, který znáte z konfi
 
 Vedle `presets` stojí klíč `groups`, kterým řeknete, co po kódu chcete kromě vzhledu: `cleanup` uklidí, co je v kódu pro nic, `modernization` přepíše kód na novější PHP, `deprecations` na nové API knihoven. Skupin je celkem šest a popisuje je [Konfigurace |configuration#Skupiny pravidel].
 
-Od téhle chvíle stačí `dresscode check`. Do téhož souboru přijdou i jednotlivá pravidla s volbami a výjimky pro cesty; všechno popisuje stránka [Konfigurace |configuration]. A protože pár řádků konfigurace znamená přes sto pravidel z několika vrstev, vypíše `dresscode config`, co z nich nakonec platí a odkud se každá hodnota vzala.
+Do téhož souboru přijdou i jednotlivá pravidla s volbami a výjimky pro cesty; všechno popisuje stránka [Konfigurace |configuration]. A protože pár řádků konfigurace znamená přes sto pravidel z několika vrstev, vypíše `dresscode config`, co z nich nakonec platí a odkud se každá hodnota vzala.
 
 
 Kam dál
