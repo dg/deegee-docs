@@ -4,7 +4,7 @@ How the pages in `dresscode/` are written where they depart from the Writing Sty
 
 ## Languages
 
-The pages exist in Czech only for now. Write every Czech paragraph as a single line, so that the English version can later be aligned with it line by line. The English version is written anew from the meaning, not translated sentence by sentence: English carried over from Czech keeps the Czech shape of the sentence and it shows.
+The pages are written in Czech and English only; they are not translated into the other languages. The Czech version exists alone for now. Write every Czech paragraph as a single line, so that the English version can later be aligned with it line by line. The English version is written anew from the meaning, not translated sentence by sentence: English carried over from Czech keeps the Czech shape of the sentence and it shows.
 
 ## Who speaks
 
@@ -20,7 +20,7 @@ The voice depends on the kind of text:
 - **The author speaks.** The first person is used only where it is true of the author: years of using PHP CS Fixer and PHP_CodeSniffer, not liking exceptions in code, watching for something in code review. The text never claims someone else wrote the tool and never plays an enthusiastic discoverer of it.
 - **The voice is graded.** It is strongest on the home page, in getting started, in the custom rule tutorial, on the page about porting rules, on the migration pages and on the pages about upgrading code. Elsewhere it carries at most one personal sentence per section, and the configuration, the CLI and the reference pages stay calm.
 - **Enthusiasm is carried by an example, not by an adjective.** At most one superlative, and only after the demonstration. Most of the text is calm, so that one or two places can be strong.
-- **A joke only when it rests on an observation and is new.** A weak joke is worse than none. What is meant to be funny must be funny by the situation, not by the wording, because irony, puns and idioms do not survive translation into eight languages.
+- **A joke only when it rests on an observation and is new.** A weak joke is worse than none. What is meant to be funny must be funny by the situation, not by the wording. An image both languages share (a fairy tale, a proverb known in both) may be used; a pun that works in one of them only has no counterpart in the other version.
 - **The thing first, then the explanation.** Short sentences, one thought per paragraph, a concrete number instead of an adjective ("4.5× shorter", not "much shorter"), no passive voice.
 - **Doubt is allowed.** A sentence admitting that an idea sounds like one to be ashamed of on Monday makes the reader trust the confident rest.
 - **Never from above.** No sentence may make a beginner feel slow.
