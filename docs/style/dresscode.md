@@ -28,6 +28,17 @@ The voice depends on the kind of text:
 
 Before a page is done, count and check: how many comparisons with other tools, how many superlatives, whether every example is verified, whether every sentence about another tool has a source, and what could be deleted.
 
+## The name as a voice
+
+The pages lean gently on the metaphor the name offers: a dress code, clothes, a tailor, made to measure. Gently means a touch where it fits by itself, never a voice running through the whole page, and **never at the cost of clarity**: the word a reader looks for (check, fix, violation, preset, baseline) stays, and the metaphor gets only the sentence around it.
+
+- **Where it belongs:** the perexes and the opening sentences ("Sám žádný styl nenosí, obléká kód podle presetu"), and at most once on a calm page such as the CLI (`init` "ušije `dresscode.neon` na míru").
+- **Where not:** the headings, which serve navigation and search, the facts of a rule page, and anything the reader has to act on.
+- **It works best where it also says what really happens.** `init` really measures the code, and a run without a configuration really has no dress code. Where the image is only decoration, leave it out.
+- **The texts of the tool speak the same way**, and a page quoting them quotes them as they are: the summary of a clean run (`OK  120 files, all up to the dress code`), the end of `init` (`dresscode.neon written, made to measure.`) and the refusal without a configuration (`so there is no dress code to check against`).
+- **Terms are not renamed** for the metaphor.
+- The Emperor's New Clothes is used once, in the baseline section of `suppressing` ("aby nikdo nechválil císařovy nové šaty"). It is a worn trope, so not again elsewhere.
+
 ## Writing about other tools
 
 - **Criticize the foundation, never the author.** The tools built on `token_get_all()` stand on a flat array of tokens, and that is what the text talks about. PHP CS Fixer, PHP_CodeSniffer and Slevomat are good tools made by smart people who did the most that foundation allows.
