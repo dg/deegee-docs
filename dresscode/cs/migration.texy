@@ -18,11 +18,13 @@ Postup má tři kroky a každý z nich se dá vrátit.
 1. Kód nechte, jak je
 =====================
 
-Komentáře `// phpcs:ignore`, `phpcs:disable`, `phpcs:enable`, `phpcs:ignoreFile` i anotace `@phpcsSuppress` dělají dál to, co dělaly. DressCode je přečte, cizí jméno pravidla si přeloží na své, a potlačení platí. Do kódu tedy zatím vůbec nemusíte sahat a první kontrolu můžete pustit hned:
+Komentáře `// phpcs:ignore`, `phpcs:disable`, `phpcs:enable`, `phpcs:ignoreFile` i anotace `@phpcsSuppress` fungují dál. DressCode je přečte, cizí jméno pravidla si přeloží na své, a potlačení platí. Do kódu tedy zatím vůbec nemusíte sahat a první kontrolu můžete pustit hned:
 
 ```shell
 dresscode check src tests
 ```
+
+Jeden rozdíl je potřeba znát: `phpcs:ignore` na samostatném řádku potlačoval v PHP_CodeSniffer jen následující řádek. DressCode ho čte stejně jako svůj `dresscode:ignore`, a ten na samostatném řádku platí pro celý následující příkaz, i když zabírá víc řádků. Potlačení tak může krýt víc, než kryl dřív.
 
 Bez konfigurace platí preset `dresscode/per`, tedy [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/]. Kdo dosud používal `@PER-CS` nebo `PSR12`, uvidí zhruba to, co čekal. Kdo měl doladěno nad rámec standardu, uvidí rozdíly, které vyřeší další krok.
 
@@ -37,7 +39,7 @@ dresscode import phpcs.xml > dresscode.php
 dresscode import .php-cs-fixer.dist.php > dresscode.php
 ```
 
-`phpcs.xml` je XML, takže se přečte bez čehokoli dalšího. Naproti tomu `.php-cs-fixer.dist.php` je PHP, které se musí spustit a které vrací objekt cizí knihovny; `import` na něm funguje jen v projektu, kde je ta knihovna ještě nainstalovaná. Proto konfiguraci překládejte dřív, než starý nástroj odeberete.
+`phpcs.xml` je XML, takže se přečte bez čehokoli dalšího. Naproti tomu `.php-cs-fixer.dist.php` je PHP, které se musí spustit a které vrací objekt cizí knihovny. `import` na něm funguje jen jako `vendor/bin/dresscode` v projektu, kde je PHP CS Fixer ještě nainstalovaný; DressCode nainstalovaný globálně nebo přes `create-project` jeho třídy nenajde a skončí chybou konfigurace (podrobnosti na stránce [PHP CS Fixer |from-php-cs-fixer#Než začnete]). Proto konfiguraci překládejte dřív, než starý nástroj odeberete.
 
 Na standardní výstup jde hotová konfigurace, na chybový výstup to, co se přenést nepodařilo:
 
@@ -73,7 +75,7 @@ Komentáře v kódu fungují i se starými jmény, nové jsou ale kratší a či
 dresscode migrate-suppressions src tests
 ```
 
-Z `phpcs:ignore SlevomatCodingStandard.Namespaces.UnusedUses` se stane `dresscode:ignore dresscode/unused-imports`, z `phpcs:disable` a `phpcs:enable` se stanou `dresscode:disable` a `dresscode:enable`, z `phpcs:ignoreFile` pak `dresscode:ignore-file`. Anotace `@phpcsSuppress` zůstane anotací, změní se v ní jen jméno pravidla. Pozor na `phpcs:ignore` na samostatném řádku: potlačoval jen následující řádek, kdežto `dresscode:ignore` na samostatném řádku platí pro celý následující příkaz kódu, i když zabírá víc řádků. `migrate-suppressions` na to upozorní a přepsaná místa stojí za to projít. Jméno, které žádné pravidlo nepokrývá, zůstane, jak bylo, a příkaz ho vypíše. Z toho výpisu máte seznam potlačení, která už nic nepotlačují.
+Z `phpcs:ignore SlevomatCodingStandard.Namespaces.UnusedUses` se stane `dresscode:ignore dresscode/unused-imports`, z `phpcs:disable` a `phpcs:enable` se stanou `dresscode:disable` a `dresscode:enable`, z `phpcs:ignoreFile` pak `dresscode:ignore-file`. Anotace `@phpcsSuppress` zůstane anotací, změní se v ní jen jméno pravidla. Když příkaz přepíše `phpcs:ignore` na samostatném řádku, připomene [rozdíl v rozsahu |#1. Kód nechte, jak je] poznámkou a přepsaná místa stojí za to projít. Jméno, které žádné pravidlo nepokrývá, zůstane, jak bylo, a příkaz ho vypíše. Z toho výpisu máte seznam potlačení, která už nic nepotlačují.
 
 
 První oprava
@@ -89,7 +91,7 @@ Návod, který slibuje bezešvý přechod, ztratí důvěru u prvního rozdílu,
 
 - **Priority neexistují.** Kdo si výsledek stavěl na pořadí fixerů, dostane u některých souborů jiný tvar kódu. Pravidla tu běží opakovaně, dokud se výsledek neustálí; [proč |how-it-works#Bez priorit: pravidla běží do ustálení].
 - **Pravidla bez protějšku** vypíše `import` i `migrate-suppressions`. Není jich málo, hlavně mezi sniffy o dokumentaci a mezi pravidly, kterými se nástroje navzájem překrývají.
-- **Rizikové (risky) pravidlo tu rizikové být nemusí.** Co PHP CS Fixer zapínal jen na výslovnou žádost, protože nad tokeny nerozeznal bezpečný případ od nebezpečného, rozhoduje tady strom, a pravidlo opraví jen ty bezpečné. Oprava, která chování měnit může, se ohlásí jako riziková a udělá se až u pravidla uvedeného v seznamu `fixRisky` v konfiguraci, nebo s `--fix-risky`. A pravidlo, které mění chování programu ze své podstaty (`strict-comparison` dělá z `==` `===`), zůstává vaším rozhodnutím, ať ho zapnete kdekoli.
+- **Rizikové (risky) pravidlo tu rizikové být nemusí.** Co PHP CS Fixer zapínal jen na výslovnou žádost, protože nad tokeny nerozeznal bezpečný případ od nebezpečného, rozhoduje tady strom, a pravidlo opraví jen ty bezpečné. Oprava, která chování měnit může, se ohlásí jako riziková oprava (risky fix) a udělá se až u pravidla uvedeného v seznamu `fixRisky` v konfiguraci, nebo s `--fix-risky`. A pravidlo, které mění chování programu ze své podstaty (`strict-comparison` dělá z `==` `===`), zůstává vaším rozhodnutím, ať ho zapnete kdekoli.
 - **Exit kódy jsou jiné**: `0` čisto, `1` porušení, `2` selhání nástroje. PHP_CodeSniffer i PHP CS Fixer mají vlastní stupnice, takže skript, který je vyhodnocuje, potřebuje jednu úpravu.
 - **Jeden nástroj místo dvou.** Kdo kombinoval CodeSniffer a Fixer, měl dvě konfigurace a dva kroky v CI. Teď je jedna a jeden.
 - **Místo výčtu pravidel se ptáte na záměr.** Konfigurace stojí na dvou otázkách: standard řekne, jak má kód vypadat, a [skupina pravidel |configuration#Skupiny pravidel] to, co po něm chcete kromě vzhledu. Skupin je šest a jejich jména jsou uzavřený výčet, takže se z řádku `groups: [cleanup]` nemá jak stát dvacet řádků se jmény pravidel, ani když katalog povyroste.

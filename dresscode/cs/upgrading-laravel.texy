@@ -25,7 +25,7 @@ groups:
 
 Balíček žádné pravidlo nezapne sám. Data se uplatní jen tehdy, když projekt má `laravel/framework`, a jen ty verze, na které projekt dosáhne.
 
-Larastan v projektu nevadí, naopak: ať ho máte v `phpstan.neon`, nebo ho zaregistroval `phpstan/extension-installer`, DressCode spustí aplikaci stejně jako PHPStan a fasádu `Request::get()` čte jako metodu třídy, která za ní stojí. Selže-li při tom `bootstrap/app.php`, DressCode skončí chybou se zprávou, se kterou start aplikace selhal, a bez typů nepokračuje. Alias z `config/app.php` psaný bez jmenného prostoru, `\Request::get()`, nezná žádná statická analýza, a ten zůstane nepovšimnutý.
+Larastan v projektu nevadí, naopak: ať ho máte v `phpstan.neon`, nebo ho zaregistroval `phpstan/extension-installer`, DressCode spustí aplikaci stejně jako PHPStan a fasádu `Request::get()` čte jako metodu třídy, která za ní stojí. Selže-li při tom `bootstrap/app.php`, vypíše Larastan sám hlášku "Application bootstrap failed" i s výjimkou, na které start aplikace selhal, a celý běh ukončí. Pozor v CI: exit kód je pak 1, stejně jako když DressCode v kódu něco najde. Alias z `config/app.php` psaný bez jmenného prostoru, `\Request::get()`, nezná žádná statická analýza, a ten zůstane nepovšimnutý.
 
 
 Co se opraví
@@ -36,7 +36,7 @@ Tohle je middleware, provider a controller psaný pro Laravel 10, v projektu na 
 ```php .[before]
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken as Middleware;  // Class Illuminate\Foundation\Http\Middleware\VerifyCsrfToken is replaced by Illuminate\Foundation\Http\Middleware\PreventRequestForgery
 
-class VerifyCsrfToken extends Middleware
+class VerifyCsrfToken extends Middleware  // Class Illuminate\Foundation\Http\Middleware\VerifyCsrfToken is replaced by Illuminate\Foundation\Http\Middleware\PreventRequestForgery
 {
 	protected $except = ['stripe/*'];
 }
@@ -97,20 +97,20 @@ class ReportController
 
 Minuty se převedly na sekundy, které Laravel 11 do vlastnosti ukládá. `Schema::getAllTables()` zůstalo: `getTables()` vrací pole se jménem a schématem každé tabulky, ne řádky databáze, a co s nimi váš kód dělá, musíte rozhodnout vy.
 
-Co všechno balíček opravuje:
+Příklady toho, co balíček opravuje, podle druhu změny:
 
 - **helpery Laravelu 5.8**: `str_slug()`, `str_limit()`, `array_get()`, `studly_case()` a dalších 35 na metody `Str` a `Arr` se stejnými argumenty, i s importem,
 - **přejmenované třídy**: `VerifyCsrfToken` a `ValidateCsrfToken` na `PreventRequestForgery`, trait `HasVersion7Uuids` na `HasUuids`, fasáda `Input` na `Request`, `Resource` na `JsonResource`, testovací `TestResponse` a `Assert` do jmenného prostoru `Illuminate\Testing`; přepíše se import, `extends`, `::class` i `withoutMiddleware()`,
 - **přejmenované členy**: `Request::get()` na `input()` i přes fasádu, `Lang::trans()` a `transChoice()` na `get()` a `choice()`, `dispatchNow()` jobu a funkce `dispatch_now()` na `dispatchSync()` a `dispatch_sync()`, `getRouteMiddleware()` kernelu na `getMiddlewareAliases()`, `validateCsrfTokens()` na `preventRequestForgery()`, `forceRootUrl()` na `useOrigin()`, metody kolekcí `containsOneItem()`, `containsManyItems()`, `reduceWithKeys()`, `reduceMany()` a `until()` na `hasSole()`, `hasMany()`, `reduce()`, `reduceSpread()` a `takeUntil()`, `Relation::getBaseQuery()` na `toBase()`, `PendingMail::sendNow()` na `send()`, vlastnost `QueueBusy::$connection` na `$connectionName`,
 - **volání jiného tvaru**: `$limit->decayMinutes` na sekundy, `$event->exceptionOccurred` na `$event->exception !== null`, `redirectTo()` výjimky `AuthenticationException` s aktuálním požadavkem, `Redirect::home()` na `route('home')`, `assertDeleted()` testů na `assertModelMissing()` nebo `assertDatabaseMissing()`, `assertTimesSent($count, $notification)` na `assertSentTimes($notification, $count)`, `addHidden()` a `addVisible()` modelu na `makeHidden()` a `makeVisible()`, sloupce `double('x', 8, 2)`, `unsignedDecimal()` a `unsignedDouble()` migrací, jak je píše Laravel 11.
 
-To je jen výběr; úplný výčet je v datech balíčku, v souboru `upgrading/framework.neon`.
+Úplný výčet je v datech balíčku, v souboru `upgrading/framework.neon`.
 
 Helper volaný bez zpětného lomítka uvnitř jmenného prostoru, jak je to v aplikaci obvyklé, DressCode přepíše jen s `--fix-risky`: stejnojmennou funkci by mohl deklarovat ten prostor. `str_contains()`, `array_first()` a `array_last()` data nechávají být, protože dnes jsou to funkce PHP.
 
 `Request::get()` a `input()` nejsou úplně totéž: `get()` čte napřed atributy routy, pak query a nakonec tělo požadavku, `input()` atributy nečte, tělo má před query a klíč s tečkou bere jako cestu do pole. Laravel sám u zastaralého `get()` radí `input()` a DressCode ho píše také; hodnotu, kterou nastavuje middleware jako atribut routy, čtěte přes `$request->attributes->get()`.
 
-Co framework změnil v signaturách, metodu, kterou přidal kontrakt, a návratový typ, který musí deklarovat potomek, data nepotřebuje: ohlásí a zapíše to `dresscode/no-unimplemented-abstract-method` a `dresscode/override-signature` z téže skupiny, z deklarací nainstalované verze. Dopsaný návratový typ je riziková oprava (risky fix): tělo metody může vracet něco jiného, a proto se udělá jen s `--fix-risky` nebo s pravidlem v klíči [`fixRisky` |configuration#Varování a rizikové opravy].
+Co framework změnil v signaturách, metodu, kterou přidal kontrakt, a návratový typ, který musí deklarovat potomek, data nepotřebuje: ohlásí a zapíše to `dresscode/no-unimplemented-abstract-method` a `dresscode/override-signature` z téže skupiny, z deklarací nainstalované verze. Dopsání návratového typu je riziková oprava (risky fix): tělo metody může vracet něco jiného, a proto se udělá jen s `--fix-risky` nebo s pravidlem v klíči [`fixRisky` |configuration#Varování a rizikové opravy].
 
 
 Co zůstane na vás

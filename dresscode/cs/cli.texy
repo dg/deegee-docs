@@ -73,26 +73,26 @@ Presets    dresscode/psr12, dresscode/per, dresscode/nette-style, dresscode/nett
 Groups     cleanup, types, correctness
 Style      a tab, the line ending each file mostly has, lines of up to 140 characters
 Names      certain, the namespaces declare no function and no constant
-Rules      152 of 211 run
+Rules      155 of 211 run
 
   dresscode/name-casing                       dresscode/nette
       classes                         PascalCase              dresscode/nette
       constants                       PascalCase              dresscode/nette (over dresscode/psr12 UPPER_CASE, dresscode/per UPPER_CASE)
   dresscode/braces-position                   dresscode/nette-style
       emptyBodies                     ownLine                 dresscode/nette-style (over dresscode/per sameLine)
+  dresscode/strict-call                       group correctness, risky fixes only reported, only warns
   dresscode/string-quotes                     the configuration
-  dresscode/strict-call                       group correctness, risky fixes only reported
   ...
 
 Not running
+  dresscode/class-name-reference-for-string-literal it needs the types of the code and the configuration sets no types
+  dresscode/useless-parentheses-around-new it needs PHP 8.4 and the target is 8.2
   dresscode/useless-overriding-method     it needs the types of the code and the configuration sets no types
-  dresscode/useless-else                  turned off by dresscode/nette
-  dresscode/type-hint-required            turned off by dresscode/nette
-  ...
+  dresscode/no-manual-empty-string-test   it needs the types of the code and the configuration sets no types
   52 more that no preset or rule of the configuration mentions
 \--
 
-Řádek `Names` říká, jak se berou [nekvalifikovaná jména funkcí a konstant ve jmenných prostorech |namespaces], a když konfigurace nějaké jmenuje, vypíše je pod sebou. Řádek `Groups` říká, ke kterým [skupinám pravidel |configuration#Skupiny pravidel] se konfigurace doresolvovala, a pravidlo, které zapnula skupina, má jako vrstvu `group <jméno>`. U každého pravidla stojí vrstva, která ho zapnula, u každé volby, kterou některá vrstva jmenovala, výsledná hodnota, kdo ji nastavil a co tím přebil. Pravidlo s [rizikovými opravami |configuration#Varování a rizikové opravy] navíc říká, jestli jste je přijali (`risky fixes accepted`), nebo jestli se jen ohlásí (`risky fixes only reported`). Pravidlo, které neběží, říká proč: vypnul ho preset nebo konfigurace, chybí mu verze PHP, typy nebo knihovna, kterou hlídá, zapíná ho jen přepis, nebo o něm nikdo nemluvil. `--file cesta` ukáže totéž pro jeden soubor, tedy i s přepisy, které pro něj platí, a `--json` dá výstup jako data pro nástroje.
+Řádek `Names` říká, jak se berou [nekvalifikovaná jména funkcí a konstant ve jmenných prostorech |namespaces], a když konfigurace nějaké jmenuje, vypíše je pod sebou. Řádek `Groups` říká, ke kterým [skupinám pravidel |configuration#Skupiny pravidel] se konfigurace doresolvovala, a pravidlo, které zapnula skupina, má jako vrstvu `group <jméno>`. U každého pravidla stojí vrstva, která ho zapnula, u každé volby, kterou některá vrstva jmenovala, výsledná hodnota, kdo ji nastavil a co tím přebil. Pravidlo s [rizikovými opravami |configuration#Varování a rizikové opravy] navíc říká, jestli jste je přijali (`risky fixes accepted`), nebo jestli se jen ohlásí (`risky fixes only reported`), a pravidlo z klíče `warnings` dostane příznak `only warns`. Když projekt používá [upgradovací data knihoven |upgrading-libraries], přibude řádek `Packages` s počtem upgradovacích souborů a pod ním každý balíček s verzí, se kterou musí kód fungovat, se souborem, odkud data pocházejí, a s verzemi, na které se dá ještě upgradovat. Pravidlo, které neběží, říká proč: vypnul ho preset nebo konfigurace, chybí mu verze PHP, typy nebo knihovna, kterou hlídá, zapíná ho jen přepis, nebo o něm nikdo nemluvil. `--file cesta` ukáže totéž pro jeden soubor, tedy i s přepisy, které pro něj platí, a `--json` dá výstup jako data pro nástroje.
 
 
 Vysvětlení pravidel: explain
@@ -101,11 +101,15 @@ Vysvětlení pravidel: explain
 Jméno pravidla ve výpisu je odkaz, ne vysvětlení. `dresscode explain <pravidlo>` k němu dá popis, fázi, volby s hodnotou a vrstvou, která ji v tomhle projektu nastavila, a příklad kódu před opravou a po ní:
 
 /--pre .[terminal]
+DRESS|CODE 1.0.0
+Config     /var/www/shop/dresscode.neon
+Target     PHP 8.2 from composer.json
+
 dresscode/string-quotes
 Decides which quotes a string that needs neither kind is written with.
 stage Structure
 
-It runs in this project, set by dresscode/nette.
+It runs in this project, set by the configuration.
 
 Options
   quotes                     single                  (default)
@@ -115,13 +119,15 @@ Example
   <?php
   $name = "Kafka";
   $greeting = "Hello, $name";
+  $path = "a\tb";
   becomes
   <?php
   $name = 'Kafka';
   $greeting = "Hello, $name";
+  $path = "a\tb";
 \--
 
-Příklad je fixtura pravidla, kterou jeho autor vybral jako ukázku a přibalil k balíčku, takže ho testovací sada pouští proti pravidlu a ukázka nemůže zastarat. Příklad nemá každé pravidlo; kde ho autor nepřipravil, `explain` ho vynechá. Pravidlo, které jen hlásí, má příklad bez "becomes". Diff toho, co by `fix` udělal s vaším kódem, ukáže `check --diff`.
+Příklad je fixtura, tedy dvojice souborů s kódem před opravou a po ní, kterou autor pravidla vybral jako ukázku a přibalil k balíčku v adresáři `examples/`. Vestavěná pravidla mají ukázky zařazené v testech DressCode, takže nemůžou zastarat; u pravidla z rozšíření to platí, když si je jeho autor [pustí ve vlastních testech |testing-rules#Fixtury]. Pravidlo může mít příkladů víc, pak jsou očíslované (`Example 1`, `Example 2`), a příklad, který pravidlu nastavuje volby, je vypíše za popiskem `with {...}`. Příklad nemá každé pravidlo; kde ho autor nepřipravil, `explain` ho vynechá. Pravidlo, které jen hlásí, má příklad bez "becomes". Diff toho, co by `fix` udělal s vaším kódem, ukáže `check --diff`.
 
 
 Bez jména pravidla `dresscode explain` vysvětlí všechna pravidla, která v projektu běží. S `--output` je zapíše do souboru jako Markdown: z čeho se konfigurace skládá a u každého pravidla popis, volby, jak je má tenhle projekt, a příklad, seskupeno podle oblastí kódu.
@@ -158,7 +164,7 @@ Dry run    per         2 of 3 sampled files would change, the one written
 dresscode.neon written.
 ```
 
-Vzorek je každý k-tý soubor setříděného seznamu, nejvýš 300 souborů a 2 MB, aby měření trvalo vteřiny i ve velkém projektu. Kromě výchozích vyloučených cest jdou stranou adresáře `fixtures`, `Fixtures` a `expected`, soubory větší než 100 kB a soubory, které v hlavičce říkají, že je vygeneroval nástroj (`@generated`, "do not edit"), protože nic z toho nikdo nepíše rukou; kolik souborů vynechal pro velikost nebo jako vygenerované, řekne řádek `Sample`. Řádky `Dry run` jsou nasucho spuštěný `fix`: říkají, kolik souborů vzorku by každý ze čtyř standardů změnil, tedy co vás čeká při prvním opravdovém `fix`. Se zadaným `--preset` je řádek jen jeden, pro zvolený standard.
+Vzorek je každý k-tý soubor setříděného seznamu, nejvýš 300 souborů a 2 MB, aby měření trvalo vteřiny i ve velkém projektu. Kromě výchozích vyloučených cest jdou stranou adresáře `fixtures`, `Fixtures` a `expected`, soubory větší než 100 kB a soubory, které v hlavičce říkají, že je vygeneroval nástroj (`@generated`, "do not edit"), protože nic z toho nikdo nepíše rukou. Ty z těchto tří adresářů, které v projektu najde, zapíše i do klíče `excludePaths`, aby je vynechávala i každá další kontrola. Kolik souborů vynechal pro velikost nebo jako vygenerované, řekne řádek `Sample`. Řádky `Dry run` jsou nasucho spuštěný `fix`: říkají, kolik souborů vzorku by každý ze čtyř standardů změnil, tedy co vás čeká při prvním opravdovém `fix`. Se zadaným `--preset` je řádek jen jeden, pro zvolený standard.
 
 Měří se tři rozhodnutí, a každé jinou jednotkou, podle toho, jak často se v kódu vyskytuje:
 

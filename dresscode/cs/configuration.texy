@@ -2,7 +2,7 @@ Konfigurace
 ***********
 
 .[perex]
-Konfigurace je jeden soubor v kořeni projektu: `dresscode.neon`, nebo `dresscode.php`, pokud dáváte přednost PHP. Řeknete v něm, podle jakého standardu se kontroluje a co z něj chcete mít jinak. A to s přesností, jakou jinde nenajdete: každá část projektu může mít vlastní presety, vlastní styl, vlastní verzi PHP, vlastní seznam rizikových oprav, které přijímáte, i vlastní pravidla, která jen varují. Zdrojáky, testy i šablony generátoru tak dostanou každý přesně to, co potřebují, a pořád je to jeden krátký soubor.
+Konfigurace je jeden soubor v kořeni projektu: `dresscode.neon`, nebo `dresscode.php`, pokud dáváte přednost PHP. Řeknete v něm, podle jakého standardu se kontroluje a co z něj chcete mít jinak. A to s přesností, jakou jinde nenajdete: každá část projektu může mít vlastní presety, vlastní styl, vlastní verzi PHP, vlastní seznam rizikových oprav (risky fixes), které přijímáte, i vlastní pravidla, která jen varují. Zdrojáky, testy i šablony generátoru tak dostanou každý přesně to, co potřebují, a pořád je to jeden krátký soubor.
 
 
 Konfigurační soubor
@@ -66,7 +66,6 @@ Nejdůležitější věc, kterou o konfiguraci DressCode potřebujete vědět: t
 | `rules` | která pravidla běží a s jakými volbami |
 | `indent`, `eol`, `lineLength` | odsazení, konec řádku a nejdelší řádek |
 | `php` | pro jakou verzi PHP je kód psaný |
-| `types` | odkud se berou typy kódu |
 | `namespaces` | které funkce a konstanty deklarují jmenné prostory |
 | `nameResolution` | jestli jsou ty seznamy úplné |
 | `fixRisky` | u kterých pravidel přijímáte rizikové opravy |
@@ -74,7 +73,7 @@ Nejdůležitější věc, kterou o konfiguraci DressCode potřebujete vědět: t
 
 Profil má celý projekt: to jsou klíče nejvyšší úrovně vašeho souboru. Vlastní profil může mít [každá část projektu |#Jiný profil pro část projektu], třeba testy nebo jeden adresář. A [preset |presets-and-extensions] není nic jiného než profil pod jménem. Co umíte napsat pro celý projekt, umíte tedy napsat i pro testy nebo do presetu, který sdílíte mezi projekty, a naopak: preset, který jinde zapínáte pro celý projekt, můžete zapnout jen pro jeho část.
 
-Pět klíčů zůstává rozhodnutím projektu a preset je nastavit nemůže: verze PHP (`php`), odkud se berou typy (`types`), úplnost seznamů (`nameResolution`), souhlas s rizikovými opravami (`fixRisky`) a pravidla, která jen varují (`warnings`). Preset zná standard, váš kód znáte jen vy. Zbylé klíče konfigurace pak říkají, co se kontroluje a co si projekt bere z balíčků. Kdo co smí nastavit, shrnuje tabulka:
+Čtyři klíče profilu zůstávají rozhodnutím projektu a preset je nastavit nemůže: verze PHP (`php`), úplnost seznamů (`nameResolution`), souhlas s rizikovými opravami (`fixRisky`) a pravidla, která jen varují (`warnings`). Preset zná standard, váš kód znáte jen vy. Zbylé klíče konfigurace do profilu nepatří: říkají, co se kontroluje, odkud se berou typy kódu (`types`) a co si projekt bere z balíčků. Kdo co smí nastavit, shrnuje tabulka:
 
 | klíče | konfigurace | přepis | preset | rozšíření |
 |---|---|---|---|---|
@@ -106,9 +105,9 @@ Pro každý soubor se profily skládají do vrstev, od nejnižší po nejvyšš�
 
 Preset, který už leží níž, se podruhé nepokládá. Vyšší vrstva mění jen to, co sama říká, a jak to změní, záleží na druhu hodnoty:
 
-- **Hodnota** (`indent`, `eol`, `lineLength`, `php`, `nameResolution`, `types`) platí z nejvyšší vrstvy, která ji uvádí.
+- **Hodnota** (`indent`, `eol`, `lineLength`, `php`, `nameResolution`) platí z nejvyšší vrstvy, která ji uvádí.
 - **Seznam** (`groups`, `namespaces`, `fixRisky`, `warnings`) se přes vrstvy sčítá. Přepis pro testy tak k seznamu projektu přidává a nic z něj neubere.
-- **Volby pravidla** se slévají. **Mapa voleb se slévá po klíčích**: když preset nastaví pravidlu `dresscode/braces-position` devět voleb a vy uvedete jednu, platí ta vaše a zbylých osm zůstane, jak je nastavil preset. **Skalár a seznam naopak nahrazují celou hodnotu**: `multiLine: [arguments]` u `dresscode/trailing-comma` znamená jen argumenty, ať preset říkal cokoli, takže kdo chce přidávat, opíše i zděděné položky. A **`keep` na úrovni pravidla maže všechno**, co o něm vrstvy pod ním řekly, kromě dat z nainstalovaných balíčků (soubory `upgrading.neon`); mapa uvedená v další vrstvě pak začíná znovu od výchozích hodnot pravidla a od těch dat.
+- **Volby pravidla** se slévají. **Mapa voleb se slévá po klíčích**: když preset nastaví pravidlu `dresscode/braces-position` devět voleb a vy uvedete jednu, platí ta vaše a zbylých osm zůstane, jak je nastavil preset. **Skalár a seznam naopak nahrazují celou hodnotu**: `multiLine: [arguments]` u `dresscode/trailing-comma` znamená jen argumenty, ať preset říkal cokoli, takže kdo chce přidávat, opíše i zděděné položky. A **`keep` na úrovni pravidla maže všechno**, co o něm vrstvy pod ním řekly, kromě dat ze souborů `upgrading.neon`, ať je přinesly nainstalované balíčky, nebo projekt sám; mapa uvedená v další vrstvě pak začíná znovu od výchozích hodnot pravidla a od těch dat.
 
 Odkud každá hodnota přišla a co přebila, vypíše [`dresscode config` |cli#Co konfigurace znamená: config].
 
@@ -214,7 +213,7 @@ Klíč `types: phpstan` řekne, že se typy kódu berou z PHPStanu nainstalovan�
 types: phpstan
 ```
 
-Stejně jako verze PHP je to rozhodnutí projektu, a preset ho proto nastavit nemůže; uvádí se na nejvyšší úrovni konfigurace. Pravidlo, které typy potřebuje a které zapíná preset, se bez klíče `types` potichu vynechá. Pravidlo, které jste zapnuli jménem, je bez klíče `types` chyba konfigurace, protože běh, ve kterém by pravidlo chybělo, by tvrdil, že je kód v pořádku. Co všechno typy umožní a co stojí, popisuje stránka [Typy z PHPStanu |types].
+Je to rozhodnutí celého projektu, a proto ho nenastaví preset ani přepis; uvádí se jen na nejvyšší úrovni konfigurace. Pravidlo, které typy potřebuje a které zapíná preset, se bez klíče `types` potichu vynechá. Pravidlo, které jste zapnuli jménem, je bez klíče `types` chyba konfigurace, protože běh, ve kterém by pravidlo chybělo, by tvrdil, že je kód v pořádku. Co všechno typy umožní a co stojí, popisuje stránka [Typy z PHPStanu |types].
 
 
 Pravidla a jejich volby
@@ -287,7 +286,7 @@ overrides:
 
 Co z toho vyjde:
 
-- Soubory v `src` dostanou k Nette Coding Standardu navíc skupinu `optimized-calls`, která zapíše volání tak, aby je PHP mohlo [optimalizovat |optimizations]. Přepis leží nad klíči konfigurace, takže pravidlu, které nastavují oba, dá poslední slovo přepis; o volbách, které přepis nezmíní, dál rozhoduje projekt.
+- Soubory v `src` dostanou k presetu `dresscode/nette` navíc skupinu `optimized-calls`, která zapíše volání tak, aby je PHP mohlo [optimalizovat |optimizations]. Přepis leží nad klíči konfigurace, takže pravidlu, které nastavují oba, dá poslední slovo přepis; o volbách, které přepis nezmíní, dál rozhoduje projekt.
 - V `tests` říká `nameResolution: uncertain`, že seznamy funkcí z konfigurace pro testy úplné nejsou. Opravy, které stojí na tom, že je funkce globální, se tam jen ohlásí jako rizikové a hlídač nevyjmenovaných deklarací tam mlčí, takže pomocná funkce testu do konfigurace psát nemusíte. Zdrojáky přitom dál těží z jistoty; podrobnosti jsou na stránce [Funkce a konstanty ve jmenných prostorech |namespaces#Pomocné funkce v testech].
 - Tamtéž `{afterImports: 2}` změní jediný klíč a ostatní čísla z presetu zůstanou, a `warnings` přidá k seznamu projektu pravidlo, které v testech jen varuje.
 - Šablony v `resources/stubs` se odsazují dvěma mezerami a ve všem ostatním platí totéž co ve zbytku projektu.
@@ -313,7 +312,7 @@ warnings:
 	- dresscode/line-length
 ```
 
-Riziková oprava je taková, která může změnit, co kód dělá. Většinou je to vlastnost konkrétního místa: `dresscode/modern-class-name-reference` nahradí `get_class($this)` za `static::class` bezpečně, kdežto `get_class($obj)` nahradí za `$obj::class` jen s volbou `onObjects` a vždy jako rizikovou opravu, protože s argumentem, který není objekt, se oba zápisy chovají jinak. Pravidlo tedy opraví, co bezpečně umí, a rizikový výskyt jen ohlásí. Jiné pravidlo ale bezpečné místo z kódu poznat nemůže, a pak je riziková každá jeho oprava: `dresscode/strict-call` doplní do `in_array()` parametr `$strict = true`, a kód, který spoléhal na volné porovnání, pak může najít něco jiného. Shrnutí řekne, kolik rizikových oprav čeká, a ve formátu `json` má každé takové porušení příznak `risky`.
+Riziková oprava je taková, která může změnit, co kód dělá. Většinou je to vlastnost konkrétního místa: `dresscode/modern-class-name-reference` nahradí `get_class($this)` zápisem `static::class` bezpečně, kdežto `get_class($obj)` zápisem `$obj::class` jen s volbou `onObjects` a vždy jako rizikovou opravu, protože s argumentem, který není objekt, se oba zápisy chovají jinak. Pravidlo tedy opraví, co bezpečně umí, a rizikový výskyt jen ohlásí. Jiné pravidlo ale bezpečné místo z kódu poznat nemůže, a pak je riziková každá jeho oprava: `dresscode/strict-call` doplní do `in_array()` parametr `$strict = true`, a kód, který spoléhal na volné porovnání, pak může najít něco jiného. Shrnutí řekne, kolik rizikových oprav čeká, a ve formátu `json` má každé takové porušení příznak `risky`.
 
 Zapnout pravidlo, ať jménem, nebo presetem, ještě neznamená souhlasit s jeho rizikovými opravami. Souhlas dává projekt klíčem `fixRisky`, seznamem pravidel, jejichž rizikové opravy přijímá; `fix` pak udělá jen ty a ostatní ohlásí. Preset tenhle souhlas dát nemůže a DressCode preset, který by se o to pokusil, odmítne. Git hook nebo editor proto nepotřebují žádný přepínač: opraví, co projekt přijal, a zbytek ohlásí. Přepínač `--fix-risky` dovolí rizikové opravy všech pravidel na jeden běh:
 
@@ -384,7 +383,7 @@ Rozšíření o tom, jak se kód píše, nerozhoduje: nezapne preset ani pravidl
 
 V klíči `extensions` může stát i třída pravidla nebo presetu. Tím dostane své jméno: pravidlo pak zapnete jménem v `rules`, na jeden běh v `--rule` a potlačíte ho v komentáři `dresscode:ignore`, preset zapnete jménem v `presets`, obojí v konfiguraci i v přepisu. Jak rozšíření napsat, popisuje [Vlastní preset a rozšíření |presets-and-extensions#Rozšíření].
 
-Balíček může své rozšíření ohlásit i sám, ve svém `composer.json` pod klíčem `extra.dresscode.extension`. DressCode ho pak po instalaci najde v `vendor/composer/installed.json` a do `extensions` ho psát nemusíte. Stejně najde soubory `upgrading.neon`, které balíček uvede pod `extra.dresscode.upgrading` a ve kterých stojí, co verze knihoven přejmenovaly nebo zrušily, viz [Aktualizace knihoven |upgrading-libraries]. Oba klíče čte i z `composer.json` projektu samotného. Ani jedno přitom žádné pravidlo nezapne: pravidla z balíčku jen dostanou svá jména a data se uplatní jen v pravidlech, která jste zapnuli sami, ať jménem, nebo skupinou `deprecations`. Po instalaci balíčku `dresscode/rules-nette` tak ví `dresscode/replaced-classes`, že se z `Nette\Forms\IControl` stalo `Nette\Forms\Control`, a vy jste neudělali nic než to pravidlo zapnuli.
+Balíček může své rozšíření ohlásit i sám, ve svém `composer.json` pod klíčem `extra.dresscode.extension`. DressCode ho pak po instalaci najde v `vendor/composer/installed.json` a do `extensions` ho psát nemusíte. Stejně najde soubory `upgrading.neon`, které balíček uvede pod `extra.dresscode.upgrading` a ve kterých stojí, co verze knihoven přejmenovaly nebo zrušily, viz [Aktualizace knihoven |upgrading-libraries]. Oba klíče čte i z `composer.json` projektu samotného. Ani jedno přitom samo žádné pravidlo nezapne: pravidla z balíčku jen dostanou svá jména. Data se uplatní, až když projekt zapne skupinu, ke které se soubor dat hlásí klíčem `group` (`deprecations`, nebo `modernization`). Pravidlo, které jmenuje konfigurace nebo preset, dostane data ze všech souborů. Po instalaci balíčku `dresscode/rules-nette` tak ví `dresscode/replaced-classes`, že se z `Nette\Forms\IControl` stalo `Nette\Forms\Control`, a vy jste neudělali nic než to pravidlo zapnuli.
 
 
 Objekty a callbacky

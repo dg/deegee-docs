@@ -122,9 +122,11 @@ Každý z pěti nálezů potřeboval vědět něco, co v souboru není. Šestý,
 
 K tomu `dresscode/useless-overriding-method` smaže metodu, která jen předá své parametry stejnojmenné metodě rodiče. Typy prozradí, jestli ji volající od rodičovské vůbec rozezná: rodič ji musí deklarovat se stejnou viditelností, parametry i návratovým typem. Oprava je riziková (risky fix), protože rodič, který čte `func_get_args()`, by pak dostal i argumenty navíc a z výpisu zásobníku zmizí jeden řádek; udělá se, až pravidlo uvedete v klíči `fixRisky`.
 
-Bez typů se neobejdou ani pravidla, která hlídají dědění po nové verzi knihovny: `dresscode/override-signature` přizpůsobí metodu potomka signatuře předka, `dresscode/no-final-parent` ohlásí potomka třídy, která se stala `final`, a `dresscode/no-unimplemented-abstract-method` abstraktní metodu, kterou potomek nemá. Z balíčku `dresscode/rules-nette` je potřebují `nette/link-destination-notation` a `nette/monitor-for-attached-hook`. Několik dalších pravidel běží i bez typů, ale s nimi toho udělají víc: `dresscode/pipe-operator` z nich pozná, jestli metoda nebere parametr referencí, a bez nich je jeho oprava volání metody riziková, `dresscode/attribute-for-annotation` a `dresscode/attribute-for-member` ohlásí cílovou třídu, která atributem není, i atribut s nevyplněným povinným parametrem, a `dresscode/static-for-private-method-without-this` pozná, která třída je opravdu předkem.
+Bez typů se neobejdou ani pravidla, která hlídají dědění po nové verzi knihovny: `dresscode/override-signature` přizpůsobí metodu potomka signatuře předka, `dresscode/no-final-parent` ohlásí potomka třídy, která se stala `final`, a `dresscode/no-unimplemented-abstract-method` abstraktní metodu, kterou potomek nemá. Z balíčku `dresscode/rules-nette` je potřebují `nette/link-destination-notation` a `nette/monitor-for-attached-hook`.
 
-Zvlášť jedno po druhém tahle pravidla zapínat nemusíte: patří do [skupin |configuration#Skupiny pravidel] `cleanup`, `deprecations` a `modernization` a klíč `types` je dá do pohybu. Nepleťte si přitom skupinu s klíčem: skupina říká, co po kódu chcete, klíč říká, odkud se typy kódu zjišťují, a pravidlo, které se bez typů neobejde, není tím pádem pravidlo skupiny `types`. Standard `dresscode/nette` nese skupiny `cleanup`, `types` a `correctness`, takže mu stačí přidat klíč a skupiny `deprecations` a `modernization`; ty v něm nejsou, protože co která verze zrušila a co nová verze píše líp, je věc aktualizace, a tu si pustíte, až ji budete chtít:
+Několik dalších pravidel běží i bez typů, ale s nimi toho udělají víc. `dresscode/pipe-operator` z nich pozná, jestli metoda nebere parametr referencí; bez nich je jeho oprava volání metody riziková. `dresscode/static-for-private-method-without-this` pozná, která třída je opravdu předkem. `dresscode/attribute-for-member` a z balíčku `dresscode/rules-laravel` pravidla `laravel/casts-method-for-casts-property` a `laravel/scope-attribute-for-scope-prefix` bez typů poznají jen třídu, která předka jmenuje sama v `extends` nebo `implements`; s typy i tu, která od něj dědí přes další třídu, třeba model odvozený od vašeho `BaseModel`. `dresscode/attribute-for-member` navíc s typy ohlásí rozhraní, které třída zdědila od rodiče, a atribut, jehož konstruktoru by chyběl povinný argument. Atribut s chybějícím povinným argumentem ohlásí s typy i `dresscode/attribute-for-annotation`, a když je klíčem mapy maska jmenného prostoru, také cílovou třídu, která neexistuje nebo atributem není.
+
+Pravidla, která se bez typů neobejdou, zvlášť jedno po druhém zapínat nemusíte: patří do [skupin |configuration#Skupiny pravidel] `cleanup`, `deprecations` a `modernization` a klíč `types` je dá do pohybu. Nepleťte si přitom skupinu s klíčem: skupina říká, co po kódu chcete, klíč říká, odkud se typy kódu zjišťují, a pravidlo, které se bez typů neobejde, není tím pádem pravidlo skupiny `types`. Standard `dresscode/nette` nese skupiny `cleanup`, `types` a `correctness`, takže mu stačí přidat klíč a skupiny `deprecations` a `modernization`; ty v něm nejsou, protože co která verze zrušila a co nová verze píše líp, je věc aktualizace, a tu si pustíte, až ji budete chtít:
 
 ```neon
 types: phpstan
@@ -163,11 +165,13 @@ Stojí to čas: každý soubor projde dvěma parsery a PHPStan pro něj počít�
 Bez PHPStanu
 ============
 
-Bez klíče `types` DressCode funguje dál, jen pravidla, která typy potřebují, neběží. Když je zapíná preset nebo skupina, vynechají se potichu, takže `dresscode/nette` i skupinu `types` můžete mít i v projektu bez PHPStanu. `dresscode config` u nich uvede důvod:
+Bez klíče `types` DressCode funguje dál, jen pravidla, která typy potřebují, neběží. Když je zapíná preset nebo skupina, vynechají se potichu, takže preset `dresscode/nette`, jehož skupina `cleanup` tři taková pravidla má, můžete mít i v projektu bez PHPStanu. `dresscode config` u nich uvede důvod:
 
 /--pre .[terminal]
 Not running
-  dresscode/override-attribute-required   it needs the types of the code and the configuration sets no types
+  dresscode/class-name-reference-for-string-literal it needs the types of the code and the configuration sets no types
+  dresscode/useless-overriding-method     it needs the types of the code and the configuration sets no types
+  dresscode/no-manual-empty-string-test   it needs the types of the code and the configuration sets no types
 \--
 
 Když ale takové pravidlo zapnete jménem, je to chyba konfigurace. Chtěli jste něco, co běh dát nemůže, a běh bez pravidla by vám lhal, že je kód v pořádku:

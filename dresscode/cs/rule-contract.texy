@@ -68,10 +68,17 @@ Nejdřív ohlásit, teprve pak opravit
 Tohle je nejdůležitější pravidlo celého kontraktu: **strom se smí změnit až poté, co `report()` vrátil `true`.**
 
 ```php
-if ($context->report($node, 'The var_dump() call must not stay in the code')) {
-	$node->remove();
+$statement = $node->parent;
+if (
+	$statement instanceof ExpressionStatementNode
+	&& $statement->parent instanceof NodeList
+	&& $context->report($node, 'The var_dump() call must not stay in the code')
+) {
+	$statement->remove();
 }
 ```
+
+Ukázka odstraní celý příkaz, jehož výrazem volání je, protože `remove()` umí odstranit jen položku seznamu. Jestli to jde, zjistí dřív, než zavolá `report()`: volání uvnitř jiného výrazu a příkaz ve slotu, třeba za `if` bez složených závorek, nechá být.
 
 `report()` vrátí `false`, pokud je porušení na svém řádku potlačené komentářem, nebo pokud je oprava riziková a běh ji nedovolil; pak se nesmí nic měnit. Porušení, které zná baseline, `report()` nezamítne: nehlásí se, ale pravidlo ho opravit smí. Nespoléhá se přitom na dobrou vůli: strom počítá své změny a jádro každou změnu spáruje s hlášením ze stejného volání. Změna bez hlášení, nebo po hlášení, které vrátilo `false`, je porušený kontrakt. Za běhu je z toho varování, s přepínačem `--strict-rules` a v `RuleTester`u chyba.
 
@@ -145,6 +152,9 @@ final class ForbiddenFunctionsRule extends NodeRule implements ConfigurableRule
 	{
 		$this->functions = $options['functions'];
 	}
+
+
+	// getVisitedTypes(), enter() ...
 }
 ```
 
