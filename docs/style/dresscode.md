@@ -51,7 +51,8 @@ The pages lean gently on the metaphor the name offers: a dress code, clothes, a 
 
 ## Names and terms
 
-- **PER Coding Style 3.1** is written in full, with a link to php-fig at its first mention on a page; the preset is `dresscode/per`.
+- **PER Coding Style 3.1** is written in full, with a link to php-fig at its first mention on a page; the preset is `per`.
+- **Built-in presets and rules are named short**, without the vendor: `per`, `nette`, `line-length`, in the configuration, on the command line, in `dresscode:ignore` and in prose. That is how people write them, and the tool accepts it everywhere. The full name `dresscode/…` is kept only where it carries information: in quoted output the tool prints in that form (`config`, `explain`, messages), on the pages about moving from other tools, where names of several tools meet, on the pages about writing rules and presets, where the name `vendor/slug` is the subject, and next to names of other vendors, where `nette` and `nette/…` would otherwise read as one thing. Names of extensions and rule packages are always written in full. What the vendor means is explained once, in `configuration` under Presety a vrstvy; other pages link there.
 - **nikic/PHP-Parser** is written exactly like this, with a link to GitHub at its first mention on a page.
 - **Installation** is offered in three ways: globally, with `create-project`, and as a development dependency. The last one is the way to get the types from the PHPStan of the project, so a page about types installs both into the project; its cost, the PHP version the tool requires forced on the project, is mentioned together with it. The PHP version of the tool and the target PHP version of the checked project are two different numbers.
 - **Updating code** is said on every page where a reader decides whether to use the tool (home, getting started, how it works, migration): DressCode formats and upgrades code in one run, to newer PHP and to new versions of libraries.
@@ -103,7 +104,7 @@ unused-imports
 .[perex]
 Import, který kód nikde nepoužije, se odstraní.
 
-Opravuje · v presetech `dresscode/nette` · pokrývá `no_unused_imports` .[rule-info]
+Opravuje · v presetech `nette` · pokrývá `no_unused_imports` .[rule-info]
 
 
 Co pravidlo hlídá
@@ -134,7 +135,7 @@ searchAnnotations .[option]
 
 ```neon
 rules:
-	dresscode/unused-imports:
+	unused-imports:
 		searchAnnotations: false
 ```
 
