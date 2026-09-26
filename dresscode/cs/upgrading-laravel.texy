@@ -1,10 +1,10 @@
 Laravel
 *******
 
-{{description: Balíček dresscode/rules-laravel nese migrace frameworku Laravel od verze 11 po současnou a nabídku atributů Laravelu 13, které DressCode přepíše nebo ohlásí.}}
+{{description: Balíček dresscode/rules-laravel nese migrace frameworku Laravel od verze 6 po současnou a nabídku atributů Laravelu 13, které DressCode přepíše nebo ohlásí.}}
 
 .[perex]
-Balíček `dresscode/rules-laravel` nese migrace frameworku Laravel od verze 11 po současnou, tedy pro kód psaný pro Laravel 10 a novější. Je v něm 68 položek: přejmenovaný middleware `VerifyCsrfToken`, `Request::get()` na `input()`, schéma bez Doctrine DBAL, sloupce migrací, které verze 11 zrušila. Dvacet z nich DressCode rovnou opraví, zbytek ohlásí i s tím, co napsat místo toho. A k tomu nabídne, jak Laravel 13 píše modely, příkazy a joby atributy.
+Balíček `dresscode/rules-laravel` nese migrace frameworku Laravel od verze 6 po současnou, tedy pro kód psaný pro Laravel 5.8 a novější. Je v něm 179 položek: helpery `str_slug()` a `array_get()` na `Str::slug()` a `Arr::get()`, přejmenovaný middleware `VerifyCsrfToken`, `Request::get()` na `input()`, schéma bez Doctrine DBAL, sloupce migrací, které verze 11 zrušila. Přes sto z nich DressCode rovnou opraví, zbytek ohlásí i s tím, co napsat místo toho. A k tomu nabídne, jak Laravel 13 píše modely, příkazy a joby atributy.
 
 
 Instalace
@@ -99,9 +99,12 @@ Minuty se převedly na sekundy, které Laravel 11 do vlastnosti ukládá. `Schem
 
 Co všechno balíček opravuje:
 
-- **přejmenované třídy**: `VerifyCsrfToken` a `ValidateCsrfToken` na `PreventRequestForgery`, trait `HasVersion7Uuids` na `HasUuids`; přepíše se import, `extends`, `::class` i `withoutMiddleware()`,
-- **přejmenované členy**: `Request::get()` na `input()` i přes fasádu, `validateCsrfTokens()` na `preventRequestForgery()`, `forceRootUrl()` na `useOrigin()`, `containsOneItem()` a `containsManyItems()` kolekcí na `hasSole()` a `hasMany()`, vlastnost `QueueBusy::$connection` na `$connectionName`,
-- **volání jiného tvaru**: `$limit->decayMinutes` na sekundy, `$event->exceptionOccurred` na `$event->exception !== null`, `redirectTo()` výjimky `AuthenticationException` s aktuálním požadavkem, sloupce `double('x', 8, 2)`, `unsignedDecimal()` a `unsignedDouble()` migrací, jak je píše Laravel 11.
+- **helpery Laravelu 5.8**: `str_slug()`, `str_limit()`, `array_get()`, `studly_case()` a dalších 35 na metody `Str` a `Arr` se stejnými argumenty, i s importem,
+- **přejmenované třídy**: `VerifyCsrfToken` a `ValidateCsrfToken` na `PreventRequestForgery`, trait `HasVersion7Uuids` na `HasUuids`, fasáda `Input` na `Request`, `Resource` na `JsonResource`, testovací `TestResponse` a `Assert` do jmenného prostoru `Illuminate\Testing`; přepíše se import, `extends`, `::class` i `withoutMiddleware()`,
+- **přejmenované členy**: `Request::get()` na `input()` i přes fasádu, `Lang::trans()` na `get()`, `dispatchNow()` jobu na `dispatchSync()`, `validateCsrfTokens()` na `preventRequestForgery()`, `forceRootUrl()` na `useOrigin()`, `containsOneItem()` a `containsManyItems()` kolekcí na `hasSole()` a `hasMany()`, vlastnost `QueueBusy::$connection` na `$connectionName`,
+- **volání jiného tvaru**: `$limit->decayMinutes` na sekundy, `$event->exceptionOccurred` na `$event->exception !== null`, `redirectTo()` výjimky `AuthenticationException` s aktuálním požadavkem, `Redirect::home()` na `route('home')`, `assertDeleted()` testů na `assertModelMissing()` nebo `assertDatabaseMissing()`, sloupce `double('x', 8, 2)`, `unsignedDecimal()` a `unsignedDouble()` migrací, jak je píše Laravel 11.
+
+Helper volaný bez zpětného lomítka uvnitř jmenného prostoru, jak je to v aplikaci obvyklé, DressCode přepíše jen s `--fix-risky`: stejnojmennou funkci by mohl deklarovat ten prostor. `str_contains()`, `array_first()` a `array_last()` data nechávají být, protože dnes jsou to funkce PHP.
 
 `Request::get()` a `input()` nejsou úplně totéž: `get()` čte napřed atributy routy, pak query a nakonec tělo požadavku, `input()` atributy nečte, tělo má před query a klíč s tečkou bere jako cestu do pole. Laravel sám u zastaralého `get()` radí `input()` a DressCode ho píše také; hodnotu, kterou nastavuje middleware jako atribut routy, čtěte přes `$request->attributes->get()`.
 
@@ -180,9 +183,10 @@ Co balíček pokrývá
 
 | co | verze |
 |---|---|
-| zastaralé a odstraněné API frameworku | 11 až 13 |
+| helpery `str_*` a `array_*` | 6 |
+| zastaralé a odstraněné API frameworku | 6 až 13 |
 | atributy místo vlastností | 13 |
 | `casts()` místo `$casts` | 11 |
 | `#[Scope]` místo předpony `scope` | 12.4 |
 
-Balíček začíná Laravelem 11, takže převede kód psaný pro Laravel 10. Aplikaci na starší verzi převedete po jedné hlavní verzi, jak popisuje [Aktualizace knihoven |upgrading-libraries#Po jedné verzi, nebo najednou], ale pro verze do 10 data balíček nemá.
+Balíček začíná Laravelem 6, takže převede kód psaný pro Laravel 5.8. Aplikaci na starší verzi převedete po jedné hlavní verzi, jak popisuje [Aktualizace knihoven |upgrading-libraries#Po jedné verzi, nebo najednou], ale pro verze do 5.8 data balíček nemá.
