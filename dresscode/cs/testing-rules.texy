@@ -52,11 +52,12 @@ RuleTester
 
 ```php
 use DressCode\Testing\RuleTester;
+use Tester\Assert;
 
-RuleTester::run(ExceptionMessagePeriodRule::class, __DIR__ . '/fixtures/exception-message-period');
+Assert::noError(fn() => RuleTester::run(ExceptionMessagePeriodRule::class, __DIR__ . '/fixtures/exception-message-period'));
 ```
 
-Metoda `run()` projde všechny soubory `*.code` v adresáři a vrátí jejich počet; adresář bez nich je selhání, ne prázdný úspěch. Selhání je výjimka `DressCode\Testing\TestFailure` se jménem fixtury a s diffem, takže ji srozumitelně ukáže každý testovací framework. Z Nette Testeru je tohle celý test, z PHPUnit je to jedno volání v testovací metodě.
+Metoda `run()` projde všechny soubory `*.code` v adresáři a vrátí jejich počet; adresář bez nich je selhání, ne prázdný úspěch. Selhání je výjimka `DressCode\Testing\TestFailure` se jménem fixtury a s diffem, takže ji srozumitelně ukáže každý testovací framework. Nette Tester chce v každém testu aspoň jednu aserci, proto je volání v ukázce zabalené do `Assert::noError()`; z PHPUnit je to jedno volání v testovací metodě.
 
 U každé fixtury tester ověří:
 
@@ -68,7 +69,7 @@ U každé fixtury tester ověří:
 - **kontrakt oprav**: žádná změna stromu bez hlášení, které prošlo;
 - **strom**: každý uzel má správného rodiče, což se rozbije při chybném vkládání.
 
-Pravidlo, které volby dostává jinak než z konfigurace (třeba se závislostí v konstruktoru), předáte místo třídy jako továrnu `fn(array $options): Rule`. Továrna dostane volby z hlavičky fixtury tak, jak jsou zapsané v JSON, a bez hlavičky prázdné pole. U třídy tester volby prožene schématem pravidla, které je zvaliduje a doplní výchozí hodnoty; u továrny to neudělá. Výchozí hodnoty proto doplní továrna sama, třeba `$options + ['functions' => ['var_dump', 'print_r']]`, a teprve pak zavolá `configure()`, což za ni tester také neudělá.
+Pravidlo, které volby dostává jinak než z konfigurace (třeba se závislostí v konstruktoru), předáte místo třídy jako továrnu `fn(array $options): Rule`. Továrna dostane volby z hlavičky fixtury tak, jak jsou zapsané v JSONu, a bez hlavičky prázdné pole. U třídy tester volby prožene schématem pravidla, které je zvaliduje a doplní výchozí hodnoty; u továrny to neudělá. Výchozí hodnoty proto doplní továrna sama, třeba `$options + ['functions' => ['var_dump', 'print_r']]`, a teprve pak zavolá `configure()`.
 
 Pro zvláštní případy jsou tu menší nástroje: `RuleTester::runFixture()` spustí jedinou fixturu, `RuleTester::check()` ověří instanci pravidla nad řetězcem bez souborů (hodí se na rychlou reprodukci) a `RuleTester::collectViolations()` vrátí hlášení nad fixturou přímo ve tvaru souboru `.violations` a `collectOutput()` výstup ve tvaru souboru `.expected`, takže si je můžete nechat zapsat a jen zkontrolovat diff, místo abyste je opisovali ručně. `run()`, `runFixture()` i obě `collect*()` přijmou jako poslední parametr `$phpVersion`.
 

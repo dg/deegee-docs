@@ -10,7 +10,7 @@ Co v CI spouštět
 
 `check`, ne `fix`. CI má říct, jestli je kód v pořádku, a exit kód `1` u porušení job shodí; opravu dělá vývojář lokálně, kde ji vidí. Kdo chce, aby CI opravu i nabídlo, pustí `fix` a za ním `git diff --exit-code`. Diff ve výpisu jobu je pak přesně to, co má vývojář commitnout.
 
-Exit kódy jsou pevně dané: `0` znamená čisto, `1` porušení nebo soubor, který nejde parsovat, a `2` selhání nástroje (špatná konfigurace, výjimka v pravidle). Na `2` má job selhat hlasitěji než na `1`, protože znamená, že se nezkontrolovalo nic.
+Exit kódy jsou pevně dané: `0` znamená čisto, `1` porušení, soubor, který nejde parsovat, nebo víc varování, než dovoluje `--max-warnings`, a `2` selhání nástroje (špatná konfigurace, výjimka v pravidle). Na `2` má job selhat hlasitěji než na `1`, protože znamená, že se nezkontrolovalo nic.
 
 
 GitHub Actions
@@ -69,10 +69,11 @@ cacheDir: temp/dresscode-cache
       - uses: actions/cache@v4
         with:
           path: temp/dresscode-cache
-          key: dresscode-${{ hashFiles('composer.lock', 'dresscode.neon') }}
+          key: dresscode-${{ github.sha }}
+          restore-keys: dresscode-
 ```
 
-Součástí klíče cache je i otisk konfigurace, verzí nainstalovaných balíčků a času změny souborů s vlastními pravidly a presety projektu, takže po změně konfigurace, po aktualizaci nástroje nebo po úpravě vlastního pravidla se soubory zkontrolují znovu samy od sebe. Hash v klíči jobu je jen proto, aby se stará cache neuchovávala navěky.
+Cache s klíčem, který už existuje, `actions/cache` na konci jobu znovu neuloží, takže s pevným klíčem by zůstala ve stavu z prvního běhu. Proto má klíč v sobě commit: každý běh uloží novou cache a `restore-keys` na začátku dalšího obnoví tu nejnovější. DressCode má navíc vlastní klíč cache, jehož součástí je otisk konfigurace, verzí nainstalovaných balíčků a času změny souborů s vlastními pravidly a presety projektu, takže po změně konfigurace, po aktualizaci nástroje nebo po úpravě vlastního pravidla se soubory zkontrolují znovu samy od sebe.
 
 
 Paralelní běh a verze

@@ -101,7 +101,7 @@ public function enter(Node|Token $node, RuleContext $context): void
 }
 ```
 
-Čtěte to shora: je to `new` se jménem třídy (tedy ne `new $class` ani anonymní třída) a jméno končí na `Exception`. První argument je řetězec bez interpolace, protože interpolovaný řetězec je jiný uzel než `StringNode`, takže třetí řádek fixtury odpadne sám. Ten řetězec je v jednoduchých uvozovkách, není prázdný a nekončí tečkou. A poslední otázka: **nikdo pravidlo v tomhle místě nepotlačil.** Volání `report()` vrátí `false`, pokud na řádku stojí `dresscode:ignore`, a pak se nesmí nic měnit. Proto stojí v podmínce, a ne před ní.
+Čtěte to shora: je to `new` se jménem třídy (tedy ne `new $class` ani anonymní třída) a jméno končí na `Exception`. První argument je řetězec bez interpolace, protože interpolovaný řetězec je jiný uzel než `StringNode`, takže třetí řádek fixtury odpadne sám. Ten řetězec je v jednoduchých uvozovkách, není prázdný a nekončí tečkou. A poslední otázka: **nikdo pravidlo v tomhle místě nepotlačil.** Volání `report()` vrátí `false`, pokud místo [potlačuje |suppressing] komentář `dresscode:ignore` na témže řádku nebo na samostatném řádku nad konstrukcí, případně dvojice `dresscode:disable` a `dresscode:enable` kolem něj, a pak se nesmí nic měnit. Proto stojí v podmínce, a ne před ní.
 
 Teprve za tím vším je oprava: jediné `setValue()`. Nezapisujeme text tokenu, ale hodnotu řetězce, takže o escapování a uvozovky se postará uzel sám. Zbytek souboru se nezmění ani o bajt.
 
@@ -116,14 +116,15 @@ Test pravidla
 ```php
 use App\CodeStyle\ExceptionMessagePeriodRule;
 use DressCode\Testing\RuleTester;
+use Tester\Assert;
 
 require __DIR__ . '/../vendor/autoload.php';
 Tester\Environment::setup();
 
-RuleTester::run(ExceptionMessagePeriodRule::class, __DIR__ . '/fixtures/exception-message-period');
+Assert::noError(fn() => RuleTester::run(ExceptionMessagePeriodRule::class, __DIR__ . '/fixtures/exception-message-period'));
 ```
 
-Z PHPUnit je to totéž volání uvnitř testovací metody. Selhání je výjimka `DressCode\Testing\TestFailure` s diffem, takže ji každý framework ukáže srozumitelně.
+Nette Tester chce v každém testu aspoň jednu aserci, proto je volání zabalené do `Assert::noError()`. Z PHPUnit je to totéž volání uvnitř testovací metody. Selhání je výjimka `DressCode\Testing\TestFailure` s diffem, takže ji každý framework ukáže srozumitelně.
 
 Když teď test pustíte, projde. Kdyby neprošel, řekne vám diff, na kterém řádku fixtury pravidlo vidí něco jiného než vy, a to bývá chvíle, kdy se o kódu něco nového dozvíte. V tomhle případě to bylo `rtrim()`: v první verzi pravidla nebylo a fixtura s mezerou na konci ho vynutila.
 

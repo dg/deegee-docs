@@ -25,7 +25,7 @@ groups:
 
 Balíček žádné pravidlo nezapne sám. Data se uplatní jen tehdy, když projekt má `laravel/framework`, a jen ty verze, na které projekt dosáhne.
 
-Larastan v projektu nevadí, naopak: ať ho máte v `phpstan.neon`, nebo ho zaregistroval `phpstan/extension-installer`, DressCode spustí aplikaci stejně jako PHPStan a fasádu `Request::get()` čte jako metodu třídy, která za ní stojí. Selže-li při tom `bootstrap/app.php`, vypíše Larastan sám hlášku "Application bootstrap failed" i s výjimkou, na které start aplikace selhal, a celý běh ukončí. Pozor v CI: exit kód je pak 1, stejně jako když DressCode v kódu něco najde. Alias z `config/app.php` psaný bez jmenného prostoru, `\Request::get()`, nezná žádná statická analýza, a ten zůstane nepovšimnutý.
+Larastan v projektu nevadí, naopak: ať ho máte v `phpstan.neon`, nebo ho zaregistroval `phpstan/extension-installer`, DressCode spustí aplikaci stejně jako PHPStan a fasádu `Request::get()` čte jako metodu třídy, která za ní stojí. Selže-li při tom `bootstrap/app.php`, vypíše Larastan sám hlášku "Application bootstrap failed" i s výjimkou, na které start aplikace selhal, a celý běh ukončí. Pozor v CI: běh skončí nenulovým exit kódem, a když běží v jednom procesu, je to 1, stejně jako když DressCode v kódu něco najde. Alias z `config/app.php` psaný bez jmenného prostoru, `\Request::get()`, nezná žádná statická analýza, a ten zůstane nepovšimnutý.
 
 
 Co se opraví
@@ -58,7 +58,8 @@ class ReportController
 	{
 		$limit = Limit::perMinute(60);
 		$limit->decayMinutes = 5;  // Property Illuminate\Cache\RateLimiting\Limit::$decayMinutes is replaced by $this->decaySeconds = $value * 60
-		return [$request->get('day'), Schema::getAllTables()];  // Method Illuminate\Http\Request::get() is replaced by Request::input() // Static method Illuminate\Support\Facades\Schema::getAllTables() is forbidden: call getTables(), which returns arrays with the name and schema of each table, not rows of the database
+		return [$request->get('day'), Schema::getAllTables()];  // Method Illuminate\Http\Request::get() is replaced by Request::input()
+		                                                        // Static method Illuminate\Support\Facades\Schema::getAllTables() is forbidden: call getTables(), which returns arrays with the name and schema of each table, not rows of the database
 	}
 }
 ```

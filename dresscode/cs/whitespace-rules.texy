@@ -26,7 +26,7 @@ Kdyby si pravidlo o mezeře za čárkou psalo mezeru samo a pravidlo o zalomení
 
 Proto pravidla pro bílé znaky do kódu nesahají. Každé jen vysloví **požadavek** (v API `Claim`), co má na daném místě být, a jádro nástroje, které vidí všechny požadavky najednou, rozhodne, opraví a hlášení vypíše pod jménem toho pravidla, jehož požadavek vyhrál.
 
-Z toho plyne to, co vidí uživatel: každá mezera má právě jednoho vlastníka a dvě pravidla, která by si nárokovala totéž místo, jsou chyba konfigurace. Dva pevné požadavky nástroj odmítne hned při startu, dvě anonymní funkce až u mezery, kde se srazí (viz [níže |#Kdo vyhraje]).
+Z toho plyne to, co vidí uživatel: každá mezera má právě jednoho vlastníka a dvě pravidla, která by si nárokovala totéž místo, jsou chyba konfigurace. Dva pevné požadavky nástroj odmítne hned při startu, požadavky dvou closure (anonymní funkce) až u mezery, kde se srazí (viz [níže |#Kdo vyhraje]).
 
 
 Požadavek
@@ -69,13 +69,13 @@ final class BlankLineBeforeReturnRule extends GapRule
 }
 ```
 
-Klíč první úrovně je třída uzlu, nebo `*` pro každý uzel, který takový slot má. Klíč druhé úrovně je jméno slotu (`'body'`), případně `slot:item` pro každou položku seznamu (`'statements:item'`, `'items:item'`) nebo `slot:separator` pro jeho oddělovače (`'items:separator'`). Pod klíčem `*` znamená `'*:item'` položky a `'*:separator'` oddělovače každého seznamu; tak si `comma-spacing` nárokuje mezery kolem všech čárek. Hodnotou je dvojice požadavků, před a za: buď `Claim`, nebo `null`, když pravidlo nic nechce, nebo anonymní funkce, která dostane `Gap` a vrátí požadavek či `null`. Požadavek u slotu, ve kterém sedí uzel, platí pro jeho první token (před) nebo poslední token (za).
+Klíč první úrovně je třída uzlu, nebo `*` pro každý uzel, který takový slot má. Klíč druhé úrovně je jméno slotu (`'body'`), případně `slot:item` pro každou položku seznamu (`'statements:item'`, `'items:item'`) nebo `slot:separator` pro jeho oddělovače (`'items:separator'`). Pod klíčem `*` znamená `'*:item'` položky a `'*:separator'` oddělovače každého seznamu; tak si `comma-spacing` nárokuje mezery kolem všech čárek. Hodnotou je dvojice požadavků, před a za: buď `Claim`, nebo `null`, když pravidlo nic nechce, nebo closure, která dostane `Gap` a vrátí požadavek či `null`. Požadavek u slotu, ve kterém sedí uzel, platí pro jeho první token (před) nebo poslední token (za).
 
 Jméno slotu je řetězec, takže ho refaktoring nepřejmenuje spolu se slotem. Tiše to ale neprojde: požadavek na slot, který uzel nemá, třeba s překlepem `'statemnts:item'`, odmítne jádro už při sestavení pravidel chybou `ConfigurationException` (`Rule acme/blank-line-before-return claims the whitespace of *.statemnts:item, but no node has a slot 'statemnts'.`). Jména slotů najdete v [přehledu uzlů |phpsyntax:nodes].
 
 Ukázka výše říká: před každým příkazem seznamu, který je `return` a není první v pořadí, má být jeden prázdný řádek. Pravidlo nenavštěvuje žádné uzly, protože `GapRule` návštěvy vůbec nemá; všechnu práci odvede jádro z požadavků, a to v průchodu fáze `Formatting`, ať `RuleInfo` uvádí jakoukoli fázi. Hlášení zní `Expected 1 blank line before the return, 0 found` a skládá ho jádro z toho, u čeho požadavek stojí. Stejně vznikají hlášky `A single space after the comma` nebo `A line break before the opening brace`. Autor pravidla texty hlášek nepíše.
 
-Anonymní funkce dostane v objektu `Gap` token na okraji mezery, hodnotu slotu nebo položku, které se požadavek týká, její index v seznamu a styl souboru včetně délky řádku. Metodou `findRule()` se navíc může zeptat jiného pravidla tak, jak je pro soubor nakonfigurované, stejně jako [`RuleContext::findRule()` |rule-contract#Analýzy]. Podle toho se rozhodne, například jinak pro tečku než pro ostatní operátory:
+Closure dostane v objektu `Gap` token na okraji mezery, hodnotu slotu nebo položku, které se požadavek týká, její index v seznamu a styl souboru včetně délky řádku. Metodou `findRule()` se navíc může zeptat jiného pravidla tak, jak je pro soubor nakonfigurované, stejně jako [`RuleContext::findRule()` |rule-contract#Analýzy]. Podle toho se rozhodne, například jinak pro tečku než pro ostatní operátory:
 
 ```php
 public function getClaims(): array
@@ -88,7 +88,7 @@ public function getClaims(): array
 }
 ```
 
-Pravidlo s volbou si požadavek postaví jednou v `configure()` a v anonymní funkci ho jen vrací; nestaví ho u každé mezery znovu.
+Pravidlo s volbou si požadavek postaví jednou v `configure()` a v closure ho jen vrací; nestaví ho u každé mezery znovu.
 
 
 Rozhodnutí, které musí být pokaždé stejné
@@ -116,7 +116,7 @@ Jádro skládá požadavky obou stran mezery složku po složce, a to podle pevn
 - u zalomení řádku má `Line::Next` přednost před `Line::Same`,
 - u prázdných řádků platí průnik toho, co obě strany dovolí, a když se rozsahy vylučují, ten užší z nich.
 
-Dva pevné požadavky na tutéž složku téže strany téhož slotu jsou `ConfigurationException` už při skládání pravidel. Dvě anonymní funkce si slot rozdělit smějí, protože každá z nich může tam, kde rozhoduje ta druhá, vrátit `null`. Když ale u jedné mezery rozhodnou obě o téže složce, přijde `ConfigurationException` až za běhu, právě u té mezery (`Rules acme/a and acme/b both govern the whitespace before PhpSyntax\Nodes\Expression\BinaryOpNode.operator.`). Vestavěná pravidla se nekříží; rozšíření, které chce jednu mezeru řešit jinak než vestavěné pravidlo, ho pro to místo dnes musí vypnout a požadavek převzít, nebo požádat o novou volbu.
+Dva pevné požadavky na tutéž složku téže strany téhož slotu jsou `ConfigurationException` už při skládání pravidel. Dvě closure si slot rozdělit smějí, protože každá z nich může tam, kde rozhoduje ta druhá, vrátit `null`. Když ale u jedné mezery rozhodnou obě o téže složce, přijde `ConfigurationException` až za běhu, právě u té mezery (`Rules acme/a and acme/b both govern the whitespace before PhpSyntax\Nodes\Expression\BinaryOpNode.operator.`). Vestavěná pravidla se nekříží; rozšíření, které chce jednu mezeru řešit jinak než vestavěné pravidlo, ho pro to místo dnes musí vypnout a požadavek převzít, nebo požádat o novou volbu.
 
 Vynucené zalomení řádku jádro udělá hned a prázdné řádky doladí až v dalším průchodu. Zakázané zalomení naopak odstraní jen tehdy, když v mezeře není nic než bílé znaky. Odsazení řádku, který zalomením vznikl, není věcí požadavku: jádro mu dá obvyklé odsazení a pravidlo `indentation` ho pak umístí přesně.
 

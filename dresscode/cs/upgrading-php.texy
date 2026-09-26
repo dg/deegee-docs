@@ -150,9 +150,9 @@ Přehled podle verze, ve které PHP danou věc přineslo:
 | 8.5 | vnořená volání na pipe operátor, čtení prvního a posledního prvku pole na `array_first()` a `array_last()` |
 | 8.6 | dvojice `max()` a `min()` na `clamp()` |
 
-Tohle všechno zapne skupina `modernization`, jen `#[\Override]` potřebuje vědět, co třída dědí, a proto [typy z PHPStanu |types]; bez nich se vynechá. Atribut `#[\Deprecated]` mění chování programu ze své podstaty, protože zastaralá metoda začne za běhu hlásit, že je zastaralá. Každá jeho oprava je proto riziková (risky fix) a udělá se, až pravidlo `dresscode/deprecated-attribute-for-annotation` uvedete v klíči `fixRisky`, viz [dál |#Rizikové opravy]. Skupina `cleanup` přidá zkrácený zápis `new Foo()->bar()` z PHP 8.4, tedy bez závorek kolem `new`, a podle verze PHP odstraní, co novější PHP už nepotřebuje: proměnnou v `catch`, kterou blok nečte (8.0), volání `curl_close()` a dalších funkcí, které od PHP 8.0 nic neuvolňují, a `setAccessible()` na reflexi, které od PHP 8.1 nic nedělá. Návratový typ `never` z PHP 8.1 přidá skupina `types`.
+Tohle všechno zapne skupina `modernization`, jen `#[\Override]` potřebuje vědět, co třída dědí, a proto [typy z PHPStanu |types]; bez nich se vynechá. Atribut `#[\Deprecated]` mění chování programu ze své podstaty, protože zastaralá metoda začne za běhu hlásit, že je zastaralá. Každá jeho oprava je proto riziková (risky fix) a udělá se, až pravidlo `dresscode/deprecated-attribute-for-annotation` uvedete v klíči `fixRisky`, viz [dál |#Rizikové opravy]. Skupina `cleanup` přidá zkrácený zápis `new Foo()->bar()` z PHP 8.4, tedy bez závorek kolem `new`, a podle verze PHP odstraní, co novější PHP už nepotřebuje: proměnnou v `catch`, kterou blok nečte (8.0), volání `curl_close()` a dalších funkcí, které od PHP 8.0 nic neuvolňují (`finfo_close()` až od 8.1), a `setAccessible()` na reflexi, které od PHP 8.1 nic nedělá. Návratový typ `never` z PHP 8.1 přidá skupina `types`.
 
-Několik pravidel rozhoduje o návrhu vašeho kódu, a proto je zapínáte jménem, až se pro ně rozhodnete: `readonly` u vlastnosti, kterou zapisuje jen konstruktor (PHP 8.1), klíčové slovo `readonly` místo anotace `@readonly` (8.1) a `readonly` u celé třídy (8.2). Přepis anotace je přitom rizikový: anotace jen žádá analyzátor, aby si stěžoval, kdežto PHP při zápisu, který anotace propustila, třeba z hydrátoru nebo při klonování, vyhodí `Error`. Udělá se proto, až pravidlo uvedete i v klíči `fixRisky`:
+Několik pravidel rozhoduje o návrhu vašeho kódu, a proto je zapínáte jménem, až se pro ně rozhodnete: `readonly` u vlastnosti, kterou zapisuje jen konstruktor (PHP 8.1), klíčové slovo `readonly` místo anotace `@readonly` (8.1) a `readonly` u celé třídy (8.2). Přepis anotace je přitom rizikový: anotace jen žádá analyzátor, aby si stěžoval, kdežto PHP při zápisu, který anotace propustila, třeba z hydrátoru nebo při klonování, vyhodí `Error`. Rizikové je také `readonly` u vlastnosti, která není privátní, protože kód, který ji zapisuje zvenku, v souboru vidět není; takovou vlastnost pravidlo zvažuje jen ve třídě `final`. Obě opravy se udělají, až pravidlo uvedete i v klíči `fixRisky`:
 
 ```neon
 rules:
@@ -161,6 +161,7 @@ rules:
 	dresscode/readonly-class-for-readonly-members: true
 
 fixRisky:
+	- dresscode/readonly-for-unwritten-property
 	- dresscode/readonly-for-annotation
 ```
 
@@ -180,7 +181,7 @@ groups:
 Rizikové opravy
 ===============
 
-Některé přepisy můžou změnit, co kód dělá, a DressCode je proto sám od sebe neudělá. Typickým příkladem je `switch` na `match`: `switch` porovnává volně a `match` přísně, takže `case 1` dnes zachytí i řetězec `'1'`, kdežto větev `1 =>` v `match` už ne. Taková riziková oprava (risky fix) se jen ohlásí a udělá se, až pravidlo uvedete v klíči `fixRisky`, nebo na jeden běh s přepínačem `--fix-risky`:
+Některé přepisy můžou změnit, co kód dělá, a DressCode je proto sám od sebe neudělá. Typickým příkladem je `switch` na `match`: `switch` porovnává volně a `match` přísně, takže `case 1` dnes zachytí i řetězec `'1'`, kdežto větev `1 =>` v `match` už ne. Taková riziková oprava se jen ohlásí a udělá se, až pravidlo uvedete v klíči `fixRisky`, nebo na jeden běh s přepínačem `--fix-risky`:
 
 ```neon
 fixRisky:
