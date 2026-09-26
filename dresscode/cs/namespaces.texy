@@ -117,7 +117,7 @@ Pravidla se jí ptají na dvě věci:
 - **Co je co.** `isGlobalFunctionCall($node, 'is_null')` vrátí `true` pro globální funkci a `App\is_null()` ze seznamu za ni nepovažuje. S `certain` je ta odpověď jistá, jinak jen předpoklad.
 - **Jak jistá je odpověď.** `getUnqualifiedResolution('is_null', SymbolKind::Function, $node)` řekne, kam nekvalifikované jméno míří: jistě do globálního prostoru (`Global`), jistě do jmenného prostoru (`Namespaced`), nebo do globálního jen za předpokladu, že ho jmenný prostor jinde nedeklaruje (`Uncertain`). Pravidlo, které se takhle zeptá, ohlásí svou opravu jako rizikovou právě u výskytu s `Uncertain`, a v projektu s `certain` tedy nikdy.
 
-A funguje to i obráceně, když pravidlo jméno funkce do kódu samo zapisuje. `dresscode/no-alias-functions` přepisuje `sizeof()` na `count()` a nové jméno napíše stejně jako to původní: `\sizeof()` na `\count()`, `sizeof()` na `count()`. Když ale soubor importuje nebo deklaruje vlastní `count`, nebo když podle konfigurace deklaruje `count()` jeho jmenný prostor, zapíše `\count()`, aby opravený kód volal totéž co původní.
+A funguje to i obráceně, když pravidlo jméno funkce do kódu samo zapisuje. `no-alias-functions` přepisuje `sizeof()` na `count()` a nové jméno napíše stejně jako to původní: `\sizeof()` na `\count()`, `sizeof()` na `count()`. Když ale soubor importuje nebo deklaruje vlastní `count`, nebo když podle konfigurace deklaruje `count()` jeho jmenný prostor, zapíše `\count()`, aby opravený kód volal totéž co původní.
 
 Všechna pravidla tak čtou každé jméno stejně a výsledek nezávisí na tom, které z nich se na něj ptá.
 
@@ -125,7 +125,7 @@ Všechna pravidla tak čtou každé jméno stejně a výsledek nezávisí na tom
 Nová funkce neproklouzne
 ========================
 
-Seznam by nebyl k ničemu, kdyby zastaral. Proto ho hlídá pravidlo `dresscode/no-unlisted-namespaced-declaration`, které zapne sám klíč `nameResolution: certain`. Ohlásí funkci deklarovanou ve jmenném prostoru, která v seznamu `namespaces.functions` chybí, a totéž udělá pro `const` a pro `define('App\X', ...)`. Počítá i s deklarací uvnitř podmínky, třeba s polyfillem v `if (!function_exists(...))`. Jakmile někdo do projektu přidá funkci `App\Utils\slugify()`, `dresscode check` upozorní, že patří do konfigurace:
+Seznam by nebyl k ničemu, kdyby zastaral. Proto ho hlídá pravidlo `no-unlisted-namespaced-declaration`, které zapne sám klíč `nameResolution: certain`. Ohlásí funkci deklarovanou ve jmenném prostoru, která v seznamu `namespaces.functions` chybí, a totéž udělá pro `const` a pro `define('App\X', ...)`. Počítá i s deklarací uvnitř podmínky, třeba s polyfillem v `if (!function_exists(...))`. Jakmile někdo do projektu přidá funkci `App\Utils\slugify()`, `dresscode check` upozorní, že patří do konfigurace:
 
 /--pre .[terminal]
 src/Utils/helpers.php
@@ -163,7 +163,7 @@ Presety, které znají svůj framework
 
 Někdy píšete kód přímo do jmenného prostoru frameworku, protože vás k tomu framework vede. Symfony nechává psát konfiguraci služeb do souboru, který začíná `namespace Symfony\Component\DependencyInjection\Loader\Configurator;`, právě proto, aby šlo volat `service()`, `param()` nebo `env()` bez importu. Ty funkce deklaruje Symfony ve složce `vendor`, kam DressCode nekouká.
 
-Tuhle znalost proto nese `dresscode/symfony-configurator`, preset bez jediného pravidla, který jen vyjmenuje funkce, jež Symfony do svého jmenného prostoru deklaruje. Standard `dresscode/symfony` ho skládá sám. S jiným standardem ho přidáte do presetů a `dresscode init` ho navrhne, když najde nainstalovaný balíček `symfony/dependency-injection`:
+Tuhle znalost proto nese `symfony-configurator`, preset bez jediného pravidla, který jen vyjmenuje funkce, jež Symfony do svého jmenného prostoru deklaruje. Standard `symfony` ho skládá sám. S jiným standardem ho přidáte do presetů a `dresscode init` ho navrhne, když najde nainstalovaný balíček `symfony/dependency-injection`:
 
 ```neon
 presets:
@@ -177,7 +177,7 @@ Vlastní preset dodá takové seznamy klíčem `namespaces` svého profilu (viz 
 Jak se píšou globální jména
 ===========================
 
-S tím souvisejí dvě pravidla, protože jde o dvě různé otázky. Pravidlo `dresscode/name-fallback` rozhoduje, jestli globální funkce nebo konstanta smí stát holá a spoléhat na pád do globálního jména. Pravidlo `dresscode/name-notation` rozhoduje, jak se píše jméno, které na pád nespoléhá: importem, nebo s úvodním lomítkem. Obě pravidla samy nerozhodují o ničem: co jim neřeknete, nechají být.
+S tím souvisejí dvě pravidla, protože jde o dvě různé otázky. Pravidlo `name-fallback` rozhoduje, jestli globální funkce nebo konstanta smí stát holá a spoléhat na pád do globálního jména. Pravidlo `name-notation` rozhoduje, jak se píše jméno, které na pád nespoléhá: importem, nebo s úvodním lomítkem. Obě pravidla samy nerozhodují o ničem: co jim neřeknete, nechají být.
 
 
 Holé, nebo kvalifikované: name-fallback
