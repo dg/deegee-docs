@@ -50,7 +50,7 @@ final class SignPresenter extends Presenter
 	protected function startup(): void  // The method overriding Nette\Application\UI\Presenter::startup() must be marked with #[\Override]
 	{
 		parent::startup();
-		$this->invalidateControl();  // Method Nette\Application\UI\Presenter::invalidateControl() is deprecated: use redrawControl()
+		$this->setLayout('sign');
 	}
 
 
@@ -58,6 +58,7 @@ final class SignPresenter extends Presenter
 	{
 		$form = new Form;
 		$form->addText('name')
+			->setAttribute('autofocus')  // Method Nette\Forms\Controls\BaseControl::setAttribute() is deprecated: use setHtmlAttribute()
 			->addRule($form::FILLED, 'Enter your name');  // Constant Nette\Forms\Form::FILLED is deprecated: use Form::Filled
 		return $form;
 	}
@@ -81,11 +82,11 @@ Po opravě:
 ```php .[after]
 final class SignPresenter extends Presenter
 {
-	#[\Override]
+	#[Override]
 	protected function startup(): void
 	{
 		parent::startup();
-		$this->redrawControl();
+		$this->setLayout('sign');
 	}
 
 
@@ -93,6 +94,7 @@ final class SignPresenter extends Presenter
 	{
 		$form = new Form;
 		$form->addText('name')
+			->setHtmlAttribute('autofocus')
 			->addRule($form::Filled, 'Enter your name');
 		return $form;
 	}
@@ -111,16 +113,18 @@ final class SignPresenter extends Presenter
 }
 ```
 
-Každý z pěti nálezů potřeboval vědět něco, co v souboru není:
+Každý z pěti nálezů potřeboval vědět něco, co v souboru není. Šestý, který `dresscode check` vypíše navíc, je jen důsledkem prvního: preset `dresscode/nette` píše v souboru bez jmenného prostoru globální jména bez úvodního lomítka, a tak z `#[\Override]` udělá `#[Override]`.
 
-- **Zastaralé API** přepisuje `dresscode/no-deprecated-members` podle anotace `@deprecated` v kódu knihovny. Rozhoduje přitom třída, která konstantu nebo metodu deklaruje, ne zápis, takže se `$form::FILLED` přepíše stejně jako `Form::FILLED`. Typy potřebují i pravidla, která přepisují kód podle dat balíčků pravidel (`replaced-members`, `replaced-calls`, `nette/named-arguments-for-flags`, `forbidden-members`), a `replaced-classes` se s nimi navíc ujistí, že třída, kterou zapíše, v projektu existuje. Jak to funguje u celých knihoven, popisuje [Aktualizace knihoven |upgrading-libraries].
+- **Zastaralé API** přepisuje `dresscode/no-deprecated-members` podle anotace `@deprecated` v kódu knihovny. Rozhoduje přitom třída, která konstantu nebo metodu deklaruje, ne zápis, takže se `$form::FILLED` přepíše stejně jako `Form::FILLED` a hláška u `setAttribute()` jmenuje třídu `BaseControl`, i když se metoda volá na textovém poli. Zastaralé třídy stejně přepisuje `dresscode/no-deprecated-classes`. Typy potřebují i pravidla, která přepisují kód podle dat balíčků pravidel (`replaced-members`, `replaced-calls`, `nette/named-arguments-for-flags`, `forbidden-members`), a `replaced-classes` se s nimi navíc ujistí, že třída, kterou zapíše, v projektu existuje. Jak to funguje u celých knihoven, popisuje [Aktualizace knihoven |upgrading-libraries].
 - **`#[\Override]`** z PHP 8.3 doplní `dresscode/override-attribute-required` k metodě, která přepisuje metodu rodiče nebo rozhraní. PHP pak samo ohlásí chybu, kdyby rodič metodu přejmenoval a vaše metoda by potichu přestala cokoli přepisovat.
 - **Jméno třídy v řetězci** přepíše `dresscode/class-name-reference-for-string-literal` na `::class` jen tehdy, když třída toho jména v projektu opravdu existuje. Editor pak jméno najde, až budete třídu přejmenovávat. Pravidlo `class_keyword` PHP CS Fixeru podle vlastní dokumentace tohle poznat nemůže, protože nad tokeny neví, jaké třídy projekt má.
 - **Test prázdného řetězce** `strlen($name) === 0` přepíše `dresscode/no-manual-empty-string-test` na `$name === ''` jen tam, kde je `$name` určitě řetězec. U jiné hodnoty by se oba zápisy chovaly jinak.
 
 K tomu `dresscode/useless-overriding-method` smaže metodu, která jen předá své parametry stejnojmenné metodě rodiče. Typy prozradí, jestli ji volající od rodičovské vůbec rozezná: rodič ji musí deklarovat se stejnou viditelností, parametry i návratovým typem. Oprava je riziková (risky fix), protože rodič, který čte `func_get_args()`, by pak dostal i argumenty navíc a z výpisu zásobníku zmizí jeden řádek; udělá se, až pravidlo uvedete v klíči `fixRisky`.
 
-Zvlášť jedno po druhém tahle pravidla zapínat nemusíte: patří do [skupin |configuration#Skupiny pravidel] `cleanup`, `deprecations` a `modernization` a klíč `types` je dá do pohybu. Nepleťte si přitom skupinu s klíčem: skupina říká, co po kódu chcete, klíč říká, odkud se typy kódu zjišťují, a pravidlo, které se bez typů neobejde, není tím pádem pravidlo skupiny `types`. Standard `dresscode/nette` nese `cleanup`, takže mu stačí přidat klíč a zbylé dvě skupiny; ty v něm nejsou, protože co která verze zrušila a co nová verze píše líp, je věc aktualizace, a tu si pustíte, až ji budete chtít:
+Bez typů se neobejdou ani pravidla, která hlídají dědění po nové verzi knihovny: `dresscode/override-signature` přizpůsobí metodu potomka signatuře předka, `dresscode/no-final-parent` ohlásí potomka třídy, která se stala `final`, a `dresscode/no-unimplemented-abstract-method` abstraktní metodu, kterou potomek nemá. Z balíčku `dresscode/rules-nette` je potřebují `nette/link-destination-notation` a `nette/monitor-for-attached-hook`. Několik dalších pravidel běží i bez typů, ale s nimi toho udělají víc: `dresscode/pipe-operator` z nich pozná, jestli metoda nebere parametr referencí, a bez nich je jeho oprava volání metody riziková, `dresscode/attribute-for-annotation` a `dresscode/attribute-for-member` ohlásí cílovou třídu, která atributem není, i atribut s nevyplněným povinným parametrem, a `dresscode/static-for-private-method-without-this` pozná, která třída je opravdu předkem.
+
+Zvlášť jedno po druhém tahle pravidla zapínat nemusíte: patří do [skupin |configuration#Skupiny pravidel] `cleanup`, `deprecations` a `modernization` a klíč `types` je dá do pohybu. Nepleťte si přitom skupinu s klíčem: skupina říká, co po kódu chcete, klíč říká, odkud se typy kódu zjišťují, a pravidlo, které se bez typů neobejde, není tím pádem pravidlo skupiny `types`. Standard `dresscode/nette` nese skupiny `cleanup`, `types` a `correctness`, takže mu stačí přidat klíč a skupiny `deprecations` a `modernization`; ty v něm nejsou, protože co která verze zrušila a co nová verze píše líp, je věc aktualizace, a tu si pustíte, až ji budete chtít:
 
 ```neon
 types: phpstan

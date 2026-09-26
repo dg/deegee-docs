@@ -1,10 +1,10 @@
 Přechod na novější PHP
 **********************
 
-{{description: DressCode přepíše PHP kód na syntaxi a funkce novějšího PHP, od PHP 8.0 po PHP 8.6, a v témž běhu ho zformátuje podle vašeho standardu. Pipe operátor, array_any(), match, clamp() a další.}}
+{{description: DressCode přepíše kód psaný pro PHP 8.0 nebo novější na syntaxi a funkce novějších verzí až po PHP 8.6 a v témž běhu ho zformátuje podle vašeho standardu. Pipe operátor, array_any(), match, clamp() a další.}}
 
 .[perex]
-DressCode kód nejen formátuje, ale i přepisuje na to, co přináší novější PHP. Zvednete verzi v `composer.json`, pustíte `dresscode fix` a v diffu uvidíte kód, jaký byste pro novou verzi napsali sami, rovnou zformátovaný podle vašeho standardu. Umí to pro každou verzi od PHP 8.0 až po PHP 8.6, které teprve vyjde.
+DressCode kód nejen formátuje, ale i přepisuje na to, co přináší novější PHP. Zvednete verzi v `composer.json`, pustíte `dresscode fix` a v diffu uvidíte kód, jaký byste pro novou verzi napsali sami, rovnou zformátovaný podle vašeho standardu. Umí to pro kód psaný pro PHP 8.0 nebo novější, a to až po PHP 8.6, které teprve vyjde.
 
 
 Jak to vypadá
@@ -116,7 +116,7 @@ Pro vás to znamená jeden nástroj, jednu konfiguraci a jeden krok v průběžn
 Verze z composer.json rozhoduje
 ===============================
 
-Pro jakou verzi PHP je kód psaný, čte DressCode z `require.php` v `composer.json`: bere nejnižší verzi, kterou omezení dovoluje. Jinou verzi určí jen klíč `php` v konfiguraci. Každé pravidlo, které zapisuje syntaxi nebo funkci novějšího PHP, ví, od které verze ji jazyk má, a pod ní se samo vynechá. Nemusíte tedy nic hlídat: dokud projekt dovoluje PHP 8.3, `array_any()` se do kódu nedostane, a v den, kdy omezení zvednete na `^8.4`, začne platit. Proč které pravidlo neběží, řekne `dresscode config`:
+Pro jakou verzi PHP je kód psaný, čte DressCode z `require.php` v `composer.json`: bere nejnižší verzi, kterou omezení dovoluje. Jinou verzi určí jen klíč `php` v konfiguraci. Nejstarší verze, pro kterou DressCode kód opravuje, je PHP 8.0: když projekt dovoluje starší, kontroluje ho jako PHP 8.0 a upozorní, že oprava může napsat syntaxi, kterou starší verze nemá. Každé pravidlo, které zapisuje syntaxi nebo funkci novějšího PHP, ví, od které verze ji jazyk má, a pod ní se samo vynechá. Nemusíte tedy nic hlídat: dokud projekt dovoluje PHP 8.3, `array_any()` se do kódu nedostane, a v den, kdy omezení zvednete na `^8.4`, začne platit. Proč které pravidlo neběží, řekne `dresscode config`:
 
 /--pre .[terminal]
 Not running
@@ -142,21 +142,34 @@ Přehled podle verze, ve které PHP danou věc přineslo:
 
 | PHP | co se přepíše |
 |---|---|
+| starší | anonymní funkce, která jen vrací výraz, na arrow funkci `fn`, ternární operátor, který testuje `null`, na `??`, ternární operátor, který opakuje podmínku, na `?:`, `array()` a `list()` na `[]`, přiřazení, které opakuje svůj cíl, na `+=`, `??=` a spol., řetěz `isset() && isset()` na jedno `isset()`, několik `unset()` za sebou na jedno, `if` a `else`, které jen vybírají jednu ze dvou hodnot, na ternární operátor, `__CLASS__` a `get_class()` bez argumentu na `self::class` |
 | 8.0 | `strpos() !== false` na `str_contains()`, porovnání se `substr()` na `str_starts_with()` a `str_ends_with()`, jednoduchý `switch` na `match`, vlastnost přiřazená v konstruktoru na vlastnost deklarovanou v konstruktoru, ternární operátor s `null` na `?->`, rozhraní `Stringable` u třídy s metodou `__toString()`, trojice `is_object()`, `get_class()` a `gettype()` na `get_debug_type()` |
 | 8.1 | callable zapsané jako `$this->save(...)`, ruční test, jestli je pole seznamem, na `array_is_list()`, osmičkové číslo jako `0o755` |
-| 8.3 | `json_validate()` místo `json_decode()` volaného jen kvůli testu, `Foo::{$name}` místo funkce `constant()` |
-| 8.4 | smyčka, která jen hledá nebo testuje položky, na `array_any()`, `array_all()`, `array_find()` a `array_find_key()`, výčet `RoundingMode` ve funkci `round()` |
+| 8.3 | `json_validate()` místo `json_decode()` volaného jen kvůli testu, `Foo::{$name}` místo funkce `constant()`, atribut `#[\Override]` u metody, která přepisuje zděděnou |
+| 8.4 | smyčka, která jen hledá nebo testuje položky, na `array_any()`, `array_all()`, `array_find()` a `array_find_key()`, výčet `RoundingMode` ve funkci `round()`, atribut `#[\Deprecated]` místo anotace `@deprecated` |
 | 8.5 | vnořená volání na pipe operátor, čtení prvního a posledního prvku pole na `array_first()` a `array_last()` |
 | 8.6 | dvojice `max()` a `min()` na `clamp()` |
 
-Tohle všechno zapne skupina `modernization`. Zkrácený zápis `new Foo()->bar()` z PHP 8.4, tedy bez závorek kolem `new`, přidá skupina `cleanup`. Atribut `#[\Override]` z PHP 8.3 a návratový typ `never` z PHP 8.1 přidá skupina `types`; `#[\Override]` potřebuje vědět, co třída dědí, a proto [typy z PHPStanu |types].
+Tohle všechno zapne skupina `modernization`, jen `#[\Override]` potřebuje vědět, co třída dědí, a proto [typy z PHPStanu |types]; bez nich se vynechá. Atribut `#[\Deprecated]` mění chování programu ze své podstaty, protože zastaralá metoda začne za běhu hlásit, že je zastaralá. Každá jeho oprava je proto riziková a udělá se, až pravidlo `dresscode/deprecated-attribute-for-annotation` uvedete v klíči `fixRisky`, viz [dál |#Rizikové opravy]. Zkrácený zápis `new Foo()->bar()` z PHP 8.4, tedy bez závorek kolem `new`, přidá skupina `cleanup` a návratový typ `never` z PHP 8.1 skupina `types`.
 
-Několik pravidel rozhoduje o návrhu vašeho kódu, a proto je zapínáte jménem, až se pro ně rozhodnete: `readonly` u vlastnosti, kterou zapisuje jen konstruktor (PHP 8.1), klíčové slovo `readonly` místo anotace `@readonly` (8.1), `readonly` u celé třídy (8.2) a atribut `#[\Deprecated]` místo anotace `@deprecated` (8.4). Poslední z nich mění chování programu ze své podstaty: zastaralá metoda začne za běhu hlásit, že je zastaralá.
+Několik pravidel rozhoduje o návrhu vašeho kódu, a proto je zapínáte jménem, až se pro ně rozhodnete: `readonly` u vlastnosti, kterou zapisuje jen konstruktor (PHP 8.1), klíčové slovo `readonly` místo anotace `@readonly` (8.1) a `readonly` u celé třídy (8.2).
 
 ```neon
 rules:
 	dresscode/readonly-for-unwritten-property: true
 	dresscode/readonly-class-for-readonly-members: true
+```
+
+
+Co novější PHP zavrhlo
+======================
+
+Nová verze PHP věci nejen přidává, ale i zavrhuje, a na zavržené věci v kódu pak za běhu upozorňuje. Opravuje je skupina `deprecations`: typ parametru s výchozí hodnotou `null` dostane `?`, funkce pro CSV dostanou výslovně argument `escape`, jehož výchozí hodnotu PHP 8.4 zavrhlo, `utf8_encode()` a `utf8_decode()` se přepíšou na `mb_convert_encoding()` (riziková oprava, protože ta potřebuje rozšíření mbstring), `${name}` v řetězci na `{$name}`, zpětné apostrofy na `shell_exec()` a klíč pole `null` na `''`. Argument, který PHP přestalo číst, zmizí. Volání zastaralé funkce se ohlásí podle cílové verze, `strftime()` až v projektu pro PHP 8.1, a ohlásí se i metody `__sleep()` a `__wakeup()`. Tatáž skupina přepisuje i zastaralé API knihoven, viz [Aktualizace knihoven |upgrading-libraries], a přidáte ji vedle `modernization`:
+
+```neon
+groups:
+	- modernization
+	- deprecations
 ```
 
 

@@ -17,7 +17,6 @@ dresscode rules
 dresscode init
 dresscode import <soubor>
 dresscode migrate-suppressions [cesty...]
-dresscode lsp
 ```
 
 - `check` ohlásí porušení a nic nezapíše.
@@ -28,7 +27,6 @@ dresscode lsp
 - `init` napíše `dresscode.neon` podle toho, jak je projekt psaný: odsazení, uvozovky a tvar podmínek změří na vzorku souborů. Viz [níže |#Konfigurace naměřená z kódu: init].
 - `import` převede konfiguraci PHP CS Fixeru nebo PHP_CodeSniffer, viz [Přechod na DressCode |migration#2. Přeložte konfiguraci].
 - `migrate-suppressions` přepíše komentáře `phpcs:*` na `dresscode:*`, viz [tamtéž |migration#3. Přepište komentáře].
-- `lsp` spustí jazykový server pro [editory |editors].
 
 Cesty jsou soubory nebo adresáře relativně k aktuálnímu adresáři a mají přednost před klíčem `paths` z konfigurace. Adresář, ve kterém leží některé cesty z `paths`, se ale zúží jen na ně, takže `dresscode fix .` v kořeni projektu nesáhne mimo `paths` a `check` i `fix` to hned na začátku výpisu ohlásí slovy `narrowed to the configured paths`. Adresář nebo soubor mimo `paths` se vezme tak, jak jste ho zadali. Bez cest i bez konfiguračního souboru příkaz skončí chybou, protože nechce hádat, co má kontrolovat.
 
@@ -38,60 +36,63 @@ Přepínače
 
 | přepínač | význam |
 |---|---|
-| `-c`, `--config <soubor>` | konfigurační soubor místo nejbližšího `dresscode.neon` nebo `dresscode.php` |
+| `-c`, `--config <soubor>` | konfigurační soubor místo nejbližšího `dresscode.neon` nebo `dresscode.php` (případně jejich šablony s příponou `.dist`) |
 | `-f`, `--format <název>` | formát výstupu, viz níže |
-| `--diff` | u `check` ukáže, co by `fix` změnil; u `fix` to, co změnil |
-| `--preset <název>` | přidá preset; lze uvést vícekrát |
-| `--group <název>` | přidá [skupinu pravidel |configuration#Skupiny pravidel], třeba `cleanup` nebo `modernization`; lze uvést vícekrát |
+| `--diff` | u `check` ukáže, co by `fix` změnil; u `fix` to, co změnil; jen ve formátu `console` |
+| `--preset <název>` | přidá preset; bez konfiguračního souboru nahradí výchozí `per`; lze uvést vícekrát |
+| `--group <název>` | přidá [skupinu pravidel |configuration#Skupiny pravidel], třeba `cleanup` nebo `modernization`; bez konfiguračního souboru nahradí výchozí `per`; lze uvést vícekrát |
 | `--rule <název>=on` nebo `=off` | zapne nebo vypne pravidlo pro tenhle běh; lze uvést vícekrát |
-| `--only <název>` | zúží běh na jmenovaná pravidla; jméno presetu nebo skupiny znamená všechna jejich pravidla. Lze uvést vícekrát, viz [níže |#Jedno pravidlo najednou: --only] |
+| `--only <název>` | zúží běh na jmenovaná pravidla; jméno presetu nebo skupiny znamená všechna jejich pravidla. Jde použít i u `config`, `explain` a `rules`. Lze uvést vícekrát, viz [níže |#Jedno pravidlo najednou: --only] |
 | `--fix-risky` | udělá [rizikové opravy |configuration#Varování a rizikové opravy] všech pravidel, nejen těch, která konfigurace jmenuje v klíči `fixRisky`; ohlásí se tak jako tak |
 | `--max-warnings <n>` | víc než `n` [varování |configuration#Varování a rizikové opravy] znamená exit kód `1`; bez něj varování exit kód nemění |
-| `--stdin <cesta>` | čte kód ze standardního vstupu, jako by to byl soubor na dané cestě; `fix` pak opravený kód vypíše na standardní výstup |
-| `--generate-baseline` | zapíše porušení, která oprava nechá, do [baseline |suppressing#Baseline] místo hlášení; jen u `check` a nad kódem, na kterém `fix` nemá co opravit |
+| `--stdin <cesta>` | čte kód ze standardního vstupu, jako by to byl soubor na dané cestě; nejde kombinovat s cestami, viz [níže |#Standardní vstup] |
+| `--skip-excluded` | vynechá i soubor zadaný jménem, pokud ho konfigurace vylučuje v `excludePaths`; pro hooky a nástroje, které předávají jména souborů |
+| `--generate-baseline` | zapíše porušení, která oprava nechá, do [baseline |suppressing#Baseline] místo hlášení; jen u `check`, bez `--fix-risky` a `--only` a nad kódem, na kterém `fix` nemá co opravit |
 | `--file <cesta>` | u `config`: co platí pro tenhle jeden soubor, včetně přepisů v `overrides` |
 | `--json` | u `config`: totéž jako data |
 | `--output <soubor>` | u `explain`: zapíše vysvětlení do souboru jako Markdown |
 | `--no-cache` | zpracuje každý soubor, i ten, o kterém se ví, že je čistý |
 | `--jobs <n>` | počet pracovních procesů; `1` znamená běh v jediném procesu |
 | `--strict-rules` | pravidlo, které poruší svůj kontrakt, je chyba, ne varování; pro vývoj vlastních pravidel |
-| `--no-color` | výstup bez barev |
+| `--no-color` | výstup bez barev; totéž zařídí proměnná prostředí `NO_COLOR`, barvy naopak vynutí `FORCE_COLOR` |
 | `--version`, `--help` | verze, nápověda |
 
-U `--preset`, `--rule` a `explain` můžete jméno vestavěného presetu nebo pravidla zkrátit o předponu `dresscode/`: `--preset nette` je totéž co `--preset dresscode/nette`. Jména skupin vendora nemají a píšou se vždycky sama: `--group cleanup`.
+U `--preset`, `--rule`, `--only` a `explain` můžete jméno vestavěného presetu nebo pravidla zkrátit o předponu `dresscode/`: `--preset nette` je totéž co `--preset dresscode/nette`. Jména skupin vendora nemají a píšou se vždycky sama: `--group cleanup`.
 
 
 Co konfigurace znamená: config
 ==============================
 
-Konfigurace je pár řádků, ale to, co z nich vzejde, je sto sedmdesát pravidel s volbami z několika vrstev. `dresscode config` to vypíše tak, jak to vidí běh: čte totéž vyřešení, kterým se řídí pravidla i cache, takže nemůže tvrdit něco jiného, než co se opravdu stane.
+Konfigurace je pár řádků, ale to, co z nich vzejde, je přes sto padesát pravidel s volbami z několika vrstev. `dresscode config` to vypíše tak, jak to vidí běh: čte totéž vyřešení, kterým se řídí pravidla i cache, takže nemůže tvrdit něco jiného, než co se opravdu stane.
 
 /--pre .[terminal]
-DRESS|CODE 1.0
+DRESS|CODE 1.0.0
 Config     /var/www/shop/dresscode.neon
 Target     PHP 8.2 from composer.json
 Presets    dresscode/psr12, dresscode/per, dresscode/nette-style, dresscode/nette
-Groups     cleanup, types, correctness, modernization
+Groups     cleanup, types, correctness
 Style      a tab, the line ending each file mostly has, lines of up to 140 characters
-Rules      172 of 199 run
+Names      certain, the namespaces declare no function and no constant
+Rules      152 of 211 run
 
   dresscode/name-casing                       dresscode/nette
       classes                         PascalCase              dresscode/nette
       constants                       PascalCase              dresscode/nette (over dresscode/psr12 UPPER_CASE, dresscode/per UPPER_CASE)
   dresscode/braces-position                   dresscode/nette-style
       emptyBodies                     ownLine                 dresscode/nette-style (over dresscode/per sameLine)
-  dresscode/line-length                       the configuration
+  dresscode/string-quotes                     the configuration
   dresscode/strict-call                       group correctness, risky fixes only reported
   ...
 
 Not running
+  dresscode/useless-overriding-method     it needs the types of the code and the configuration sets no types
   dresscode/useless-else                  turned off by dresscode/nette
-  dresscode/octal-notation                it needs PHP 8.1 and the target is 8.0
-  dresscode/no-deprecated-members         it needs the types of the code and the configuration sets no types
-  6 more that no preset or rule of the configuration mentions
+  dresscode/type-hint-required            turned off by dresscode/nette
+  ...
+  52 more that no preset or rule of the configuration mentions
 \--
 
-Řádek `Groups` říká, ke kterým [skupinám pravidel |configuration#Skupiny pravidel] se konfigurace doresolvovala, a pravidlo, které zapnula skupina, má jako vrstvu `group <jméno>`. U každého pravidla stojí vrstva, která ho zapnula, u každé volby, kterou některá vrstva jmenovala, výsledná hodnota, kdo ji nastavil a co tím přebil. Pravidlo s [rizikovými opravami |configuration#Varování a rizikové opravy] navíc říká, jestli jste je přijali (`risky fixes accepted`), nebo jestli se jen ohlásí (`risky fixes only reported`). Pravidlo, které neběží, říká proč: vypnul ho preset nebo konfigurace, chybí mu verze PHP, typy nebo knihovna, kterou hlídá, zapíná ho jen přepis, nebo o něm nikdo nemluvil. `--file cesta` ukáže totéž pro jeden soubor, tedy i s přepisy, které pro něj platí, a `--json` dá výstup jako data pro nástroje.
+Řádek `Names` říká, jak se berou [nekvalifikovaná jména funkcí a konstant ve jmenných prostorech |namespaces], a když konfigurace nějaké jmenuje, vypíše je pod sebou. Řádek `Groups` říká, ke kterým [skupinám pravidel |configuration#Skupiny pravidel] se konfigurace doresolvovala, a pravidlo, které zapnula skupina, má jako vrstvu `group <jméno>`. U každého pravidla stojí vrstva, která ho zapnula, u každé volby, kterou některá vrstva jmenovala, výsledná hodnota, kdo ji nastavil a co tím přebil. Pravidlo s [rizikovými opravami |configuration#Varování a rizikové opravy] navíc říká, jestli jste je přijali (`risky fixes accepted`), nebo jestli se jen ohlásí (`risky fixes only reported`). Pravidlo, které neběží, říká proč: vypnul ho preset nebo konfigurace, chybí mu verze PHP, typy nebo knihovna, kterou hlídá, zapíná ho jen přepis, nebo o něm nikdo nemluvil. `--file cesta` ukáže totéž pro jeden soubor, tedy i s přepisy, které pro něj platí, a `--json` dá výstup jako data pro nástroje.
 
 
 Vysvětlení pravidel: explain
@@ -142,19 +143,22 @@ dresscode init
 ```
 
 ```
-DRESS|CODE 1.0
-Sample     35 of 35 files in src, tests
-Standard   nette, as given
-Indent     tab 100% of 32 files
-Quotes     single 100% of 591 strings
+DRESS|CODE 1.0.0
+Sample     3 of 3 files in src, tests
+Standard   per, not chosen by measure; the dry runs below count what each would change, not which is nearest, and '--preset' writes another
+Indent     tab 100% of 2 files
+Quotes     single 86%, double 14% of 7 strings
 Conditions no conditions
-Namespaced none declared in 35 files
-Dry run    2 of 35 sampled files would change
+Namespaces no function and no constant declared, resolved for certain
+Dry run    per         2 of 3 sampled files would change, the one written
+           psr12       2 of 3
+           nette       3 of 3
+           symfony     3 of 3
 
 dresscode.neon written.
 ```
 
-Vzorek je každý k-tý soubor setříděného seznamu, nejvýš 300, aby měření trvalo vteřiny i ve velkém projektu; kromě výchozích vyloučených cest jdou stranou adresáře `fixtures`, `Fixtures` a `expected`, protože jejich obsah nikdo nepíše rukou. Poslední řádek je nasucho spuštěný `fix`: říká, kolik souborů vzorku by navržená konfigurace změnila, tedy co vás čeká při prvním opravdovém `fix`.
+Vzorek je každý k-tý soubor setříděného seznamu, nejvýš 300 souborů a 2 MB, aby měření trvalo vteřiny i ve velkém projektu. Kromě výchozích vyloučených cest jdou stranou adresáře `fixtures`, `Fixtures` a `expected`, soubory větší než 100 kB a soubory, které v hlavičce říkají, že je vygeneroval nástroj (`@generated`, "do not edit"), protože nic z toho nikdo nepíše rukou; kolik souborů vynechal pro velikost nebo jako vygenerované, řekne řádek `Sample`. Řádky `Dry run` jsou nasucho spuštěný `fix`: říkají, kolik souborů vzorku by každý ze čtyř standardů změnil, tedy co vás čeká při prvním opravdovém `fix`. Se zadaným `--preset` je řádek jen jeden, pro zvolený standard.
 
 Měří se tři rozhodnutí, a každé jinou jednotkou, podle toho, jak často se v kódu vyskytuje:
 
@@ -165,33 +169,30 @@ Měří se tři rozhodnutí, a každé jinou jednotkou, podle toho, jak často s
 Zapíše se jen to, co kód říká dost jasně. Hodnota, se kterou souhlasí aspoň 70 % míst, se napíše jako hodnota i s procenty. Kde hranice nedosáhne žádná, ale obě dohromady ano, napíše se u tvaru podmínky tolerance `[perLine, compact]`, tedy "oba tvary projdou"; u uvozovek, kde tolerance nedává smysl, se napíše `keep`. A kde ani to ne, nenapíše se nic a rozhoduje standard. Klíč `fixRisky` nenapíše `init` nikdy: souhlas s opravami, které mohou změnit chování kódu, se z kódu změřit nedá.
 
 ```neon
-# Written by dresscode init from 35 of the 35 files. A number is the share of the places a decision
+# Written by dresscode init from 3 of the 3 files. A number is the share of the places a decision
 # appears in that already agree with its value; what the file does not name, the standard decides.
 
 presets:
-	- nette
+	- per
+	# not chosen by measure; the other complete standards are psr12, nette and symfony
 
-indent: tab  # tab 100% of 32 files
+indent: tab  # tab 100% of 2 files
 
 # the namespaces of the scope declare no function and no constant, so an unqualified name in a namespace
 # is resolved for certain; one declared later is reported until it is listed
 nameResolution: certain
 
 rules:
-	string-quotes: single  # single 100% of 591 strings
+	string-quotes: single  # single 86%, double 14% of 7 strings
 
 paths:
 	- src
 	- tests
-
-fileExtensions:
-	- php
-	- phpt
 ```
 
 Vedle tří rozhodnutí zapíše `init` i to, co deklarují jmenné prostory. Tady nejde o většinu, ale o úplnost, a tak vzorek nestačí: `init` projde všechny soubory v cestách, najde funkce a konstanty deklarované ve jmenných prostorech, zapíše jejich seznamy do klíče `namespaces` a k nim `nameResolution: certain`. Soubor, který nejde naparsovat, může deklarovat cokoli, a proto `init` jistotu v takovém případě nezapíše a v komentáři jmenuje první takový soubor a řekne, kolik je dalších. Když mezi nainstalovanými balíčky najde `symfony/dependency-injection`, navrhne i preset `symfony-configurator`, který zná funkce, jimiž Symfony konfiguruje služby. Co ty klíče znamenají, popisuje stránka [Funkce a konstanty ve jmenných prostorech |namespaces].
 
-Standard `init` neměří: vezme ten, který mu dáte přepínačem `--preset`, a bez něj napíše `per` s komentářem, že ostatní tři jsou `psr12`, `nette` a `symfony`. Cesty bere z adresářů `src`, `tests`, `app` a `lib`, které v kořeni opravdu jsou.
+Standard `init` neměří: vezme ten, který mu dáte přepínačem `--preset`, a bez něj napíše `per` s komentářem, že ostatní tři jsou `psr12`, `nette` a `symfony`. Cesty bere z autoloadu v `composer.json` a přidá k nim adresáře `src`, `tests`, `test`, `app`, `lib`, `bin`, `cron` a `www*`, které v kořeni opravdu jsou; když nenajde žádný, vezme celý kořen. Najde-li v nich soubory `.phpt`, zapíše i klíč `fileExtensions`.
 
 Než se soubor zapíše, `init` si ho sám přečte a nechá vyřešit, jestli z něj vyjdou tytéž hodnoty, které naměřil. Konfiguraci, která už existuje, nikdy nepřepíše: návrh vypíše na výstup a skončí s kódem `2`, takže si ho můžete prohlédnout nebo přesměrovat do souboru.
 
@@ -242,18 +243,17 @@ FIXED  36 violations found, 1 remaining in 12 of 214 files
 
 Barvy se vypnou samy, jakmile výstup nejde do terminálu.
 
-`github` se zvolí sám, když běh probíhá jako krok GitHub Actions. Každé porušení je anotace, která se ukáže přímo v diffu pull requestu; u `fix` jsou to porušení, která oprava nechala.
+`github` se zvolí sám, když běh probíhá jako krok GitHub Actions; se `--stdin` ne, tam platí jen to, co zadáte přepínačem `--format`. Každé porušení je anotace, která se ukáže přímo v diffu pull requestu; u `fix` jsou to porušení, která oprava nechala.
 
-`bare` je pro Git hooky a nástroje, které výstup čtou: bez hlavičky a bez shrnutí, jen porušení, která zůstala na uživateli, ve stejném rozvržení jako `console`, a u každého přepsaného souboru řádek `rewritten`. Čistý běh nevypíše vůbec nic.
+`bare` je pro Git hooky a nástroje, které výstup čtou: bez hlavičky a bez shrnutí, jen to, co zůstalo na uživateli, tedy porušení, syntaktické chyby, selhání pravidel a varování k souborům, ve stejném rozvržení jako `console`, a u každého přepsaného souboru řádek `rewritten`. Čistý běh na standardní výstup nevypíše nic; varování ke konfiguraci jdou ve všech formátech na standardní chybový výstup.
 
 /--pre .[terminal]
 src/Cart.php  rewritten
-
 src/Order.php
   error  12:1  The line is 133 characters long, the limit is 120  line-length
 \--
 
-`json` je strojově čitelný a jeho tvar se v minoritních verzích nemění. Pole `files` má u každého souboru nalezená porušení `violations` (pravidlo, zpráva, řádek, sloupec, závažnost, zda je oprava riziková, otisk) a porušení `remaining`, která zbudou po opravě, s pozicemi v opraveném textu. Dál následuje `summary` s počty, mezi nimi `remaining`, rizikové opravy, které čekají, soubory se syntaktickou chybou (`syntaxErrors`) a porušení v baseline, a nakonec `warnings`.
+`json` je strojově čitelný a jeho tvar se v minoritních verzích nemění. Pole `files` obsahuje jen soubory, o kterých je co říct, čisté v něm nejsou. U každého jsou nalezená porušení `violations` (pravidlo, zpráva, řádek, sloupec, závažnost, zda je oprava riziková `risky` a zda ji běh odmítl `refused`, otisk, `derivedFrom`), porušení `remaining`, která zbudou po opravě, s pozicemi v opraveném textu, varování souboru `warnings`, syntaktická chyba `error` se zprávou a řádkem, selhání pravidla `failure` a příznaky `changed` (oprava text mění) a `written` (soubor se zapsal). Dál následuje `summary` s počty `files`, `violations`, `remaining`, `riskyDeferred` (rizikové opravy, které čekají), `changedFiles`, `syntaxErrors`, `failures` a `baselined` (porušení v baseline) a nakonec `warnings` k celému běhu.
 
 `checkstyle` je XML, kterému rozumí Jenkins, nástroj `cs2pr` a další nástroje pro CI; u `fix` v něm stejně jako u `github` jsou porušení, která oprava nechala.
 
@@ -281,10 +281,10 @@ Soubory, které cache nepokryje, se rozdělí mezi pracovní procesy. Výchozí 
 Standardní vstup
 ================
 
-`--stdin` je rozhraní pro editory a hooky: obsah přijde na standardním vstupu, cesta říká, která pravidla pro něj platí (podle ní se vyhodnotí přepisy pro cesty), a `fix` vrátí opravený kód na standardní výstup místo toho, aby zapisoval do souboru:
+`--stdin` je rozhraní pro hooky a další nástroje: obsah přijde na standardním vstupu, cesta říká, která pravidla pro něj platí (podle ní se vyhodnotí přepisy pro cesty), a `fix` vrátí opravený kód na standardní výstup místo toho, aby zapisoval do souboru. Report pak `fix` posílá na standardní chybový výstup, aby se s kódem nepletl:
 
 ```shell
 git show :src/Cart.php | dresscode check --stdin src/Cart.php
 ```
 
-Cache se u standardního vstupu nepoužívá.
+Cesty k dalším souborům se k `--stdin` přidat nedají. Cache se u standardního vstupu nepoužívá a klíč `excludePaths` se nevyhodnocuje: kód se zkontroluje, i když cesta leží ve vyloučené části projektu.

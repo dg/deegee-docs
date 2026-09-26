@@ -8,7 +8,7 @@ Jak DressCode spustit z vlastního kódu: načtení konfigurace, `Runner`, výsl
 Kdy sáhnout po API
 ==================
 
-Příkazová řádka pokryje průběžnou integraci, Git hooky i editory. API potřebujete tehdy, když DressCode zapojujete do vlastního nástroje: do generátoru, který má vyrobený kód rovnou naformátovat, do migračního skriptu, do služby, která kontroluje kód z formuláře, nebo když chcete výsledky v podobě, kterou žádný z vestavěných formátů nedává.
+Příkazová řádka pokryje průběžnou integraci i Git hooky. API potřebujete tehdy, když DressCode zapojujete do vlastního nástroje: do generátoru, který má vyrobený kód rovnou naformátovat, do migračního skriptu, do služby, která kontroluje kód z formuláře, nebo když chcete výsledky v podobě, kterou žádný z vestavěných formátů nedává.
 
 
 Běh nad projektem
@@ -21,8 +21,8 @@ use DressCode\Config\Loader;
 use DressCode\Config\RunnerFactory;
 use DressCode\Reporters\JsonReporter;
 
-[$config, $root] = new Loader()->load(file: null, directory: getcwd());
-$runner = new RunnerFactory()->createRunner($config, $root);
+[$config, $root, $configFile] = new Loader()->load(file: null, directory: getcwd());
+$runner = new RunnerFactory()->createRunner($config, $root, configFile: $configFile);
 
 $files = $runner->findFiles(['src', 'tests']);
 $result = $runner->run($files, fix: false, reporter: new JsonReporter(STDOUT));
@@ -30,12 +30,12 @@ $result = $runner->run($files, fix: false, reporter: new JsonReporter(STDOUT));
 exit($result->getExitCode());
 ```
 
-`Loader::load()` najde `dresscode.neon` nebo `dresscode.php` od zadaného adresáře směrem nahoru (nebo vezme soubor, který mu určíte) a vrátí konfiguraci a kořenový adresář projektu; bez konfiguračního souboru platí výchozí preset, nebo konfigurace, kterou předáte třetím argumentem. `Runner::findFiles()` rozvine cesty podle klíčů `paths`, vyloučení (i těch z rozšíření) a přípon z konfigurace, `run()` je zpracuje a výsledky posílá reporteru soubor po souboru. Pravidlo nebo analýzu, kterou konfigurace staví closurou, popisuje jen text konfiguračního souboru, a proto `createRunner()` takový běh cachuje, jen když dostane cestu k tomu souboru v argumentu `configFile`.
+`Loader::load()` najde `dresscode.neon` nebo `dresscode.php` (případně jejich šablonu s příponou `.dist`) od zadaného adresáře směrem nahoru, nebo vezme soubor, který mu určíte, a vrátí trojici: konfiguraci, kořenový adresář projektu a cestu ke konfiguračnímu souboru. Bez konfiguračního souboru platí výchozí preset `per`, nebo konfigurace, kterou předáte třetím argumentem, a cesta je `null`. `Runner::findFiles()` rozvine předané cesty na soubory podle vyloučení (i těch z rozšíření) a přípon z konfigurace, přičemž soubor zadaný jménem vezme tak, jak je, pokud nepředáte `skipExcluded: true`; klíč `paths` nečte, ten zpracovává příkazová řádka, takže cesty předáváte sami. `run()` soubory zpracuje a výsledky posílá reporteru soubor po souboru. Pravidlo nebo analýzu, kterou konfigurace staví closurou, popisuje jen text konfiguračního souboru, a proto `createRunner()` takový běh cachuje, jen když dostane cestu k tomu souboru v argumentu `configFile`.
 
 .[caution]
-`RunnerFactory` je zatím označená `@internal`, takže se její podoba může v minoritní verzi změnit. Je to jediné hrubé místo tohohle API a zároveň jediná cesta, jak `Runner` postavit. Komu to vadí, ať volá rovnou [celý příkaz |#Vlastní příkaz], jehož rozhraní stabilní je.
+`Runner` a `RunnerFactory` jsou označené `@internal`, stejně jako všechno ostatní ve jmenném prostoru `DressCode\Config` kromě `Loader`, takže se jejich podoba může v minoritní verzi změnit. Stabilní je `Loader`, `Config` s přepisy, rozhraní `Reporter` s výsledky `FileResult` a `RunResult`, vestavěné reportery a [celý příkaz |#Vlastní příkaz] v `Console\Application`. Kdo chce mít jistotu, že ho nová verze nerozbije, spustí běh přes něj.
 
-`RunResult` obsahuje `FileResult` pro každý soubor, jen bez kódu a výstupu, aby velký projekt nezůstal celý v paměti (ty dostane reporter v `reportFile()`), a k tomu souhrnná čísla: `countViolations()` (porušení souborů, jak byly načtené), `countLeftAfterFix()` (kolik jich po opravě zbude, v `check` i ve `fix`), `countRemaining()` (co zůstalo na uživateli: v `check` všechna porušení, ve `fix` ta, která oprava nechala), `countRiskyDeferred()` (rizikové opravy, které čekají na svolení) a `listRiskyDeferredRules()` (jména jejich pravidel), `countChangedFiles()`, `countSyntaxErrors()` (soubory, které nejdou parsovat), `countFailures()` (soubory, kde pravidlo selhalo), vlastnost `baselined` s počtem porušení, která umlčela baseline, a `getExitCode()` podle stejných pravidel jako na příkazové řádce. První tři počty přijmou volitelnou závažnost, `Severity::Error` nebo `Severity::Warning`.
+`RunResult` má ve vlastnosti `files` výsledek `FileResult` pro každý soubor, jen bez kódu a výstupu, aby velký projekt nezůstal celý v paměti (ty dostane reporter v `reportFile()`). Dál nese `fix` (šlo o opravu), `warnings` (varování k celému běhu, třeba o zastaralých položkách baseline), `maxWarnings` (práh z `--max-warnings`) a souhrnná čísla: `countViolations()` (porušení souborů, jak byly načtené), `countLeftAfterFix()` (kolik jich po opravě zbude, v `check` i ve `fix`), `countRemaining()` (co zůstalo na uživateli: v `check` všechna porušení, ve `fix` ta, která oprava nechala), `countDerived()` (kolik z nich plyne z opravy jiného porušení), `countRiskyDeferred()` (rizikové opravy, které čekají na svolení) a `listRiskyDeferredRules()` (jména jejich pravidel), `countChangedFiles()`, `countSyntaxErrors()` (soubory, které nejdou parsovat), `countFailures()` (soubory, kde pravidlo selhalo), vlastnost `baselined` s počtem porušení, která umlčela baseline, a `getExitCode()` podle stejných pravidel jako na příkazové řádce. První čtyři počty přijmou volitelnou závažnost, `Severity::Error` nebo `Severity::Warning`.
 
 Kdo konfiguraci staví v PHP místo načítání ze souboru, napíše `new Config(...)` se stejnými klíči jako NEON a přepisy pro část projektu jako objekty `Override`. Metoda `createRunner()` přijme navíc profil `commandLine`, který leží nad vším jako přepínače `--preset`, `--group` a `--rule`, a seznam `only`, který běh zúží jako `--only`:
 
@@ -71,9 +71,9 @@ foreach ($result->violations as $violation) {
 $fixed = $result->output;
 ```
 
-`processFile()` nikdy nezapisuje. Cesta říká, která pravidla pro kód platí (podle ní se vyhodnotí přepisy pro cesty), `$result->output` je opravený kód, `$result->isChanged()` řekne, jestli se od vstupu liší, a `$result->remaining` jsou porušení, která opravený kód pořád má. Naproti tomu `processPath()` soubor přečte a s `fix: true` i zapíše. Ani jedno nepoužívá cache.
+`processFile()` nikdy nezapisuje. Cesta říká, která pravidla pro kód platí (podle ní se vyhodnotí přepisy pro cesty), `$result->output` je opravený kód, `$result->isChanged()` řekne, jestli se od vstupu liší, a `$result->remaining` jsou porušení, která opravený kód pořád má. Kód, který nejde naparsovat, má `output` rovný `null` a chybu v `error`. Když pravidlo selže nebo se pravidla zacyklí, vyhodí `processFile()` výjimku `RuleException` nebo `ConvergenceException`. Naproti tomu `processPath()` soubor přečte, s `fix: true` ho i zapíše a selhání pravidla místo výjimky zapíše do `failure` výsledku, stejně jako to dělá `run()`. Ani jedno nepoužívá cache.
 
-`FileResult` nese cestu, původní kód a výstup (výsledky, které si nechá `RunResult`, je už nemají, reporter je dostane v `reportFile()`), seznam objektů `Violation` nalezených v původním kódu (pravidlo, zpráva, řádek, sloupec, závažnost, jestli je oprava riziková, otisk pro baseline), seznam `remaining` s porušeními výstupu a s pozicemi v něm, tedy přesně s tím, co ohlásí příští kontrola opraveného souboru, dále varování a případnou chybu parsování nebo selhání pravidla.
+`FileResult` nese cestu, původní kód a výstup (výsledky, které si nechá `RunResult`, je už nemají, reporter je dostane v `reportFile()`), seznam objektů `Violation` nalezených v původním kódu a seznam `remaining` s porušeními výstupu a s pozicemi v něm, tedy přesně s tím, co ohlásí příští kontrola opraveného souboru. Dál nese varování `warnings`, chybu parsování `error` s řádkem `errorLine`, selhání pravidla `failure`, počet průchodů `passes`, otisky porušení umlčených baseline `baselined` a příznaky `written` (soubor se zapsal) a `cached` (cache ho znala jako čistý). `Violation` má pravidlo, zprávu, řádek, sloupec, závažnost, `risky` (oprava je riziková), `refused` (běh ji neudělal, protože k ní nebylo svolení), otisk pro baseline a `derivedFrom`, otisk porušení, z jehož opravy plyne.
 
 
 Vlastní reporter
@@ -114,7 +114,7 @@ final class CountingReporter implements Reporter
 }
 ```
 
-Takový reporter po prvním běhu nad starým projektem řekne, která tři pravidla dělají devadesát procent všech porušení, a to je přesně informace, podle které se rozhoduje, co vypnout a co opravit. Vestavěné reportery (`ConsoleReporter`, `JsonReporter`, `CheckstyleReporter`, `GithubReporter`) jsou dobrý vzor k nahlédnutí.
+Takový reporter po prvním běhu nad starým projektem řekne, která tři pravidla dělají devadesát procent všech porušení, a to je přesně informace, podle které se rozhoduje, co vypnout a co opravit. Vestavěné reportery (`ConsoleReporter`, `JsonReporter`, `CheckstyleReporter`, `GithubReporter`) jsou dobrý vzor k nahlédnutí. `NullReporter` nevypíše nic a hodí se tam, kde vás zajímá jen vrácený `RunResult`.
 
 
 Vlastní příkaz
@@ -130,4 +130,4 @@ $application = new Application(defaultConfig: new Config(extensions: [Nette\Codi
 exit($application->run($argv));
 ```
 
-Všechno ostatní, tedy příkazy, přepínače, formáty i paralelní běh, zůstává na příkazové řádce.
+Všechno ostatní, tedy příkazy, přepínače, formáty i paralelní běh, zůstává na příkazové řádce. Chybné volání (`Console\UsageException`), špatnou konfiguraci i jinou chybu běhu `run()` zachytí sám, vypíše je na standardní chybový výstup a vrátí exit kód `2`.

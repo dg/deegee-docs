@@ -81,7 +81,7 @@ Pět klíčů zůstává rozhodnutím projektu a preset je nastavit nemůže: ve
 | `presets`, `groups`, `rules`, `indent`, `eol`, `lineLength`, `namespaces` | ano | ano | ano | ne |
 | `php`, `nameResolution`, `fixRisky`, `warnings` | ano | ano | ne | ne |
 | `types` | ano | ne | ne | ne |
-| `overrides`, `paths`, `fileExtensions`, `baseline`, `cacheDir` | ano | ne | ne | ne |
+| `overrides`, `paths`, `fileExtensions`, `packages`, `baseline`, `cacheDir` | ano | ne | ne | ne |
 | `extensions`, `excludePaths`, `skipWhen`, `analyses` | ano | ne | ne | ano |
 
 
@@ -106,9 +106,9 @@ Pro každý soubor se profily skládají do vrstev, od nejnižší po nejvyšš�
 
 Preset, který už leží níž, se podruhé nepokládá. Vyšší vrstva mění jen to, co sama říká, a jak to změní, záleží na druhu hodnoty:
 
-- **Hodnota** (`indent`, `eol`, `lineLength`, `php`, `nameResolution`) platí z nejvyšší vrstvy, která ji uvádí.
-- **Seznam** (`namespaces`, `fixRisky`, `warnings`) se přes vrstvy sčítá. Přepis pro testy tak k seznamu projektu přidává a nic z něj neubere.
-- **Volby pravidla** se slévají. **Mapa voleb se slévá po klíčích**: když preset nastaví pravidlu `dresscode/braces-position` devět voleb a vy uvedete jednu, platí ta vaše a zbylých osm zůstane, jak je nastavil preset. **Skalár a seznam naopak nahrazují celou hodnotu**: `multiLine: [arguments]` u `dresscode/trailing-comma` znamená jen argumenty, ať preset říkal cokoli, takže kdo chce přidávat, opíše i zděděné položky. A **`keep` na úrovni pravidla maže všechno**, co o něm vrstvy pod ním řekly; mapa uvedená v další vrstvě pak začíná znovu od výchozích hodnot pravidla.
+- **Hodnota** (`indent`, `eol`, `lineLength`, `php`, `nameResolution`, `types`) platí z nejvyšší vrstvy, která ji uvádí.
+- **Seznam** (`groups`, `namespaces`, `fixRisky`, `warnings`) se přes vrstvy sčítá. Přepis pro testy tak k seznamu projektu přidává a nic z něj neubere.
+- **Volby pravidla** se slévají. **Mapa voleb se slévá po klíčích**: když preset nastaví pravidlu `dresscode/braces-position` devět voleb a vy uvedete jednu, platí ta vaše a zbylých osm zůstane, jak je nastavil preset. **Skalár a seznam naopak nahrazují celou hodnotu**: `multiLine: [arguments]` u `dresscode/trailing-comma` znamená jen argumenty, ať preset říkal cokoli, takže kdo chce přidávat, opíše i zděděné položky. A **`keep` na úrovni pravidla maže všechno**, co o něm vrstvy pod ním řekly, kromě dat z nainstalovaných balíčků (soubory `upgrading.neon`); mapa uvedená v další vrstvě pak začíná znovu od výchozích hodnot pravidla a od těch dat.
 
 Odkud každá hodnota přišla a co přebila, vypíše [`dresscode config` |cli#Co konfigurace znamená: config].
 
@@ -116,7 +116,7 @@ Odkud každá hodnota přišla a co přebila, vypíše [`dresscode config` |cli#
 Skupiny pravidel
 ================
 
-**Katalog má skoro dvě stě pravidel a skládat si z nich konfiguraci položku po položce je práce, kterou za vás udělají skupiny. Konfigurace pak stojí na dvou otázkách: jak má kód vypadat, na to odpovídá jeden standard, a co po něm chcete kromě vzhledu, na to odpovídá šest skupin.** Skupina je jméno záměru, ne výčet: napíšete `cleanup` a s výchozími volbami běží každé pravidlo, které odklízí kód, co je v souboru pro nic.
+**Katalog má přes dvě stě pravidel a skládat si z nich konfiguraci položku po položce je práce, kterou za vás udělají skupiny. Konfigurace pak stojí na dvou otázkách: jak má kód vypadat, na to odpovídá jeden standard, a co po něm chcete kromě vzhledu, na to odpovídá šest skupin.** Skupina je jméno záměru, ne výčet: napíšete `cleanup` a s výchozími volbami běží každé pravidlo, které odklízí kód, co je v souboru pro nic.
 
 ```neon
 presets:
@@ -174,7 +174,7 @@ lineLength: 100
 
 Hodnota `indent` je počet mezer, nebo `tab`. Hodnota `eol` je `LF` nebo `CRLF` (velkými písmeny, jak se ty zkratky píšou; `lf` je chyba), dále `majority` pro sjednocení každého souboru na jeho převažující konec řádku (výchozí), nebo `platform` pro konec řádku stroje, na kterém DressCode běží.
 
-Hodnota `lineLength` je nejdelší řádek, který projde, v šířce, jak ho vidíte: tabulátor se počítá do další zarážky. `false` délku neomezuje, i když ji vrstva pod ním nastavila. Standardy `dresscode/psr12` a `dresscode/per` mají 120 znaků, `dresscode/nette` 140 znaků a `dresscode/symfony` žádný limit. Délka je jedna pro všechna pravidla, která ji potřebují: [`dresscode/line-length` |rules/line-length] ohlásí širší řádek, `dresscode/multi-line-signature` a `dresscode/multi-line-condition` rozlomí signaturu a podmínku na řádku širším než limit, `dresscode/binary-operator-spacing` nepřitáhne přiřazení na řádek levé strany, kdyby tím řádek limit přesáhl, a `dresscode/multi-line-array` podle ní skládá položky dlouhého pole za sebe.
+Hodnota `lineLength` je nejdelší řádek, který projde, v šířce, jak ho vidíte: tabulátor se počítá do další zarážky. `false` délku neomezuje, i když ji vrstva pod ním nastavila. Standardy `dresscode/psr12` a `dresscode/per` mají 120 znaků, `dresscode/nette` 140 znaků a `dresscode/symfony` žádný limit. Délka je společná všem pravidlům, která ji potřebují: [`dresscode/line-length` |rules/line-length] ohlásí širší řádek, `dresscode/multi-line-signature` a `dresscode/multi-line-condition` rozlomí signaturu a podmínku na řádku širším než limit, `dresscode/binary-operator-spacing` nepřitáhne přiřazení na řádek levé strany, kdyby tím řádek limit přesáhl, `dresscode/multi-line-array` podle ní skládá položky dlouhého pole za sebe a `dresscode/multi-line-import` rozloží na řádky skupinový import širší než limit. Jen `dresscode/multi-line-import` má i vlastní volbu `lineLength`, která společnou délku přebije.
 
 **Cílová verze PHP** je vlastnost projektu a čte se z `composer.json` jako nejnižší verze, kterou dovoluje `require.php`; pravidla pro novější syntaxi se pod ní sama vynechají. DressCode rozumí běžným zápisům omezení: `^8.1`, `~8.1`, `>=8.1` s horní mezí i bez ní, `8.1 - 8.3` a jejich kombinacím přes `||`. Z jiného tvaru, třeba `<8.4` nebo `*`, nejnižší verzi poznat nejde, a tak platí výchozí PHP 8.0. Starší verzi než PHP 8.0 DressCode nepodporuje: když ji projekt dovoluje nebo ji nastavíte, zkontroluje kód jako PHP 8.0 a upozorní, že oprava může zapsat syntaxi, kterou starší PHP nezná. Klíč `php` tedy uvádějte jen tehdy, když se verze od `composer.json` liší, nebo když ji z něj DressCode nepřečte. Do přepisu ho napište, když má část projektu běžet na jiném PHP. Uvozovky psát můžete a nemusíte, obojí je správně:
 
@@ -186,7 +186,7 @@ Zápis `php: '8.2'` znamená totéž. Verze bez uvozovek je pro NEON číslo a D
 
 Stejně jako verzi PHP může pravidlo vyžadovat i **balíček** v nějaké verzi, když hlídá jeho API; pravidlo pro nové API `nette/forms` 3.3 se v projektu, který ho nemá, prostě nespustí. Verze balíčku se čte z `composer.json` a z instalovaných balíčků vedle něj a měří se tím, na čem projekt stojí: u balíčku, který si projekt vyžaduje sám, je to nejnižší verze, kterou jeho omezení dovolí, protože kód psaný pro novější by se rozbil všude, kam to omezení pustí starší. U balíčku, který přišel jen s jiným, rozhoduje ta nainstalovaná. Pravidlo se tedy zapne, až když zvednete omezení ve svém `composer.json`.
 
-Verzi balíčku, pro kterou má být kód napsaný, můžete říct i přímo klíčem `packages`. Má přednost před `composer.json` a hodí se při [aktualizaci knihoven |upgrading-libraries#Po jedné verzi, nebo najednou], kdy kód převádíte na novou verzi, zatímco je ve vendoru ještě ta stará. Verzi pište v uvozovkách, protože NEON by `3.10` přečetl jako číslo 3.1. Klíč patří jen do konfigurace projektu, preset ani přepis ho nemají:
+Verzi balíčku, pro kterou má být kód napsaný, můžete říct i přímo klíčem `packages`. Má přednost před `composer.json` a hodí se při [aktualizaci knihoven |upgrading-libraries#Po jedné verzi, nebo najednou], kdy kód převádíte na novou verzi, zatímco je ve vendoru ještě ta stará. Verze je jedno až čtyři čísla oddělená tečkou (`3`, `3.3`, `3.3.1`) a píše se v uvozovkách, protože NEON by `3.10` přečetl jako číslo 3.1; DressCode proto verzi s tečkou bez uvozovek odmítne. Balíček, který projekt nemá nainstalovaný, se s varováním přeskočí, a stejně tak jméno projektu samotného. Klíč patří jen do konfigurace projektu, preset ani přepis ho nemají:
 
 ```neon
 packages:
@@ -220,12 +220,13 @@ Stejně jako verze PHP je to rozhodnutí projektu, a preset ho proto nastavit ne
 Pravidla a jejich volby
 =======================
 
-Klíč `rules` je mapa, ve které je jménu pravidla přiřazena jedna ze čtyř věcí:
+Klíč `rules` je mapa, ve které má jméno pravidla jednu z těchto hodnot:
 
 - `true` zapne pravidlo s výchozími volbami;
-- `keep` říká, že pravidlo nic nevynucuje: kód zůstane, jak je. Je to jediné slovo pro "nesahej na to", stejné u celého pravidla i u jedné jeho volby (`false` z PHP zápisu znamená totéž);
+- `keep` říká, že pravidlo nic nevynucuje: kód zůstane, jak je. Je to jediné slovo pro "nesahej na to", stejné u celého pravidla i u jedné jeho volby (`false` znamená u pravidla totéž);
 - **hodnota** u pravidla, které je jedním rozhodnutím: `dresscode/yoda: forbidden`, `dresscode/string-quotes: single`, `dresscode/kind-in-class-name: required`. Je to zkratka za mapu s jedinou volbou a stránka pravidla říká, kterou;
-- **mapa voleb**.
+- **mapa voleb**;
+- **entita**, podle které se postaví pravidlo s vlastními závislostmi, viz [Objekty a callbacky |#Objekty a callbacky].
 
 Jména jsou ta z [přehledu pravidel |rules/@home] a z výpisu `dresscode check`; volby každého pravidla najdete i s příklady na jeho stránce a vypíše je `dresscode explain <pravidlo>`.
 
@@ -312,7 +313,7 @@ warnings:
 	- dresscode/line-length
 ```
 
-Riziková oprava je taková, která může změnit, co kód dělá. Většinou je to vlastnost konkrétního místa: `get_class($x)` na `$x::class` je bezpečné, dokud `$x` nemůže být `null`, takže `dresscode/modern-class-name-reference` opraví, co bezpečně umí, a rizikový výskyt jen ohlásí. Jiné pravidlo ale bezpečné místo z kódu poznat nemůže, a pak je riziková každá jeho oprava: `dresscode/strict-call` doplní do `in_array()` parametr `$strict = true`, a kód, který spoléhal na volné porovnání, pak může najít něco jiného. Shrnutí řekne, kolik rizikových oprav čeká, a ve formátu `json` má každé takové porušení příznak `risky`.
+Riziková oprava je taková, která může změnit, co kód dělá. Většinou je to vlastnost konkrétního místa: `dresscode/modern-class-name-reference` nahradí `get_class($this)` za `static::class` bezpečně, kdežto `get_class($obj)` nahradí za `$obj::class` jen s volbou `onObjects` a vždy jako rizikovou opravu, protože s argumentem, který není objekt, se oba zápisy chovají jinak. Pravidlo tedy opraví, co bezpečně umí, a rizikový výskyt jen ohlásí. Jiné pravidlo ale bezpečné místo z kódu poznat nemůže, a pak je riziková každá jeho oprava: `dresscode/strict-call` doplní do `in_array()` parametr `$strict = true`, a kód, který spoléhal na volné porovnání, pak může najít něco jiného. Shrnutí řekne, kolik rizikových oprav čeká, a ve formátu `json` má každé takové porušení příznak `risky`.
 
 Zapnout pravidlo, ať jménem, nebo presetem, ještě neznamená souhlasit s jeho rizikovými opravami. Souhlas dává projekt klíčem `fixRisky`, seznamem pravidel, jejichž rizikové opravy přijímá; `fix` pak udělá jen ty a ostatní ohlásí. Preset tenhle souhlas dát nemůže a DressCode preset, který by se o to pokusil, odmítne. Git hook nebo editor proto nepotřebují žádný přepínač: opraví, co projekt přijal, a zbytek ohlásí. Přepínač `--fix-risky` dovolí rizikové opravy všech pravidel na jeden běh:
 
@@ -334,7 +335,7 @@ Cesty
 
 `paths` říká, co se kontroluje: soubory a adresáře relativně ke kořeni projektu. Cesty zadané na příkazové řádce mají přednost před konfigurací; adresář, ve kterém některé cesty z `paths` leží, se ale zúží jen na ně, viz [Příkazová řádka |cli#Příkazy].
 
-`excludePaths` naopak cesty vynechává a **jen přidává**: k výchozímu seznamu (`vendor`, `node_modules`, `temp`, `tmp`, `log` a všechny adresáře začínající tečkou) přidá vaše, a totéž udělá každé rozšíření. Nikdo nemůže vrátit zpátky to, co jiný vyloučil, takže se nestane, že by rozšíření omylem zapnulo kontrolu `vendor`.
+`excludePaths` naopak cesty vynechává a **jen přidává**: k výchozímu seznamu (`vendor`, `node_modules`, `temp`, `tmp`, `log` a všechny adresáře i soubory začínající tečkou) přidá vaše, a totéž udělá každé rozšíření. Nikdo nemůže vrátit zpátky to, co jiný vyloučil, takže se nestane, že by rozšíření omylem zapnulo kontrolu `vendor`.
 
 ```neon
 paths:
@@ -346,7 +347,7 @@ excludePaths:
 	- '*.generated.php'
 ```
 
-Vzor s lomítkem je ukotvený ke kořeni, takže `tests/fixtures` je právě ten jeden adresář. Vzor bez lomítka odpovídá jménu souboru nebo adresáře v jakékoli hloubce, takže `fixtures` vynechá každý adresář toho jména. Hvězdička zastupuje cokoli kromě lomítka, dvě hvězdičky i lomítka, takže `tests/**.phpt` jsou všechny testy v libovolné hloubce.
+Vzor s lomítkem je ukotvený ke kořeni, takže `tests/fixtures` je právě ten jeden adresář. Vzor bez lomítka odpovídá jménu souboru nebo adresáře v jakékoli hloubce, takže `fixtures` vynechá každý adresář toho jména. Hvězdička zastupuje cokoli kromě lomítka, dvě hvězdičky i lomítka, takže `tests/**.phpt` jsou všechny testy v libovolné hloubce. Otazník zastupuje jeden znak kromě lomítka, `[abc]` jeden z vyjmenovaných znaků a `[!abc]` jakýkoli jiný znak.
 
 Jednotlivé pravidlo vypnete jen pro některé cesty [přepisem |#Jiný profil pro část projektu] s hodnotou `keep`; zbytek pravidel takový soubor zkontroluje normálně:
 
@@ -383,7 +384,7 @@ Rozšíření o tom, jak se kód píše, nerozhoduje: nezapne preset ani pravidl
 
 V klíči `extensions` může stát i třída pravidla nebo presetu. Tím dostane své jméno: pravidlo pak zapnete jménem v `rules`, na jeden běh v `--rule` a potlačíte ho v komentáři `dresscode:ignore`, preset zapnete jménem v `presets`, obojí v konfiguraci i v přepisu. Jak rozšíření napsat, popisuje [Vlastní preset a rozšíření |presets-and-extensions#Rozšíření].
 
-Balíček může své rozšíření ohlásit i sám, ve svém `composer.json` pod klíčem `extra.dresscode.extension`. DressCode ho pak po instalaci najde v `vendor/composer/installed.json` a do `extensions` ho psát nemusíte. Stejně najde soubory `upgrading.neon`, které balíček uvede pod `extra.dresscode.upgrading` a ve kterých stojí, co verze knihoven přejmenovaly nebo zrušily, viz [Aktualizace knihoven |upgrading-libraries]. Ani jedno přitom žádné pravidlo nezapne: pravidla z balíčku jen dostanou svá jména a data se uplatní jen v pravidlech, která jste zapnuli sami, ať jménem, nebo skupinou `deprecations`. Po instalaci balíčku `dresscode/rules-nette` tak ví `dresscode/replaced-classes`, že se z `Nette\Forms\IControl` stalo `Nette\Forms\Control`, a vy jste neudělali nic než to pravidlo zapnuli.
+Balíček může své rozšíření ohlásit i sám, ve svém `composer.json` pod klíčem `extra.dresscode.extension`. DressCode ho pak po instalaci najde v `vendor/composer/installed.json` a do `extensions` ho psát nemusíte. Stejně najde soubory `upgrading.neon`, které balíček uvede pod `extra.dresscode.upgrading` a ve kterých stojí, co verze knihoven přejmenovaly nebo zrušily, viz [Aktualizace knihoven |upgrading-libraries]. Oba klíče čte i z `composer.json` projektu samotného. Ani jedno přitom žádné pravidlo nezapne: pravidla z balíčku jen dostanou svá jména a data se uplatní jen v pravidlech, která jste zapnuli sami, ať jménem, nebo skupinou `deprecations`. Po instalaci balíčku `dresscode/rules-nette` tak ví `dresscode/replaced-classes`, že se z `Nette\Forms\IControl` stalo `Nette\Forms\Control`, a vy jste neudělali nic než to pravidlo zapnuli.
 
 
 Objekty a callbacky
@@ -441,7 +442,7 @@ Další klíče
 ===========
 
 - `baseline`: soubor se soupisem porušení, která zatím opravit nejde a nemají se hlásit; jak vzniká a kdy se hodí, popisuje [Potlačení pravidel a baseline |suppressing#Baseline].
-- `cacheDir`: kam si DressCode ukládá, které soubory už prošly čistě; výchozí je systémový dočasný adresář.
+- `cacheDir`: kam si DressCode ukládá, které soubory už prošly čistě, a s `types: phpstan` i cache PHPStanu; výchozí je adresář `dresscode` v systémovém dočasném adresáři.
 - `analyses`: registrace vlastní analýzy pro [vlastní pravidla |rule-contract#Analýzy]; analýza, kterou jádro samo nepostaví, dostane továrnu jako [entitu |#Objekty a callbacky]. Analýza stejné třídy z konfigurace má přednost před tou z rozšíření.
 
 Co z toho všeho nakonec platí, ukáže `dresscode config`: u každého pravidla, které běží, volby s hodnotou, vrstvou, která ji nastavila, a s tím, co přebila, a u pravidla, které neběží, důvod. S `--file` totéž pro jeden soubor, i s přepisy, které pro něj platí. `dresscode rules` vypíše všechna známá pravidla, hvězdičkou označí ta, která v aktuální konfiguraci platí, a u každého uvede jména pravidel jiných nástrojů, která pokrývá.

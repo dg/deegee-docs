@@ -38,7 +38,7 @@ Klíče map s členy (`replaced-members`, `replaced-calls`, `nette/named-argumen
 
 | zápis | co to je |
 |---|---|
-| `App\Form::FILLED` | konstanta nebo metoda s jakýmikoli argumenty |
+| `App\Form::render` | konstanta nebo metoda s jakýmikoli argumenty |
 | `App\Form::MAX` | jméno bez malého písmene je jen konstanta, na metodu `max()` nesedí |
 | `App\Form::$items` | vlastnost |
 | `'App\Form::$items::get'` | čtení vlastnosti, i v `isset()` |
@@ -56,13 +56,13 @@ Klíč sedí na přístup přes kterýkoli podtyp třídy, přes rozhraní i tra
 Tvar argumentů zapisuje, jak vypadají argumenty volání:
 
 - `$name` je jakýkoli výraz, jen `$this` placeholder není, protože v hodnotě znamená příjemce,
-- `array $options` nebo `list $values` je výraz, o kterém typy řeknou, že je tohoto typu; typem může být kterýkoli nativní typ PHP a `list`,
+- `array $options` nebo `list $values` je výraz, o kterém typy řeknou, že je tohoto typu; typem může být kterýkoli nativní typ PHP, `list`, třída, nullable typ jako `?Acme\Clock` i sjednocení jako `int|string`,
 - literál (`true`, `0`, `'array'`) sedí na stejnou hodnotu, ať je zapsaná jakkoli,
 - `['mode' => $mode, ...$options]` sedí na doslovné pole s těmito klíči; ostatní položky vezme `...$options`, bez něj je pole mít nesmí,
 - `name: $x` sedí na argument předaný tímto jménem,
 - `...` a `...$rest` jsou zbylé argumenty; bez nich volání žádné další mít nesmí.
 
-Poziční položka vezme i argument předaný jménem parametru, pokud metodu něco deklaruje. Když na volání sedí víc klíčů jedné metody, rozhoduje ten s víc literály, a literál je přesnější než placeholder s typem a ten než placeholder bez typu.
+Poziční položka vezme i argument předaný jménem parametru, pokud metodu něco deklaruje. Když na volání sedí víc klíčů jedné metody, vyhraje ten s víc literály, kde se každý klíč doslovného pole počítá jako literál. Při shodě vyhraje ten s víc typy, kde `list` váží dvakrát, pak klíč bez zbylých argumentů `...`, pak ten s víc položkami, pak klíč třídy bližší volání, tedy potomka před předkem, a nakonec ten, který mapa uvádí dřív.
 
 
 replaced-classes a replaced-functions
@@ -121,7 +121,7 @@ dresscode/replaced-calls:
 - **`$this`** je totéž jako výraz, kdekoli výraz stojí: `\Nette\Utils\Arrays::invoke($this->onFailure, ...$args)`. Volání přes `::` nic takového nemá, proto se jen ohlásí. Volání přes `?->` se přepíše jen tam, kde výraz volá holé jméno a `$this` nepíše; jinak by na null zavolal, co původní volání přeskočilo, a jen se ohlásí.
 - **Kvalifikované jméno** `\Closure::fromCallable()` je funkce nebo třída sama za sebe; třídu DressCode zapíše přes importy projektu.
 - **`...`** zapíše argumenty, které klíč nechal nepojmenované, a **`...$args`** ty, za které stojí variadický placeholder, nebo hodnoty pole, za které stojí obyčejný. Když je tím polem literál, rozepíše se na argumenty, jak to dělá PHP: `new Signer(...['domain' => $d])` jako `new Signer(domain: $d)`.
-- **Konstruktor** zapsaný jako `new Třída(...)` té třídy, kterou klíč nahrazuje, zachová třídu z kódu, takže se opraví i potomek a `parent::__construct()`.
+- **Konstruktor** zapsaný jako `new Třída(...)` té třídy, kterou klíč nahrazuje, zachová třídu z kódu, takže se opraví i potomek a `parent::__construct()`. Atribut je vytvoření objektu své třídy, a tak klíč konstruktoru přepíše i jeho argumenty, pokud výraz vytváří tutéž třídu; jinak se atribut jen ohlásí.
 
 Vlastnost dostane výraz pro čtení a výraz pro zápis, každý pod klíčem svého hooku; v zápisu je `$value` přiřazovaná hodnota:
 
@@ -130,6 +130,8 @@ dresscode/replaced-calls:
 	'Nette\Forms\Form::$action::get': 'getAction()'
 	'Nette\Forms\Form::$action::set': 'setAction($value)'
 ```
+
+U statické vlastnosti se výraz zavolá na třídě, přes kterou se k ní kód dostal: `self::$container` jako `self::getContainer()`. Přiřazení se přepíše, jen když stojí samo jako příkaz, a `isset()` a `unset()`, jen když nic jiného nedrží; jiný zápis do vlastnosti se ohlásí a zůstane, jak je. Čtení nalevo od `??` je riziková oprava, protože PHP se tam nejdřív ptá, jestli je vlastnost nastavená. Že funkce bere argument referencí, pravidlo nevidí, takže vlastnost předanou takové funkci přepíše jako čtení.
 
 Šablona, která píše jen tytéž klíče pole voleb pod jinými jmény, přejmenuje klíč v poli volání na místě; rozložení pole, komentáře i pořadí položek zůstanou:
 
@@ -142,7 +144,7 @@ A magická metoda je klíčem pro syntaxi, kterou ji PHP volá: `__get($name)` j
 
 Uvnitř řetězce se výraz zapíše, jen když ho interpolace pojme, tedy proměnnou a čtení nebo volání na ní, a to ve složených závorkách: `"$mail->subject"` se stane `"{$mail->getSubject()}"`. Jiný výraz, třeba `$this->decaySeconds / 60`, se v řetězci jen ohlásí.
 
-Oprava není riziková, když se každý argument vyhodnotí jednou jako předtím. Kde výraz argument vyhodnotí jen někdy, vůbec nebo v jiném pořadí, je riziková, pokud vyhodnocení argumentu něco dělá; kde by ho vyhodnotil dvakrát, volání se jen ohlásí. Když na totéž volání sedí klíč `replaced-calls` i prosté přejmenování v `replaced-members`, vyhrává tvar argumentů.
+Oprava není riziková, když se každý argument vyhodnotí jednou jako předtím. Kde výraz argument vyhodnotí jen někdy, vůbec nebo v jiném pořadí, je riziková, pokud vyhodnocení argumentu něco dělá; kde by ho vyhodnotil dvakrát, volání se jen ohlásí. Deklarace metody v potomkovi pod jménem klíče, který bere jakékoli argumenty, se ohlásí taky: metoda se nahrazuje celá a deklaraci žádný výraz nenahradí. Když na totéž volání sedí klíč `replaced-calls` i prosté přejmenování v `replaced-members`, vyhrává tvar argumentů.
 
 
 nette/named-arguments-for-flags
@@ -218,10 +220,25 @@ dresscode/forbidden-classes:
 Klíče mají stejný tvar jako u ostatních map, včetně tvaru argumentů a magických metod; `'Symfony\Component\HttpFoundation\Request::$query::set'` zakáže jen zápis do vlastnosti a čtení nechá být. Metoda, kterou pod zakázaným jménem deklaruje potomek, se ohlásí taky. Mapy se hodí i pro náhradu, která mění typ nebo chování, třeba řetězec za výčet nebo iterátor za pole: tu by oprava tiše změnila.
 
 
+forbidden-functions
+===================
+
+Funkce, jejíž volání se jen ohlásí. Mapa nestojí přímo pod pravidlem, ale v jeho volbě `functions`: klíčem je jméno funkce nebo vzor s `*` a hodnotou doporučená náhrada, anglický text, který hláška uvede za `the replacement is`, nebo `null`, když náhrada není:
+
+```neon
+dresscode/forbidden-functions:
+	functions:
+		elixir: 'vite() for an asset built by Vite'
+		dump*: null
+```
+
+Volání `elixir('app.css')` se ohlásí jako `Function elixir() is forbidden: the replacement is vite() for an asset built by Vite` a `dumpVars($x)` jako `Function dumpVars() is forbidden`. Funkce bez náhrady můžete psát i jako seznam, `- var_dump`. Jméno bez zpětného lomítka znamená globální funkci a volání se vyhodnotí jako v PHP, takže `elixir()` uvnitř jmenného prostoru sedí, pokud soubor nedeklaruje nebo neimportuje jinou funkci toho jména. Vzor se zpětným lomítkem sedí na plně kvalifikované jméno. Typy pravidlo nepotřebuje.
+
+
 Hodnota jako kód v NEONu
 ========================
 
-Hodnotu `replaced-calls` pište jako řetězec s kódem PHP v apostrofech; apostrof uvnitř se zdvojí: `'isMethod(''POST'')'`. NEON sice přečte `isMethod(POST)` bez apostrofů jako entitu, ale v jejích argumentech je holé slovo řetězcem, `Class::NAME` konstantou třídy a `$name` placeholderem. Globální konstantu, operátor nebo cokoli dalšího entita neunese. Stejně tak jméno, které by NEON přečetl jako literál, `False` nebo `Null`, patří do apostrofů.
+Hodnotu `replaced-calls` pište jako řetězec s kódem PHP v apostrofech; apostrof uvnitř se zdvojí: `'isMethod(''POST'')'`. NEON sice přečte `isMethod(POST)` bez apostrofů jako entitu, ale v jejích argumentech je holé slovo řetězcem, `Class::NAME` konstantou třídy a `$name` placeholderem, `...` a `...$args` zůstanou zbylými argumenty, číslo, `true`, `false` a `null` jsou literály PHP a vnořená entita je další volání. Globální konstantu, operátor nebo cokoli dalšího entita neunese, a řetěz entit, tedy volání na výsledku volání, DressCode odmítne; takový kód patří do řetězce celý. Stejně tak jméno, které by NEON přečetl jako literál, `False` nebo `Null`, patří do apostrofů.
 
 
 Soubor upgrading.neon
@@ -257,7 +274,7 @@ since 3.2.1:
 		Nette\Http\IRequest::POST: Post
 ```
 
-- **Záměr** říká klíč `group` jménem [skupiny |configuration#Skupiny pravidel]: `deprecations` pro to, co verze vzala zpět, `modernization` pro novější zápis, který starý neruší. Je povinný a skupina, kterou projekt zapne, zapne pravidla, která soubor krmí; data slyší pravidlo jen ze souborů zapnutých skupin, nebo ze všech, když ho projekt jmenuje sám. Zavržení a nabídky proto patří do různých souborů.
+- **Záměr** říká klíč `group` jménem [skupiny |configuration#Skupiny pravidel]: `deprecations` pro to, co verze vzala zpět, `modernization` pro novější zápis, který starý neruší. Je povinný a skupina, kterou projekt zapne, zapne pravidla, která soubor krmí; data slyší pravidlo jen ze souborů zapnutých skupin, nebo ze všech, když ho jménem uvádí konfigurace projektu nebo kterýkoli preset. Zavržení a nabídky proto patří do různých souborů.
 - **Sekce** pište od nejnovější verze, jak je píše i průvodce upgradem; slévají se podle verzí bez ohledu na pořadí v souboru a pozdější má poslední slovo.
 - **Verze** se píše bez koncových nul, `since 3.1`, a klíč `since 3.10` je text, takže se nepromění v číslo 3.1.
 - **Co pozdější verze vzala zpět**, dostane v její sekci `keep`, případně i zákaz, jako `IMAGE_MIME_TYPES` v ukázce.

@@ -167,7 +167,7 @@ rules:
 
 Žádný standard ji sám nezapíná. Skupina obsahuje tahle pravidla:
 
-- `optimized-call-notation` přepíše pojmenované argumenty funkcí, které PHP volá bez rámce, na poziční a ohlásí rozbalené argumenty ve funkcích se zkratkou. Pojmenovaný argument přepíše jen tehdy, když stojí na místě svého parametru, takže se význam volání nezmění.
+- `optimized-call-notation` přepíše pojmenované argumenty funkcí, které PHP volá bez rámce, na poziční a ohlásí rozbalené argumenty ve funkcích se zkratkou. Pojmenovaný argument přepíše jen tehdy, když stojí na místě svého parametru, takže se význam volání nezmění, a jen v kódu pro PHP 8.4 a novější, protože volání bez rámce starší verze neznají.
 - `no-is-null`, `no-conversion-functions`, `no-settype` a `no-dirname-of-file` nahradí volání jazykovou konstrukcí: `is_null($x)` porovnáním `$x === null`, `intval($x)` přetypováním `(int) $x`, `settype()` přiřazením přetypované hodnoty a `dirname(__FILE__)` konstantou `__DIR__`. Jazyková konstrukce žádnou zkratku nepotřebuje, je rychlá vždy a na jmenném prostoru nezáleží.
 
 Ve skupině naopak není `name-fallback`, které rozhoduje o tom, jak se v celém projektu píšou jména globálních funkcí a konstant. To je rozhodnutí o vzhledu kódu a takové skupina nedělá, proto je v ukázce zapnuté jménem. S volbami `optimizedFunctions: qualified` a `optimizedConstants: qualified` nenechá holé funkce, se kterými zachází zvlášť kompilátor nebo OPcache, tam, kde je volání s danými argumenty opravdu zrychlí, ani konstanty, se kterými kompilátor počítá. Zapíše je tvarem, jaký chce váš standard, a když ten nic neříká, doplní `use function` a `use const`. Podrobně to popisuje stránka [o jmenných prostorech |namespaces#Holé, nebo kvalifikované: name-fallback].
@@ -187,12 +187,12 @@ function isAllowed(array $roles, ?string $role): bool
 }
 ```
 
-A takhle po ní:
+A takhle po ní, v projektu pro PHP 8.4 s `nameResolution: certain`:
 
 ```php
 namespace App;
 
-use function in_array, strlen;
+use function strlen;
 
 
 function isAllowed(array $roles, ?string $role): bool
@@ -205,11 +205,13 @@ function isAllowed(array $roles, ?string $role): bool
 }
 ```
 
-Stejně naloží s konstantami, ale jen tam, kde s nimi kompilátor opravdu počítá. `PHP_VERSION_ID` v podmínce `if (PHP_VERSION_ID >= 80400)` nebo příznaky v `ENT_QUOTES | ENT_HTML5` dostanou `use const`, protože výraz se pak spočítá předem. Konstanta, která stojí jen jako argument, třeba `E_USER_DEPRECATED` v `trigger_error()`, nebo se porovnává s proměnnou, zůstane, jak je: literál by jí ušetřil jen samotné načtení. Proč je to lepší než import všeho, ukazuje [měření výše |#Jen tam, kde to kompilátor využije]. Na styl, tedy import proti lomítku, preset nesahá: ten nechává na standardu, a tak se hodí ke kterémukoli.
+Import dostalo jen `strlen()`, které PHP optimalizuje vždy. `in_array()` zůstalo holé: import by mu pomohl jen s polem zapsaným přímo ve volání, kdežto `$roles` je proměnná, a volání bez rámce z PHP 8.4 funguje i s holým jménem. Pojmenovaný argument `strict` z něj ale zmizel, protože právě volání bez rámce by vypnul.
+
+Stejně naloží s konstantami, ale jen tam, kde s nimi kompilátor opravdu počítá. `PHP_VERSION_ID` v podmínce `if (PHP_VERSION_ID >= 80400)` nebo příznaky v `ENT_QUOTES | ENT_HTML5` dostanou `use const`, protože výraz se pak spočítá předem. Konstanta, která stojí jen jako argument, třeba `E_USER_DEPRECATED` v `trigger_error()`, nebo se porovnává s proměnnou, zůstane, jak je: literál by jí ušetřil jen samotné načtení. Proč je to lepší než import všeho, ukazuje [měření výše |#Jen tam, kde to kompilátor využije]. O stylu, tedy o importu proti lomítku, nerozhoduje skupina `optimized-calls` ani pravidlo `name-fallback`: ten nechávají na standardu, a tak se hodí ke kterémukoli.
 
 Všechny tyhle opravy stojí na tom, že jde o globální funkci PHP. Pokud konfigurace neříká `nameResolution: certain`, DressCode je proto ohlásí jako rizikové a udělá je jen se svolením. Podrobnosti jsou na stránce [o jmenných prostorech |namespaces#Řekněte DressCode, co je co].
 
-DressCode přitom nehledí na verzi PHP, pro kterou kód píšete. Zkratku, kterou přidala až novější verze, zapíše stejně: starší PHP ji jen nevyužije, nic se nerozbije, a až na novější PHP přejdete, kód bude připravený.
+Pravidlo `name-fallback` přitom nehledí na verzi PHP, pro kterou kód píšete. Funkci, kterou optimalizuje až novější verze, kvalifikuje stejně: starší PHP zkratku jen nevyužije, nic se nerozbije, a až na novější PHP přejdete, kód bude připravený. Pojmenované argumenty naopak `optimized-call-notation` přepisuje jen v kódu pro PHP 8.4 a novější.
 
 
 Nečekejte zázraky
@@ -225,4 +227,4 @@ Shrnutí
 - Skoro všechny zkratky potřebují jisté jméno: `\strlen()`, `use function strlen;` nebo soubor bez jmenného prostoru. Totéž platí pro konstanty jako `PHP_VERSION_ID`.
 - Volání bez rámce z PHP 8.4 funguje i s nekvalifikovaným jménem ve jmenném prostoru.
 - Pojmenované a rozbalené argumenty vypnou všechny zkratky.
-- Skupina `optimized-calls` a k ní pravidlo `name-fallback` zapíšou kód tak, aby zkratky platily: optimalizované funkce kvalifikují vždy, konstanty PHP jen tam, kde s nimi kompilátor počítá, a chovají se stejně pro všechny verze PHP.
+- Skupina `optimized-calls` a k ní pravidlo `name-fallback` zapíšou kód tak, aby zkratky platily: optimalizované funkce kvalifikují tam, kde je PHP s danými argumenty opravdu zrychlí, a konstanty PHP jen tam, kde s nimi kompilátor počítá.

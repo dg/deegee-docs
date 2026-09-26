@@ -21,9 +21,11 @@ exit $status
 
 Uložte jako `.git/hooks/pre-commit` a nastavte spustitelný bit. Když je vše v pořádku, hook nic nevypíše a commit projde; jinak vypíše soubor a pod ním porušení s řádkem, zprávou a jménem pravidla, a commit zastaví.
 
-Kdo chce hook, který rovnou opravuje, pustí `fix` nad pracovním stromem a opravené soubory přidá do indexu. Je to pohodlné, ale znamená to, že commit obsahuje změny, které vývojář neviděl. Mně je bližší první varianta a oprava na jedno stisknutí přímo v [editoru |editors].
+Se `--stdin` se klíč `excludePaths` nevyhodnocuje, takže hook zkontroluje i soubory, které konfigurace vylučuje. Pokud v projektu takové jsou, vyřaďte je už ve výběru souborů: za `'*.php'` v příkazu `git diff` přidejte třeba `':!tests/fixtures'`.
 
-S nástrojem `pre-commit` je to jeden záznam v konfiguraci:
+Kdo chce hook, který rovnou opravuje, pustí `fix` nad pracovním stromem a opravené soubory přidá do indexu. Je to pohodlné, ale znamená to, že commit obsahuje změny, které vývojář neviděl. Mně je bližší první varianta: hook jen hlásí a opravu si pustím vědomě.
+
+S nástrojem `pre-commit` je to jeden záznam v konfiguraci. Nástroj předává DressCode jména souborů, a proto záznam potřebuje `--skip-excluded`, jinak by zkontroloval i soubor, který konfigurace vylučuje v `excludePaths`:
 
 ```yaml
 repos:
@@ -31,7 +33,7 @@ repos:
     hooks:
       - id: dresscode
         name: DressCode
-        entry: dresscode check -f bare
+        entry: dresscode check -f bare --skip-excluded
         language: system
         types: [php]
 ```
@@ -45,13 +47,13 @@ Kdo nechává kód psát AI agenta, potřebuje dvě věci: aby se soubor po kaž
 Formát `bare` na to odpovídá jedním řádkem:
 
 ```shell
-dresscode fix src/Cart.php -f bare
+dresscode fix src/Cart.php -f bare --skip-excluded
 ```
 
 /--pre .[terminal]
 src/Cart.php  rewritten
 \--
 
-Řádek `rewritten` říká agentovi, že si má soubor přečíst znovu, než na něj zase sáhne. Porušení, která zůstala neopravená, dostane ve stejném výpisu a může je opravit sám. Čistý soubor nevypíše nic, takže hook nezahlcuje kontext. Přesně takhle je zapojený hook v pluginu Nette pro Claude Code a stejný tvar funguje pro jakýkoli nástroj, který umí spustit příkaz po zápisu souboru.
+Řádek `rewritten` říká agentovi, že si má soubor přečíst znovu, než na něj zase sáhne. Porušení, která zůstala neopravená, dostane ve stejném výpisu a může je opravit sám. Čistý soubor nevypíše nic, takže hook nezahlcuje kontext. Díky `--skip-excluded` hook nesáhne na soubor, který konfigurace vylučuje v `excludePaths`, třeba na fixturu testu, do které agent zapsal. Stejný tvar funguje pro jakýkoli nástroj, který umí spustit příkaz po zápisu souboru, například pro hooky v Claude Code.
 
 Rizikové opravy hook neudělá, jen je ohlásí. Aby jich zbývalo co nejméně, patří do `dresscode.neon` i klíč [`nameResolution: certain` |namespaces]: s ním přestanou být rizikové opravy, které stojí na tom, že je funkce globální, a hook je udělá sám.

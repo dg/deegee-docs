@@ -20,14 +20,14 @@ Převod konfigurace
 dresscode import .php-cs-fixer.dist.php > dresscode.php
 ```
 
-Sady se překládají na presety: `@PSR1`, `@PSR2` a `@PSR12` na `dresscode/psr12`, `@PER`, `@PER-CS` a jejich číslované varianty na `dresscode/per`, který odpovídá [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/], a `@Symfony` na `dresscode/symfony`, který zatím nemá pravidla o phpDocu. Sady bez protějšku, hlavně `@PhpCsFixer`, `import` ohlásí; v takovém případě začněte od `dresscode/per` a doplňte pravidla, na kterých vám záleží. Sady s příponou `:risky` protějšek nemají, protože rizikové opravy tu nezapíná sada, ale projekt u jednotlivých pravidel (viz níže).
+Sady se překládají na presety: `@PSR1`, `@PSR2` a `@PSR12` na `dresscode/psr12`, `@PER`, `@PER-CS` a jejich číslované varianty na `dresscode/per`, který odpovídá [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/], a `@Symfony` na `dresscode/symfony`, který zatím nemá většinu pravidel o phpDocu. Sady bez protějšku, hlavně `@PhpCsFixer`, `import` ohlásí; v takovém případě začněte od `dresscode/per` a doplňte pravidla, na kterých vám záleží. Sady s příponou `:risky` protějšek nemají, protože rizikové opravy tu nezapíná sada, ale projekt u jednotlivých pravidel (viz níže).
 
 Jednotlivé fixery se překládají jménem, a kde má volba protějšek, tak i s ní: `no_unused_imports` je `dresscode/unused-imports`, `binary_operator_spaces` je `dresscode/binary-operator-spacing`, `trailing_comma_in_multiline` se svým `elements` je `dresscode/trailing-comma` s volbou `multiLine`. Fixer, který protějšek nemá, se objeví ve výpisu na chybovém výstupu, a z toho máte seznam věcí, o kterých je potřeba rozhodnout. Vlastní fixery z balíčku `kubawerlos/php-cs-fixer-custom-fixers` se překládají také, pokud pro ně DressCode pravidlo má.
 
 Co `import` nepřenese, protože to v konfiguraci Fixeru nejsou pravidla:
 
 - **Finder.** Cesty, `exclude()` a `notPath()` přepište do klíčů `paths` a `excludePaths`; vzory popisuje [Konfigurace |configuration#Cesty].
-- **Odsazení a konce řádků** (`setIndent()`, `setLineEnding()`). Nastaví je preset; pokud žádný nepoužíváte, doplňte klíč `style`.
+- **Odsazení a konce řádků** (`setIndent()`, `setLineEnding()`). Nastaví je preset; pokud žádný nepoužíváte, doplňte klíče `indent` a `eol`; `import` vás na ně bez presetu sám upozorní.
 - **`setRiskyAllowed(true)`**. Svolení k rizikovým opravám nedává DressCode celé konfiguraci, ale jednotlivým pravidlům: jejich jména patří do seznamu `fixRisky`. Bez něj se rizikové opravy jen hlásí.
 
 
@@ -38,7 +38,7 @@ PHP CS Fixer označuje jako rizikové (risky) takové pravidlo, které nad polem
 
 V DressCode tohle rozdělení není, protože otázku zodpoví strom: pravidlo `dresscode/short-ternary-operator` zkrátí ternární operátor jen tehdy, když je podmínku bezpečné vyhodnotit dvakrát, a volání funkce nechá být. Totéž platí pro další pravidla, která byla riziková z téhož důvodu.
 
-Něco jiného jsou opravy, které mohou změnit chování programu. Ty DressCode nezapíná zvláštní sadou. Pravidlo, které bezpečný případ poznat umí, je hlásí jako rizikové místo po místě: `get_class($x)` na `$x::class` je bezpečné, dokud `$x` nemůže být `null`, takže `dresscode/modern-class-name-reference` bezpečná místa opraví a riziková jen ohlásí. Pravidlo, které to poznat neumí, jako `dresscode/strict-call`, má za rizikovou každou svou opravu. V obou případech se riziková oprava udělá teprve tehdy, když pravidlo uvedete v seznamu `fixRisky` v konfiguraci, nebo na jeden běh s `--fix-risky`. Pravidlo, které mění význam vždy (`dresscode/strict-comparison` dělá z `==` `===`), zůstává vaším rozhodnutím ve chvíli, kdy ho zapínáte; říká to jeho popis, ne značka risky.
+Něco jiného jsou opravy, které mohou změnit chování programu. Ty DressCode nezapíná zvláštní sadou. Pravidlo, které bezpečný případ poznat umí, je hlásí jako rizikové místo po místě: `dresscode/modern-class-name-reference` přepíše `__CLASS__` na `self::class` rovnou, ale `get_class($x)` na `$x::class` (s volbou `onObjects`) jen ohlásí jako rizikové, protože když `$x` není objekt, vyhodí každý z těch zápisů jinou výjimku. Pravidlo, které to poznat neumí, jako `dresscode/strict-call`, má za rizikovou každou svou opravu. V obou případech se riziková oprava udělá teprve tehdy, když pravidlo uvedete v seznamu `fixRisky` v konfiguraci, nebo na jeden běh s `--fix-risky`. Pravidlo, které mění význam vždy (`dresscode/strict-comparison` dělá z `==` `===`), zůstává vaším rozhodnutím ve chvíli, kdy ho zapínáte; říká to jeho popis, ne značka risky.
 
 Zvláštní skupinou jsou fixery, které PHP CS Fixer označuje jako rizikové proto, že funkci může někdo přepsat ve jmenném prostoru: `is_null`, `no_alias_functions`, `dir_constant` a další. Tuhle nejistotu v DressCode rozhoduje konfigurace. S klíčem `nameResolution: certain` a seznamy v klíči `namespaces` ví, co ve vašich jmenných prostorech je, a odpovídající opravy jsou bezpečné; viz [Funkce a konstanty ve jmenných prostorech |namespaces].
 
@@ -52,7 +52,7 @@ Příkazy
 | `php-cs-fixer fix --dry-run --diff` | `dresscode check --diff` |
 | `php-cs-fixer fix` | `dresscode fix` |
 | `php-cs-fixer fix --config=soubor` | `dresscode fix --config soubor` |
-| `php-cs-fixer fix --rules=jméno` | `dresscode fix --rule jméno=on` (přidá pravidlo k presetu, nenahradí jím celou sadu) |
+| `php-cs-fixer fix --rules=jméno` | `dresscode fix --rule jméno=on` (se jménem pravidla DressCode, ne fixeru; přidá pravidlo k presetu, nenahradí jím celou sadu) |
 | `php-cs-fixer fix --format=checkstyle` | `dresscode check -f checkstyle` |
 | `php-cs-fixer fix --allow-risky=yes` | `dresscode fix --fix-risky`; natrvalo seznam pravidel v klíči `fixRisky` |
 | `.php-cs-fixer.cache` | cache je zapnutá sama; `--no-cache` ji obejde |

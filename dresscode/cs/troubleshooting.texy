@@ -14,7 +14,7 @@ Běh skončil s `OK` a vy víte, že by neměl. Odpověď najdete v hlavičce a 
 - **Soubor není v rozsahu kontroly.** Hlavička říká, kolik souborů se kontroluje. Ve výchozím stavu jsou vyloučené `vendor`, `node_modules`, `temp`, `tmp`, `log` a všechny adresáře začínající tečkou, k tomu `excludePaths` z konfigurace i z rozšíření. Pozor na to, že se vyloučené cesty jen sčítají a nikdo je nemůže zrušit.
 - **Pravidlo není zapnuté.** `dresscode config` vypíše, která pravidla běží, a u těch, která ne, proč: vypnul je preset, konfigurace nebo přepis, chybí jim verze PHP, typy nebo knihovna, kterou hlídají, zapíná je jen přepis, nebo o nich nikdo nemluvil. Pravidlo, které nezapíná standard ani [skupina |configuration#Skupiny pravidel], se zapíná v klíči `rules`.
 - **Pravidlo se vynechalo kvůli verzi PHP.** Pravidlo pro novější syntaxi se pod cílovou verzí projektu samo vypne, a pokud jste ho zapnuli jménem, běh o tom napíše varování. Cílovou verzi ukazuje hlavička jako `Target PHP 8.2 from composer.json`. Když tam stojí `PHP 8.0 by default`, přestože `composer.json` máte, DressCode z jeho `require.php` nejnižší verzi nepřečetl: rozumí běžným zápisům jako `^8.2`, `~8.2`, `>=8.2` nebo `8.2 - 8.4`, a z jiného tvaru raději nehádá. Verzi pak nastavte klíčem `php`.
-- **Oprava je riziková.** Shrnutí říká `1 of them risky (strict-call), fixed once their rules are named in fixRisky or with --fix-risky`: oprava by mohla změnit chování kódu, tak ji `fix` jen ohlásil. Buď ten přepínač pro jeden běh, nebo jméno pravidla ze závorky v seznamu [`fixRisky` |configuration#Varování a rizikové opravy] v konfiguraci. Která pravidla s rizikovými opravami běží a jestli jste je přijali, ukáže `dresscode config`. U pravidel jako `no-is-null` nebo `name-notation`, jejichž oprava stojí na tom, že je funkce globální, poznáte to podle dovětku `unless the namespace declares ...` ve zprávě. Tam je lepší cesta říct DressCode, co je ve vašich jmenných prostorech: s klíčem [`nameResolution: certain` |namespaces] tyhle opravy rizikové nejsou vůbec.
+- **Oprava je riziková.** Shrnutí říká `1 of them risky (strict-call), fixed once their rules are named in fixRisky or with --fix-risky`: oprava by mohla změnit chování kódu, tak ji `fix` jen ohlásil. Buď ten přepínač pro jeden běh, nebo jméno pravidla ze závorky v seznamu [`fixRisky` |configuration#Varování a rizikové opravy] v konfiguraci. Která pravidla s rizikovými opravami běží a jestli jste je přijali, ukáže `dresscode config`. U pravidel jako `no-is-null` nebo `no-alias-functions`, jejichž oprava stojí na tom, že je funkce globální, poznáte to podle dovětku `unless the namespace declares ...` ve zprávě. Tam je lepší cesta říct DressCode, co je ve vašich jmenných prostorech: s klíčem [`nameResolution: certain` |namespaces] tyhle opravy rizikové nejsou vůbec.
 - **Pravidlo jen varuje.** Je v klíči `warnings`, takže hlásí se značkou `warning` a exit kód nemění; práh dá `--max-warnings`.
 - **Cache.** Soubor se stejnou cestou, stejným obsahem a stejnou konfigurací se přeskočí. Konfigurace, baseline i soubory vlastních pravidel projektu jsou součástí klíče, takže jejich změna cache zneplatní sama. Výjimkou je pravidlo sestavené closure, která čte ještě jiný soubor než konfiguraci: jeho změnu cache nepozná, a tam pomůže `--no-cache`.
 - **Potlačení v kódu.** `dresscode:ignore` i `phpcs:ignore` platí i pro opravu, a `dresscode:disable` bez `enable` platí až do konce souboru.
@@ -25,9 +25,11 @@ Hlášky, které stojí za vysvětlení
 
 **`No paths given and none configured.`** Bez konfiguračního souboru musíte cesty zadat na příkazové řádce; se souborem stačí klíč `paths`.
 
-**`Unknown rule 'no_unused_imports'. It is covered by dresscode/unused-imports; run dresscode import to translate a configuration of another tool.`** Do konfigurace patří jména pravidel DressCode. Cizí jméno hláška rovnou přeloží, celý cizí konfigurační soubor převede příkaz [import |migration#2. Přeložte konfiguraci].
+**`Unknown rule 'no_unused_imports'. It is covered by dresscode/unused-imports; 'dresscode import' translates a configuration of another tool.`** Do konfigurace i na příkazovou řádku patří jména pravidel DressCode; jména jiných nástrojů platí jen v potlačovacích komentářích. Cizí jméno hláška rovnou přeloží, celý cizí konfigurační soubor převede příkaz [import |migration#2. Přeložte konfiguraci].
 
 **`Unknown rule 'acme/foo'.`** Buď překlep, u kterého hláška nabídne nejbližší známé jméno (`Did you mean '…'?`), nebo pravidlo z rozšíření, které není uvedené v klíči `extensions` ani zapsané názvem třídy.
+
+**`Rule dresscode/override-attribute-required needs the types of the code; set 'types: phpstan' in the configuration and install phpstan/phpstan in the project.`** Pravidlo, které se ptá na typy, jste zapnuli jménem, ale konfigurace žádné typy nemá. Ze skupiny nebo z presetu by takové pravidlo tiše vypadlo, jenže o pravidlo zapnuté jménem jste požádali výslovně, a tak je to chyba konfigurace s exit kódem `2`. Nastavte `types: phpstan`, jak radí hláška, nebo pravidlo z konfigurace odeberte; viz [Typy z PHPStanu |types].
 
 **`Invalid options of rule dresscode/line-length set by the configuration: The item 'ignoreImports' expects to be bool, 'abc' given.`** Hláška jmenuje vrstvy, které volbu nastavily: konfiguraci, preset nebo přepis, takže je hned vidět, kam jít.
 
@@ -44,12 +46,12 @@ Hlášky, které stojí za vysvětlení
 **`Warning: 3 entries of the baseline no longer match a violation; regenerate it with 'check --generate-baseline'.`** znamená, že porušení, které baseline zná, v kódu už není: opravil ho někdo ručně, nebo `fix`, když se opravitelným stalo. Nic se neděje, jen baseline přestala odpovídat skutečnosti; vygenerujte ji znovu. Hlásí se jen položky souborů, které běh zpracoval, a při `--only` jen položky pravidel, která běžela, takže kontrola části projektu neoznačí za zastaralé to, na co se vůbec neptala.
 
 
-Editor a formátování
+Editor a konfigurace
 ====================
 
-Když se soubor po každém uložení změní dvakrát, přetahují se v něm dva formátovače. Vypněte vestavěné formátování PHP v PhpStormu nebo výchozí formátovač pro PHP ve VS Code, jak popisuje stránka [Editory a IDE |editors].
+Když editor po `dresscode fix` vrací v souboru mezery a zalomení jinak, přetahují se v něm dva formátovače: DressCode a formátování, které editor pouští při uložení. Vypněte vestavěné formátování PHP v PhpStormu nebo výchozí formátovač pro PHP ve VS Code, případně aspoň formátování při uložení.
 
-Když DressCode v editoru zdánlivě nic nedělá, zkontrolujte, jestli běží nad kořenem projektu s konfigurací. Hledá ji od adresáře souboru směrem nahoru, takže otevřený podadresář bez konfigurace znamená, že platí výchozí preset.
+Když DressCode zdánlivě nepoužívá vaši konfiguraci a hlavička ukazuje `Config none`, zkontrolujte, odkud ho spouštíte. Konfiguraci hledá od pracovního adresáře směrem nahoru, ne od kontrolovaných souborů, takže spuštěný mimo projekt ji nenajde a platí výchozí preset. Pomůže spustit ho z kořene projektu, nebo cestu ke konfiguraci předat přepínačem `--config`.
 
 
 Konce řádků

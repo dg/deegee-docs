@@ -4,7 +4,7 @@ Knihovny Nette
 {{description: Balíček dresscode/rules-nette nese migrace všech dvaceti knihoven Nette od verzí 3.0 po současné: přes 900 přejmenování, přesunů a změněných volání, které DressCode přepíše nebo ohlásí.}}
 
 .[perex]
-Balíček `dresscode/rules-nette` nese migrace všech dvaceti knihoven Nette od verzí 3.0 po současné. Je v něm přes 900 položek: rozhraní, která přišla o předponu `I`, konstanty přepsané z velkých písmen, přejmenované metody a parametry, magické vlastnosti nahrazené gettery, příznaky nahrazené pojmenovanými argumenty. Zhruba 670 z nich DressCode rovnou opraví, zbytek ohlásí i s tím, co napsat místo toho.
+Balíček `dresscode/rules-nette` nese migrace všech dvaceti knihoven Nette od verzí 3.0 po současné. Je v něm přes 900 položek: rozhraní, která přišla o předponu `I`, konstanty přepsané z velkých písmen, přejmenované metody a parametry, magické vlastnosti nahrazené gettery, příznaky nahrazené pojmenovanými argumenty. Zhruba 700 z nich DressCode rovnou opraví, zbytek ohlásí i s tím, co napsat místo toho.
 
 
 Instalace
@@ -23,7 +23,7 @@ groups:
 	- deprecations
 ```
 
-Balíček nic neregistruje a žádné pravidlo nezapne sám. Data každé knihovny se uplatní jen tehdy, když ji projekt má, a jen ty verze, na které projekt dosáhne.
+Balíček žádné pravidlo nezapne sám: tři pravidla, která přináší, jen přihlásí do DressCode a zapne je až skupina `deprecations`. Data každé knihovny se uplatní jen tehdy, když ji projekt má, a jen ty verze, na které projekt dosáhne.
 
 
 Co se opraví
@@ -36,7 +36,7 @@ public function add(string $code): void
 {
 	$section = $this->session->getSection('cart');
 	$items = $section->items ?? [];  // Method Nette\Http\SessionSection::__get() is replaced by get($name), which no longer asks first whether it is set, as ?? does
-	$items[] = Strings::match($code, '~^[A-Z]+-\d+$~', PREG_OFFSET_CAPTURE);  // Static method Nette\Utils\Strings::match() takes captureOffset: true instead of `PREG_OFFSET_CAPTURE`
+	$items[] = Strings::match($code, '~^[A-Z]+-\d+$~', PREG_OFFSET_CAPTURE);  // Static method Nette\Utils\Strings::match() takes captureOffset: true instead of PREG_OFFSET_CAPTURE
 	$section->items = $items;  // Method Nette\Http\SessionSection::__set() is replaced by set($name, $value)
 	$section->source = $this->request->getQuery('utm_source', 'direct');  // Method Nette\Http\SessionSection::__set() is replaced by set($name, $value)
 	                                                                      // Method Nette\Http\IRequest::getQuery() is replaced by getQuery($key) ?? $default
@@ -56,7 +56,7 @@ public function add(string $code): void
 }
 ```
 
-První řádek zůstal: čtení vlastnosti nalevo od `??` se u `SessionSection` nejdřív ptá, jestli je nastavená, a `get()` se neptá. Oprava je proto [riziková |configuration#Varování a rizikové opravy] a udělá se, až pravidlo `dresscode/replaced-calls` uvedete v klíči `fixRisky`.
+Řádek `$items = $section->items ?? []` zůstal: čtení vlastnosti nalevo od `??` se u `SessionSection` nejdřív ptá, jestli je nastavená, a `get()` se neptá. Oprava je proto [riziková |configuration#Varování a rizikové opravy] a udělá se, až pravidlo `dresscode/replaced-calls` uvedete v klíči `fixRisky`.
 
 Co všechno balíček opravuje:
 
@@ -66,10 +66,12 @@ Co všechno balíček opravuje:
 - **přejmenované parametry** u volání s pojmenovanými argumenty: `setExpiration(time: ...)` na `setExpiration(expire: ...)`, `Arrays::map(callback: ...)` na `Arrays::map(transformer: ...)`, i v `parent::__construct()` potomka,
 - **výchozí hodnota za `??`**: `getParameter('page', 1)` na `getParameter('page') ?? 1`, stejně u `getQuery()`, `getPost()`, `getCookie()`, `getHeader()` a `getOption()`,
 - **magické vlastnosti** na gettery a settery: `$form->action`, `$control->caption`, `$section->user`, `$section['user']`,
-- **příznaky** na pojmenované argumenty: `Json::encode($value, Json::PRETTY)`, `Strings::match()`, `matchAll()`, `split()` a `Arrays::grep()` s konstantami `PREG_*`,
+- **příznaky** na pojmenované argumenty: `Json::encode($value, Json::PRETTY)` a `Json::decode()`, `Strings::match()`, `matchAll()`, `split()` a `Arrays::grep()` s konstantami `PREG_*`, `Neon::encode()` s `Neon::BLOCK`, `add()`, `prepend()` a `addRoute()` routeru s `Router::ONE_WAY`, `User::setExpiration()` s `IUserStorage::CLEAR_IDENTITY` a `Job::run()` Testeru s `RUN_ASYNC`,
 - **volání jiného tvaru**: `addUpload($name, $label, true)` na `addMultiUpload()`, `getValues(true)` na `getValues('array')`, `Callback::closure()` na `Closure::fromCallable()`,
 - **anotace** na atributy: `@persistent` a `@crossOrigin` v presenterech, `@filter` a `@function` ve třídách parametrů šablon Latte, a atribut `#[CrossOrigin]` na `#[Requires(sameOrigin: false)]`,
-- **hooky** `attached()` a `detached()` komponent na callbacky metody `monitor()` v konstruktoru, a **query string a fragment v destinaci odkazu**, `link('Product:show?id=1#reviews')`, na argumenty; tohle umí pravidla `nette/monitor-for-attached-hook` a `nette/link-destination-notation`, která balíček přináší.
+- **hooky** `attached()` a `detached()` komponent na callbacky metody `monitor()` v konstruktoru, a **query string a fragment v destinaci odkazu**, `link('Product:show?id=1#reviews')`, na argumenty.
+
+Příznaky převádí pravidlo `nette/named-arguments-for-flags` podle dat, hooky a destinace odkazů pravidla `nette/monitor-for-attached-hook` a `nette/link-destination-notation`; všechna tři balíček přináší. Zbytek dělají pravidla jádra DressCode podle dat.
 
 
 Co zůstane na vás
