@@ -1,0 +1,223 @@
+Functions and Constants in Namespaces
+*************************************
+
+.[perex]
+An unqualified `strlen()` inside a namespace can mean two different functions, and the code does not tell you which one. Because of this, PHP code style tools have to guess for a whole range of fixes. DressCode removes the doubt with one line of configuration: you tell it what your namespaces contain, and from then on every rule knows exactly what it is working with. A style checker that finally gets this right.
+
+
+One Name, Two Meanings
+======================
+
+Look at this code:
+
+```php
+namespace App;
+
+if (is_null($user)) {
+	// ...
+}
+```
+
+Which function is called here? Most likely the global `is_null()` that everyone knows. But PHP decides this only at runtime: first it checks whether a function `App\is_null()` exists, and only if it does not, it uses the global one. All it takes is another file anywhere in the project that declares it:
+
+```php
+namespace App;
+
+function is_null(mixed $value): bool
+{
+	return $value === null || $value === '';
+}
+```
+
+and suddenly the call above does something else. This has nothing to do with the file where the call is written. What decides is whether that other file has been loaded.
+
+Constants behave exactly the same way: `PHP_EOL` in the namespace `App` is `App\PHP_EOL` if it exists, and the global `PHP_EOL` otherwise. Classes do not do this. `Exception` in the namespace `App` is always `App\Exception`, and the global class is written `\Exception` or imported.
+
+
+A Bit of History
+================
+
+Namespaces came with PHP 5.3, and agreeing on their design was hard. The release was planned for the fall of 2008, the first alpha came out in August, and in October the PHP developers were still deciding how namespaces should actually work. That is also when the famous decision was made to replace the separator `::` with a backslash, because `::` could not be reliably told apart from a static method call. PHP 5.3.0 finally came out on June 30, 2009, nine months later than planned.
+
+One of the hardest questions was exactly this one: what does a name mean when no namespace stands in front of it? The proposal of October 30, 2008 came to different answers for classes and for functions. Classes do not fall back to the global name, because together with autoloading that would be a performance disaster: for every `new Exception`, PHP would first try to load `App\Exception`. Functions and constants have no autoloading, so this danger did not exist, and because most of what PHP can do is provided by global functions, they got the fallback to the global name. Code written before namespaces could then move into a namespace without adding a backslash in front of every `strlen()`.
+
+It was a reasonable compromise. Its price is that the meaning of an unqualified function name is not a property of the file but of the whole running program.
+
+
+Why Tools Struggle with It
+==========================
+
+A code style tool sees files, not a running program. So for every `is_null($x)` in a namespace it faces the same question you faced above, and it does not know the answer. Yet a whole range of useful fixes depend on the function being the well-known global one:
+
+- `is_null($x)` to `$x === null`,
+- `intval($x)` to `(int) $x`,
+- `sizeof($a)` to `count($a)`,
+- `dirname(__FILE__)` to `__DIR__`,
+- `get_class()` to `self::class`,
+- adding `use function count;` so that the compiler can optimize the call.
+
+If the function were your own `App\is_null()`, each of these fixes would change what the program does. An honest tool must therefore treat them as risky fixes and not make them without permission. PHP CS Fixer has, for example, `is_null`, `no_alias_functions` and `dir_constant` among its risky rules, all with the same reason: risky when the function is overridden.
+
+This is not a theoretical loophole. A well-known testing trick is built on exactly this behavior: libraries such as php-mock declare `App\time()` or `App\file_get_contents()` in a test, so that code in the namespace `App` calls a fake instead of the real function.
+
+
+Let's Be Pragmatic
+==================
+
+How many functions and constants do you really have in your namespaces? Almost certainly few, often none. Functions are **not autoloaded**: before one can be called, someone must load it with `require` or with a `files` entry in `composer.json`, and do it before it is used. That is why code moved into classes long ago and functions in namespaces stayed a marginal thing. Proposals for function autoloading have come up in PHP several times, and none has become part of the language yet.
+
+This is also a good reason not to rely on an unqualified call of a function from a namespace: when the file with the function happens not to be loaded, PHP reports no error and quietly calls the global function of the same name, if one exists. An import `use function App\is_null;` does not load the function either, but in that situation it ends with a clear error `Call to undefined function App\is_null()`.
+
+So the picture is clear: the doubt affects everyone, but a real function in a namespace is rare. It is enough to list them.
+
+
+Tell DressCode What Is What .[#name-resolution]
+===============================================
+
+The most common case is that your project declares no functions or constants in namespaces at all. Then a single line of configuration is enough:
+
+```neon
+nameResolution: certain
+```
+
+Now DressCode knows that every unqualified function or constant name that the file neither imports nor declares itself is global. Not "probably", but for certain.
+
+If you do have some functions or constants, you list them in the key `namespaces`: functions under `functions` and constants under `constants`. They are written the same way as in a `use` statement, including groups in braces. Put an item with a group in quotes, otherwise NEON would read it as a map:
+
+```neon
+nameResolution: certain
+
+namespaces:
+	functions:
+		- 'App\Utils\{format, parse}'
+		- App\Legacy\helper
+	constants:
+		- 'App\{VERSION, DEBUG}'
+```
+
+DressCode then reads a function from the list as the namespaced function wherever it is called in that namespace without an import. For functions, case does not matter at all; for constants, it matters only in their own name, not in the namespace, exactly as in PHP.
+
+The lists and `nameResolution` are two different things, and that is why each has its own key. A list is a fact: this function exists. `nameResolution` is a decision: nothing else exists there.
+
+| `nameResolution` | what it means |
+|---|---|
+| `certain` | the lists are complete, and whatever is not in them is global |
+| `uncertain` | the lists may be incomplete; the same as when the key is missing |
+
+With `uncertain`, DressCode is careful: it treats an unqualified name as global, but it considers a fix that depends on this [risky |configuration#risky-fixes]. It reports such a fix as a warning, with the reason on the line below the violation, for example <code>''the namespace may declare `is_null()`''</code>, and it makes the fix only when you list the decision in `fixRisky` or run `fix --fix-risky`. That is why `uncertain` is the default: writing a decision into the configuration does not yet mean agreeing that it may change how the code behaves. As soon as you write `certain`, these fixes are no longer risky.
+
+
+Every Rule Benefits
+===================
+
+What matters is *where* this knowledge is used. DressCode does not pass it to individual decisions, but to the `NameResolver` analysis, which resolves names for all rules. The built-in rules ask it, and so does [your own rule |rule-contract#Analyses]. The knowledge lives in one place, and no rule keeps its own list of exceptions.
+
+Rules ask it two things:
+
+- **What is what.** `isGlobalFunctionCall($node, 'is_null')` returns `true` for the global function, and `false` for `App\is_null()` from the list. With `certain`, this answer is certain; otherwise it is only an assumption.
+- **How certain the answer is.** `getUnqualifiedResolution('is_null', SymbolKind::Function, $node)` tells where an unqualified name points: certainly to the global namespace (`Global`), certainly to the namespace (`Namespaced`), or to the global namespace only on the assumption that the namespace does not declare it elsewhere (`Uncertain`). A rule that asks this reports its fix as risky exactly at the occurrences with `Uncertain`, and so never in a project with `certain`.
+
+And it also works the other way, when a rule writes a function name into the code itself. `hygiene.aliasFunctions` rewrites `sizeof()` to `count()` and writes the new name the same way as the original: `\sizeof()` to `\count()`, `sizeof()` to `count()`. But when the file imports or declares its own `count`, or when its namespace declares `count()` according to the configuration, it writes `\count()`, so that the fixed code calls the same thing as the original.
+
+So all rules read every name the same way, and the result does not depend on which of them asks.
+
+
+A New Function Does Not Slip Through
+====================================
+
+The list would be useless if it went out of date. That is why DressCode itself checks it as soon as the configuration says `nameResolution: certain`, and it reports a finding under the path of the list, `namespaces.functions` or `namespaces.constants`. It reports a function declared in a namespace that is missing from the list `namespaces.functions`, and it does the same for `const` and for `define('App\X', ...)`. It also counts a declaration inside a condition, for example a polyfill in `if (!function_exists(...))`. As soon as someone adds a function `App\Utils\slugify()` to the project, `dresscode check` points out that it belongs in the configuration:
+
+/--pre .[terminal]
+src/Utils/helpers.php
+  error  12:10  Function `App\Utils\slugify()` must be listed in `namespaces.functions`.  namespaces.functions
+\--
+
+This is enough, because unlike a call, a declaration can be recognized: it stands in a file that DressCode checks. Just watch out for paths excluded from the check. DressCode cannot report a function declared, for example, in tests that it skips, and if the code calls such a function without an import, add it to the list yourself. With `uncertain`, this check is silent, because there is nothing to check. With `certain`, not even `--only` turns it off: a fix that depends on complete lists must not lose what keeps them true.
+
+You do not have to write the first list by hand either. [`dresscode init` |cli#init] goes through all files in the project paths, finds the functions and constants declared in namespaces and writes their lists together with `nameResolution: certain`. When a file cannot be parsed, what it declares stays unknown, so `init` does not write the certainty and names that file in a comment.
+
+.[note]
+In the future, `dresscode fix` could write the new entry into the configuration itself, instead of only pointing it out.
+
+
+Helper Functions in Tests
+=========================
+
+Tests often declare helper functions right in their own namespace, for example `App\Tests\createUser()`. There is no point in writing them into the configuration, and no point in checking them either. For such a part of the project, an [override |configuration#Different Values for Part of the Project] that says the lists are not complete there is enough:
+
+```neon
+nameResolution: certain
+
+overrides:
+	- paths: [tests]
+	  nameResolution: uncertain
+```
+
+DressCode then reads the files in `tests` carefully: fixes that depend on a function being global are only reported there as risky, and the check for unlisted declarations is silent there. The sources in `src` still benefit from the certainty. This works because the code in `src` does not call the helper functions of the tests, so they have no effect on the meaning of names in `src`.
+
+One exception is worth noting: the trick with a fake function mentioned [above |#Why Tools Struggle with It]. When a test declares `App\time()` so that code in the namespace `App` calls a fake, this affects calls in `src`, not in the tests. Such a function therefore belongs in the project's `namespaces.functions` list, so that the rules in `src` leave it alone.
+
+
+Functions Declared by a Framework
+=================================
+
+Sometimes you write code directly in the namespace of a framework, because the framework leads you to. Symfony lets you write the service configuration in a file that starts with `namespace Symfony\Component\DependencyInjection\Loader\Configurator;`, precisely so that you can call `service()`, `param()` or `env()` without an import. Symfony declares these functions in the `vendor` folder, where DressCode does not look.
+
+That is why DressCode knows these functions itself: when the project has the package `symfony/dependency-injection` installed, it adds them to the list `namespaces.functions` without a single line of configuration and with any standard. In the output of `dresscode config` you find them under the line `Names`, each with the source `DressCode for symfony/dependency-injection`.
+
+Other packages provide such lists in the key `namespaces` of their [data file |upgrading-data], and these are added to what you write yourself. But neither a package nor a preset can set the key `nameResolution`: they know the framework, not your project.
+
+
+How Global Names Are Written
+============================
+
+How the name of a global function or constant is written is decided by the section [`qualification` |decisions/qualification]. Every name can be written in three ways, and every key of the section takes a word for one of them: `bare` is the bare name that relies on the fallback to the global name, `imported` is the name from a `use function` or `use const` statement, and `backslashed` is the name with a leading backslash.
+
+```neon
+qualification:
+	function:
+		global: bare
+		optimized: imported
+	constant:
+		global: bare
+		optimized: imported
+```
+
+With this configuration, global functions and constants stay bare, and only those the PHP compiler can work with get an import:
+
+```php
+namespace App;
+
+use function count;
+use function in_array;
+```
+
+At first glance this looks pointless: `count()` would work without the import too. But this is about speed. When the PHP compiler meets an unqualified `strlen($s)` in a namespace, it does not know whether `App\strlen()` will exist at runtime, so it produces a generic call that is resolved only at runtime. When it knows the function is global, it can skip the call completely for about thirty basic functions, and for several others the OPcache optimizer computes the result already at compile time. The page [Optimizations of Functions and Constants |optimizations] explains what exactly PHP does and how big the difference is.
+
+The keys go from general to specific:
+
+| key | which names it decides |
+|---|---|
+| `function.global`, `constant.global` | global functions and constants in a namespace, except those decided by the `optimized` keys |
+| `function.optimized` | functions the compiler handles specially, where it really optimizes the call with the given arguments |
+| `constant.optimized` | constants the compiler computes with: in a condition or in a constant expression |
+| `function.currentNamespace`, `constant.currentNamespace` | functions and constants of the namespace the file itself is in |
+
+For some functions, `function.optimized` depends on the arguments: PHP always optimizes `strlen()`, but `dirname()`, `defined()` or `function_exists()` only with a constant argument, `sprintf()` only with a constant format that has no placeholders other than `%s` and `%d` and has exactly as many of them as the values the call passes, and `in_array()` only with an array written directly in the code. A function falls under this key when the namespace calls it this way at least once, and then every use of it in that namespace is written the same way. A function that is never called this way is decided by `function.global`, because an import that speeds nothing up would only be extra code. `constant.optimized`, in turn, does not depend on the name, but on where the constant stands in the code. The value `bare` in these two keys means that the project gives up the optimization in favor of the bare name. Every name belongs to one key only: where `function.optimized` is `keep`, optimized functions stay as they are, and `function.global: bare` alone removes the backslash from `\array_map()` but leaves `\strlen()` and `\count()`.
+
+DressCode writes an import the way the file already writes imports: into a statement that lists several of them, into a group use that already stands under the namespace of that name, and at the place where it belongs alphabetically, so that the decisions of the section [`imports` |decisions/imports] then have nothing to report. When the file already imports the function under another name, it uses that import. Where an import cannot be added, for example because the name is taken, it writes a leading backslash. On the other hand, it makes a name bare only where the bare name really reaches the global function, and it removes an import that nobody needs any more.
+
+And here we come back to namespaces. The import `use function strlen;` pins the call to the global function. If the project had its own `App\strlen()`, the import would change the behavior. So with `uncertain`, DressCode considers every change between a bare name and an import or a backslash risky. With `certain`, it knows that `App\strlen()` does not exist, and it simply adds the import. Naturally, it does not import a function from the list `namespaces.functions`.
+
+Classes do not have this problem: a bare class name in a namespace never falls back to the global one, so for classes `class.otherNamespace` and `class.global` choose only between an import and a backslash, and none of their fixes is risky. A name without a leading backslash, for example `Model\User` with `use App\Model;`, is left alone, because it is read relative to the import or to the namespace of the file. In a file without a namespace, the backslash is always unnecessary, and `qualification.leadingBackslash` removes it.
+
+
+Summary
+=======
+
+- According to PHP, an unqualified function or constant in a namespace means either the one from the namespace or the global one, and a single file cannot tell you which.
+- Write `nameResolution: certain` into the configuration, plus the lists in the key `namespaces` if needed. The behavior of all rules is then unambiguous, and fixes that depended on a guess are no longer risky.
+- A part of the project where the lists are not complete, for example tests with helper functions, gets `nameResolution: uncertain` in an override.
+- Without this, DressCode is careful and makes such fixes only with permission in `fixRisky` or with `--fix-risky`.
+- DressCode reports a new declaration in a namespace under the path `namespaces.functions`; `dresscode init` writes the first lists.
+- Call a function from a namespace through `use function`. If its file is not loaded, you find out right away.

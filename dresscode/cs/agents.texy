@@ -1,0 +1,95 @@
+AI agenti: Claude Code a Codex
+******************************
+
+.[perex]
+Agent píše kód rychle a po svém. DressCode ho po každé editaci ušije podle standardu projektu a jako dobrý krejčí agentovi rovnou řekne, co přešil: diff přepisu, odstraněné importy, a co zbylo, s radou, co s tím.
+
+
+Instalace
+=========
+
+V Claude Code stačí dva příkazy:
+
+```shell
+/plugin marketplace add nette/agent-plugins
+/plugin install php-fixer@nette
+```
+
+Plugin `php-fixer` pak po každé editaci PHP souboru pustí DressCode s konfigurací projektu (nejbližší `dresscode.neon`), a kde žádná není, se standardem Nette. Codex bere tentýž plugin příkazem `codex plugin add php-fixer@nette`; jeho hooky je potřeba jednou schválit v `/hooks`. Kde DressCode nemá projekt ani globální instalace, nainstaluje ho skill `install-php-fixer`.
+
+Hook pokrývá zápisy nástroji `Edit` a `Write` v Claude Code a `apply_patch` v Codexu. Soubor, který agent zapíše příkazem v shellu (`Bash`), hook nevidí; takový soubor srovná až další editace nebo `dresscode fix`.
+
+
+Co agent dostane
+================
+
+Bez toho, aby se agent dozvěděl, co se pod ním v souboru změnilo, nastává známá smyčka: agent zapíše `use`, hook ho jako nepoužitý smaže, agent přidá kód, který ten import potřeboval, a diví se, kde se stala chyba. Nebo upraví další místo podle textu, který si pamatuje, a editace selže, protože soubor už vypadá jinak. Formát `agent` na to odpovídá větami pro model:
+
+/--pre .[terminal]
+DressCode changed `src/Cart.php`; the changes below are already in the file:
+
+- removed the import of `Acme\Shop\Payment\Gateway`: nothing used it; if you meant to use it, add the import in the same edit as the use.
+
+```diff
+@@ -12,7 +10,7 @@
+
+ 	public function add(string $name, int $price): void
+ 	{
+-		$this->items[] = ["name" => $name, "price" => $price];
++		$this->items[] = ['name' => $name, 'price' => $price];
+ 	}
+
+
+```
+
+Left in `src/Cart.php`, at the lines of the file as it is now:
+- line 19: the `@` operator must not be used (`mistakes.errorSuppression`). Fix it; where the current code is intended and you know why, keep it with a comment on its line, `// @ <why>`, giving the real reason for `<why>`; otherwise tell the user.
+\--
+
+- **Čistý soubor nevypíše nic**, takže hook nezahlcuje kontext.
+- **Přepis přijde jako diff** toho, co už v souboru je, a další editace nemine. Kde je přepis delší, než se do zprávy vejde, dostane agent místo diffu pokyn soubor přečíst znovu.
+- **Odstraněný import je jmenovaný**, s radou přidat ho ve stejné editaci jako jeho použití.
+- **U každého porušení stojí, co s ním dělat**: u rizikové opravy, proč se neudělala a že změna musí zachovat zamýšlené chování, a kde projekt schvaluje výjimku komentářem (klíč [`suppressionComments` |suppressing]), ukázka toho komentáře. `dresscode:ignore` se agentovi nenabízí nikdy.
+- **Varování ke konfiguraci formát vynechá**, s těmi agent nic nenadělá.
+
+
+Styl souboru
+============
+
+Hook předá DressCode i text souboru před editací (`--before`). Co ten text nedodržoval, je styl souboru, ne chyba agenta: DressCode to nechá, jak to soubor píše, a agentovi řekne, ať tam píše ve stylu souboru:
+
+/--pre .[terminal]
+Before the edit `src/Legacy.php` did not follow `indentation.unit`, `literals.quotes`, so DressCode leaves them as the file writes them; write the code there in the style of the rest of the file.
+\--
+
+Soubor, který ještě standardu neodpovídá, se tak při úpravě jedné metody nepřeformátuje celý, do úzkého commitu se nedostane nic, co agent nepsal, a soubor odsazený mezerami zůstane odsazený mezerami. Co editace pokazila, se naopak opraví, ať to stojí kdekoli: import, kterému vzala poslední použití, nebo řádky, které obalila novým blokem. Nový soubor je celý agentův, a proto se opraví celý. Na zbytek projektu je `dresscode fix`, pustit vědomě a commitnout zvlášť.
+
+
+Bez hooku
+=========
+
+Agent nebo nástroj, který umí spustit příkaz po zápisu souboru, pustí totéž sám:
+
+```shell
+dresscode fix src/Cart.php -f agent --skip-excluded --before /tmp/Cart.before.php --lines 12-14
+```
+
+Díky `--skip-excluded` příkaz nesáhne na soubor, který konfigurace vylučuje v `excludePaths`, třeba na fixturu testu, do které agent zapsal. Bez `--before` se opraví celý soubor, `--lines` zužuje jen výpis.
+
+
+Upgrade s agentem
+=================
+
+Po [upgradu knihoven |upgrade] zbude seznam míst, která musí přepsat člověk, a každá hláška v něm říká, co napsat místo starého API. Takový seznam je přesně práce pro agenta. S formátem `agent` dostane diff toho, co DressCode přepsal, a u každého zbylého nálezu, co s ním dělat:
+
+```shell
+dresscode upgrade today -f agent
+```
+
+Formát `agent` nevypisuje radu k dalšímu běhu, kterou dává terminál, a tak příkaz pusťte znovu, dokud něco přepisuje. [Odhad a plán upgradu |upgrade#Kolik práce upgrade dá] dostane agent jako data, třeba `dresscode upgrade plan php 8.4 --format json`, a stejně tak běh plánu, `upgrade tasks` a `upgrade status`; formát `agent` tyhle příkazy nemají. Dokument nese kořen projektu `root` a u uloženého plánu `planIdentity`, otisk souboru plánu, podle kterého agent pozná, o kterém plánu dokument mluví. Ve formátu `json` se DressCode na nic neptá, ani v terminálu, a tak typy zapněte přepínačem `--types` a zvednutí verzí v `composer.json` při `upgrade run` povolte přepínačem `--yes`; bez něj se běh Composeru ani nezeptá a skončí s exit kódem 4. Data dávají agentovi i `init` a `migrate`: `dresscode init --format json` změří konfiguraci, vezme doporučené odpovědi a to, na co by se ptal, vrátí pod `instructions`.
+
+
+Méně rizikových oprav
+=====================
+
+Rizikové opravy hook neudělá, jen je ohlásí. Aby jich zbývalo co nejméně, patří do `dresscode.neon` i klíč [`nameResolution: certain` |namespaces#name-resolution]: s ním přestanou být rizikové opravy, které stojí na tom, že je funkce globální, a hook je udělá sám. Totéž udělají [typy |types#enable] s opravami, které stojí na typu hodnoty.

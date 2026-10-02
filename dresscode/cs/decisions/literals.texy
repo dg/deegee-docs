@@ -1,0 +1,182 @@
+Literály
+********
+
+.[perex]
+Sekce `literals` rozhoduje o tom, jak se píšou hodnoty přímo v kódu: pole `[]` místo `array()`, uvozovky řetězce, oddělovače číslic `1_000_000`, heredoc bez interpolace jako nowdoc, dva řetězce spojené tečkou na jednom řádku a jméno třídy v řetězci.
+
+Klíč `quotes` se týká jen obyčejného řetězce, tedy takového, který nemá interpolaci proměnné, escape sekvenci, kterou znají jen dvojité uvozovky, ani uvozovku žádaného druhu uvnitř. U všech ostatních na druhu uvozovek záleží a zůstanou, jak jsou.
+
+```neon
+literals:
+	arraySyntax:
+		array: short
+	quotes: single
+	digitSeparator:
+		integer: required
+	digitSeparatorMinDigits:
+		integer: 7
+	concatenatedLiterals: forbidden
+```
+
+```php .[before]
+$colors = array("red", "green");  // The array must be written `[…]` instead of `array(…)`. // A plain string must be written with single quotes. // A plain string must be written with single quotes.
+$limit = 1000000;  // The number `1000000` must be written `1_000_000`.
+$query = 'SELECT * ' . 'FROM users';  // Useless concatenation of two string literals, because they make one literal.
+$greeting = "Hello $name";
+```
+
+```php .[after]
+$colors = ['red', 'green'];
+$limit = 1_000_000;
+$query = 'SELECT * FROM users';
+$greeting = "Hello $name";
+```
+
+Řetězec s proměnnou zůstal ve dvojitých uvozovkách, protože ty jeho význam mění.
+
+
+literals.arraySyntax.array
+==========================
+
+The syntax of an array.
+
+- `short`: `[1, 2]`, never `array(1, 2)`
+- `long`: `array(1, 2)`, never `[1, 2]`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `short`, psr12 `keep`, nette `short`, symfony `short`, laravel `short` · pokrývá `array_syntax`, `Generic.Arrays.DisallowLongArraySyntax`, `Generic.Arrays.DisallowShortArraySyntax` .[decision-facts]
+
+
+literals.arraySyntax.list
+=========================
+
+The syntax of a destructuring.
+
+- `short`: `[$a, $b] =`, never `list($a, $b) =`
+- `long`: `list($a, $b) =`, never `[$a, $b] =`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `short`, symfony `keep`, laravel `short` · pokrývá `list_syntax`, `SlevomatCodingStandard.PHP.ShortList` .[decision-facts]
+
+
+literals.classNameInString
+==========================
+
+`'Acme\Shop\Order'` is `Order::class`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · jen s typy · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · pokrývá `class_keyword` .[decision-facts]
+
+Jméno třídy v řetězci se přepíše na `::class` jen tehdy, když třída, rozhraní nebo enum toho jména v projektu opravdu existuje; to DressCode zjistí z [typů z PHPStanu |/types]. Jméno traitu se nepřepíše, stejně jako řetězec s úvodním zpětným lomítkem (`'\Acme\Shop\Order'`), který jméno třídy v řetězci nepotřebuje. Třída deklarovaná v testu `.phpt` platí jen v tom souboru, protože takový test žádný autoload nenačte. Pravidlo `class_keyword` PHP CS Fixeru to podle vlastní dokumentace poznat nemůže, protože nad tokeny neví, jaké třídy projekt má.
+
+
+literals.implicitBackslash
+==========================
+
+A backslash of a string that escapes nothing, written `\\` instead.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · pokrývá `escape_implicit_backslashes`, `string_implicit_backslashes` .[decision-facts]
+
+
+literals.heredocWithoutInterpolation
+====================================
+
+A heredoc with nothing to interpolate, which is written as a nowdoc.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `forbidden`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `forbidden` · pokrývá `heredoc_to_nowdoc`, `SlevomatCodingStandard.PHP.RequireNowdoc` .[decision-facts]
+
+
+literals.digitSeparator.integer
+===============================
+
+The separator grouping by three the digits of a decimal integer, or of the integer part of a decimal number, `1_000`; a number grouped already stays.
+
+- `required`: always there
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` · pokrývá `PhpCsFixerCustomFixers/numeric_literal_separator`, `numeric_literal_separator`, `SlevomatCodingStandard.Numbers.DisallowNumericLiteralSeparator`, `SlevomatCodingStandard.Numbers.RequireNumericLiteralSeparator` .[decision-facts]
+
+
+literals.digitSeparator.fraction
+================================
+
+The separator grouping by three the digits of the fraction of a decimal number, `0.000_1`.
+
+- `required`: always there
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` · pokrývá `PhpCsFixerCustomFixers/numeric_literal_separator`, `numeric_literal_separator`, `SlevomatCodingStandard.Numbers.DisallowNumericLiteralSeparator`, `SlevomatCodingStandard.Numbers.RequireNumericLiteralSeparator` .[decision-facts]
+
+
+literals.digitSeparatorMinDigits.integer
+========================================
+
+The number of digits from which `literals.digitSeparator.integer` groups them.
+
+- počet od 1
+
+Výchozí `4` · standardy: perCs `4`, psr12 `4`, nette `7`, symfony `4`, laravel `4` · pokrývá `SlevomatCodingStandard.Numbers.RequireNumericLiteralSeparator` .[decision-facts]
+
+
+literals.digitSeparatorMinDigits.fraction
+=========================================
+
+The number of digits from which `literals.digitSeparator.fraction` groups them.
+
+- počet od 1
+
+Výchozí `4` · standardy: perCs `4`, psr12 `4`, nette `20`, symfony `4`, laravel `4` · pokrývá `SlevomatCodingStandard.Numbers.RequireNumericLiteralSeparator` .[decision-facts]
+
+
+literals.quotes
+===============
+
+The quotes of a plain string, one without interpolation, without an escape sequence only double quotes know and without a quote of the wanted kind inside.
+
+- `single`: `'text'` where double quotes gain nothing
+- `double`: `"text"` for every plain string, the backslashes of a single-quoted one escaped
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `single`, symfony `single`, laravel `single` · pokrývá `single_quote`, `Squiz.Strings.DoubleQuoteUsage` .[decision-facts]
+
+
+literals.concatenatedLiterals
+=============================
+
+Two string literals concatenated on one line, which are one literal, `'ab'` for `'a' . 'b'`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · pokrývá `PhpCsFixerCustomFixers/no_superfluous_concatenation`, `no_useless_concat_operator`, `Generic.Strings.UnnecessaryStringConcat` .[decision-facts]
+
+
+literals.concatenatedLiteralsOverLines
+======================================
+
+Whether two string literals concatenated over a line break are one literal too.
+
+- `yes`, nebo `no`
+
+Výchozí `no` · standardy: perCs `no`, psr12 `no`, nette `no`, symfony `no`, laravel `no` · pokrývá `Generic.Strings.UnnecessaryStringConcat` .[decision-facts]
+
+
+literals.emptyStringConcatenation
+=================================
+
+The concatenation with an empty string, which is a cast or nothing, `(string) $x` for `$x . ''`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · pokrývá `PhpCsFixerCustomFixers/no_superfluous_concatenation`, `Generic.Strings.UnnecessaryStringConcat` .[decision-facts]

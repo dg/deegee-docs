@@ -1,0 +1,116 @@
+DressCode
+*********
+
+{{maintitle: DressCode: PHP Code Style Checker, Fixer and Code Upgrader}}
+{{description: PHP code style checker and fixer that also upgrades your code to newer PHP and new library versions in the same run. PER Coding Style, PSR-12, Nette, Symfony.}}
+
+.[perex]
+DressCode is a dress code for your PHP code. It checks the code style, fixes most findings on the spot, and it can also upgrade your code: it rewrites it for a newer PHP, from PHP 8.0 all the way to PHP 8.6, and for new versions of your libraries. It works on a lossless syntax tree, so it changes only what it touches, and the rest of the file stays the same byte for byte. It wears no style of its own; it dresses your code according to a coding standard: [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/], PSR-12, Nette Coding Standard or Symfony. Whatever you want done differently, you write down key by key, the way it looks in the code, and it can differ for each part of the project.
+
+For years I used PHP CS Fixer and PHP_CodeSniffer and accepted them as a given. Then I needed one new rule, and I found out how much work it takes to write one when the tool sees only a flat array of tokens and has to guess the structure of the code. DressCode was made so that you can write a rule in an afternoon and trust what it fixes.
+
+
+A Configuration That Describes Your Code
+----------------------------------------
+
+Code style tools have hundreds of rules, and DressCode is no exception: it has more than two hundred built-in ones. But you do not name them in the configuration. You write down what your code looks like, one thing at a time: the key names a thing in the code, and the value says how it is written.
+
+```neon
+use:
+	- perCs
+	- modernizations
+
+braces:
+	position:
+		class: nextLine
+spacing:
+	concatenation: '$a.$b'
+qualification:
+	function:
+		global: bare
+		optimized: imported
+```
+
+You can read it out loud: the brace of a class goes on the next line, the concatenation dot has no spaces around it, global functions are written as bare names, without a leading backslash, and the ones PHP optimizes are imported. In PHP CS Fixer, no single setting says what those last two lines say. They come from two rules working together:
+
+```php
+'native_function_invocation' => [
+	'include' => ['@compiler_optimized'],
+	'scope' => 'namespaced',
+	'strict' => true,
+],
+'global_namespace_import' => ['import_functions' => true],
+```
+
+The first rule adds a backslash before the functions the compiler optimizes and removes it from all others. The second one then turns every backslash into an import. On the same file, both configurations give the same code, but in PHP CS Fixer you have to work out the result; no sentence in the configuration states it. PHP_CodeSniffer with Slevomat can add the backslash before optimized functions, or import all global functions, but it cannot import only the optimized ones.
+
+You do not have to write hundreds of keys, because the configuration rests on two questions. **What should the code look like?** That is the standard. You pick exactly one, by its name. **What do you want from the code besides its looks?** Those are the [sets |configuration#Standards and Sets]: `modernizations`, `deprecations`, `cleanup`, `correctness`, `types` and `compilerOptimizations`. A set names an intent, not a list of keys, and it grows: when DressCode learns a new modernization, the set brings it to you without a single new line in your configuration. For anything else, one key is enough. And where you do not want even the standard to apply, you write `keep`.
+
+Every finding in the output shows the whole path to its key, for example `braces.position.class`, so you know what to set or suppress, or what to ask about with `dresscode explain braces.position.class`. Before you write a key into the configuration for good, you can try it for one run: `dresscode fix --set hygiene.is_null=forbidden` adds it on top of your configuration, and its changes come out already formatted, ready for one clean commit. All sections and their keys are described in the [Configuration Reference |decisions/@home].
+
+
+Not Just Style: Upgrading Code Too
+----------------------------------
+
+A tool that understands code does not have to stop at whitespace. When you raise the PHP version in `composer.json`, the `modernizations` set rewrites your code to use what the new version brought, and DressCode formats it by your standard in the same run:
+
+```php .[before]
+return trim(strtolower(strip_tags($title)));
+```
+
+```php .[after]
+return $title |> strip_tags(...) |> strtolower(...) |> trim(...);
+```
+
+It rewrites code the same way when you [upgrade your libraries |upgrade]: you raise the versions in `composer.json`, run `dresscode upgrade today`, and DressCode rewrites the code to the API of the versions the project now requires, with no configuration and without touching the style. For Nette, the package `dresscode/upgrade-nette` carries the migrations of all its libraries, for most of them from version 3.0 to the current one: renamed classes, constants, methods and parameters. Symfony, Laravel, Dibi and Texy have their own packages too. DressCode also asks PHPStan about types, so it rewrites deprecated API based on what the variable really is. One tool with one configuration and one diff takes care of both the style and the upgrade to a new version.
+
+
+Coverage of PER Coding Style and PSR-12
+---------------------------------------
+
+It is easy to write that a tool supports a standard, so I let the competition judge the result. I fixed the code of Laravel with the `perCs` preset and then ran PHP CS Fixer over it, with its own set for PER Coding Style. In 1,696 files it changed only 9 more places. The other way round, after PHP CS Fixer, DressCode finds 1,201 places where PER Coding Style wants something different, for example one item per line or a comma after a multiline list. For PSR-12, after `phpcbf` DressCode still finds 772 places, among them missing constant visibility, which `phpcbf` reports but cannot add. The numbers for Symfony, and what the other tools still find after DressCode, are on the page [How DressCode Works |how-it-works#PER Coding Style and PSR-12 Compared to PHP CS Fixer and PHP_CodeSniffer].
+
+
+Speed Compared to PHP CS Fixer and PHP_CodeSniffer
+--------------------------------------------------
+
+DressCode is made to run after every edit of a file, and there the time for a single file is what counts: DressCode needs about a third to a half of the time PHP CS Fixer needs, 118 ms against 323 ms for a small file. It is also faster on a whole project when it does the same work. With decisions that match the PER Coding Style set of PHP CS Fixer, it needs 64 to 90% of the time of PHP CS Fixer in one process and 46 to 64% in parallel processes, on the code of Laravel, WordPress, Symfony and Nette. On Symfony, with Symfony's own PHP CS Fixer configuration converted by the `migrate config` command, it finishes the check in 56% of PHP CS Fixer's time (14.2 s against 25.3 s), even though PHP CS Fixer also runs more than a hundred rules for phpDoc and PHPUnit there, which DressCode does not have.
+
+The `perCs` preset does more than that set: it also splits long signatures, conditions, call chains and arrays onto lines, and it fixes the letter case of names. So preset against preset, it runs in 72% of the time of PHP CS Fixer on Laravel and in 118% on WordPress, because that is where the extra decisions have the most work to do.
+
+Against PHP_CodeSniffer, the difference shows when fixing: `dresscode fix` needs 36 to 54% of the time `phpcbf` spends on PSR-12. For reporting alone, `phpcs` is faster, because `dresscode check` computes the fixes in memory even when it only checks. And upgrading to a newer PHP takes a fraction of the time Rector needs, 1.6 s against 128.5 s on Symfony 3.4, and with [types from PHPStan |types] it is still faster: on Laravel 4.4 s against 10.5 s with a warm PHPStan cache, and 9.0 s against 195 s with a cold one.
+
+Measured in October 2026 on PHP 8.5 against PHP CS Fixer 3.95, PHP_CodeSniffer 4.0 and Rector 2.6, median of three runs.
+
+
+Where to Go Next
+----------------
+- [Getting Started with DressCode |getting-started] installation, the first check and the first fix.
+- [Configuration |configuration] the standard, the sets and the keys that say what your code looks like.
+- [Upgrading to a Newer PHP |upgrading-php] how DressCode rewrites code from PHP 8.0 to PHP 8.6.
+- [Upgrading Code |upgrade] migrating Nette, Symfony, Laravel and other libraries with one command.
+- [Migrating to DressCode |migration] if you use PHP CS Fixer, PHP_CodeSniffer or Slevomat today.
+- [How to Write Your Own Rule |custom-rule] if something is missing from the catalogue.
+
+
+Usage
+-----
+- [How DressCode Works |how-it-works] a tree instead of tokens, decisions instead of rules, passes, and a glossary of terms.
+- [Types from PHPStan |types] what DressCode can do when it can ask PHPStan about the types of your code.
+- [Functions and Constants in Namespaces |namespaces] why `strlen()` is ambiguous in a namespace and how DressCode removes the doubt.
+- [Optimizations of Functions and Constants |optimizations] which shortcuts PHP takes for function calls and constants, what turns them off, and how to write code so they apply.
+- [Suppressions and the Baseline |suppressing] exceptions on a line, in a file and for a path, and a baseline for what the code does not meet yet.
+- [Command Line |cli] commands, options, output formats, exit codes.
+
+
+Reference
+---------
+- [Configuration Reference |decisions/@home] all sections and their keys, with values and examples.
+- [Standards and Sets |presets-reference] exactly what PER Coding Style, PSR-12, Nette, Symfony and the six sets decide.
+
+
+Extensions and Integrations
+---------------------------
+- [Extending DressCode |extending], [your own rule |custom-rule], [a rule in detail |rule-contract], [whitespace rules |whitespace-rules], [testing rules |testing-rules].
+- [Continuous integration |continuous-integration], [AI agents |agents], [Git hooks |hooks].
+- [PhpSyntax |phpsyntax:] the lossless syntax tree DressCode is built on, as a standalone library.

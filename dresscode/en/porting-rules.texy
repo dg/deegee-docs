@@ -1,0 +1,74 @@
+Porting a Rule from Another Tool
+********************************
+
+.[perex]
+How to port a sniff from PHP_CodeSniffer or a fixer from PHP CS Fixer to DressCode: take the specification from the tests and not from the source, translate the questions from tokens to the tree, and drop the defensive code that has no purpose on a tree.
+
+
+Who This Is For
+===============
+
+You have your own sniff (a PHP_CodeSniffer rule) or fixer (a PHP CS Fixer rule). For years it has checked something no standard covers, and you want to have it here too. This procedure is written so that you can work through it step by step, and an AI agent can follow it just as well when you give it the original rule. In fact, agents ported most of the built-in rules of DressCode this way.
+
+But first check whether you need to port it at all: for every decision, `dresscode catalogue` prints the names from PHP CS Fixer, PHP_CodeSniffer and Slevomat that it covers. Port only what is not in that list.
+
+
+1. Take the Specification from the Tests, Not from the Source
+=============================================================
+
+The source code of the other tool's rule describes how to work around the problem on a flat array of tokens: where it steps back, what it counts, when the rule gives up. That is exactly the information that is useless here. What is valuable are the **test cases**: pairs of code before and after the fix, and the edge cases the author collected over the years. Move them almost literally into [fixtures |testing-rules]. A fixture is your specification and at the same time proof that you lost nothing on the way.
+
+
+2. Translate the Questions from Tokens to the Tree
+==================================================
+
+Every loop over tokens in the original is in fact a question about the structure of the code. The same translations come up again and again:
+
+| in the original | in DressCode |
+|---|---|
+| `getPrevMeaningfulToken()` in a loop until the start of the expression is found | a slot of a node: `$node->condition`, `$node->arguments`, or `$node->parent` |
+| counting parentheses by hand to find the end of a block | the slots `openParen` and `closeParen`, `openBrace` and `closeBrace` |
+| `T_STRING` and guessing from the context what it actually is | a specific node class: `NameNode`, `IdentifierNode`, `FunctionCallNode` |
+| your own helper for "is this a global function" and "which namespace are we in" | `GlobalCalls::findFunction()`, `findUncertainty()`, `NameResolver::getNamespace()`, `resolveClass()` |
+| your own helper for "are we inside a method" and "is `$this` available" | `Scope::findFunction()`, `findClass()`, `hasThis()` |
+| comparing two ranges of tokens | `Node::matches()` |
+| checking that a range has no `++`, call and the like | `ExpressionNode::isRepeatableRead()` |
+| searching for a comment between tokens | `Token::hasCommentUpTo()`, `Node::hasInnerComment()` |
+| `$phpcsFile->addFixableError()` and then `$fixer->replaceToken()` | `report()` in the condition, and only after it a write to a slot or `replaceWith()` |
+| `Tokens::insertAt()` with tokens built by hand | `Parser::parseExpression()` or `parseStatement()` and `insert()` into a list |
+
+Where the original worked with token indexes, work with nodes; where it read text, ask the tree. The [node reference |phpsyntax:nodes] lists which nodes and slots exist.
+
+
+3. Drop the Defensive Code
+==========================
+
+A large part of the other tool's rule exists only so that it does not get confused: so that it does not mistake the `[` of an array for an element access, so that a parenthesis inside a string is not counted, so that a comment in the middle of a call does not break the search. On a tree, these mix-ups cannot happen, so that code has nothing to port. The temptation to translate the original line by line is strong, especially for an agent, and a simple test protects you from it: **every line of the new rule must answer a question about the code, not about tokens.** A line that deals with everything that can stand between two tokens is removed.
+
+The result is usually several times shorter. A rule that has more than a hundred lines after porting is suspicious: either it does several things at once and should be split, or it is still a line-by-line translation instead of a real port.
+
+
+4. Handle Safety Differently from the Original
+==============================================
+
+The original often guarded against side effects with a list: `T_INC`, `T_DEC`, maybe calls. Here you use `isRepeatableRead()` instead, which is both stricter and more precise. A fix that was risky in PHP CS Fixer may stop being risky after porting, if the rule asks the tree. Where the safe case cannot be recognized from the code, report the fix as risky at every such occurrence, `report(..., risk: Risk::TypeUnknown)` with what would decide it, see [the rule contract |rule-contract#Report First, Fix Second]; it is then made only with the permission of the project. A rule that changes the meaning of the program by its nature reports every occurrence with `Risk::BehaviorChanges`, so its fixes stay subject to the user's permission.
+
+
+5. Decisions Instead of Options
+===============================
+
+The options of the other tool's rule are not carried over one to one. First ask yourself what thing in the code the rule checks, and name it with a decision path according to the [convention |extending#Naming]: in the section `project` or in the section of your plugin, a state, not a step. What was a choice between two shapes in the original is the value of that decision (`sameLine`, `nextLine`), what was turning on and off is `forbidden` or `required` versus `keep`, and a list of exceptions is a parameter. Drop an option that only worked around a weakness of tokens, such as "ignore nested parentheses", together with the defensive code. [A Rule in Detail |rule-contract#Decisions] describes how to declare a decision.
+
+Your users, however, will still have the name of the original sniff or fixer in their `phpcs:ignore` comments. DressCode translates the names of other tools only to decisions of the engine, so for your own rule, replace them in the code with the path of the new decision: `migrate suppressions` prints which names it does not know, and that is exactly the list.
+
+
+6. Verify on Their Fixtures and on Your Own
+===========================================
+
+Did the original test cases pass? Then add what was missing in them, because the tree sees more: a comment inside a construct, a construct across several lines, alternative syntax, code mixed with pieces of HTML. Finally, run `fix` on a larger body of someone else's code and look at the diff.
+
+
+License
+=======
+
+You are carrying over behavior and test cases, not code. PHP_CodeSniffer is under the BSD-3-Clause license, PHP CS Fixer and Slevomat under MIT; both allow derivative works with attribution. Mark fixtures taken from another project with their origin and license in the header of the file. A rule written by this procedure contains no one else's code, because in the end there was nothing left to carry over.

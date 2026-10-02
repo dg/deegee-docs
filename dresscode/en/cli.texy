@@ -1,0 +1,611 @@
+Command Line
+************
+
+{{description: The DressCode command line: the check, fix, baseline, upgrade, config and explain commands, all options, output formats for CI and editors, exit codes, cache and parallel runs.}}
+
+.[perex]
+Everything you run in the terminal: the `check`, `fix` and `baseline` commands, a view of what your configuration really means, explanations of decisions in the terminal or as a document, the catalogue of all decisions, importing the configuration of another tool, every option, output formats for the terminal, CI and other tools, exit codes, the cache and parallel runs.
+
+
+Commands
+========
+
+```shell
+dresscode check [paths...]
+dresscode fix [paths...]
+dresscode baseline [paths...]
+dresscode upgrade estimate|plan|run|tasks|status|abort|today [target [version]]
+dresscode config
+dresscode explain [decision]
+dresscode catalogue
+dresscode init
+dresscode migrate config [file]
+dresscode migrate suppressions [paths...]
+```
+
+- `check` reports violations and writes nothing.
+- `fix` fixes what it can and reports the rest. A file is written only when it has changed and the fixed text parses back to the same syntax tree; a file with a syntax error or with a rule that failed stays untouched, and so does a file that an editor or another tool saved in the meantime.
+- `baseline` writes the violations a fix leaves into the [baseline |suppressing#baseline] file. Run it on code where `fix` has nothing left to fix.
+- `upgrade today` rewrites the code to the API of the newer library and PHP versions that the project now requires in `composer.json`. It works even without a configuration, writes in the style the project follows, and offers to install missing upgrade data. It also takes `--modernize`, `--ask-risky` and `--yes`, see [Upgrading Code |upgrade#Options]. `upgrade estimate` estimates what upgrading to the target versions takes, changing nothing, `upgrade plan` orders it into steps, `upgrade run` carries them out, `upgrade tasks` lists the manual tasks the plan leaves for you, `upgrade status` says where the saved plan stands, and `upgrade abort` puts back what a run did not finish, see [Upgrade Your Code Step by Step |upgrade].
+- `config` prints what the configuration leads to: the resolved configuration in the shape of the file, with the layer that set each value, and for a decision that does not apply, the reason. See [below |#What the Configuration Means: config].
+- `explain` tells you about a decision: what it is for, which values it takes and which one it has in this project; with the name of a section, the same about all its decisions, and without an argument, about the whole configuration. See [below |#Explaining a Decision: explain].
+- `catalogue` lists all decisions the installation knows, including those from plugins and the project's own rules, and marks the ones the configuration makes with an asterisk. See [below |#The Catalogue of Decisions: catalogue].
+- `init` writes a `dresscode.neon` that fits how the project is written: it chooses the nearest standard and measures where the code departs from it. See [below |#init].
+- `migrate config` translates a configuration of PHP CS Fixer, PHP_CodeSniffer or Laravel Pint into decisions, without an argument the one the project has, see [Migrating to DressCode |migration#migrate-config].
+- `migrate suppressions` rewrites `phpcs:*` comments to `dresscode:*`, see [the same page |migration#3. Rewrite the Comments].
+
+Paths are files or directories, relative to the current directory. They take precedence over the `paths` key of the configuration, with one exception: a directory that contains some of the paths from `paths` is narrowed to just those. So `dresscode fix .` in the root of the project does not touch anything outside `paths`, and both `check` and `fix` say so right at the start of the output with the words `narrowed to the configured paths`. A directory or file outside `paths` is taken as you gave it. When you give no paths and the configuration lists none, the command ends with the error `No paths given and none configured.`, because it does not want to guess what to check.
+
+`dresscode --help` prints the commands and the common options, `dresscode <command> --help` the options of one command, and `dresscode --version` the version.
+
+
+Options
+=======
+
+These options apply to every command:
+
+| option | meaning |
+|---|---|
+| `-c`, `--config <file>` | a configuration file instead of the nearest `dresscode.neon` or `dresscode.php` (or their templates with the `.dist` extension) |
+| `--use <name>` | adds a preset or a plugin on top of the configuration; works even without a configuration file; for `init`, the standard and the sets to write; may be given several times, see [below |#Adding a Preset: --use] |
+| `--set <path=value>` | gives a decision a value for one run, the value is written in NEON; may be given several times, see [below |#One Decision for One Run: --set and --only] |
+| `--severity <name=severity>` | says how the violations of a decision, section, preset or rule are counted, `name=warning` or `name=error`, on top of the [`severity` |configuration#risky-fixes] key; may be given several times |
+| `--no-color` | output without colors; the environment variable `NO_COLOR` does the same, and `FORCE_COLOR` forces colors instead |
+| `--version`, `--help` | version, help |
+
+These options belong to `check` and `fix`, and where the table says so, also to `baseline`:
+
+| option | meaning |
+|---|---|
+| `-f`, `--format <name>` | the output format, see [below |#Output Formats]; also for `baseline` |
+| `--diff` | for `check`, shows what `fix` would change; for `fix`, what it changed; only in the `console` format |
+| `--only <name>` | narrows the run to the named decision, section, preset, [upgrade package |upgrade#Upgrading a Library You Maintain] or library the data is about, without changing values; also works for `config`, `explain` and `catalogue`, not for `baseline`; may be given several times, see [below |#One Decision for One Run: --set and --only] |
+| `--fix-risky`, `--fix-risky=<name>` | makes the [risky fixes |configuration#risky-fixes] of all decisions, or with a name, only of that decision, section, preset, upgrade package or library, not just of those the configuration names in the `fixRisky` key; may be given several times, the name goes after `=`; they are reported either way |
+| `--ask-risky` | only for `fix`: fixes as usual, then asks about each remaining risky fix separately, shows its diff and makes those you accept (`y` yes, `n` no, `a` this one and all further ones of that decision, `q` quit); only in an interactive terminal |
+| `--max-warnings <n>` | more than `n` [warnings |configuration#risky-fixes] means exit code `1`; without it, warnings do not change the exit code |
+| `--stdin <path>` | reads code from standard input as if it were the file at the given path; cannot be combined with paths, see [below |#Standard Input] |
+| `--skip-excluded` | skips even a file given by name if the configuration excludes it in `excludePaths`; for hooks and editors that pass file names; also for `baseline` |
+| `--no-cache` | processes every file, even one known to be clean; also for `baseline` |
+| `--jobs <n>` | the number of worker processes; `1` means running in a single process; also for `baseline` |
+| `--strict-rules` | a rule that breaks its contract is an error, not a warning; for developing your own rules; also for `baseline` |
+
+And these belong to `config`, `explain` and `catalogue`:
+
+| option | meaning |
+|---|---|
+| `--file <path>` | for `config`: what applies to this one file, including the overrides in `overrides` |
+| `--preset <name>` | for `config`: prints the preset itself, with what it builds on, instead of the configuration |
+| `-f`, `--format <name>` | for `config` and `catalogue`, `console` for reading or `json` as data; for `explain`, `console` or `markdown` as a document |
+
+With `--use`, `--only` and `--fix-risky`, a built-in preset is written short: `--use nette` is the same as `--use dresscode/nette`. A package of the vendor `dresscode` is written short too, `--only upgrade-nette`; a preset from a plugin of another vendor is written in full, see [Standards and Sets |configuration#Standards and Sets]. Decisions and sections are written by their path, `--only blankLines` or `--only blankLines.aroundMethods`, and for a typo, the message offers the closest known name (<code>''Unknown preset `modernizaton`. Did you mean `modernizations`?''</code>).
+
+
+Adding a Preset: --use
+======================
+
+`--use` adds a preset or a plugin for one run, the same thing the `use` key holds otherwise. It takes precedence over all layers, over the configuration and over the overrides:
+
+```shell
+dresscode check --use modernizations        # the configuration plus the modernizations set
+dresscode check src --use psr12            # someone else's project without a configuration
+```
+
+Without a configuration file, `--use` is all the run has. This way you can try DressCode on someone else's project without writing anything into it, see [below |#Checking Someone Else's Project Without a Configuration]. `--use` does not take decisions; that is what `--set` is for, and the message says so: <code>''Option `--use`: expects a preset or a plugin, `controlFlow.elseAfterReturn=forbidden` given; a decision is set by `--set path=value`.''</code>
+
+
+One Decision for One Run: --set and --only
+==========================================
+
+`--set` gives a decision a value as if it stood in the configuration, and `--only` narrows the run to what you name. Both options can be repeated, and together they cover whatever you want to do with a decision just once, without editing the configuration. The value after `=` is written in NEON, so it is exactly what you would write into the file; put a sample with spaces in quotes, so that the shell does not split it:
+
+```shell
+dresscode check --set hygiene.is_null=forbidden
+dresscode check --set blankLines.aroundMethods=1
+dresscode check --set 'spacing.arrowFunction="fn ($x) => $x"'
+```
+
+`--only` changes no value. The whole configuration tree is resolved, and `--only` merely selects from it what is reported and fixed. A decision outside the selection stays silent, but its value still applies to everything the selected decisions write: when `--only` runs the rewrite to `match` in a project indented with four spaces, the new block gets four spaces.
+
+
+Trying a Decision You Don't Have in Your Configuration
+------------------------------------------------------
+
+Do you wonder what a decision would do to your code when the configuration does not mention it or your standard leaves it at `keep`? Give it a value and run just that decision:
+
+```shell
+dresscode check --set controlFlow.elseAfterReturn=forbidden --only controlFlow.elseAfterReturn --diff
+```
+
+/--pre .[terminal]
+src/Discount.php
+  error  12:5  Useless else, because the branches before it always leave.  controlFlow.elseAfterReturn
+--- src/Discount.php
++++ src/Discount.php
+@@ -9,8 +9,7 @@
+ 	{
+ 		if ($count > 10) {
+ 			return 0.1;
+-		} else {
+-			return 0.0;
+ 		}
++			return 0.0;
+ 	}
+ }
+
+FOUND  1 violation, a fix leaves none in 1 file
+\--
+
+The other decisions do not run, and that is why the `return` in the diff stayed indented one level too deep: indentation is the job of `indentation.unit`. `--only` alone, without `--set`, does not run a decision the configuration does not make, because there is no value to run it with; the message says so and suggests `--set`:
+
+/--pre .[terminal]
+Error: Option `--only` names decision `controlFlow.elseAfterReturn`, which has no rule that runs here; `--set controlFlow.elseAfterReturn=<value>` decides it for the run.
+\--
+
+
+Introducing a New Decision in One Commit
+----------------------------------------
+
+Once you decide to adopt a decision, you want a commit that holds exactly its changes, already formatted by your standard. In a project that is clean according to its configuration, `--set` alone does it:
+
+```shell
+dresscode fix --set controlFlow.elseAfterReturn=forbidden
+```
+
+The whole configuration runs, plus that one decision, so the other decisions immediately correct whatever its fix moves: the `return` from the example above ends up indented correctly. Everything else was already in order, so the diff contains only what the new decision brought. Then write the decision into the configuration and commit both at once.
+
+
+Cleaning Up Old Code Step by Step
+---------------------------------
+
+A big cleanup is hard to read as a single diff. Split it by intent, one commit for each [set |configuration#Standards and Sets] the configuration uses, or for each section:
+
+```shell
+dresscode fix --only cleanup
+dresscode fix --only correctness
+dresscode fix --only blankLines
+dresscode fix
+```
+
+Only the `types` set has the same name as a section, so here it is written by its full name, `dresscode/types`, and the section as `types.*`; the bare name could mean either, so DressCode refuses it. The name of a set or a preset in `--only` runs only those of its decisions that the configuration really makes, never more. The name itself decides nothing about any of them, so it cannot overrule what the project left at `keep` on purpose. And nothing is hidden: when you have turned off some decisions of the set in the configuration, the run tells you which ones:
+
+/--pre .[terminal]
+Warning: Option `--only` keeps 29 of the 30 rules of preset `dresscode/cleanup` that may run here, without `controlFlow.elseAfterReturn`, `controlFlow.elseifAfterReturn`, which the configuration turns off.
+\--
+
+To run a set the configuration does not use, add it with `--use`. `dresscode fix --use modernizations` rewrites the code to a newer PHP and formats the result by your standard right away; `--use modernizations --only modernizations` runs the set alone, and that is also what the message suggests when `--only` names a preset that the configuration does not have in full. A name that would run nothing is an error, not a silently clean run.
+
+`fix --only` fixes only what you name and does not touch the rest, so the final full `fix` still changes something, for example the indentation that the selected decisions shifted. This is on purpose, not unfinished work: each commit carries one kind of change, and the last one is pure formatting. The `baseline` command does not have the `--only` option, because the baseline would forget what the other decisions found.
+
+
+Checking Someone Else's Project Without a Configuration
+-------------------------------------------------------
+
+Without a configuration file, DressCode does not start, because it has no style of its own. `--use` gives it a standard for one run, and nothing is written into the project:
+
+```shell
+dresscode check src --use psr12
+```
+
+The header of the output then says `Config     none, using psr12`. You can add a set too: `dresscode check src --use perCs --use modernizations` shows, besides the style, what could be written with a newer PHP. When you want a permanent configuration, [`dresscode init` |#init] measures it from the code.
+
+
+What the Configuration Means: config
+====================================
+
+The configuration is a few lines, but they result in hundreds of decisions from several layers. `dresscode config` prints them as the run sees them: in the shape of the configuration file, with the layer that set each value in a comment. It reads the same resolved configuration that the rules and the cache follow, so it cannot claim anything other than what really happens.
+
+/--pre .[terminal]
+DRESS|CODE 1.3.0
+Config     /var/www/shop/dresscode.neon
+Target     PHP 8.2 from `composer.json`
+Use        dresscode/psr12, dresscode/perCs, dresscode/cleanup, dresscode/types, dresscode/correctness, dresscode/nette, dresscode/modernizations
+Targets    php 8.2
+Style      a tab, the line ending each file mostly has, lines of up to 140 characters
+Names      certain, the namespaces declare no function and no constant
+Comments   silence decisions on their line
+      ~\bintentionally\s+[!=]=~                               expressions.comparison.loose, mistakes.strictArgument
+      ~^//\s*@\s+\S~                                          mistakes.errorSuppression
+Decisions  339 of 423 set by a layer, the others asking for nothing
+
+file:
+	lineLength: 140                             # dresscode/nette
+	strictTypes:
+		declaration: required                   # dresscode/nette
+		position: sameLine                      # dresscode/nette
+...
+spacing:
+	arrowFunction: 'fn ($x) => $x'              # the configuration
+...
+classes:
+	overridingMethod:
+		parentCallOnly: forbidden               # dresscode/cleanup, no effect: types
+...
+expressions:
+	comparison:
+		loose: forbidden                        # dresscode/nette
+...
+mistakes:
+	strictArgument: required                    # dresscode/correctness, risky fixes accepted
+...
+upgrading:
+	functions:
+		arrayFirstLast: required                # dresscode/modernizations, no effect: php
+\--
+
+The `Use` line names the plugins first and then the presets in the order they were applied, including the presets they build on: `nette` builds on `perCs` and the sets `cleanup`, `types` and `correctness`, `perCs` on `psr12`. The `Targets` line says which version of PHP and of libraries the code is written for, and the `Names` line how [unqualified names of functions and constants in namespaces |namespaces] are resolved. Each value shows the layer that set it: a preset, `the configuration`, or an override. A decision that does not apply says why: `no effect: php` when it needs a newer PHP than the project allows, `no effect: types` when it needs types and the configuration has none. A decision whose [risky fixes |configuration#risky-fixes] you have accepted carries `risky fixes accepted`, and a decision that the `severity` key softened to a warning carries `only warns`. When the project uses [upgrade data for libraries |upgrading-libraries] or PHP's own data, a `Packages` line is added, with each package, `php` among them, the version the code must work with, the file the data comes from, and the versions the data would lead to after the lower bound is raised. A version marked `(reported)` lies in the range the constraint already allows, so what it brought is reported without a fix: `upgrading further to 3.3 (reported), 4.0`.
+
+`--file path` shows the same for one file, that is, including the overrides that apply to it, and `--preset nette` one preset alone, with what it builds on. `--format json` gives the output as data for tools: the keys of the environment as they are written in the configuration (`use`, `targets`, `nameResolution`…), in the `decisions` key each decision by its path with its value (`value`), its layer (`layer`), the reason why it does not apply (`inactive`), and whether `--only` selected it (`selected`), and in the `rules` key the classes of the rules with whether they run.
+
+
+Explaining a Decision: explain
+==============================
+
+A decision path in the output is a reference, not an explanation. `dresscode explain <path>` adds its description, the values the decision takes with their meaning, its value in this project with the layer that set it, and what the four standards say:
+
+/--pre .[terminal]
+`spacing.arrowFunction`
+
+The space between `fn` and its parenthesis.
+
+By default `keep`.
+
+Takes: `'fn($x) => $x'` (no space before the parenthesis); `'fn ($x) => $x'` (a single space); `keep`
+
+Here `'fn ($x) => $x'`, set by the configuration.
+
+The standards: perCs `'fn($x) => $x'`, psr12 `keep`, nette `'fn($x) => $x'`, symfony `'fn ($x) => $x'`.
+
+Rule `DressCode\Rules\Whitespace\ConstructSpacingRule`, stage Formatting.
+
+See https://dresscode.run/decisions/spacing.arrowFunction
+\--
+
+With the name of a section, `dresscode explain blankLines` explains all its decisions. Without an argument, it explains the whole configuration of the project, section by section, and only what some layer decides. With `--format markdown`, it prints the same as a Markdown document to standard output; redirect it to get it into a file:
+
+```shell
+dresscode explain --format markdown > docs/coding-style.md
+```
+
+The document comes from the same configuration that checks the code. Habits from code review, and everything no decision covers, are not in it.
+
+
+The Catalogue of Decisions: catalogue
+=====================================
+
+`dresscode catalogue` lists all decisions the installation knows, the built-in ones and those from plugins and the project's own rules, each with its description and the names of the rules of other tools that it covers. It marks the ones your configuration makes with an asterisk:
+
+/--pre .[terminal]
+* file.finalLineEndings                              Exactly one line ending after the last line; a file ending in HTML is content  (covers single_blank_line_at_eof, PSR2.Files.EndFileNewline)
+* file.openingTag                                    The opening tag of PHP  (covers full_opening_tag, Generic.PHP.DisallowShortOpenTag)
+* file.lineEnding                                    The line ending of every line, which the code written new takes too; under `keep` that follows the file  (covers line_ending, Generic.Files.LineEndings)
+* file.lineLength                                    The widest line, by which what spreads over lines is split  (covers Generic.Files.LineLength, SlevomatCodingStandard.Classes.RequireMultiLineMethodSignature, SlevomatCodingStandard.ControlStructures.RequireMultiLineCondition, SlevomatCodingStandard.Files.LineLength)
+  file.lineLengthExcept                              What a line too wide leaves as it is: a construct named is not spread over lines for its width, and a line it stands on, one a regular expression matches, or with `strings` one wide only for its string literals, is not reported  (covers Generic.Files.LineLength, SlevomatCodingStandard.Files.LineLength)
+...
+\--
+
+It is useful when you are looking for what something is called, or where a rule of another tool has gone. With `--format json`, it prints the catalogue as data: for each decision its kind, its range of values, its description, notes, the values of the four standards and the foreign rules it covers. The [Configuration Reference |decisions/@home] on this website is built from the same output.
+
+
+A Configuration Measured from Your Code: init .[#init]
+======================================================
+
+You do not have to write your first configuration: `dresscode init` in the root of the project measures the code you already have and makes a `dresscode.neon` to measure. It does not guess. It measures a value of a decision with the rule that would fix it later, and whatever the rule reports does not agree with that value. So the measuring is done by the same tool that will check the code, and the two cannot drift apart.
+
+```shell
+dresscode init
+```
+
+/--pre .[terminal]
+DRESS|CODE 1.3.0  looking at /var/www/shop to write its `dresscode.neon`
+
+Project    13 PHP files in git, acme/shop
+Excluded   fixtures        test data
+           src/Generated   generated
+           not measured: 1 file git does not track, which the first fix takes too
+PHP        8.2 and newer, from `composer.json`
+Standard   perCs (PER Coding Style), the nearest to your code by the files a fix changes, 13 under psr12; `--use` names another
+Measured   your code departs from it in 3 decisions over 13 files; perCs as it is, with no decision below `use`, would rewrite 13 of them
+As written indentation.unit: tab   your code, 92% of 13 files
+           blankLines.beforeDeclaration: 2   your code, all 13 places
+           braces.emptyBody.function: expanded   your code, all 26 places
+Checked    all 13 files: a fix changes 1 file, 1 of them for the indentation, the line endings or the long lines the rest of the code has
+Your call  `dresscode init --use nette` measures against nette instead, where there is no `dresscode.neon` yet
+
+Written    `dresscode.neon`
+Next       `dresscode fix`        rewrites 1 file in place (`dresscode check --diff` shows the changes first); until then `check` reports them
+\--
+
+First, `init` finds the files of the project: what Git tracks, and without Git the paths of the autoload in `composer.json` together with the directories `src`, `tests`, `test`, `app`, `lib`, `bin`, `cron` and `www*` that really exist in the root. It leaves out test data (the directories `fixtures`, `Fixtures` and `expected`), files that a tool generated according to their header or to `linguist-generated` in `.gitattributes`, tests in the PHPT format, what Git ignores, and files that do not parse, because nobody writes any of these by hand. It writes every such file or directory into the `excludePaths` key with the reason, so that every later check leaves it out too; the `Excluded` line lists them. A file Git does not track yet but would add is not measured; the `not measured` line counts it all the same, because the first `fix` takes it too.
+
+Then it chooses the standard: it checks the code with each of them and takes the one under which a fix would change the fewest files, and the `Standard` line says so. It counts files, not decisions, because a difference the whole project has weighs more than a difference in a single place. When it is close, within a tenth, the standard named by the configuration of the project's formatter decides. The framework the project is built on does not: an application in Nette or Symfony need not follow their style. When the formatter names none, it takes `perCs` if it is among them, and in a terminal it asks whether you would rather have another of the close ones; if you pick one, it measures against that; outside a terminal, a `Your call` line instead of the question gives the command that measures against the other one. The `psr12` standard gives way to `perCs`, its successor, unless the formatter names it or a fix under `perCs` would change more than half again as many files: PSR-12 says nothing about the newer constructs of PHP, so code written to [PER Coding Style |https://www.php-fig.org/per/coding-style/] departs from it in fewer decisions. A project formatted by Laravel Pint gets the standard of its preset, and a standard given with the `--use` option is taken as it is. Sets given with more `--use` options are written after the standard, so `dresscode init --use nette --use modernizations` writes both names into the `use` key.
+
+Then it measures the decisions in which the code departs from the standard, each one alone and under each of its values. It measures the indentation, the line length and the line endings first, because everything else depends on them. A project of up to a thousand files and 8 MB is measured whole, a larger one over a sample shared evenly among its directories, so that a large directory does not crowd out the others; the `Sample` line says how many files each one gave. A value that at least 70% of the places agree with is written together with what it rests on (`your code, 92% of 13 files`). Where the code writes the same thing in several ways and none of them prevails, `init` writes `keep`, which means "do not check", with a `not checked:` comment and what it found in the code; the `Unchecked` line says how many such decisions there are.
+
+A directory whose files write the indentation or one of the `file.*` decisions differently from the rest of the project, in at least five files and nine tenths of them, gets a `Differs` line with the [override |configuration#Different Values for Part of the Project] that would keep its way there. Only you write it, though: `init` proposes one style for the whole project, and an override is your decision.
+
+/--pre .[terminal]
+Differs    tests: indentation.unit 4 spaces in all 6 files; an override for `tests` would keep it, none is written
+\--
+
+Finally, it checks the whole configuration over all files. The first `fix` after `init` should not rewrite half of the project, so there is a budget: it may change at most 1% of the files, at least 2 and at most 20; the `--budget` option sets another number. When the fixes together would change more files, `init` leaves some decisions unchecked until the rest fits the budget, and asks you about them, showing a place in the code each one concerns. The indentation, the line length and the line endings are never left unchecked, because the other decisions depend on them; `fix` corrects the files that write them differently from the rest of the project whatever the budget, and the `Checked` line counts them apart. Your answers do not count against the budget either. The findings that no rule fixes belong in the [baseline |suppressing#baseline]; the same line says how many there are.
+
+/--pre .[terminal]
+Standard   nette (the Nette Coding Standard), as given
+Measured   your code departs from it in 4 decisions over 13 files; nette as it is, with no decision below `use`, would rewrite 13 of them
+As written file.strictTypes.position: nextLine   your code, all 13 files
+Checked    all 13 files: a fix changes 1 file, 1 of them for the indentation, the line endings or the long lines the rest of the code has
+           1 more decision is left as your code has it, as the fixes together would change more than 2 files, the indentation, the line endings, the long lines and your answers aside (`--budget` raises the limit)
+
+Check `literals.quotes: single`? A fix rewrites 3 files, more than the budget allows.
+           e.g. src/Cart.php:18  A plain string must be written with single quotes.
+  [1] don't check it (recommended)
+  [2] single everywhere, a fix rewrites 3 files
+Your choice [1/2]
+\--
+
+You answer with the number in the square brackets. The recommended answer always comes first, as number 1, and Enter takes it; it leaves your code as you have it, so when you are not sure, you cannot spoil anything. The answers that change the code show how many files the fix would rewrite. When your answers change the configuration, `init` checks it again, so that the `Checked` line holds for what you chose too, and if the budget then leaves another decision unchecked, it asks about that one as well and says your answers brought it. The questions of one round are numbered, `(2/3)`, so you know how many are left.
+
+What does `init` ask about? About the decisions the budget left unchecked, and about the standard in a close call, as described above. It also asks about a value the configuration of the project's formatter contradicts, and about names that break the case the standard wants and share a prefix or a suffix, such as classes ending with an underscore; a pattern in [`naming.except` |decisions/naming#naming.except] can let them pass. It asks about at most five decisions, the costliest first.
+
+Whether to take the standard as it is, `init` does not ask; it says so on the `Measured` line: here `nette` would rewrite all 13 files, mostly because of a single decision: your code writes `declare(strict_types=1)` everywhere in another place than `nette` does. A difference like that is often the trace of a standard that has moved on since. If you want to move with it, delete the decision `file.strictTypes.position` from `dresscode.neon` and run `fix`; otherwise the value of your code that `init` wrote stays.
+
+Without a terminal, with the `--yes` option or with `--format json`, `init` asks nothing and takes the recommended answers, so it writes the same file Enter gives. It then prints each question on the `Your call` line as the line of `dresscode.neon` or the command that answers it otherwise:
+
+/--pre .[terminal]
+Your call  `literals.quotes: single` in `dresscode.neon` checks it too; its fix changes 3 files
+\--
+
+You can also give an answer in advance: `dresscode init --set literals.quotes=single` writes the value whatever the code says, and the budget never leaves it unchecked. The path and the value are checked against the catalogue before measuring starts, so you don't learn about a typo only after the measuring.
+
+With the `--dry-run` option, `init` prints the configuration below the report and writes nothing. `--jobs` limits how many processors the measuring shares, and `--jobs 1` measures in a single process. With `--format json`, it prints a single document for a tool or an AI agent instead of the text: the version of the format in `version`, the root of the project in `root`, the scope in `scope`, the sample in `sample`, the standard in `standard` with how many files a fix would change under each one, the values in `values` with their comments and origins, the directories of the `Differs` line as `regions`, the check over all files in `verification`, the `Your call` lines as `instructions`, the files a rule failed in as `failed`, the configuration in `configuration`, and the file it was written to in `written`; over a configuration that already exists, also what has moved since it in `shifts`.
+
+The written file shows next to every value what it rests on:
+
+```neon
+# made to measure by `dresscode init`; run it again to see what has moved since, it writes nothing over this file
+use: perCs   # PER Coding Style, of the standards the one a fix changes the fewest files of your code under
+
+paths: [src, tests]
+excludePaths:
+	- fixtures        # test data
+	- src/Generated   # generated
+
+# the namespaces of the scope declare no function and no constant, so an unqualified name in a namespace
+# is resolved for certain; one declared later is reported until it is listed
+nameResolution: certain
+
+indentation:
+	unit: tab                # your code, 92% of 13 files
+
+braces:
+	emptyBody:
+		function: expanded   # your code, all 26 places
+
+blankLines:
+	beforeDeclaration: 2     # your code, all 13 places
+```
+
+Besides the decisions, `init` also writes what the namespaces declare. Here it is not about the majority but about completeness, so it goes through all files, finds the functions and constants declared in namespaces, writes their lists into the `namespaces` key and adds `nameResolution: certain`. What these keys mean is described on the page [Functions and Constants in Namespaces |namespaces]. If it finds `phpstan/phpstan` among the installed packages, it also writes [`typeAnalysis: phpstan` |types#enable] with a comment on what the types give. `init` never writes the `fixRisky` key: permission for fixes that may change the behavior of the code cannot be measured from the code.
+
+If the project has PHP_CodeSniffer, PHP CS Fixer or Laravel Pint, `init` reads its configuration but never runs it without your consent. It picks the configuration the way [`migrate config` |migration#migrate-config] does, the one the project really runs, and asks in a terminal where that cannot be told. It takes the paths it checks, the files it leaves out, and the rules turned off only in part of the project, for which it writes an [override |configuration#Different Values for Part of the Project]. It compares the rules of the formatter with what the code holds to, and where they contradict each other, it asks which value to write. The configuration of PHP CS Fixer, however, is PHP: the paths of its Finder `init` reads from its code and says under the line `Formatter` what of them it could not read, but its rules can only be learned by running it, so in a terminal `init` first asks whether it may. To take another configuration than the one it picked, name it with the `--formatter` option; naming it is also your consent to read its rules, even when it is PHP. At the end it says where `dresscode check` can take the place of the formatter, whether it compared the rules of the formatter with the code or did not read them at all, and that `dresscode migrate config` translates them instead of measuring the code; either way, the rules of the formatter are not carried over into the written file. It also says how many phpcs suppression comments `dresscode migrate suppressions` rewrites.
+
+At most two commands are left, and `init` prints them itself: `dresscode fix` brings the files that depart from the written configuration in line, and `dresscode baseline` records the places that no rule fixes, so that `check` passes.
+
+Before it writes the file, `init` reads it back and checks that it gives the same values it measured. When a rule fails in a file, it leaves that file out of the measuring, names it in the head of the written file and ends with exit code 2, because the configuration then rests only on the rest of the code. It never overwrites a configuration that already exists, so over one it asks nothing and refuses `--set`; one it cannot read stops it with the reason before it measures anything. Instead it measures the project again against the standard that file names, over the files the configuration checks (it leaves out the files an override gives decisions of their own, and says so), and lists every decision it would write differently today, with how many files a fix under the value the file has would rewrite, and every decision the file sets apart from the standard while the code follows the standard; this is useful after updating DressCode or after a while of work on the project:
+
+/--pre .[terminal]
+Compared   the code with the standard and the decisions of `dresscode.neon`, over the files it checks
+Moved      nothing: `dresscode.neon` says what init measures
+
+`dresscode.neon` exists, so nothing is written; `dresscode check --set path=value` shows what a value would change.
+\--
+
+
+Output Formats
+==============
+
+The `--format` option chooses the whole shape of the output, not a detail of it; formats are not combined.
+
+`console` is the default for the terminal: a header with the configuration, the target PHP version and the scope of the check, then the individual files with their violations (status, line and column, message, decision path), and finally a summary. The header also names the [baseline |suppressing#baseline] the run uses. A file lists at most 20 violations and sums up the rest on one line by decision (`… and 3456 more: 3100 indentation.unit, 340 spacing.call, 16 others`), so that a file written in another style does not flood the terminal; the formats for tools list everything. A violation of a decision that the [`severity` |configuration#risky-fixes] key softened has the label `warning` instead of `error`. A risky fix the run was not allowed to make has the label `risky`; when types or `nameResolution` would decide it, the summary counts it as a warning, like the softened violations. For `check`, the summary also says how many violations would be left after `fix`:
+
+/--pre .[terminal]
+src/Cart.php
+  error      1  `declare(strict_types=1)` must be on the line of the opening tag.  file.strictTypes.position
+  error      3  Expected 1 blank line before the namespace, 2 found.               blankLines.beforeNamespace
+  error      6  Expected 2 blank lines before the class, 1 found.                  blankLines.beforeDeclaration
+  risky  14:10  The `in_array()` call must pass `$strict = true`.                  mistakes.strictArgument
+                Risky because a strict search no longer finds a value of another type.
+  error  20:10  A plain string must be written with single quotes.                 literals.quotes
+  error  20:47  A plain string must be written with single quotes.                 literals.quotes
+
+1 risky fix waits, the type is unknown: set `typeAnalysis: phpstan`. See https://dresscode.run/types#enable
+
+FOUND  5 violations, 1 warning, a fix leaves none in 1 file
+\--
+
+Above the summary, it counts the risky fixes waiting for permission, grouped by what would decide them, and gives each group advice with a link to the documentation: types (<code>''the type is unknown: set `typeAnalysis: phpstan`''</code>), names of functions in namespaces (`a name may reach a function of the namespace`), or your judgment, where the fix changes behavior by its nature (`changes what the code does`).
+
+When a violation appeared in the file only through the fix of another violation in the same run, the console prints it under the one it follows from, as a `Then also` line with its message and path; if it is on a different line, it says which one (`Then also, on line 7:`). The summary then says how many violations follow from others. In the other formats, it is a violation like any other, with a `derivedFrom` field.
+
+/--pre .[terminal]
+src/Box.php
+  error  6:11  Expected a line break before the opening brace.                braces.position.class
+  error  6:11  Expected a line break after the opening brace.                 braces.position.class
+  error  6:33  Expected a line break before the opening brace.                braces.position.function
+  error  6:33  Expected a line break after the opening brace.                 braces.position.function
+  error  6:36  Expected a line break before the method.                       file.statementsPerLine
+               Then also: Expected 2 blank lines before the method, 0 found.  blankLines.aroundMethods
+  error  6:68  Expected a line break before the opening brace.                braces.position.function
+  error  6:68  Expected a line break after the opening brace.                 braces.position.function
+  error  6:87  Expected a line break before the closing brace.                braces.position.function
+  error  6:89  Expected a line break before the closing brace.                braces.position.class
+
+FOUND  10 violations, 1 of them following from others, a fix leaves none in 1 file
+\--
+
+`fix` prints each file it rewrote with the note `rewritten`, and under it what the fixed text still violates, with lines and columns in the fixed file. The resulting text cannot show which violations the fix removed, so the summary counts the violations found and the ones remaining; `--diff` shows exactly what changed:
+
+/--pre .[terminal]
+src/Cart.php  rewritten
+  risky  13:10  The `in_array()` call must pass `$strict = true`.  mistakes.strictArgument
+                Risky because a strict search no longer finds a value of another type.
+
+1 risky fix waits, the type is unknown: set `typeAnalysis: phpstan`. See https://dresscode.run/types#enable
+
+FIXED  5 violations found, none remaining, 1 warning in 1 file
+\--
+
+Colors turn off by themselves as soon as the output does not go to a terminal. In a terminal, the decision path of each violation is a link to its description on this website.
+
+`github` is chosen automatically when the run is a step of GitHub Actions, except with `--stdin`, where only an explicit `--format` applies. Each violation is an annotation that shows up right in the diff of the pull request; for `fix`, these are the violations the fix left.
+
+`lines` is for Git hooks and editors: one line per finding in the form compilers write, `path:line:column: severity: message [decision]`, and for a risky fix the run did not make, with the risk after the decision. The column is missing where the finding has none, a line break in the message is a space, and the path is relative to the working directory, absolute outside it, always with forward slashes. For `fix`, these are the findings the fix left; a clean file and a rewritten file with nothing left print nothing. Warnings about the configuration go to standard error in all formats. The page [Editors and IDEs |editors#Findings in the Editor: the lines Format] shows how an editor reads the output.
+
+/--pre .[terminal]
+src/Cart.php:13:10: warning: The `in_array()` call must pass `$strict = true`. [mistakes.strictArgument; risk=typeUnknown]
+src/Order.php:16:3: error: The line is 144 characters long, more than 140. [file.longLines]
+\--
+
+`agent` is for an AI agent that has just edited the file: sentences instead of a table, for a rewritten file a diff of what is already in the file, naming removed imports, and for each remaining violation what to do about it. It leaves out warnings about the configuration. `check`, `fix`, `baseline` and `upgrade today` have it; `init`, `migrate` and the other `upgrade` commands give an agent the `json` format. The page [AI Agents |agents] shows an example and how to set it up.
+
+`checkstyle` is XML that Jenkins, the `cs2pr` tool and other CI tools understand; for `fix`, it contains, as with `github`, the violations the fix left.
+
+`json` is for your own tools, see [the next section |#Output for Tools: json].
+
+
+Output for Tools: json
+======================
+
+If you want to plug DressCode into your own tool, such as a code generator, a migration script or a service that checks code from a form, run it from the command line with `--format json` and read the result. The classes that put the run together are internal and may change in a minor version; the shape of this document will not.
+
+```shell
+dresscode check --format json src/Cart.php
+```
+
+```json
+{
+    "version": 1,
+    "mode": "check",
+    "root": "/var/www/shop",
+    "files": [
+        {
+            "path": "src/Cart.php",
+            "violations": [
+                {
+                    "decision": "mistakes.strictArgument",
+                    "message": "The `in_array()` call must pass `$strict = true`.",
+                    "line": 19,
+                    "column": 10,
+                    "severity": "warning",
+                    "fixable": true,
+                    "risk": "typeUnknown",
+                    "refused": true,
+                    "because": "a strict search no longer finds a value of another type",
+                    "fingerprint": "2f83e4aa829e87db",
+                    "derivedFrom": null
+                }
+            ],
+            "remaining": [
+                {
+                    "decision": "mistakes.strictArgument",
+                    "message": "The `in_array()` call must pass `$strict = true`.",
+                    "line": 19,
+                    "column": 10,
+                    "severity": "warning",
+                    "fixable": true,
+                    "risk": "typeUnknown",
+                    "refused": true,
+                    "because": "a strict search no longer finds a value of another type",
+                    "fingerprint": "2f83e4aa829e87db",
+                    "derivedFrom": null
+                }
+            ],
+            "warnings": [],
+            "syntaxError": null,
+            "failure": null,
+            "changed": false,
+            "written": false
+        }
+    ],
+    "summary": {
+        "files": 1,
+        "violations": 1,
+        "remaining": 1,
+        "refused": 1,
+        "changedFiles": 0,
+        "syntaxErrors": 0,
+        "failures": 0,
+        "baselined": 0,
+        "exitCode": 0
+    },
+    "warnings": []
+}
+```
+
+The header gives the version of the format in `version`, whether it was `check` or `fix` (`mode`), and the root of the project in `root`, which the file paths are relative to. The `files` array contains only files there is something to say about; clean files are not in it. Each file has:
+
+- `violations`: the violations found in the file as it was loaded;
+- `remaining`: the violations left after the fix, with lines and columns in the fixed text, that is, exactly what the next check of the fixed file will report;
+- `warnings`: warnings about the file, for example about a rule that broke its contract;
+- `syntaxError`: the file cannot be parsed, with the message in `message` and the line in `line`, otherwise `null`;
+- `failure`: a rule failed in the file or the rules did not agree, with the message in `message` and a link to the documentation in `docs`, otherwise `null`;
+- `changed`: the fix changes the text (for `check`, it would change it), and `written`: the file was written.
+
+A violation carries the decision path in `decision`, the message in `message`, the line in `line`, the column in `column` counted from 1, with a tab as one character (`null` for a violation in whitespace or in a comment, and for a token that only the fix wrote), the severity in `severity` (`error` or `warning`), `fixable`, whether a fix exists for the violation (`false` for a finding the rule only reports, and for a decision the project leaves only reported in `reportOnly`), and for a risky fix, `risk` with what would decide it: `typeUnknown` (the type of a value), `nameUncertain` (the name of a function in a namespace), or `behaviorChanges` (the fix changes behavior by its nature); otherwise `null`. `refused` says that the run did not make the risky fix because there was no permission for it, and `because` adds a sentence about what exactly can go wrong at that place, where the risk alone does not say it. `fingerprint` is the fingerprint under which the [baseline |suppressing#baseline] knows the violation, and `derivedFrom` the fingerprint of the violation whose fix this one follows from.
+
+`summary` sums up the run: the number of processed files in `files`, the violations found in `violations`, those remaining in `remaining`, the refused risky fixes in `refused`, the files the fix changes in `changedFiles`, the files with a syntax error in `syntaxErrors`, the files where a rule failed in `failures`, the violations the baseline silenced in `baselined`, and the exit code of the run in `exitCode`. At the end come the `warnings` about the whole run, for example about stale entries of the baseline.
+
+The keys of the structure are camelCase; the data (messages, paths) stays as the tool or you wrote it. Files are printed as they are processed, so even with a large project, you don't wait until the end for the output. Code that is not on disk can be checked or fixed through [standard input |#Standard Input].
+
+
+Exit Codes
+==========
+
+| code | meaning |
+|---|---|
+| `0` | done, and nothing is left; for `fix` also when the fixed text no longer violates anything; warnings do not change the exit code without the `--max-warnings` threshold |
+| `1` | done, but work is left for a person: violations, a file that cannot be parsed, more warnings than `--max-warnings` allows, a `baseline` refused over code that `fix` would still change, manual tasks of an upgrade, or what a migration did not carry over; for a run of the [upgrade plan |upgrade#Upgrade Step by Step] also a step its tests sent back, more findings of the check at the end of the plan, or a previous run interrupted in the middle of a step; for `upgrade abort`, a file it left as it is, or a failed `composer install` |
+| `2` | not complete, because something could not be processed: a rule threw an exception in a file, the rules got into a loop, or the file changed during the fix; an estimate, a plan, a run or the tasks of an upgrade missed a file, an estimate or a plan missed upgrade data or an answer from Composer; `init` measured without the files a rule failed in; the tests do not run even before the first step of `upgrade run`; Git refused a commit of `upgrade run --commit`; `migrate suppressions` met a name nothing covers, or skipped a file |
+| `3` | an error on the command line or in the configuration: an unknown option, key or value, a missing configuration |
+| `4` | a run of the upgrade plan waits for a step outside DressCode: for the versions in `composer.json` to be raised, also when Composer did not finish raising them, or at a manual step until the lock lets the target version in; DressCode running inside another program also after a raise of the versions, after which `upgrade run` has to be run again |
+
+This scale holds for every command. The queries that change no code, `upgrade estimate` and `upgrade plan`, end with `0` even when they find a lot of work, because that work is their answer, and with `2` when they could not look at everything; `upgrade status` always ends with `0`.
+
+The failure of one file does not stop the run: the file is reported as failed, nothing is written into it, and the run goes on with the other files. A risky fix that waits for permission and changes the behavior of the code by its nature is a violation like any other, and it keeps the exit code at `1` until someone makes it or writes it into the baseline; one that types or `nameResolution` would decide is a warning.
+
+
+Cache and Parallel Runs
+=======================
+
+DressCode remembers every file that passed clean: its path and a fingerprint of its content, and with them a fingerprint of the configuration that applies to it (including the overrides for its path), of the target PHP version, of the baseline and of the versions of the installed packages. The path is in the key because the same content in two files may get two verdicts, for example because of an override. Next time, a file with the same path, content and configuration is skipped; as soon as any of these things changes, it is processed again. The counts in the summary and the warnings about stale entries of the baseline come out the same with the cache as without it. DressCode remembers content written by `fix` only in a project without a baseline. The cache lives in the system temporary directory, or where `cacheDir` in the configuration points; `--no-cache` bypasses it for one run.
+
+Files the cache does not cover are split among worker processes. The default number matches the number of CPUs, but at most one process per four files, because starting a process has a cost. `--jobs 1` runs without worker processes, which helps when debugging your own rule, and `--jobs 8` pays off on a machine with many cores, where the default estimate would be needlessly low. `baseline` uses worker processes too, so generating it takes no longer than a check.
+
+
+Standard Input
+==============
+
+`--stdin` is the interface for hooks, editors and other tools: the content comes on standard input, and the path says what applies to it (the overrides are matched against this path). `check --stdin` gives a report in any format. `fix --stdin` is a formatter: it prints the whole fixed code to standard output and nothing else, ends with code 0 even when something remains in the code, and refuses the report options (`--format`, `--diff`, `--max-warnings`, `--ask-risky`); [the page about editors |editors#A Formatter over Standard Input] describes what it does on a syntax error and on a failure.
+
+```shell
+git show :src/Cart.php | dresscode check --stdin src/Cart.php -f lines
+cat src/Cart.php | dresscode fix --stdin src/Cart.php > fixed.php
+```
+
+You cannot combine `--stdin` with paths to other files. The cache is not used for standard input. The `excludePaths` key is not evaluated: the code is checked even when the path lies in an excluded part of the project; with `--skip-excluded`, `fix --stdin` returns the code unchanged for such a path, and `check --stdin` reports nothing.
+
+
+Your Own Command
+================
+
+If you package DressCode into your own tool with its own binary, run the whole command line, the `DressCode\Console\Application` class, inside your process, and give it the configuration that applies when the project has none of its own:
+
+```php
+use DressCode\Config;
+use DressCode\Console\Application;
+
+$application = new Application(script: __FILE__, defaultConfig: new Config(use: ['nette'], paths: ['src', 'tests']));
+exit($application->run($argv));
+```
+
+`script` is your binary: it starts the parallel worker processes and an upgrade run going on in a new process, so that they have the same default configuration. Everything else, that is, the commands, options, formats and parallel runs, stays the same as with `dresscode`, and `run()` returns the same exit codes. It prints the errors that belong to the run to standard error itself: a wrong call and a bad configuration with exit code `3`, a rule failure, rules in a loop, and environment errors of the `RuntimeException` type, for example a file that cannot be written or a crashed worker process, with exit code `2`. Other exceptions, for example `LogicException` or `Error`, mean a bug in the program, and `run()` lets them propagate.

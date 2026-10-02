@@ -1,0 +1,306 @@
+Chyby
+*****
+
+.[perex]
+Sekce `mistakes` rozhoduje o tom, co je nejspíš chyba, ať je styl jakýkoli: `$this` ve statické metodě, `catch`, ke kterému se nikdy nedojde, volné hledání v `in_array()`, operátor `@`, neviditelný znak v kódu, dva dokumentační komentáře nad sebou, z nichž reflexe vidí jen jeden, příkaz `global` a zapomenutý ladicí výpis.
+
+Většinu těchhle nálezů opravit nejde, protože co měl autor na mysli, z kódu vidět není: DressCode je ohlásí a nechá na vás. Kde oprava jde, bývá riziková (risky fix). Doplnit do `in_array()` argument `true` je bezpečné, jen když se hledají hodnoty jednoho typu; s [typy z PHPStanu |/types] to DressCode pozná a opraví sám, jinde čeká na váš souhlas.
+
+```neon
+mistakes:
+	thisOutsideObject: forbidden
+	unreachableCatch: forbidden
+	strictArgument: required
+	errorSuppression: forbidden
+```
+
+```php .[before]
+class Mailer
+{
+	public static function create(): static
+	{
+		$this->connect();  // The `$this` stands in a static context, which has no object.
+		return new static;
+	}
+
+	public function send(array $to): void
+	{
+		try {
+			$this->transport->send($to);
+		} catch (\Throwable $e) {
+			throw $e;
+		} catch (\RuntimeException $e) {  // Unreachable catch block, because a previous one catches `Throwable`.
+			$this->log($e);
+		}
+		$found = in_array('admin', $to);  // The `in_array()` call must pass `$strict = true`.
+		$data = @file_get_contents($this->path);  // The `@` operator must not be used.
+	}
+}
+```
+
+Projekt, který operátor `@` u některých volání používá záměrně, to může říct komentářem a klíčem [`suppressionComments` |/suppressing#Potlačení na řádku]; standard `nette` takový vzor nese.
+
+Dvě rozhodnutí sekce chybu nehledají, ale dopíší záruku, kterou kód zatím jen mlčky dodržuje: `mistakes.readonlyProperty` dá `readonly` vlastnosti, kterou zapisuje jen konstruktor, a skupina `mistakes.neverReturnType` návratový typ `never` funkci, metodě nebo closure, která vždy vyhodí výjimku nebo skončí. Jakmile záruku zná PHP, skončí chybou každý pozdější zápis do takové vlastnosti i každý návrat z takové funkce. Sada `types` zapíná `mistakes.neverReturnType.function` a `mistakes.neverReturnType.method`; `mistakes.readonlyProperty` a `never` u closure žádná sada nenese a projekt je zapne sám.
+
+
+mistakes.finalParent
+====================
+
+A class extending a final one, which is only reported.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · jen s typy · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.__debugInfoReturningNull
+=================================
+
+The `null` that `__debugInfo()` returns, which becomes `[]`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.thisOutsideObject
+==========================
+
+`$this` in a static method, a static closure or a function outside a class, which is only reported.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · pokrývá `Squiz.Scope.StaticThisUsage` .[decision-facts]
+
+
+mistakes.unimplementedAbstractMethod
+====================================
+
+An inherited abstract method a class that is not abstract leaves unimplemented, typically after a library added it, which is only reported.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · jen s typy · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.readonlyProperty
+=========================
+
+A property written only in the constructor, or not at all.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · PHP 8.1 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.__serialize
+====================
+
+`__serialize()` and `__unserialize()` in a class implementing `Serializable`, whose absence is only reported.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.staticSetState
+=======================
+
+`__set_state()` declared static, as PHP calls it.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.continueInSwitch
+=========================
+
+A `continue` that only leaves a `switch`, where `break` is meant, which is only reported.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `forbidden`, laravel `keep` · pokrývá `switch_continue_to_break`, `SlevomatCodingStandard.ControlStructures.DisallowContinueWithoutIntegerOperandInSwitch` .[decision-facts]
+
+
+mistakes.unreachableCatch
+=========================
+
+A `catch` after one catching `Throwable` or a class it catches, which is only reported.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · pokrývá `SlevomatCodingStandard.Exceptions.DeadCatch` .[decision-facts]
+
+
+mistakes.exceptionWhereThrowableBelongs
+=======================================
+
+`catch (Exception)` and a parameter of the type `Exception` where `Throwable` is meant, which is only reported.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · pokrývá `SlevomatCodingStandard.Exceptions.ReferenceThrowableOnly` .[decision-facts]
+
+
+mistakes.errorSuppression
+=========================
+
+The `@` operator, which silences errors and is only reported.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.looseNumberComparison
+==============================
+
+`0 == 'a'`, a number compared loosely with a string that is no number, whose answer PHP 8.0 turned around, which is only reported.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · jen s typy · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.invisibleCharacter
+===========================
+
+Non-breaking, zero-width and bidi characters, replaced in comments and escaped in strings, which changes their text, and reported in names.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · pokrývá `non_printable_character` .[decision-facts]
+
+
+mistakes.debugOutput
+====================
+
+A statement calling a debugging function to print, changed into a comment, `// var_dump($a);`; a call that may return its output instead, `print_r($a, true)`, stays.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` · pokrývá `PhpCsFixerCustomFixers/commented_out_function`, `Squiz.PHP.DiscouragedFunctions` .[decision-facts]
+
+
+mistakes.debugOutputFunctions
+=============================
+
+The debugging functions whose calls print.
+
+- seznam jmen
+
+Výchozí `[print_r, var_dump, var_export]` · standardy: perCs `[print_r, var_dump, var_export]`, psr12 `[print_r, var_dump, var_export]`, nette `[print_r, var_dump, var_export]`, symfony `[print_r, var_dump, var_export]`, laravel `[print_r, var_dump, var_export]` · pokrývá `PhpCsFixerCustomFixers/commented_out_function` .[decision-facts]
+
+
+mistakes.countOfUncountable
+===========================
+
+`count($value)` of what is neither an array nor `Countable`, a `TypeError` since PHP 8.0, which is only reported.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · jen s typy · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.strictArgument
+=======================
+
+`in_array()`, `array_search()`, `array_keys()`, `base64_decode()`, `mb_detect_encoding()` pass `strict: true`; an explicit `false` is reported.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` · pokrývá `strict_param`, `SlevomatCodingStandard.Functions.StrictCall` .[decision-facts]
+
+
+mistakes.trailingWhitespaceInString
+===================================
+
+At the end of the lines of a multi-line string or inline HTML, which changes their value.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · pokrývá `no_trailing_whitespace_in_string` .[decision-facts]
+
+
+mistakes.consecutivePhpdocs
+===========================
+
+A doc comment followed by another one, the first lost to reflection, which is only reported.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.neverReturnType.function
+=================================
+
+The return type `never` of PHP 8.1 on a function that always throws or exits.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · PHP 8.1 · standardy: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.neverReturnType.method
+===============================
+
+The return type `never` on a method that always throws or exits, only where no descendant can declare it again.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · PHP 8.1 · standardy: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.neverReturnType.anonymousFunction
+==========================================
+
+The return type `never` on a closure that always throws or exits, though its signature usually belongs to the call it is passed to.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · PHP 8.1 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.globalStatement
+========================
+
+The `global` statement, which is only reported.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · pokrývá `Squiz.PHP.GlobalKeyword` .[decision-facts]
+
+
+mistakes.repeatedAssignment
+===========================
+
+A variable assigned twice in one expression, `$a = $a = 1`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · pokrývá `SlevomatCodingStandard.Variables.DuplicateAssignmentToVariable` .[decision-facts]

@@ -1,0 +1,224 @@
+How Upgrading Libraries Works
+*****************************
+
+{{description: When a library renames a class, constant, method or parameter, DressCode rewrites your PHP code for you. Upgrade packages for each ecosystem carry the data on what changed in which version.}}
+
+.[perex]
+When a library renames a class, a constant, a method or a parameter, DressCode rewrites your code for you, and it reports what cannot be rewritten, together with what to write instead. The data about what changed in which version of a library comes in upgrade packages, one for each ecosystem. This page explains how DressCode knows what to rewrite and how to turn it on in the everyday check; [Upgrading Code |upgrade] describes the upgrade procedure itself.
+
+
+What It Looks Like
+==================
+
+These lines of a presenter are written for Nette 3.0. The project now uses the current versions and has the package `dresscode/upgrade-nette` installed:
+
+```php .[before]
+$this->invalidateControl('list');
+$form->addText('title')->addRule(Form::MAX_LENGTH, null, 100);
+$form->addUpload('photos', 'Fotky', true);
+$values = $form->getValues(true);
+$page = $this->getParameter('page', 1);
+$json = Json::encode($values, Json::PRETTY);
+```
+
+After one `dresscode upgrade today`:
+
+```php .[after]
+$this->redrawControl('list');
+$form->addText('title')->addRule(Form::MaxLength, null, 100);
+$form->addMultiUpload('photos', 'Fotky');
+$values = $form->getValues('array');
+$page = $this->getParameter('page') ?? 1;
+$json = Json::encode($values, pretty: true);
+```
+
+Six changes from three libraries, and none of them is a plain find and replace: `addUpload()` with the flag for multiple files is a different method, the default value of the parameter moved after `??`, and the flag `Json::PRETTY` is now a named argument. DressCode also recognizes that `$form` is a form and `$this` a presenter, even for a method inherited from a parent class, because it asks about [types from PHPStan |types]. In the same way, it rewrites the annotation `@persistent` to the attribute `#[Persistent]`, import included.
+
+
+How DressCode Knows What Has Changed
+====================================
+
+What each version of a library renamed, moved or removed is written in NEON files, one per library. They are carried by an **upgrade package** for a whole ecosystem, for example `dresscode/upgrade-nette` for all Nette libraries, and a library can also carry them itself. This is a piece of the file for `nette/forms`:
+
+```neon
+package: nette/forms
+
+since 3.1.11:
+	replacedMembers:
+		Nette\Forms\Form::FILLED: Filled
+		Nette\Forms\Form::MAX_LENGTH: MaxLength
+
+since 3.1:
+	replacedClasses:
+		Nette\Forms\IControl: Nette\Forms\Control
+
+since 3.0:
+	replacedCalls:
+		'Nette\Forms\Container::addUpload($name, $label, true)': 'addMultiUpload($name, $label)'
+```
+
+Each `since` section says what that version of the library brought. A section rewrites code only when the lowest version allowed by the project's constraint in `composer.json` reaches it, not the version installed right now, because code written for a newer version would break wherever the constraint lets in an older one. A section of a higher version the constraint also allows is only reported, see [Lower Bounds Decide |upgrade#Lower Bounds Decide]. For a library the project requires without a lower bound, or does not require at all and got only as a dependency of something else, everything is reported and nothing is rewritten, because it can be in any version. A library that another package replaces with its own version in the key `replace`, for example `illuminate/support` in `laravel/framework`, is judged by the version of that package. You set nothing: DressCode finds the files by itself, whether the package is in the project's vendor or next to DressCode, because the package announces their directory in its `composer.json`.
+
+Where there is no data, the code of the library itself helps. A well-maintained library does not delete old API overnight; it first marks it with an annotation, for example `@deprecated use Form::Filled`. With types from PHPStan, DressCode reads this and rewrites the code through the decisions `upgrading.declarations.deprecatedMember` and `deprecatedClass`, even a static call into another class, for example `Text::check($s)` to `Encoding::isValid($s)`. But an annotation helps only until the library really deletes the old API, and a project that skips a major version finds no annotation in vendor, only a missing class. The data in an upgrade package stays even after the deletion, and where it exists, it takes precedence. An annotation also speaks only for the installed version, so DressCode does not use it for a library installed in a higher version than the lowest one the constraint allows; `composer update --prefer-lowest` puts the lowest versions into vendor.
+
+The data describes how a class is used, not how it is implemented, so it neither rewrites nor reports the code of the class itself. A child class, though, is a user like any other and gets upgraded.
+
+
+Packages for Ecosystems
+=======================
+
+| ecosystem | package | what it carries |
+|---|---|---|
+| [Nette |upgrading-nette] | `dresscode/upgrade-nette` | all Nette libraries, most of them from version 3.0, over 900 items |
+| [Symfony |upgrading-symfony] | `dresscode/upgrade-symfony` | fifty Symfony components and bridges from version 6.0, over 650 items |
+| [Laravel |upgrading-laravel] | `dresscode/upgrade-laravel` | the Laravel framework from version 6, and the attributes of Laravel 13 |
+| [Dibi and Texy |upgrading-deegee] | `dresscode/upgrade-deegee` | Dibi from 4.1, Texy from 3.0 |
+
+Install the package into the project as a development dependency, or let `dresscode upgrade today` [install it by itself |upgrade#Missing Data] next to DressCode. The data is just data, so it is not tied in any way to the libraries it describes:
+
+```shell
+composer require --dev dresscode/upgrade-nette
+```
+
+The page [Replacement Maps |upgrading-data#A Package for Upgrading an Ecosystem] describes how to write such a package for another ecosystem.
+
+
+Enabling It in the Configuration
+================================
+
+The command `dresscode upgrade today` turns everything on by itself. If you want every `check` and `fix` to catch the old API too, for example in continuous integration, say so in the configuration. The data of packages applies only when the project says `upgrading.packages: yes`, and the [sets |configuration#Standards and Sets] `deprecations` and `modernizations` both do that; a project that does not want the data of packages writes `upgrading.packages: no`. Most rewrites need [types from PHPStan |types], because without them DressCode cannot tell which class the called method belongs to. So the configuration also gives the key `typeAnalysis`:
+
+```neon
+typeAnalysis: phpstan
+
+use:
+	- perCs           # your standard
+	- deprecations
+	- upgrade-nette
+```
+
+The name of the package in `use` lets in its plugin, that is, the rules the package carries beside the data, such as the conversion of the flag `Json::PRETTY` to a named argument. A package of the vendor `dresscode` is written short here, like the built-in sets: `upgrade-nette` is the same as `dresscode/upgrade-nette`. The data itself applies even without the name in `use`.
+
+The data goes into the maps of the section [`upgrading` |decisions/upgrading], and the set `deprecations` also turns on the decisions that work without data, with the code of the installed version:
+
+| decision | what it does | types |
+|---|---|---|
+| `upgrading.api.replacedClasses` | rewrites a class, interface or enum to another one | no |
+| `upgrading.api.replacedFunctions` | rewrites a function call to another function | no |
+| `upgrading.api.replacedMembers` | rewrites a constant, method or property that has a different name and is used the same way | yes |
+| `upgrading.api.replacedCalls` | rewrites a call that is written differently: a different shape of arguments, a renamed parameter, a getter instead of a property | yes |
+| `upgrading.api.attributeForAnnotation` | replaces an annotation with an attribute | no |
+| `upgrading.api.attributeForMember` | replaces the property, method or interface by which the library used to find the class with an attribute on the class | no |
+| `upgrading.api.forbiddenClasses`, `forbiddenFunctions`, `forbiddenConstants`, `forbiddenMembers` | reports what has no replacement or needs a human to write it, together with what to do | only `forbiddenMembers` |
+| `upgrading.declarations.deprecatedClass`, `deprecatedMember` | rewrites what the library marked `@deprecated` and the data does not know | yes |
+| `classes.overridingMethod.signature` | adapts a method of a child class to the signature the new version of the parent prescribes for it | yes |
+| `mistakes.finalParent`, `mistakes.unimplementedAbstractMethod` | reports a child of a class that became `final`, and an abstract method the new version added and the child does not have | yes |
+
+Without types, the decisions that need them are quietly skipped, so you can turn the set on even without PHPStan; then only classes, functions and annotations are fixed. Either of the sets `deprecations` and `modernizations` turns on the data of packages, so they also bring the new forms the data offers, such as the attributes of Laravel 13.
+
+The decisions of the rules a package brings are in a section named after its plugin. A plugin brings code that runs on every check, so for `check` and `fix` it is loaded only once the project writes the name of the package into `use`; without it, the run points out once that it skipped the rules of the package. The map `nette.flagsAsNamedArguments`, which replaces flags joined with `|` by named arguments, gets data the same way as the maps of the engine. The other decisions of a plugin are turned on by the files of the package themselves, starting with the library version for which the rewrite is correct: `nette.linkArguments` from `nette/application` 3.3 and `nette.monitorCallbacks` from `nette/component-model` 3.0 in `dresscode/upgrade-nette`, `laravel.castsMethod` from Laravel 11 and `laravel.scopeAttribute` from 12.4 in `dresscode/upgrade-laravel`. The pages [Nette |upgrading-nette] and [Laravel |upgrading-laravel] describe what they do.
+
+
+One Version at a Time, or All at Once
+=====================================
+
+Upgrade the code one major version at a time: raise the lower bound in `composer.json`, install it with `composer update --prefer-lowest` and run `dresscode upgrade today`, as described in [Upgrading Code |upgrade#One Major Version at a Time, by Hand]. In each step, the data thus meets the very version of the library it describes. The data fixes what the newly required version renamed or deleted. The new classes and attributes the data writes into your code are already in vendor, so DressCode verifies with types from PHPStan that they exist. And the `@deprecated` annotations in the installed code reveal what will disappear in the next version: the decisions `upgrading.declarations.deprecatedMember` and `deprecatedClass` rewrite the code right away, or at least show where you will need to change it.
+
+You can also upgrade an application written for very old versions all at once: raise the constraints straight to the current versions, install them and run `dresscode upgrade today` just once. The data survives deletions, so even calls of methods the current version no longer has get fixed. But you lose the annotations of the skipped versions, and where there is no data, you get no fix, just an error that only PHPStan will find.
+
+You can also rewrite the code before you update the library. The key `targets`, which otherwise sets the target PHP version, also says which version of a package the code should be written for, and it takes precedence over `composer.json`:
+
+```neon
+targets:
+	nette/application: '3.2'
+	nette/forms: '3.2'
+```
+
+The code is then fixed to the API of version 3.2, while vendor still holds the older one. But DressCode only reports a class or attribute the older version does not have yet, because it does not rewrite code to a class the project does not know. The next `dresscode upgrade today` fixes these findings, once you raise the constraint and install the new version. Write the version in quotes. Otherwise NEON would read it as a number, and `3.10` would become `3.1`; that is why DressCode rejects a version without quotes with the message <code>''The version of package `nette/forms` must be in quotes, because NEON reads a bare `3.10` as the number `3.1`.''</code>
+
+`dresscode config` reveals what the data is preparing for the project. For each package, `php` among them, it gives the version it starts from, the data file, and the versions the data would lead to after raising the lower bound; a version the constraint already allows, whose changes are therefore only reported, carries `(reported)`:
+
+/--pre .[terminal]
+Packages   21 with upgrading data
+      nette/forms 3.2                 upgrading/forms.neon of dresscode/upgrade-nette, upgrading further to 3.2.3 (reported), 3.2.9 (reported), 3.3 (reported)
+      php 8.2                         php.neon of php, upgrading further to 8.3 (reported), 8.4 (reported), 8.5 (reported), 8.6 (reported)
+\--
+
+And for each item of a map, it gives the file and the package the item comes from.
+
+
+What to Watch Out For
+---------------------
+
+DressCode expects that the old member may no longer be in vendor. The decisions recognize a call by the type of what it is called on, and they do not need the declaration of the old member. But there are two things they cannot reach after an update.
+
+**A child of a deleted class.** When a library deletes a class that a class of your project extends, PHPStan does not know the parents of the child. The call `$gone->old()` on a variable of the type of the deleted class gets fixed, but `$this->old()` inside the child does not, because DressCode cannot tell that it is a member of the deleted parent. So upgrade a project with such a class through the key `targets` before `composer update`, while the old version is still installed, and `dresscode upgrade today` finishes the rest after the update.
+
+**A change of value.** The data fixes how code is written, not what it means. When the property `originalLine` gets the new name `line` and holds `-1` instead of `null`, the data rewrites the name, but the condition `$token->line === null` stays and is never true again. So after the upgrade, run PHPStan and your tests; they will find such places.
+
+
+What Gets Fixed and What Is Only Reported
+=========================================
+
+A fix by the data is not a risky fix, because it changes exactly what the author of the data wrote down. The exception is an expression that is evaluated differently after the rewrite than before: an argument that is now evaluated only sometimes (after `??`, `&&` or `?->`), not at all, or in a different order; and reading a property that the data replaces with another expression on the left of `??`, where PHP first asks whether the property is set. A fix of a call of an unqualified global function inside a namespace is risky too, because the namespace could declare a function of the same name. Such fixes wait for your permission: the key `fixRisky` (`upgrading.api.replacedCalls` and others), the option `--fix-risky` or `--ask-risky`. Until then, they are reported with the reason. An expression that would be evaluated twice after the rewrite is not fixed at all.
+
+What the data forbids (`upgrading.api.forbiddenClasses`, `forbiddenMembers`, `forbiddenFunctions`, `forbiddenConstants`) is only reported, because there is either no replacement, or it is of a different kind and a human must write it. The message ends with a sentence saying what to do:
+
+```
+Method `Nette\Http\Request::getReferer()` is forbidden: use `getOrigin()`, which reads the Origin header and gives only the scheme, the host and the port instead of the whole URL of the referring page.
+```
+
+And where the data offers a fix that cannot be made at this place in the code, for example because the fix would throw away the expression the method was called on, or because a comment stands between the arguments, the finding is reported with the reason and the code stays as it was.
+
+
+Your Own Renames in a Project
+=============================
+
+You can do for your own code what the upgrade packages do for libraries. Did you rename a class that half the project uses, or move a global function into a namespace? Write a map of what to replace with what into the configuration, and DressCode rewrites every occurrence:
+
+```neon
+upgrading:
+	api:
+		replacedClasses:
+			App\Model\Customer: App\Model\Client
+		replacedFunctions:
+			formatPrice: App\Utils\formatPrice
+```
+
+```php .[before]
+use App\Model\Customer;  // Class `App\Model\Customer` is replaced by `App\Model\Client`.
+
+
+final class OrderMailer
+{
+	public function describe(Customer $customer, float $total): string  // Class `App\Model\Customer` is replaced by `App\Model\Client`.
+	{
+		return $customer->getName() . ': ' . \formatPrice($total);  // Function `formatPrice()` is replaced by `App\Utils\formatPrice()`.
+	}
+}
+```
+
+```php .[after]
+use App\Model\Client;
+
+
+final class OrderMailer
+{
+	public function describe(Client $customer, float $total): string
+	{
+		return $customer->getName() . ': ' . \App\Utils\formatPrice($total);
+	}
+}
+```
+
+The class is rewritten wherever it appears: in an import, in a type, after `new`, in static access and in an attribute, even in a file without a namespace, such as tests. A map the project writes always applies, regardless of the sets; the data of packages is a layer beneath it, and the project revokes an item of that data with the value `keep`. The page [Replacement Maps |upgrading-data] describes how the other maps are written: keys with the shape of arguments, and values as a PHP expression.
+
+
+Where to Go Next
+================
+
+- [Upgrading code |upgrade], the upgrade procedure from the first command to checking the code in continuous integration.
+- [Nette libraries |upgrading-nette], [Symfony |upgrading-symfony], [Laravel |upgrading-laravel] and [Dibi and Texy |upgrading-deegee], what their packages cover.
+- [Replacement maps |upgrading-data], how the data is written, for a project and for library authors.
+- [Types from PHPStan |types], without which constants, methods and calls are not rewritten.
+- [Upgrading to a newer PHP |upgrading-php], when you raise the PHP version along with the libraries.

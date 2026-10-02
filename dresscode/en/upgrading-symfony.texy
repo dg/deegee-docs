@@ -1,0 +1,159 @@
+Upgrading Symfony
+*****************
+
+{{description: Upgrade Symfony automatically: dresscode/upgrade-symfony carries the migrations of Symfony components from 6.0 to today, over 650 renames, moves, changed calls and annotations that DressCode rewrites or reports.}}
+
+.[perex]
+The package `dresscode/upgrade-symfony` carries the migrations of fifty Symfony components and bridges from version 6.0 to the current one. It holds over 650 items: renamed classes and methods, `MASTER_REQUEST` constants renamed to `MAIN_REQUEST`, SensioFrameworkExtraBundle annotations converted to attributes of the framework, the default name of a command turned into the attribute `#[AsCommand]`. DressCode fixes roughly 440 of them right away and reports the rest, together with what to write instead.
+
+
+Installation
+============
+
+```shell
+composer require --dev dresscode/upgrade-symfony phpstan/phpstan
+vendor/bin/dresscode upgrade today
+```
+
+That is all an upgrade needs: `upgrade today` takes the data of the package and its rules by itself, with no configuration, and leaves the style of the code as it is. [Upgrading Code |upgrade] describes the procedure, one major version at a time, and what to do with what is left.
+
+If you want every check to catch the old API too, add three things to the configuration: the types, the set `deprecations`, and the name of the package, which lets in its rules from the section `symfony`, as described in [How Upgrading Libraries Works |upgrading-libraries#Enabling It in the Configuration]:
+
+```neon
+typeAnalysis: phpstan
+
+use:
+	- symfony         # your standard
+	- deprecations
+	- upgrade-symfony
+```
+
+The data itself turns on two decisions in the section `symfony`, `symfony.isGrantedAttribute` from `symfony/security-http` 6.2 and `symfony.valueResolver` from `symfony/http-kernel` 6.2, so you do not have to write them into the configuration, and `upgrade today` runs them too. If you do not want one of them, turn it off in the section `symfony` with the value `keep`. The data of each component applies only when the project has that component, and only for the versions the project reaches. A project that requires the whole `symfony/symfony` has all the components that package replaces, in the version of `symfony/symfony`.
+
+
+What Gets Fixed
+===============
+
+This is a command and a controller written for Symfony 5.4, in a project that now uses the current versions:
+
+```php .[before]
+class ReportCommand extends Command
+{
+	protected static $defaultName = 'app:report';  // Property `Symfony\Component\Console\Command\Command::$defaultName` is replaced by the attribute `#[Symfony\Component\Console\Attribute\AsCommand]`.
+	protected static $defaultDescription = 'Sends the daily report';  // Property `Symfony\Component\Console\Command\Command::$defaultDescription` is replaced by the attribute `#[Symfony\Component\Console\Attribute\AsCommand]`.
+
+
+	protected function execute(InputInterface $input, OutputInterface $output): int
+	{
+		$request = $this->requestStack->getMasterRequest();  // Method `Symfony\Component\HttpFoundation\RequestStack::getMasterRequest()` is replaced by `RequestStack::getMainRequest()`.
+		$output->writeln($request->get('day'));  // Method `Symfony\Component\HttpFoundation\Request::get()` is forbidden: read the bag the value comes from, the `attributes`, `query` or `request` property, such as `query->get()`.
+		return Command::SUCCESS;
+	}
+}
+
+
+class ReportController extends AbstractController
+{
+	/** @Security("is_granted('ROLE_ADMIN')") */  // Annotation `@Security` is replaced by the attribute `#[Symfony\Component\Security\Http\Attribute\IsGranted]`.
+	public function show(): Response
+	{
+		return new Response($this->getUser()->getUsername());  // Method `Symfony\Component\Security\Core\User\UserInterface::getUsername()` is replaced by `getUserIdentifier()`.
+	}
+}
+```
+
+After `dresscode upgrade today`:
+
+```php .[after]
+#[AsCommand(name: 'app:report', description: 'Sends the daily report')]
+class ReportCommand extends Command
+{
+	protected function execute(InputInterface $input, OutputInterface $output): int
+	{
+		$request = $this->requestStack->getMainRequest();
+		$output->writeln($request->get('day'));
+		return Command::SUCCESS;
+	}
+}
+
+
+class ReportController extends AbstractController
+{
+	#[IsGranted('ROLE_ADMIN')]
+	public function show(): Response
+	{
+		return new Response($this->getUser()->getUserIdentifier());
+	}
+}
+```
+
+The two static properties merged into one attribute, and the expression of the annotation `@Security` became the role of the attribute `#[IsGranted]`, both with their imports. The call `$request->get()` stayed: `Request::get()` looks for the value in the attributes, in the query and in the body of the request, and you have to decide which of them your code reads it from.
+
+What the package fixes:
+
+- **renamed classes and interfaces**: `Symfony\Component\Security\Core\Security` to `Symfony\Bundle\SecurityBundle\Security`, `TaggedIterator` to `AutowireIterator`, the Sendinblue bridge to Brevo and others; the import, the type, `new`, `instanceof` and the attribute are all rewritten,
+- **renamed members**: `getMasterRequest()` to `getMainRequest()`, `HttpKernelInterface::MASTER_REQUEST` to `MAIN_REQUEST`, `getUsername()` to `getUserIdentifier()`, `Application::add()` to `addCommand()`,
+- **calls of a different shape**: a parameter that got a different name (`new UriSigner($secret, parameter: ...)` to `hashParameter:`), a key of an options array renamed in place (`mirror()` with `copy_on_windows` to `follow_symlinks`), the container configuration function `ref()` to `service()`,
+- **SensioFrameworkExtraBundle annotations** to attributes of the framework: `@Route`, `@Cache`, `@IsGranted` and `@Template`, and `@Security`, whose expression only calls `is_granted()`, to `#[IsGranted]`; routing and serializer annotations from the namespace `Annotation` to attributes from `Attribute`; validator constraint annotations and `@UniqueEntity` to the attributes of the same name, except `@ExpressionLanguageSyntax`, which becomes `#[ExpressionSyntax]`; and `@required` to `#[Required]`,
+- **a class member to an attribute**: `$defaultName` and `$defaultDescription` of a command, and an overridden `getDefaultName()` too, to `#[AsCommand]`, and the interface `MessageHandlerInterface` to `#[AsMessageHandler]`,
+- **a controller argument resolver** written against `ArgumentValueResolverInterface` to `ValueResolverInterface`: its `supports()` becomes a condition at the start of `resolve()`,
+- **signatures** of child classes of framework classes: the return types and parameters a component added (`execute(): int` of a command); the decision `classes.overridingMethod.signature` writes them from the declarations of the installed version, without data. Adding a return type is a risky fix, because the body of the method may return something else, and it is made only with `--fix-risky`, after your consent in `--ask-risky`, or with the decision in the key [`fixRisky` |configuration#risky-fixes].
+
+The annotation `@Security`, also in the form of the attribute `#[Security]` of the same bundle, and the resolver are rewritten by the decisions `symfony.isGrantedAttribute` and `symfony.valueResolver`, whose rules the package brings. The rules of the DressCode engine do the rest, following the data; the signatures need no data at all.
+
+
+What Is Left to You
+===================
+
+Where there is no replacement, or the replacement is used differently, DressCode reports the place and says what to write. For example, services a controller used to take from the container, or an interface that should be replaced by attributes on individual methods:
+
+```
+Method `Symfony\Bundle\FrameworkBundle\Controller\AbstractController::getDoctrine()` is forbidden: use a constructor or action argument typed with `Doctrine\Persistence\ManagerRegistry`.
+Class `Symfony\Component\Messenger\Handler\MessageSubscriberInterface` is forbidden: write the attribute `AsMessageHandler` on each method that handles a message, with what `getHandledMessages()` yields for it as its arguments.
+```
+
+When a component only quietly marks something as deprecated, it is not in the data; with types, DressCode reports it, and where the annotation names the replacement, it also rewrites it through `upgrading.declarations.deprecatedMember`. The data does not capture changes in behavior, configuration in YAML or Twig templates at all; you will find them in the `UPGRADE-*.md` guides of the Symfony repository.
+
+
+What the Package Covers
+=======================
+
+| component | versions |
+|---|---|
+| `symfony/asset`, `symfony/asset-mapper` | 6.0 to 7.1 |
+| `symfony/browser-kit`, `symfony/dom-crawler` | 6.0 to 7.4 |
+| `symfony/cache` | 6.0 to 7.1 |
+| `symfony/config` | 6.0 to 7.4 |
+| `symfony/console` | 6.0 to 7.4 |
+| `symfony/dependency-injection` | 6.0 to 8.1 |
+| `symfony/doctrine-bridge` | 6.0 to 8.2 |
+| `symfony/event-dispatcher` | 6.0 |
+| `symfony/expression-language` | 7.1 |
+| `symfony/filesystem`, `symfony/finder` | 6.0 to 8.2 |
+| `symfony/form` | 6.0 to 8.1 |
+| `symfony/framework-bundle` | 6.0 to 7.4 |
+| `symfony/html-sanitizer` | 7.4 |
+| `symfony/http-client` | 6.0 to 8.1 |
+| `symfony/http-foundation` | 6.0 to 8.1 |
+| `symfony/http-kernel` | 6.0 to 8.2 |
+| `symfony/intl` | 6.0 |
+| `symfony/json-streamer`, `symfony/type-info` | 7.2 to 8.1 |
+| `symfony/lock` | 6.0 to 6.3 |
+| `symfony/mailer`, `symfony/mime`, `symfony/notifier` | 6.0 to 7.4 |
+| `symfony/messenger` | 6.0 to 6.4 |
+| `symfony/monolog-bridge` | 6.0 to 7.4 |
+| `symfony/options-resolver` | 6.0 |
+| `symfony/property-access`, `symfony/property-info` | 6.0 to 7.3 |
+| `symfony/routing` | 6.0 to 7.4 |
+| `symfony/security-bundle`, `symfony/security-core`, `symfony/security-csrf` | 6.0 to 7.4 |
+| `symfony/security-http` | 6.0 to 8.1 |
+| `symfony/serializer` | 6.0 to 7.4 |
+| `symfony/string` | 7.4 |
+| `symfony/translation` | 6.2 to 7.4 |
+| `symfony/twig-bridge` | 6.2 to 7.2 |
+| `symfony/validator` | 6.0 to 8.2 |
+| `symfony/var-dumper`, `symfony/var-exporter` | 6.2 to 7.3 |
+| `symfony/workflow` | 6.0 to 7.3 |
+| bridges `brevo-mailer`, `brevo-notifier`, `mail-pace-mailer`, `sevenio-notifier`, `google-chat-notifier`, `slack-notifier` | 6.0 to 7.3 |
+
+The versions say in which releases a component changed something that the data captures. The data of a retired bridge is listed under the bridge that replaced it: the rename of Sendinblue to Brevo applies in a project that already has `symfony/brevo-mailer`. An application on Symfony 5.4 is upgraded the same way, with version 6.0 as the first step; [Upgrading Code |upgrade#One Major Version at a Time, by Hand] describes how to proceed one major version at a time.

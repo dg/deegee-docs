@@ -1,0 +1,185 @@
+Upgrade to PHP 8.5
+******************
+
+{{maintitle: Upgrade Your Code to PHP 8.5 Automatically}}
+{{description: Upgrade to PHP 8.5: DressCode rewrites your code to the pipe operator, array_last() and clone() with properties, and fixes or reports all PHP 8.5 deprecated.}}
+
+.[perex]
+Raise the PHP version in `composer.json` to 8.5, and DressCode rewrites your code to the pipe operator, `array_first()`, `array_last()` and `clone()` with properties. It also fixes or reports everything PHP 8.5 deprecated, and formats the result by your coding standard in the same run.
+
+
+What It Looks Like
+==================
+
+A class written for PHP 8.4, in a project that now requires PHP 8.5. The configuration adds the sets `modernizations` and `deprecations` to the standard and says that the namespaces of the project declare no functions of their own; the target PHP version, which DressCode otherwise takes from `composer.json`, is given here by the key `targets`:
+
+```neon
+use:
+	- perCs
+	- modernizations
+	- deprecations
+
+nameResolution: certain
+
+targets:
+	php: '8.5'
+```
+
+```php .[before]
+final class Article
+{
+    private string $title = '';
+
+    /** @var list<Item> */
+    private array $items = [];
+
+    public function withTitle(string $title): static
+    {
+        $clone = clone $this;
+        $clone->title = $title;
+        return $clone;
+    }
+
+    public function slug(string $title): string
+    {
+        return trim(strtolower(strip_tags($title)));
+    }
+
+    public function newest(): Item
+    {
+        return $this->items[array_key_last($this->items)];
+    }
+
+    public function download(string $url): string
+    {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        $data = (string) curl_exec($ch);
+        curl_close($ch);
+        return $data;
+    }
+
+    public function count(): int
+    {
+        return (integer) count($this->items);
+    }
+}
+```
+
+After one `dresscode fix`:
+
+```php .[after]
+final class Article
+{
+    private string $title = '';
+
+    /** @var list<Item> */
+    private array $items = [];
+
+    public function withTitle(string $title): static
+    {
+        return clone($this, ['title' => $title]);
+    }
+
+    public function slug(string $title): string
+    {
+        return $title |> strip_tags(...) |> strtolower(...) |> trim(...);
+    }
+
+    public function newest(): Item
+    {
+        return array_last($this->items);
+    }
+
+    public function download(string $url): string
+    {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        $data = (string) curl_exec($ch);
+        return $data;
+    }
+
+    public function count(): int
+    {
+        return (int) count($this->items);
+    }
+}
+```
+
+Each change is one item of PHP 8.5: `clone()` with properties, the pipe operator `|>`, the function `array_last()`, the call of `curl_close()` that no longer does anything, and the cast `(integer)`, which PHP 8.5 deprecated.
+
+
+What Gets Rewritten
+===================
+
+The set `modernizations` rewrites code to what PHP 8.5 brought. Each item is a decision of the section [upgrading |decisions/upgrading] that a project can also turn on alone.
+
+| feature | before | after | fix |
+|---|---|---|---|
+| pipe operator, `upgrading.syntax.pipe` | `trim(strtolower($s))` | `$s \|> strtolower(...) \|> trim(...)` | fixed |
+| `array_first()`, `array_last()`, `upgrading.functions.arrayFirstLast` | `$a[array_key_last($a)]` | `array_last($a)` | fixed |
+| `clone()` with properties, `upgrading.syntax.cloneWith` | `$c = clone $this; $c->title = $title;` | `clone($this, ['title' => $title])` | fixed; risky where evaluating an argument once may matter |
+| `#[\Deprecated]` on a trait and a constant, `upgrading.phpdoc.deprecated` | `/** @deprecated */` | `#[\Deprecated]` | risky: the deprecated code starts reporting at runtime |
+| `#[\Override]` on a property, `upgrading.classes.Override` | `public string $name;` | `#[\Override] public string $name;` | in no set, turn it on yourself; needs types |
+
+.[note]
+Every decision knows the PHP version that brought its feature. While `composer.json` still allows PHP 8.4, the rewrites to 8.5 wait quietly, and `dresscode config` lists them as having no effect.
+
+
+What PHP 8.5 Deprecated
+=======================
+
+The set `deprecations` fixes what has a direct replacement and reports the rest, with the version that deprecated it. Methods of PHP classes are rewritten only where DressCode knows the type of the object, see [Types from PHPStan |types].
+
+| deprecated | DressCode |
+|---|---|
+| `curl_close()`, `curl_share_close()`, `finfo_close()`, `imagedestroy()`, `xml_parser_free()` | fixed: the call is removed, it no longer does anything |
+| backticks <code>''`git log`''</code> | fixed: `shell_exec("git log")` |
+| casts `(integer)`, `(boolean)`, `(double)`, `(binary)` | fixed: `(int)`, `(bool)`, `(float)`, `(string)` |
+| a semicolon after `case` | fixed: `case 1:` |
+| the array key `null` | fixed: `''` |
+| `SplObjectStorage::contains()`, `attach()`, `detach()` | fixed with types: `offsetExists()`, `offsetSet()`, `offsetUnset()` |
+| `ReflectionProperty::setAccessible()` | fixed with types: the call is removed |
+| `mysqli_execute()`, `socket_set_timeout()` | reported |
+| `DATE_RFC7231`, `FILTER_DEFAULT`, `MHASH_*` | reported |
+| `__sleep()`, `__wakeup()` | reported: a rewrite to `__serialize()` would change the format of stored data |
+
+A finding names the version that deprecated the thing:
+
+/--pre .[terminal]
+src/Db.php:19:5: error: Function `mysqli_execute()` is deprecated: since PHP 8.5. [upgrading.php.deprecatedApi]
+\--
+
+
+Risky Fixes
+===========
+
+A rewrite that may change what the code does is only reported, and made once you list its decision in `fixRisky`. The attribute `#[\Deprecated]` is such a case by its nature, because the deprecated code starts reporting at runtime:
+
+```neon
+fixRisky:
+	- upgrading.phpdoc.deprecated
+```
+
+.[warning]
+In a namespace, an unqualified `strip_tags()` may be a function of that namespace. Until the configuration says `nameResolution: certain`, the rewrites of such calls wait as risky, see [Functions and Constants in Namespaces |namespaces].
+
+
+Step by Step
+============
+
+1. Start with a clean working tree, so that the diff shows only what DressCode did.
+2. Measure how much work the move takes: `dresscode upgrade estimate php 8.5`. If the project sets `config.platform.php`, raise it to 8.5 first.
+3. Save the plan and carry it out: `dresscode upgrade plan php 8.5 --save`, then `dresscode upgrade run`. At the Composer step, DressCode asks whether it may raise `require.php` to `^8.5`; you can also raise it yourself and then run `upgrade run`.
+4. Read what is left for you, and run `upgrade run` again until the run ends with `UPGRADED`. The risky fixes that wait are decided by the types, by `nameResolution`, or by you.
+5. Commit the result on its own, without other changes.
+
+If the project has the sets `modernizations` and `deprecations` in its configuration, a plain `dresscode fix` after raising `require.php` is enough. [Upgrade Your Code Step by Step |upgrade] describes the whole procedure with tests and commits.
+
+
+Where to Go Next
+================
+
+- [Upgrading to a newer PHP |upgrading-php], PHP 8.6 and 8.4 as well as older versions.
+- [Types from PHPStan |types], so that methods of PHP classes are rewritten too.
+- [The section upgrading |decisions/upgrading] with every decision about a newer PHP.

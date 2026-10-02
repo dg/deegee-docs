@@ -1,0 +1,38 @@
+Kompatibilita verzí
+*******************
+
+{{description: Na co se v DressCode můžete spolehnout mezi verzemi: co smí minoritní verze změnit v konfiguraci, ve standardech a sadách, ve výstupu pro nástroje a ve veřejném API pro vlastní pravidla.}}
+
+.[perex]
+Co se smí změnit v minoritní verzi DressCode a co ne: na čem můžete stavět konfiguraci, CI, nástroj, který čte výstup, i vlastní pravidlo.
+
+
+Standardy a sady
+================
+
+Standard i sada se mohou v minoritní verzi rozrůst o nová rozhodnutí. Nové pravidlo, které do standardu patří, do něj přibude, a `fix` pak po aktualizaci změní kód, který dřív nechal být. Je to záměr: standard popisuje styl, ne seznam pravidel zmrazený ke dni instalace.
+
+Kdo chce mít změny pod kontrolou, má dvě cesty. Verzi DressCode zamkne v `composer.lock` a aktualizaci pustí vědomě, s diffem, který přinese. Nebo rozhodnutí, které mu nesedí, nastaví v konfiguraci na `keep`; hodnota z konfigurace přebije každý preset, i ten, který ji dostal až v nové verzi. Co v konfiguraci stojí, se nezmění bez vašeho zásahu.
+
+Odkud se každá hodnota vzala, ukáže výpis [`dresscode config` |cli#Co konfigurace znamená: config].
+
+
+Výstup pro nástroje
+===================
+
+Dokument formátu `json` nese klíč `version`. Ten se zvýší jen tehdy, když klíč zmizí, přejmenuje se nebo změní význam. Nové klíče přibývají v minoritní verzi, a proto má nástroj, který dokument čte, klíče, které nezná, přeskočit. Text zpráv porušení se měnit smí, ať kvůli srozumitelnosti, nebo přesnosti; nástroj, který se rozhoduje podle porušení, ať čte cestu rozhodnutí v klíči `decision`, ne zprávu.
+
+Formát `lines` drží svou gramatiku, jeden řádek na nález ve tvaru `cesta:řádek:sloupec: závažnost: zpráva [rozhodnutí]`, takže matcher editoru napsaný podle [návodu |editors#Nálezy v editoru: formát lines] přežije aktualizaci. Formát `agent` je psaný pro model a jeho formulace se mění podle toho, co agentovi pomáhá; jeho význam ne: čistý soubor mlčí, přepis se hlásí jen u zapsaného souboru a řádky patří souboru, jak je teď na disku.
+
+
+Veřejné API
+===========
+
+Co je veřejné API, popisuje stránka [Rozšiřování DressCode |extending#Co je veřejné API]. Pro to, co tam stojí, platí:
+
+- **Jména parametrů jsou kontrakt.** Metody se volají i s pojmenovanými argumenty, a tak se parametr v minoritní verzi nepřejmenuje.
+- **Veřejný výčet smí přibrat case.** `Severity` nebo `Risk` mohou v minoritní verzi dostat novou hodnotu. `match` nad nimi v pravidle nebo pluginu proto potřebuje větev `default`.
+- **Nové třídy uzlů.** Strom PhpSyntaxu může v minoritní verzi dostat nový uzel pro novou syntaxi PHP, a tak `match` nad třídami uzlů potřebuje `default` taky.
+- **Pořadí pravidel se negarantuje.** Pravidla běží v pořadí registrace, ale to se v minoritní verzi změnit smí; pravidlo nesmí počítat s tím, že jiné pravidlo běží před ním nebo po něm. Co si pravidla předávají, je rozhodnutí, styl běhu nebo analýza souboru, viz [Pravidlo do detailu |rule-contract].
+
+Třída nebo metoda označená `@internal` k veřejnému API nepatří a změnit se smí kdykoli.

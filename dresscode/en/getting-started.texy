@@ -1,0 +1,182 @@
+Getting Started with DressCode
+******************************
+
+.[perex]
+In five minutes you will have DressCode installed, your PHP project checked and most findings fixed. We will go through the installation, the `check` and `fix` commands, choosing a coding standard such as [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/] or Nette, and a configuration file that you then simply commit.
+
+
+Installation
+============
+
+DressCode is a tool, not a library, so you can install it **outside the project** it checks. The simplest way is a global installation:
+
+```shell
+composer global require dresscode/dresscode
+```
+
+Add the directory with Composer's global binaries to your [PATH variable |https://getcomposer.org/doc/03-cli.md#global], and the `dresscode` command is then available from anywhere.
+
+For continuous integration (CI), where you want to pin the tool to an exact version, install it as a standalone project:
+
+```shell
+composer create-project dresscode/dresscode temp/dresscode
+temp/dresscode/bin/dresscode check
+```
+
+The third way: you can add DressCode to your project as a development dependency (`composer require --dev dresscode/dresscode`) and run it from `vendor/bin/dresscode`. This is the way to go once your project also has PHPStan: DressCode then asks it about the types of your code and can, for example, rewrite deprecated library API based on what the variable really is, see [Types from PHPStan |types]. Just keep in mind that DressCode requires PHP 8.4 to 8.6, so your project would have to run on one of these versions too, even if it could otherwise run on an older PHP.
+
+This is the thing people mix up most often: **the PHP version the tool runs on and the PHP version your code is written for are two different numbers.** When DressCode is installed outside the project, it can run on PHP 8.5, for example, and check code written for PHP 8.1. It reads the target PHP version from the `composer.json` of your project and follows it, so it never writes syntax into your code that your project could not compile. This works from PHP 8.0; DressCode does not support older versions and tells you so.
+
+DressCode needs nothing more: the parser and the tree it is built on are a standalone library, [PhpSyntax |phpsyntax:], with no dependencies at all. On top of that come four small Nette packages, the phpDoc parser from PHPStan and the version comparator from Composer. No framework.
+
+
+Checking Code
+=============
+
+DressCode has no style of its own, so it does not start without a configuration: if it quietly picked one of the standards, the first `fix` in a project written differently would rewrite almost every line. The fastest way to tell it your style is to let it measure the code you already have:
+
+```shell
+dresscode init
+```
+
+The command chooses the standard your code is nearest to, measures where the code departs from it, asks you about what is yours to decide and writes [`dresscode.neon` |#Configuration in NEON] to the root of the project; you will find the details in the description of the [`init` command |cli#init]. From then on, `dresscode check` is all you need. The one command that runs without a configuration is `dresscode upgrade today`: after you update your libraries, it rewrites the code to their new API, and it can do so because it leaves the style alone, see [Upgrading Code |upgrade]. If you only want to try the tool and create nothing, choose a standard with the `--use` option and list the paths:
+
+```shell
+dresscode check src tests --use perCs
+```
+
+The output looks like this:
+
+/--pre .[terminal]
+DRESS|CODE 1.3.0
+Config     none, using perCs
+Target     PHP 8.2 from `composer.json`
+Checking   214 files in /var/www/shop
+
+src/Cart.php
+  error   9:59  Expected a line break before the opening brace.         braces.position.function
+  error  10:26  The array must be written `[…]` instead of `array(…)`.  literals.arraySyntax.array
+  error  11:12  Expected no whitespace after the opening parenthesis.   spacing.padding.controlStructure
+  error  11:20  Expected at least one space before the `==` operator.   spacing.binaryOperator
+  error  12:13  The body of the `if` must be enclosed in braces.        braces.bracelessBody
+...
+
+FOUND  36 violations, a fix leaves 1 in 12 of 214 files
+\--
+
+Each line tells you where the violation is (line and column), what is wrong (the message describes how the code should look), and which configuration decision it violates. The path on the right, for example `braces.position.function`, is a configuration key, and you can work with it: have it explained together with the values it takes (`dresscode explain braces.position.function`), [give it a different value |configuration], look it up in the [Configuration Reference |decisions/braces#braces.position.function], or [suppress it in one place |suppressing].
+
+The header at the top answers the two questions that cause half of all misunderstandings when left unanswered: what the code is checked against (the configuration file and the presets), and for which PHP version. The summary at the bottom also tells you how many violations an automatic `fix` would leave.
+
+A message is a full sentence about one specific place. Where DressCode measures something, it says what it expected and what it found (`Expected the statement indented by 12 spaces, 10 spaces found.`). When fixing one violation would cause another one, the new violation is listed right below the one that causes it, marked `Then also`.
+
+Such messages help most where more than the looks of the code is at stake. Here are two small files checked with a few decisions from the `classes`, `mistakes` and `upgrading` sections and with [types from PHPStan |types]:
+
+/--pre .[terminal]
+src/Settings.php
+  risky  7:37  The parameter `$name` of `offsetGet()` must be named `$key`, as in `ArrayObject::offsetGet()`.  classes.overridingMethod.parameterName
+               Risky because a call naming the argument `name:` stops working.
+
+src/Users.php
+  error  12:16  The `in_array()` call must pass `$strict = true`.                    mistakes.strictArgument
+  risky  17:16  The `in_array()` call must pass `$strict = true`.                    mistakes.strictArgument
+                Risky because a strict search no longer finds a value of another type.
+  error  22:18  Method `Acme\Mail\Mailer::sendMessage()` is deprecated: use send().  upgrading.declarations.deprecatedMember
+\--
+
+The `Settings` class overrides the `offsetGet()` method of `ArrayObject` and names its parameter `$name`. PHP accepts that, but the call `$settings->offsetGet(key: 'theme')`, which works with every `ArrayObject`, fails with the error `Unknown named parameter $key`. Renaming the parameter, however, would break the calls that already use `name:`, so this is a risky fix, one that can change how the code behaves. The finding of a risky fix says exactly what can break.
+
+Both `in_array()` calls have the same message, but the fix treats them differently. On line 12 the types say that an `int` is searched for in a `list<int>`, and there a strict search finds the same thing, so `fix` adds `true` by itself. On line 17 the value searched for is `mixed`: this fix waits until you [allow it |configuration#risky-fixes], and until then it tells you what it would change.
+
+The library marked the `sendMessage()` method with the annotation `@deprecated use send()`. The finding quotes that advice, and `fix` writes `send()`.
+
+There are four exit codes, and they are worth remembering, because the check in [continuous integration |continuous-integration] relies on them:
+
+| code | meaning |
+|---|---|
+| `0` | clean |
+| `1` | violations found, a file that cannot be parsed, or more warnings than `--max-warnings` allows |
+| `2` | some file could not be processed (a rule failed, the fixes did not settle, the file changed in the meantime), or the tool failed while running |
+| `3` | an error on the command line or in the configuration, for example an unknown key |
+
+
+Automatic Fixing
+================
+
+DressCode fixes most findings by itself. Before the first run, commit your files or at least have a clean working tree, so that the diff shows exactly what the tool changed:
+
+```shell
+dresscode fix
+```
+
+/--pre .[terminal]
+src/Cart.php  rewritten
+src/Order.php  rewritten
+  error  14:21  The method `get_total` must be written in camelCase.  naming.method
+...
+
+FIXED  36 violations found, 1 remaining in 12 of 214 files
+\--
+
+Every file that `fix` changed is marked `rewritten` in the output. Below a file, you see what cannot be fixed (for example a method name, which would also have to change everywhere the method is called). It stays reported as an `error` and the exit code is `1`; when nothing like that remains, the exit code is `0`. The summary tells you how many violations were found and how many are left. If you want to see the fixes first, run `dresscode check --diff`: it shows what `fix` would change and writes nothing.
+
+Make the fix a separate commit with no other changes. It is one of those commits that nobody reads line by line, and that is exactly how it should be: for the reformatted lines, `git blame` then shows this commit, not your next commit with a real change. After the commit, a few violations that cannot be fixed automatically may remain. If there are more than you can handle right away, a [baseline |suppressing#baseline] records them, and only new ones will be reported.
+
+The second run is faster than the first: DressCode remembers the content of files that passed clean, and if neither the content nor the configuration has changed, it does not process them again.
+
+
+Upgrading to a Newer PHP
+========================
+
+DressCode does not just format your code, it also rewrites it for a newer PHP. When you raise `require.php` in `composer.json` and add the `modernizations` set to the `use` key of the configuration, DressCode starts using what the new version brought, and your standard formats the result in the same run. No standard includes this set by itself, because rewriting code for a newer PHP is a step you take when you decide to:
+
+```php .[before]
+return $article === null ? null : $article->getAuthor();
+```
+
+```php .[after]
+return $article?->getAuthor();
+```
+
+This works from PHP 8.0 all the way to PHP 8.6, which is not even released yet. You can see what the set would change in your code before you touch the configuration: `dresscode check --use modernizations --diff`. What gets rewritten and how to do the upgrade in practice is described in [Upgrading to a Newer PHP |upgrading-php]; rewriting code when you update Nette and other libraries is in [Upgrading Code |upgrade].
+
+
+Configuration in NEON
+=====================
+
+The configuration of a project is the file `dresscode.neon` in its root. You can keep editing the one `dresscode init` writes, or write your own. This is the simplest one:
+
+```neon
+use: nette
+
+paths:
+	- src
+	- tests
+```
+
+It is [NEON |https://doc.nette.org/en/neon], the format you know from the PHPStan configuration, and the keys are similar on purpose: `paths`, `excludePaths`. If you prefer PHP, write the same thing in `dresscode.php` as `new Config(...)` with named arguments; the two formats can express the same things.
+
+In the `use` key, after the standard, you add sets that say what you want from the code besides its looks: `cleanup` removes code that does nothing, `modernizations` rewrites code for a newer PHP, `deprecations` rewrites it for the new API of your libraries. Whatever you want done differently from the standard, you write key by key, the way it looks in the code:
+
+```neon
+use:
+	- perCs
+	- cleanup
+
+blankLines:
+	aroundMethods: 1
+spacing:
+	concatenation: '$a.$b'
+```
+
+All of this is described on the [Configuration |configuration] page. And because a few lines of configuration mean hundreds of decisions from several layers, `dresscode config` prints which of them apply in the end and where each value came from.
+
+
+Where to Go Next
+================
+
+- [How DressCode Works |how-it-works], if you want to understand why the tool behaves the way it does.
+- [Upgrading Code |upgrade], [Upgrading to a Newer PHP |upgrading-php] and [Types from PHPStan |types], if you want to upgrade your code, not just format it.
+- [Migrating to DressCode |migration], if you use PHP CS Fixer, PHP_CodeSniffer or Slevomat today.
+- [Command Line |cli#One Decision for One Run: --set and --only], if you want to try one decision or clean up code step by step.
+- [Continuous Integration |continuous-integration], so that the server watches the style too.

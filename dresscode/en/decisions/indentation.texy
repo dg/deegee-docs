@@ -1,0 +1,186 @@
+Indentation
+***********
+
+.[perex]
+The `indentation` section decides on indentation: whether code is indented with tabs or spaces, how many columns wide a tab is, how many levels deeper a line goes when it continues an expression, a ternary operator or a method chain, and how a heredoc is indented.
+
+DressCode does not derive the indentation from the line above but from the syntax tree: each line gets as many levels as there are constructs around it, and one level is one `unit`. So one badly indented line does not affect the lines below it, and the finding says how much indentation it expected and how much it found. The other keys of the section decide on continuation lines: how many levels deeper a line goes when it starts with an operator, with the `?` or `:` of a ternary operator, with a `case` in a `switch`, or with a link of a method chain.
+
+```neon
+indentation:
+	unit: '4 spaces'
+	tabWidth: 4
+	chain: flat
+	switchCase: 1
+```
+
+Where `unit` is `keep`, nothing is reported and lines stay where they are. But code that DressCode writes itself, such as a call it splits over several lines, still has to be indented somehow, and then it gets a tab. So a project that indents with spaces always sets `unit`; every standard sets it.
+
+```neon
+indentation:
+	unit: '4 spaces'
+```
+
+```php .[before]
+function total(array $items): int
+{
+	$sum = 0;  // Expected the statement indented by 4 spaces, 1 tab found.
+	foreach ($items as $item) {  // Expected the statement indented by 4 spaces, 1 tab found.
+		$sum += $item->price;  // Expected the statement indented by 8 spaces, 2 tabs found.
+	}  // Expected the closing brace indented by 4 spaces, 1 tab found.
+	return $sum;  // Expected the statement indented by 4 spaces, 1 tab found.
+}
+```
+
+```php .[after]
+function total(array $items): int
+{
+    $sum = 0;
+    foreach ($items as $item) {
+        $sum += $item->price;
+    }
+    return $sum;
+}
+```
+
+The console lists the lines inside the `foreach` under the finding of the loop as `Then also`: they move only because the loop moves, and they are not a separate finding.
+
+
+indentation.heredoc
+===================
+
+The levels the body and the closing marker of a heredoc or nowdoc step in by from the line the heredoc starts on, `0` at its level and `1` one level deeper, lines of the body indented further keeping their extra indentation.
+
+- a number from 0 to 1
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `1`, psr12 `keep`, nette `1`, symfony `keep`, laravel `keep` · covers `heredoc_indentation` .[decision-facts]
+
+
+indentation.unit
+================
+
+Every line indented by the construct it continues, one level per nesting, the level being this unit; under `keep` a line stays where it is.
+
+- `tab`: one tab per level
+- `4 spaces`: four spaces per level
+- `2 spaces`: two spaces per level
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `'4 spaces'`, psr12 `'4 spaces'`, nette `tab`, symfony `'4 spaces'`, laravel `'4 spaces'` · covers `array_indentation`, `indentation_type`, `no_leading_namespace_whitespace`, `statement_indentation`, `Generic.WhiteSpace.DisallowSpaceIndent`, `Generic.WhiteSpace.DisallowTabIndent`, `Generic.WhiteSpace.ScopeIndent` .[decision-facts]
+
+
+indentation.tabWidth
+====================
+
+How many columns a tab counts for in the width of a line.
+
+- a number from 1 to 8
+
+Default `4` · standards: perCs `4`, psr12 `4`, nette `4`, symfony `4`, laravel `4` .[decision-facts]
+
+
+indentation.binaryOperator
+==========================
+
+The levels a line opened by `&&`, `+`, `.` steps in by from the start of its expression, 1 at least where the expression shares its first line.
+
+- a number from 0 to 1
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `0`, psr12 `0`, nette `0`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+indentation.ternary
+===================
+
+The levels `?` and `:` opening a line step in by.
+
+- a number from 0 to 1
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `1`, psr12 `1`, nette `1`, symfony `1`, laravel `keep` .[decision-facts]
+
+
+indentation.switchCase
+======================
+
+The levels `case` steps in by from `switch`.
+
+- a number from 0 to 1
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `1`, psr12 `1`, nette `1`, symfony `1`, laravel `1` · covers `PSR2.ControlStructures.SwitchDeclaration` .[decision-facts]
+
+
+indentation.chain
+=================
+
+Where the links of a chain spread over lines stand.
+
+- `flat`: every link one level below the start
+- `nested`: a link one level deeper or shallower than the link before it
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `flat`, psr12 `flat`, nette `nested`, symfony `keep`, laravel `flat` · covers `method_chaining_indentation`, `PEAR.WhiteSpace.ObjectOperatorIndent` .[decision-facts]
+
+The value `nested` is the choice of Nette Coding Standard: a link may go one level deeper or shallower than the link before it, so a chain that works with another object for a while can show this by its indentation. But never more than one level deeper:
+
+```neon
+indentation:
+	chain: nested
+```
+
+```php .[before]
+$form->addText('name')
+	->setRequired()
+	->addCondition($form::Filled)
+		->addRule($form::MaxLength, null, 100)
+	->endCondition();
+$users = $db->table('users')
+			->where('active', true);  // Expected the chained call indented by 1 tab, 3 tabs found.
+```
+
+```php .[after]
+$form->addText('name')
+	->setRequired()
+	->addCondition($form::Filled)
+		->addRule($form::MaxLength, null, 100)
+	->endCondition();
+$users = $db->table('users')
+	->where('active', true);
+```
+
+With the value `flat`, the link `addRule()` would go back to the level of the others.
+
+
+indentation.commentLines
+========================
+
+The inner lines of a comment on several lines whose first line stands where it should; a comment moved with its line takes its inner lines along under any value.
+
+- `aligned`: every inner line in the column of the first, the stars of a doc comment one space in from its opening
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `aligned`, psr12 `aligned`, nette `aligned`, symfony `aligned`, laravel `aligned` .[decision-facts]
+
+
+indentation.singleLevel
+=======================
+
+A line steps in by one level at most, and only to a level something opened, a comment spanning several lines included.
+
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+indentation.singleLevelInComments
+=================================
+
+Whether a single-line comment standing on a line of its own steps in as a line of code does.
+
+- `yes` or `no`
+
+Default `no` · standards: perCs `no`, psr12 `no`, nette `no`, symfony `no`, laravel `no` .[decision-facts]

@@ -1,0 +1,139 @@
+Typy
+****
+
+.[perex]
+Sekce `types` rozhoduje o typech v deklaracích: jestli parametr, vlastnost, návratová hodnota a konstanta třídy musí typ deklarovat, jak se píše typ s `null` a kde v něm `null` stojí a v jakém pořadí stojí typy sjednocení.
+
+Klíče pod `declaration` doplní nativní typ parametru, vlastnosti, návratové hodnoty, konstanty a closure tam, kde ho dokumentační komentář už říká. Anotaci, která pak jen opakuje nativní typ, odstraní rozhodnutí `phpdoc.annotation.nativeTypeOnly`, proto ho ukázka nastavuje taky. Parametr, který nemá ani typ, ani anotaci, se jen ohlásí: typ za vás nikdo nevymyslí. Kterou třídu číst jako pole, jehož položky popisuje anotace, říká parametr `traversableClasses`. Typy v dokumentačních komentářích jsou věcí sekce [phpdoc |phpdoc]; o tom, odkud DressCode zná typy výrazů, rozhoduje vyhrazený klíč `typeAnalysis` a stránka [Typy z PHPStanu |/types].
+
+```neon
+types:
+	declaration:
+		parameter: required
+		return: required
+	nullable: '?int'
+phpdoc:
+	annotation:
+		nativeTypeOnly: forbidden
+```
+
+```php .[before]
+/**  // Useless `@param` annotation for the parameter `$count`, because the native type says the same.
+ * @param int $count
+ */
+function repeat(string $text, $count, ?string $glue = null): string  // The parameter `$count` must have the native type `int` from its `@param` annotation.
+{
+	return implode($glue ?? '', array_fill(0, $count, $text));
+}
+```
+
+```php .[after]
+function repeat(string $text, int $count, ?string $glue = null): string
+{
+	return implode($glue ?? '', array_fill(0, $count, $text));
+}
+```
+
+
+types.traversableClasses
+========================
+
+Classes treated like `array` and `iterable`, whose annotation says what their items are.
+
+- seznam jmen
+
+Výchozí `[Traversable]` · standardy: perCs `[Traversable]`, psr12 `[Traversable]`, nette `[Traversable]`, symfony `[Traversable]`, laravel `[Traversable]` .[decision-facts]
+
+
+types.declaration.parameter
+===========================
+
+A parameter of a function or a method declares its type, taken from `@param` where it has one and nullable where it defaults to null; one with neither, and one whose annotation PHP cannot write, is reported.
+
+Not a parameter of a closure, whose types belong to the call it is passed to.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` · pokrývá `phpdoc_to_param_type`, `SlevomatCodingStandard.TypeHints.ParameterTypeHint` .[decision-facts]
+
+
+types.declaration.property
+==========================
+
+A property declares its type, a promoted one included, taken from `@var`, or the `@param` of a promoted one, where it has one and nullable where it defaults to null, `= null` written where an untyped one had no default.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` · pokrývá `phpdoc_to_property_type`, `SlevomatCodingStandard.TypeHints.PropertyTypeHint` .[decision-facts]
+
+
+types.declaration.return
+========================
+
+A function or a method declares its return type, taken from `@return`, `void` where it returns no value and `never` where the annotation says so.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` · pokrývá `phpdoc_to_return_type`, `void_return`, `SlevomatCodingStandard.TypeHints.ReturnTypeHint` .[decision-facts]
+
+
+types.declaration.anonymousFunction
+===================================
+
+A closure declares its return type `void` where it returns no value.
+
+Not an arrow function, whose value is its expression.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` · pokrývá `void_return`, `SlevomatCodingStandard.TypeHints.ReturnTypeHint` .[decision-facts]
+
+
+types.declaration.constant
+==========================
+
+A class constant declares the type of its value.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · PHP 8.3 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+types.nullable
+==============
+
+How a native type of one type and `null` is written.
+
+- `'?int'`: a single type with `null` written with `?`
+- `'int|null'`: a union with `null`, which `types.nullPosition` places
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `'?int'`, psr12 `keep`, nette `'?int'`, symfony `'?int'`, laravel `'?int'` · pokrývá `nullable_type_declaration` .[decision-facts]
+
+
+types.nullPosition
+==================
+
+Where `null` stands in a native union type.
+
+- `last`: `int|string|null`
+- `first`: `null|int|string`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `last`, psr12 `keep`, nette `last`, symfony `last`, laravel `keep` · pokrývá `ordered_types` .[decision-facts]
+
+
+types.unionOrder
+================
+
+The order of the types of a native union.
+
+- `alphabetical`: the types beside `null` sorted by name, case-insensitively, an intersection by its first name
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` · pokrývá `ordered_types` .[decision-facts]

@@ -1,0 +1,478 @@
+Upgrade kódu krok za krokem
+***************************
+
+{{description: Kolik práce dá přechod na novější Nette, Symfony, Laravel nebo PHP? DressCode to změří, sestaví plán a provede ho krok po kroku i s Composerem a testy.}}
+
+.[perex]
+Kolik práce vám dá přechod na novější Nette, Symfony, Laravel nebo PHP? DressCode to změří dřív, než se v kódu cokoli změní: řekne, co přepíše sám, co počká na zvednutí verzí v `composer.json` a co zůstane na vás. Pak z toho sestaví plán a provede ho krok po kroku, i se zvednutím verzí přes Composer a s vašimi testy, ve stylu, který váš kód už má.
+
+
+Kolik práce upgrade dá
+======================
+
+Vezměme aplikaci na Nette 3, která chce přejít na `nette/utils` 4.0. Zatím ji nic neměníme, jen se ptáme, kolik to dá práce; jak DressCode nainstalovat, popisuje [níže |#Kde DressCode běží]. Odhad je `dresscode upgrade estimate` s cílem, tedy balíčkem a verzí, na kterou přecházíte, nebo slovem `php` a verzí PHP:
+
+```shell
+dresscode upgrade estimate nette/utils 4.0
+```
+
+/--pre .[terminal]
+DRESS|CODE 1.3.0
+Config     /var/www/shop/dresscode.neon
+Upgrade    nette/utils 4.0 over 3 files
+
+Must change, 2 topics with 12 findings
+  nette/utils  10 findings in 3 files    needs ^4.0, automatic
+  nette/utils  2 findings in 1 file      works on ^3.2, automatic
+
+Today      2 findings of `deprecations` are rewritten on the versions allowed now by `dresscode upgrade today`
+Composer   nette/utils 4.0: nothing in the lock refuses it
+Moves      nette/utils v3.2.10 => v4.0.0
+Data       nette/application up to 3.3, nette/component-model up to 3.2, nette/http up to 3.4,
+           nette/routing up to 3.1.4, nette/utils up to 4.1.5, php up to 8.6
+\--
+
+Každý řádek je jedno téma: knihovna, o které má DressCode data, tady `nette/utils`, nebo jedno [rozhodnutí |configuration] pro změnu, kterou žádná data nepopisují. Za tématem stojí počet nálezů (findings), tedy míst, která se musí změnit, počet souborů, ve kterých jsou, a dvě slova o každém z nich.
+
+To první říká, kdy se místo přepsat smí. `works on ^3.2` funguje už na verzích, které `composer.json` dovoluje dnes, tedy na `^3.2`, takže se smí přepsat hned. `needs ^4.0` počká, až zvednete omezení na `^4.0`, protože kód napsaný pro novou verzi by na staré nefungoval. Jedna knihovna tak může stát v obou: `Arrays::searchKey()` zavrhlo Nette už v řadě 3 a jeho náhrada `getKeyOffset()` ve verzi 3.2 existuje, kdežto `Strings::startsWith()` zmizelo až ve 4.0.
+
+To druhé říká, kdo místo přepíše. `automatic` přepíše DressCode sám. `manual` jsou ruční úkoly (manual tasks), místa, kde náhradu musí vybrat člověk, a hláška mu řekne, co napsat. `unknown types` čeká na typy z PHPStanu a `uncertain names` na jistotu, které funkce volání myslí.
+
+Řádek `Today` spočítá, co přepíše už dnešní [`upgrade today` |#Když už jste verze zvedli]. Řádek `Composer` říká, co v `composer.lock` cílovou verzi nepustí: balíček, který vyžaduje starší `nette/utils`, by tu stál i se svým omezením. Řádek `Moves` vypíše balíčky, které zvednutí omezení posune na novou hlavní verzi, jak to říká zkušební běh Composeru; přechod na verzi, kam data nesahají, je označený `(no data)` a ten krok uděláte bez pomoci DressCode, a přechod, kam sahají jen do nižší minoritní verze, nese `(data up to 4.1)`. Poslední řádek `Data` vypočítá knihovny, o kterých DressCode data má, a do jaké verze.
+
+Odhad nic nemění. Zeptá se Packagistu, které balíčky s daty existují, nejvýš jednou denně, Composeru, co cíl v locku blokuje, což sítě nepotřebuje, a Composeru znovu, co by zvednutí posunulo, což ji potřebuje; s přepínačem `--offline` tuhle otázku vynechá a z Packagistu vezme jen to, co si pamatuje. Soubor, který kontrola nepřečte, třeba protože nejde naparsovat, se objeví na řádku `Unverified` a jeho nálezy se nepočítají. Odhad, který některý soubor nezpracoval, neměl data pro upgrade nebo se nedozvěděl od Composeru, co cíl blokuje, skončí s exit kódem 2, aby se neúplné číslo nečetlo jako úplné. Bez cíle navrhne nejnovější verze, které jeho data znají, a `dresscode upgrade estimate php` totéž jen pro PHP.
+
+Na typy se v terminálu zeptá, protože rozhodují, na čem se která metoda volá. `--types` je zapne bez ptaní a `--no-types` měří bez nich; každé místo, které typy potřebuje, je pak `unknown types`.
+
+
+Kde DressCode běží
+------------------
+
+DressCode potřebuje PHP 8.4 a nové verze svých knihoven, mezi nimi `nette/utils` 4.1. Do aplikace, která na starším PHP nebo na Nette 3 teprve je, se proto jako vývojová závislost nevejde. Nainstalujte ho globálně, a vedle něj PHPStan a balíček s daty svého ekosystému:
+
+```shell
+composer global require dresscode/dresscode dresscode/upgrade-nette phpstan/phpstan
+```
+
+Místo `upgrade-nette` vezměte `upgrade-symfony`, `upgrade-laravel` nebo `upgrade-deegee` pro Dibi a Texy; co který nese, ukazuje [tabulka balíčků |upgrading-libraries#Balíčky pro ekosystémy]. Projekt, který na nových verzích už je a chce staré API jen hlídat, může mít DressCode i jako vývojovou závislost, viz [níže |#Aby se staré API nevracelo].
+
+
+Plán upgradu
+============
+
+Příkaz `upgrade plan` vypíše odhad a za ním plán, tedy odhad seřazený do kroků; přepínač `--save` plán navíc uloží. Odhad je ten výše, takže ho výpis níže na místě `...` vynechává:
+
+```shell
+dresscode upgrade plan nette/utils 4.0 --save
+```
+
+/--pre .[terminal]
+DRESS|CODE 1.3.0
+Config     /var/www/shop/dresscode.neon
+Upgrade    nette/utils 4.0 over 3 files
+...
+Mode       application, `composer.json` gives the type `project`
+Plan       nette/utils 4.0
+  1  fix       works on the versions allowed today  nette/utils
+  2  composer  raise nette/utils to ^4.0
+  3  fix       needs the targets                    nette/utils
+  4  composer  update to the newest versions
+Tests      not run, no `--test-command` given
+Saved      dresscode-upgrade.neon
+Next       `dresscode upgrade run` carries out the plan saved, step by step
+\--
+
+Plán jde od přepisů, které fungují už dnes (most), přes zvednutí omezení v `composer.json` k přepisům pro novou verzi (skok). Za nimi by stál úklid kódu pro verze, které projekt opustil, třeba podmínky `PHP_VERSION_ID < 80100`, které po přechodu na PHP 8.4 nikdy neplatí, a nakonec vynechaný krok s tím, co nabízí novější PHP, sadou `modernizations`. Tady první dva nejsou, protože nemají co dělat. Plán aplikace končí krokem, který aktualizuje balíčky na nejnovější verze, jaké omezení dovolí; řádek `Mode` říká, že jde o aplikaci, a proč. Knihovnu DressCode plánuje jinak, viz [níže |#Knihovna rozšiřuje, nezvedá].
+
+Před krokem, který udělat nejde, stojí ruční krok, ve výpisu plánu `manual`. Když v locku něco cílovou verzi nepustí, plán začne příkazem, kterým zjistíte proč, třeba `composer why-not nette/utils 4.0`. Běh u takového kroku skončí s exit kódem 4 a přejde přes něj, až Composer řekne, že v locku už cílovou verzi nic neodmítá. U projektu bez `composer.lock` se Composeru není na co zeptat, a tak běh čeká stejně; krok, o kterém víte, že je volný, vynecháte zápisem `skip: true`.
+
+Soubor `dresscode-upgrade.neon` v kořeni projektu je obyčejný NEON a patří do gitu: tým ho projde, krok vynechá zápisem `skip: true`, zúží téma nebo doplní příkaz testů. DressCode ho čte přísně: neznámý klíč nebo hodnota jiného typu skončí chybou, která řekne, kde v souboru stojí, takže překlep běh potichu nezmění. Když jste odhad zúžili přepínačem `--paths`, plán si ty cesty nese a jeho opravy z nich nevybočí. Krok je recept, ne výsledek: říká, která témata opravit a jak zvednout omezení, a kolik míst se změní, spočítá DressCode znovu, až na krok dojde:
+
+```neon
+version: 1
+
+targets:
+	nette/utils: '4.0'
+
+steps:
+	-
+		title: works on the versions allowed today
+		kind: fix
+		topics:
+			- nette/utils
+
+	-
+		title: raise nette/utils to ^4.0
+		kind: composer
+		require:
+			nette/utils: ^4.0
+
+	-
+		title: needs the targets
+		kind: fix
+		topics:
+			- nette/utils
+
+	-
+		title: update to the newest versions
+		kind: update
+```
+
+Krok `kind: update` aktualizuje balíčky na nejnovější verze, které omezení dovolí, a je hotový, když `composer update --dry-run` už nic nezmění.
+
+Co odhad posoudit nedokázal, si plán nese pod klíčem `estimate`: soubory, které nezpracoval, pod `unprocessed`, a balíčky dat pro upgrade, které mu chyběly, pod `missingData`, každý s knihovnami, o kterých píše. Běh takového plánu na to hned na začátku upozorní, protože kroky plánu tahle místa vidět nemusely, a na konci proto zkontroluje celý kód, viz [Místa pro vás |#Místa pro vás].
+
+
+Upgrade po krocích
+==================
+
+`upgrade run` s cílem plán uloží a rovnou provede, bez cíle provede ten uložený. Každé téma se opraví zvlášť a ve stylu, který kód dodržuje. Takhle vypadá `dresscode upgrade run` po plánu výše:
+
+/--pre .[terminal]
+DRESS|CODE 1.3.0
+Config     /var/www/shop/dresscode.neon
+Step 1     nette/utils 1 file
+Waiting    step 2, raise nette/utils to ^4.0: run `composer require "nette/utils:^4.0" -W --prefer-lowest --minimal-changes`, then `dresscode upgrade run`
+\--
+
+Most proběhl a běh se zastavil u Composeru, protože se mimo terminál na nic neptá. V terminálu ukáže, co se v projektu změní, a zeptá se, jestli smí změnit `composer.json` a aktualizovat balíčky; mimo něj to udělá jen s přepínačem `--yes`. Jinak se ani Composeru nezeptá, jen vypíše příkaz `composer require` a skončí s exit kódem 4, který znamená, že čeká na krok mimo DressCode. Composer klidně pusťte sami a pak `upgrade run`. S `--yes` běh pokračuje sám:
+
+/--pre .[terminal]
+DRESS|CODE 1.3.0
+Config     /var/www/shop/dresscode.neon
+Warning    The working tree has changes of its own, which the changes of the upgrade mix with.
+Composer   raise nette/utils to ^4.0, which changes:
+  - Upgrading nette/utils (v3.2.10 => v4.0.0)
+Composer   update to the newest versions, which changes:
+  - Upgrading nette/application (v3.1.15 => v3.3.0)
+  - Upgrading nette/component-model (v3.0.3 => v4.0.2)
+  - Upgrading nette/http (v3.2.4 => v3.4.2)
+  - Upgrading nette/routing (v3.0.5 => v3.1.5)
+  - Upgrading nette/utils (v4.0.0 => v4.1.6)
+Step 1     nette/utils left nothing to fix
+Step 3     nette/utils 3 files
+UPGRADED  4 steps done, and the final check finds nothing more to upgrade, no tests run
+\--
+
+Varování je tu proto, že změny kroku 1 ještě nejsou commitnuté, takže by se smíchaly se změnami skoku; commitněte po každém zastavení a zmizí. Composer nainstaluje nejnižší verze, které nová omezení dovolí (`--prefer-lowest --minimal-changes`), protože pro ně je kód psaný a DressCode čte jejich anotace `@deprecated`; ostatní balíčky se změní jen tolik, kolik aktualizace potřebuje, a co by zvednutí vůči locku vrátilo na nižší verzi, řekne DressCode zvlášť, ještě než souhlasíte. Krok, který zvedá PHP, zvedne i `config.platform.php`, pokud ho projekt uvádí. Nejnovější verze přinese až poslední krok plánu, `update to the newest versions`, a testuje se jako každý jiný; vynecháte-li ho zápisem `skip: true`, poslední řádek běhu připomene, že zůstaly nejnižší verze. Řádek `UPGRADED` řekne, kolik kroků proběhlo a kolik jich plán vynechal, a že závěrečná kontrola celého kódu už nic dalšího nenašla, viz [níže |#Místa pro vás].
+
+V kódu z toho je tohle:
+
+```php .[before]
+if (!Strings::endsWith($file, '.jpg')) {
+	return Image::fromString(Image::EMPTY_GIF);
+}
+
+$image->resize(300, 200, Image::FIT | Image::SHRINK_ONLY);
+file_put_contents($this->file, Json::encode($products, Json::PRETTY));
+```
+
+```php .[after]
+if (!\str_ends_with($file, '.jpg')) {
+	return Image::fromString(Image::EmptyGIF);
+}
+
+$image->resize(300, 200, Image::OrSmaller | Image::ShrinkOnly);
+file_put_contents($this->file, Json::encode($products, pretty: true));
+```
+
+Všimněte si, že krok 1 při druhém běhu už nic neopravil. Kde plán skončil, pozná DressCode z kódu a z locku, ne z toho, co si běh schovává pro návrat: téma, které nemá co opravit, je hotové, a krok Composeru je hotový, když `composer.json` jeho omezení už má a nainstalovaná verze je taková, jakou dovoluje. `upgrade run` proto naváže, i když mezitím tým commity sloučil nebo přeskládal, nebo když jste Composer pustili sami.
+
+Po zvednutí přes Composer pokračuje běh v novém procesu DressCode, aby opravy pro novou verzi, testy i kontrola na konci plánu viděly, co zvednutí nainstalovalo, i pluginy, knihovny a data pro upgrade. Pro vás je to dál jeden běh s jedním výpisem. Jen DressCode spuštěný uvnitř jiného programu, který si jeho výstup bere sám, nový proces nespustí: po zvednutí se zastaví s exit kódem 4 a vypíše, ať pustíte `dresscode upgrade run` znovu.
+
+
+Testy a commity
+---------------
+
+Testy DressCode pustí, jen když mu řeknete jak. `--test-command` je příkaz vašeho projektu, v němž `{junit}` zastupuje soubor ve formátu JUnit, kam testy zapíšou výsledky; umí ho Nette Tester i PHPUnit:
+
+```shell
+dresscode upgrade run nette/utils 4.0 --test-command "vendor/bin/tester tests -o junit:{junit}"
+```
+
+Před prvním krokem DressCode testy pustí a zapamatuje si, které prošly. Když test, který předtím procházel, po kroku spadne, je přeskočený nebo úplně zmizí, vrátí DressCode soubory kroku byte po bytu tak, jak byly, kromě souboru, který jste mezitím změnili, a skončí s exit kódem 1. Závislosti, které zvedl Composer, ale zůstanou zvednuté; výpis pak vyjmenuje `composer.json` a lock na řádku `Raised` a vrátí je `dresscode upgrade abort`, viz [níže |#Přerušený běh a návrat zpět]. Běh, který nezapíše platný report JUnit nebo nedoběhne včas, je také selhání, nikdy úspěch. Rychlejší podmnožinu pro kroky, mezi nimiž se nic velkého neděje, dáte do `--quick-test-command` a porovná se s vlastními výsledky z doby před prvním krokem; celá sada běží po skoku a po posledním kroku. Který příkaz poběží po kterém kroku, řekne řádek `Tests` už v plánu. Když testy neproběhnou ani před prvním krokem, běh skončí dřív, než cokoli změní, s exit kódem 1 a s důvodem. Řádek `Tests` běhu pak řekne, s čím se porovnávalo: kdy testy před prvním krokem běžely a kolik z nich už tehdy neprošlo, protože to, že žádný test nově nespadl, ještě neznamená, že testy procházejí. Příkaz bez `{junit}` se odmítne už při sestavení plánu, i v ručně upraveném souboru plánu.
+
+Commity nechává na vás. Začněte s čistým pracovním stromem, ať se změny upgradu nesmíchají s rozdělanou prací; když čistý není, DressCode na to upozorní. S přepínačem `--commit` udělá commit na každé téma, ale až když testy kroku projdou. Commit sestaví z textů, které téma zanechalo, přes vlastní index gitu, takže kvůli němu nikdy nepřepisuje pracovní strom, a hooky repozitáře proběhnou jako u každého jiného commitu. Vlastní commit dostane i zvednutí přes Composer, s `composer.json` a lockem, pokud je git neignoruje, aby další běh nepovažoval tyto soubory za rozdělanou práci. Commit bere soubory celé, a tak se `--commit` odmítne dřív, než se cokoli změní, když mají sledované soubory vlastní změny, nebo když git nenajde repozitář, který projekt sleduje.
+
+Změní-li soubor poté, co ho krok zapsal, někdo jiný, třeba testy nebo vy, commit by nesl text, který testy neověřily. Krok proto zůstane necommitnutý v pracovním stromu a běh vás požádá, ať ho commitnete sami. Odmítne-li git commit, třeba kvůli hooku, běh se zastaví s exit kódem 2 a řekne, co zůstalo necommitnuté a která témata kroku commitnul předtím. Krok, který nechal soubory, jež nezpracoval, zůstane necommitnutý, dokud je další běh nezpracuje a necommitne ho celý. Když mezitím plán upravíte tak, že krok s tím číslem dělá něco jiného, běh odmítne pokračovat: změny kroku commitněte sami a `upgrade run --discard` na něj zapomene.
+
+
+Místa pro vás
+-------------
+
+Co oprava nechá, vypíše běh pod kroky jako ruční úkoly (řádek `Manual`), každý s místem a hláškou, co napsat místo toho. Dokud nějaký úkol zbývá, běh se po skoku i na konci plánu zastaví a skončí s exit kódem 1; plán je hotový, až když nezbývá žádné. Každé místo opravte, nebo potvrďte komentářem s důvodem, a pusťte `upgrade run` znovu:
+
+```php
+// dresscode:ignore upgrading.php.deprecatedApi -- the report needs the locale of the server
+$month = strftime('%B');
+```
+
+Potvrzení komentářem je vidět v diffu, takže ho při review uvidí i kolega. Místo, které chcete nechat napořád, můžete zapsat i do [baseline |suppressing].
+
+`dresscode upgrade tasks` vypíše ruční úkoly, které z uloženého plánu v kódu ještě zbývají, včetně těch, které najde až kontrola celého kódu na konci plánu, a nic přitom nemění. Pod `Exceptions` k nim přidá komentáře `dresscode:ignore` bez důvodu, které úkol jen odkládají a za přijatou výjimku se zatím nepočítají, a pod `Unverified` soubory, které opravy nezpracovaly. U rizikové opravy řekne, na co čeká a jak ji povolit. Dokud zbývá úkol nebo takový komentář, skončí s exit kódem 1, a zbude-li nezpracovaný soubor, s kódem 2, takže se hodí i do CI.
+
+Na konci plánu zkontroluje DressCode sadou `deprecations` ještě celý kód, nejen témata, která našel odhad. Teprve tady se může ukázat, co zavrhuje knihovna, kterou nainstalovalo až zvednutí. Najde-li něco, běh skončí s exit kódem 1 a vypíše to: soubory, které opraví `dresscode upgrade today`, nebo ruční úkoly. Pak pusťte `upgrade run` znovu. Plán dokončený bez některých dat pro upgrade to řekne na posledním řádku.
+
+Soubor, který opravy nezpracují, třeba protože nejde naparsovat, se vypíše pod `Unverified` a běh se po jeho kroku zastaví s exit kódem 2, protože nezpracovaný soubor dělá výsledek neúplným.
+
+
+Přerušený běh a návrat zpět
+---------------------------
+
+Když běh přerušíte uprostřed kroku, část souborů už může být přepsaná. Další běh je proto vypíše a nic nespustí: vraťte je příkazem `dresscode upgrade abort`, nebo pokračujte od kódu, jak je, přes `upgrade run --discard`. Stejně se zastaví i `upgrade plan --save`, protože nový plán by na rozdělaný krok zapomněl.
+
+`dresscode upgrade abort` vrátí všechno, co si běh schovává pro návrat: soubory kroku, který nedoběhl, a `composer.json` s `composer.lock`, jak byly před prvním zvednutím přes Composer, i když leží výš než adresář konfigurace. Ty si běh drží, dokud po zvednutí nedoběhne další krok. Kde se zastaví a soubory Composeru jsou změněné, třeba když po zvednutí spadnou testy nebo Composer selže v půlce, vyjmenuje je na řádku `Raised`. Selhání Composeru řekne i s posledním řádkem jeho výstupu a s cestou k logu v dočasném adresáři, kde je výstup celý. Po vrácení pustí `abort` ještě `composer install`, aby balíčky ve vendoru odpovídaly vrácenému locku. Soubor, který od té doby někdo změnil, nechá, jak je, a vypíše ho na řádku `Left`; v takovém případě, a také když `composer install` selže, skončí s exit kódem 1. Co by vrátil a co nechal, řekne předem `upgrade abort --dry-run`, který nic nezmění.
+
+Kde uložený plán zrovna stojí, řekne `dresscode upgrade status`, aniž by pustil jedinou opravu. U kroku Composeru pozná z omezení, jestli je hotový, nebo na řadě, u ručního kroku z locku, jestli cíl ještě odmítá; kolik zbývá opravit, nepočítá a nechá to na `upgrade run`. Pod plánem vypíše, co si běh schovává: krok, který nedoběhl, zvednutí, které by vrátil `abort`, krok, který zůstal necommitnutý, a kdy běžely testy před prvním krokem. Skončí vždy s exit kódem 0:
+
+/--pre .[terminal]
+DRESS|CODE 1.3.0
+Config     /var/www/shop/dresscode.neon
+Plan       nette/utils 4.0
+  1  works on the versions allowed today  what is left `upgrade run` fixes and `upgrade tasks` lists
+  2  raise nette/utils to ^4.0            done
+  3  needs the targets                    what is left `upgrade run` fixes and `upgrade tasks` lists
+  4  update to the newest versions        `upgrade run` tells
+Raised     step 2 changed composer.json, composer.lock, which `dresscode upgrade abort` puts back
+Next       `dresscode upgrade run` carries on from where the code stands
+\--
+
+Co si běh schovává, leží v adresáři gitového repozitáře projektu, v `.git/dresscode-upgrade/`, takže o to smazáním cache nepřijdete. Projekt bez repozitáře to má v adresáři cache a běh na to upozorní. Dva běhy v jednom projektu najednou nepracují: druhý se odmítne, dokud první neskončí.
+
+
+Knihovna rozšiřuje, nezvedá
+---------------------------
+
+Knihovna, tedy projekt s `"type": "library"` bez vlastního `composer.lock`, verze nezvedá: kód musí dál fungovat i s těmi staršími, které dnes podporuje. Její plán je proto jen most a omezení rozšířené o cíl, z `^3.2` na `^3.2 || ^4.0`, zapsané s `--no-update`. Co se přepíše až po skoku, se zatím jen ohlásí, viz [níže |#Rozhodují dolní meze]. U projektu, jehož `type` říká library, ale má vlastní lock, se DressCode v terminálu zeptá a mimo něj se řídí podle `type`; přepínače `--library` a `--no-library` to rozhodnou rovnou.
+
+
+Co zůstane na vás
+=================
+
+Upgrade je přepis plus seznam toho, co zbylo, a ten seznam je polovina jeho hodnoty. DressCode nehádá: kde náhrada není, nebo ji musí vybrat člověk, místo ohlásí a řekne, co napsat místo toho:
+
+```
+Constant `Nette\Application\IRouter::SECURED` is forbidden: write the protocol, `https://`, into the mask of the route.
+Method `Nette\Http\UrlScript::setPath()` is forbidden: the class is immutable; take a changed copy with `withPath()`.
+```
+
+Každá taková hláška je pokyn, takže seznam můžete projít sami, nebo ho předat AI agentovi tak, jak je; `upgrade today -f agent` mu ho dá ve tvaru pro model a odhad, plán, jeho běh i `upgrade tasks` jako data s `--format json`, viz [AI agenti |agents#Upgrade s agentem]. Ohlásí se i místo, kde data opravu nabízejí, ale tady ji provést nejde, třeba protože by zahodila výraz, na kterém se metoda volá, nebo protože mezi argumenty stojí komentář; hláška řekne důvod a kód zůstane, jak byl.
+
+**Rizikové opravy** (risky fix) čekají na svolení. Několik přepisů by mohlo změnit, co kód dělá, třeba čtení vlastnosti nalevo od `??`, kde se PHP nejdřív ptá, jestli je nastavená. V plánu je taková oprava ručním úkolem. Rozhodnutí, kterým věříte natrvalo, zapíšete do klíče [`fixRisky` |configuration#risky-fixes], a `dresscode upgrade today --ask-risky` je projde s vámi jednu po druhé, i s diffem každé z nich.
+
+**Co data nevidí.** Změnu chování, konfiguraci v NEONu a syntaxi šablon data nezachytí; ty popisují průvodci upgradem jednotlivých knihoven. A co knihovna smazala bez záznamu v datech, najde až PHPStan.
+
+
+Rozhodují dolní meze
+====================
+
+Na jakou verzi se kód přepíše, neurčuje verze nainstalovaná ve vendoru ani PHP, na kterém DressCode zrovna běží, ale omezení v `composer.json`. Kód musí fungovat s každou verzí, kterou omezení pustí, a tak se píše pro tu nejnižší: kód napsaný pro novější by se rozbil všude, kam omezení pustí starší. U `"nette/forms": "^3.2"` se proto kód přepíše na API verze 3.2, i když je ve vendoru 3.3. Verzi PHP čte DressCode stejně z `require.php`. Composer dolní mez PHP sám neposune, ani když projekt běží na novějším, a tak ji zvedá klíč `config.platform.php`: s `^8.1` a platformou `8.3` se kód píše pro PHP 8.3.
+
+Upgradovat proto neznamená nainstalovat novější verzi, ale zvednout dolní mez. Proto plán zvedá omezení v `composer.json` a teprve pak přepisuje kód pro novou verzi.
+
+Co přinesly vyšší verze, které omezení také dovoluje, se nepřepíše, ale ohlásí, protože kód na nich jednou poběží. U `"^3.2 || ^4.0"` se kód přepíše na API verze 3.2 a to, co změnila 4.0, se ohlásí i s verzí:
+
+```
+Class `Acme\Old` is deprecated: replaced by `Acme\New`, since acme/lib 4.0.
+```
+
+Slovo `deprecated` říká, že nainstalovaný kód věc ještě má, `removed`, že už ji nemá. Knihovna, kterou projekt vyžaduje bez dolní meze (`*`), nebo kterou nevyžaduje vůbec a dostal ji jen jako závislost jiné, může být v jakékoli verzi. Podle jejích dat se proto nic nepřepíše, všechno se jen ohlásí. Takové knihovny vyjmenuje hlavička výpisu `upgrade today` na řádku `Reported` a knihovny nainstalované ve vyšší verzi, než omezení nejníž dovolí, na řádku `Lowest`.
+
+Kde data začínají a kam by vedlo zvednutí dolní meze, ukáže `dresscode config`. Verze označené `(reported)` omezení už dovoluje, a tak se jejich změny jen hlásí:
+
+/--pre .[terminal]
+Packages   3 with upgrading data
+      nette/application 3.2           upgrading/application.neon of dresscode/upgrade-nette, upgrading further to 3.2.1 (reported), 3.2.3 (reported), 3.2.9 (reported), 3.2.10 (reported), 3.3 (reported)
+      nette/component-model 3.2       upgrading/component-model.neon of dresscode/upgrade-nette, upgrading further to 4.0
+      nette/utils 4.1                 upgrading/utils.neon of dresscode/upgrade-nette, upgrading further to 4.1.5 (reported)
+\--
+
+
+Když už jste verze zvedli
+=========================
+
+Plán dělá všechno najednou. Kdo už omezení v `composer.json` zvedl sám, třeba při `composer update`, a chce jen přepsat kód na verze, které projekt teď vyžaduje, pustí jeden příkaz:
+
+```shell
+dresscode upgrade today
+```
+
+Co `dresscode upgrade today` udělá:
+
+- **Nepotřebuje konfiguraci.** Vezme celý adresář projektu a verze knihoven i PHP z omezení v `composer.json`, viz [výše |#Rozhodují dolní meze].
+- **Přepíše jen staré API.** Pustí sadu [`deprecations` |presets-reference#deprecations], tedy data nainstalovaných balíčků s jejich pravidly a data o tom, co zavrhlo PHP. S přepínačem `--modernize` navíc přepíše kód na novější konstrukce PHP (sada `modernizations`).
+- **Nesáhne na styl.** Bez konfigurace žádný styl nemá, s konfigurací si z ní vezme jen to, co kód už dodržuje, viz [níže |#Váš styl zůstane].
+- **Ptá se PHPStanu na typy**, protože bez nich nepozná, na čem se metoda volá. Bez nainstalovaného PHPStanu proto skončí chybou.
+- **Řekne, co zbylo**, a kde něco přepsal, poradí pustit ho ještě jednou.
+
+Takhle vypadá upgrade aplikace na Nette:
+
+/--pre .[terminal]
+DRESS|CODE 1.3.0
+Config     /var/www/shop/dresscode.neon
+Target     PHP 8.2 from `composer.json`
+Upgrading  nette/application, nette/component-model, nette/forms, nette/http, nette/utils
+Fixing     214 files in /var/www/shop
+
+app/Presentation/Product/ProductPresenter.php  rewritten
+app/Presentation/Sign/SignPresenter.php  rewritten
+app/Model/Referrals.php
+  error  27:26  Method `Nette\Http\Request::getReferer()` is forbidden: use `getOrigin()`, which reads the Origin header and gives only the scheme, the host and the port instead of the whole URL of the referring page.  upgrading.api.forbiddenMembers
+
+FIXED  18 violations found, 1 remaining in 3 of 214 files, 3.2 s
+Run `dresscode upgrade today` again: the code it rewrote may hold more to upgrade.
+\--
+
+Řádek `Upgrading` jmenuje knihovny, jejichž data se uplatní. Soubory označené `rewritten` DressCode přepsal, pod ostatními stojí, co zbývá. Poslední řádek radí druhý běh, protože přepsaný kód může nést další věc k upgradu, kterou první běh ještě neviděl. Běh, který už nic nepřepíše, tu radu nevypíše. `upgrade today` se hodí i do [průběžné integrace |continuous-integration]: s `--max-warnings 0` skončí s exit kódem 1, zbude-li jediné varování.
+
+
+Diff, kterému můžete věřit
+--------------------------
+
+`upgrade today` změny rovnou zapíše, ukáže je až git. Začněte proto s čistým pracovním stromem a po běhu si diff přečtěte: najdete v něm jen místa, kde stálo staré API, přepsaná do tvaru, jaký má okolní kód, i s importy. Nic nehledá a nenahrazuje jako text, volání metody přepíše jen tam, kde typy říkají, že patří té třídě: `getName()` se přepíše na `FileUpload` a nikde jinde. Jak to funguje a odkud DressCode ví, co se změnilo, popisuje [Jak funguje upgrade knihoven |upgrading-libraries]. Chcete začít opatrně? Pusťte ho nejdřív na jeden soubor, `dresscode upgrade today --paths app/Model/Orders.php`, a podívejte se, co s ním udělal.
+
+Diff čtěte i tak. Data mluví o zápisu, ne o významu: když nová verze vrací místo `null` hodnotu `-1`, DressCode přepíše jméno metody, ale podmínku `=== null` nechá. Po upgradu proto pusťte testy a PHPStan.
+
+
+Váš styl zůstane
+----------------
+
+Projekt bez `dresscode.neon` nemá styl a `upgrade today` změní jen staré API; plán po krocích konfiguraci potřebuje a bez ní odkáže na `dresscode init`. Má-li projekt konfiguraci, platí z ní všechno, co se upgradu týká: `paths` a `excludePaths`, cíl PHP, `fixRisky`, baseline, přepisy v `overrides` i vlastní [mapy náhrad |upgrading-libraries#Vlastní přejmenování v projektu]. Ze stylu jen to, co kód dodržuje: DressCode nejdřív zkontroluje kód podle stylu projektu a každé rozhodnutí, které kód někde porušuje, vynechá. Nový kód tak dostane podobu, jakou v projektu opravdu má, a soubor, na který upgrade sáhne, se nepřeformátuje.
+
+Jednotkou je rozhodnutí a výběr platí za celý projekt: jediný dlouhý řádek kdekoli vynechá `file.longLines` všude. Kdo chce i styl, pustí potom `dresscode fix`, nejlépe jako samostatný commit.
+
+
+Chybějící data
+--------------
+
+Které balíčky s daty existují, se `upgrade` dozví z Packagistu, zatím jen od vendoru `dresscode`. Ptá se nejvýš jednou denně a odpověď si pamatuje v adresáři cache, takže funguje i bez sítě; bez ní a bez zapamatované odpovědi jen nic nenabídne. Odhad chybějící balíček jmenuje a `upgrade today` ho nabídne nainstalovat, když projekt některou z jeho knihoven vyžaduje sám v `require` nebo `require-dev`, ne když knihovna přišla jen jako závislost jiné:
+
+/--pre .[terminal]
+The libraries of the project have upgrading data in `dresscode/upgrade-nette`, which DressCode does not have.
+Install it beside DressCode in `C:/Users/me/AppData/Roaming/Composer`?
+\--
+
+Instaluje se do instalace DressCode, takže `composer.json` projektu zůstane, jak je. Je-li DressCode závislostí projektu (v jeho `composer.lock`), instaluje se do projektu jako `composer require --dev` a otázka řekne, že se mění `composer.json` projektu. Bez terminálu, v CI nebo v hooku agenta, `upgrade today` nic neinstaluje, skončí exit kódem 3 a vypíše přesný příkaz Composeru; přepínač `--yes` instalaci povolí i tam.
+
+
+Po jedné hlavní verzi, ručně
+----------------------------
+
+Bez plánu rozdělte velký skok na kroky po jedné hlavní verzi knihovny. Každý krok je stejný:
+
+1. V `composer.json` zvedněte dolní mez na další hlavní verzi, třeba z `"nette/utils": "^3.2"` na `"^4.0"`. Přecházíte-li i na novější PHP, zvedněte `require.php`, a uvádí-li ho projekt, i `config.platform.php`.
+2. Pusťte `composer update --prefer-lowest`, aby ve vendoru byly právě ty nejnižší verze, pro které se kód píše.
+3. Pusťte `dresscode upgrade today`, a radí-li to, ještě jednou.
+4. Projděte, co zbylo, pusťte testy a PHPStan, přečtěte diff a commitněte.
+5. Pokračujte další verzí, nebo obyčejným `composer update` vraťte do vendoru nejnovější verze.
+
+Proč `--prefer-lowest`? Kde data nejsou, přepisuje DressCode podle anotací `@deprecated` v kódu knihovny. Anotace ale mluví jen za verzi, která je nainstalovaná. Anotace knihovny nainstalované ve vyšší verzi, než omezení nejníž dovolí, proto DressCode nepoužije: ve starší verzi by náhrada být nemusela.
+
+Po krocích proto, že se v každém data potkají s kódem knihovny. Nové třídy, které data do kódu píšou, už ve vendoru jsou, a anotace `@deprecated` nainstalované verze prozradí, co zmizí v té další; DressCode podle nich kód rovnou převede, nebo aspoň ukáže, kde bude potřeba sáhnout. Jak převést aplikaci najednou, nebo kód přepsat dřív, než knihovnu aktualizujete, popisuje [Jak funguje upgrade knihoven |upgrading-libraries#Po jedné verzi, nebo najednou].
+
+
+Aby se staré API nevracelo
+==========================
+
+Upgrade je jednorázový úklid. Aby staré API hlídala i každá kontrola v [průběžné integraci |continuous-integration] a v [Git hooku |hooks], dejte sadu `deprecations` s typy do konfigurace a jménem balíčku v `use` pusťte dovnitř i jeho pravidla:
+
+```neon
+typeAnalysis: phpstan
+
+use:
+	- perCs           # váš standard
+	- deprecations
+	- upgrade-nette
+```
+
+Balíčky vendoru `dresscode` se v `use` píšou krátce jako vestavěné sady, plné jméno `dresscode/upgrade-nette` funguje také. Data balíčku se uplatní i bez jeho jména v `use`; to přidá pravidla, která balíček nese vedle dat, u Nette třeba převod příznaku `Json::PRETTY` na pojmenovaný argument. Kde jméno chybí, `check` i `fix` na to jednou upozorní:
+
+/--pre .[terminal]
+Warning: Package `dresscode/upgrade-nette` brings rules that run only where `use` names it, as `upgrade-nette`, and in `dresscode upgrade`; skipped, with what its upgrading files set for them.
+\--
+
+Od té chvíle `dresscode check` ohlásí staré API v každém novém kódu. A protože se data řídí omezením v `composer.json`, kontrola sama ohlásí, co je potřeba převést, jakmile omezení zvednete na další verzi.
+
+
+Upgrade knihovny, kterou udržujete
+==================================
+
+Knihovna, která stojí na jiných knihovnách, se upgraduje stejně jako aplikace, jen omezení místo zvednutí rozšíří, viz [výše |#Knihovna rozšiřuje, nezvedá]. Když jsem takhle upgradoval `nette/application`, přepsal `upgrade today` v kódu i v testech `setFactory()` na `setCreator()` a příznak `RouteList::ONE_WAY` na pojmenovaný argument `oneWay: 1`, ohlásil zastaralou vlastnost a anotaci, jejíž text se do atributu nevejde, a druhý běh už nic nepřepsal.
+
+Knihovna má ale navíc testy, které staré API používají schválně: test zastaralého atributu, test zpětné kompatibility, typový test rozhraní. Ty přepsat nechcete. Takový soubor vyjměte z dat [přepisem |configuration#Jiné hodnoty pro část projektu] v `overrides`:
+
+```neon
+typeAnalysis: phpstan
+
+use:
+	- nette
+	- deprecations
+
+overrides:
+	-
+		paths: [tests/UI/Requires.sameSite.handle.phpt]
+		upgrading:
+			packages: no
+			declarations:
+				deprecatedMember: keep
+```
+
+`packages: no` odebere souboru data balíčků i přepisy, které jejich soubory zapínají, a `deprecatedMember: keep` přepis podle anotací `@deprecated`; styl i zbytek sady platí dál. Na jediný řádek stačí komentář `// dresscode:ignore upgrading`, viz [Potlačení |suppressing]. Co v takových testech `upgrade` dál hlásí, je v pořádku: ohlásí staré API, které tam stojí schválně.
+
+Kód samotné třídy data nepřepisují, protože mluví o používání třídy, ne o její implementaci. Když data `nette/application` říkají, že zápis do `$request->post` se má psát `setPost($value)`, uvnitř metody `Request::setPost()` zůstane `$this->post = $post`, jinak by metoda volala sama sebe. Potomek třídy je ale uživatel jako každý jiný a upgraduje se. Data o magické vlastnosti, tedy o `__get()` a `__set()`, platí i pro čtení a zápis privátní vlastnosti zvenčí, protože i ten PHP pošle do `__get()` a `__set()`.
+
+Chcete upgradovat po částech, třeba nejdřív Nette a PHP až potom? Dejte do odhadu a plánu jen jeden cíl, nebo zužte `upgrade today` přepínačem `--only` na data jednoho balíčku a pravidla, která je čtou:
+
+```shell
+dresscode upgrade today --only upgrade-nette
+```
+
+Data ostatních balíčků přijdou ke slovu jen tam, kde je pokryje jiné jméno v `--only`, třeba `deprecations` nebo `upgrading.api`. Jemněji to jde jménem knihovny: `--only nette/forms` vezme jen soubory o `nette/forms`, ať je nese kterýkoli balíček, a `--only php` data o tom, co zavrhlo PHP. Totéž `--only` umí `check` a `fix` a jméno balíčku i knihovny berou i klíče `fixRisky` a `severity`. Jméno balíčku, jehož data tu nic nedělají, je chyba, a hláška řekne proč: data žádnou verzi knihovny projektu nezasáhnou, nebo `upgrading.packages` není `yes`. Jméno, které je zároveň balíčkem s daty a knihovnou, o které píše jiný balíček, stojí za obojí: za soubory toho balíčku i za soubory o té knihovně.
+
+
+Přepínače
+=========
+
+Samotné `dresscode upgrade` vypíše své příkazy. Tyto měří, plánují a provádějí plán, říkají, kde stojí, nebo vrátí, co jeho běh nedokončil:
+
+| příkaz, přepínač | význam |
+|---|---|
+| `upgrade estimate [<cíl> [<verze>]]` | změří, co upgrade změní, a nic nezmění |
+| `upgrade plan [<cíl> [<verze>]]` | vypíše odhad a plán upgradu po krocích, nic nezmění |
+| `--save` | u `plan` plán navíc uloží do `dresscode-upgrade.neon` |
+| `upgrade run [<cíl> [<verze>]]` | s cílem plán uloží a provede, bez cíle provede uložený plán od místa, kde kód zrovna je |
+| `upgrade tasks` | vypíše ruční úkoly, které z uloženého plánu v kódu zbývají, a nic nezmění |
+| `upgrade status` | řekne, kde uložený plán stojí a co si běh schovává pro návrat, a nepustí žádnou opravu |
+| `upgrade abort` | vrátí soubory kroku, který nedoběhl, a `composer.json` s lockem, jak byly před zvednutím, a pustí `composer install`; s `--dry-run` jen řekne, co by vrátil a co nechal |
+| `--step <n>` | u `run` provede jen krok `n` |
+| `--commit` | u `run` udělá commit na každé téma, jehož krok prošel testy |
+| `--discard` | po běhu přerušeném uprostřed kroku pokračuje u `run` od kódu, jak je, a u `plan --save` dovolí uložit nový plán; u `run` také zapomene necommitnutý krok, který plán mezitím změnil |
+| `--test-command <příkaz>`, `--quick-test-command <příkaz>` | příkaz testů projektu s `{junit}`; krok, po kterém nově spadne test, se vrátí |
+| `--library`, `--no-library` | naplánuje projekt jako knihovnu, která omezení rozšiřuje, nebo jako aplikaci, a neptá se |
+| `--yes` | u `run` změní `composer.json` a aktualizuje balíčky bez ptaní, i mimo terminál; bez něj a bez terminálu se běh Composeru ani nezeptá |
+| `--types`, `--no-types` | měří s typy z PHPStanu, nebo bez nich, i když je konfigurace zapíná, a neptá se |
+| `--offline` | měří bez sítě, s tím, co si pamatuje z Packagistu a co ví lock |
+| `--paths <cesta>` | zúží odhad, a plán z něj sestavený, na soubory nebo adresáře |
+| `--format <console,json>` | odhad, plán, jeho běh, `upgrade tasks` a `upgrade status` jako text, nebo jako data pro nástroj či AI agenta; dokument nese kořen projektu `root` a u uloženého plánu i `planIdentity`, otisk souboru plánu, podle kterého nástroj pozná, o kterém plánu mluví; `json` se nikdy neptá |
+
+Zbývající příkaz, `upgrade today`, přepisuje kód na místě:
+
+| přepínač | význam |
+|---|---|
+| `--modernize` | přepíše kód i na novější konstrukce PHP, sadu `modernizations` |
+| `--ask-risky` | po upgradu se zeptá na každou zbylou rizikovou opravu zvlášť a ukáže její diff; jen v interaktivním terminálu |
+| `--fix-risky`, `--fix-risky=<název>` | udělá rizikové opravy všech rozhodnutí, nebo jen jmenovaného rozhodnutí, sekce, presetu, balíčku či knihovny |
+| `--only <název>` | zúží běh na balíček s daty, knihovnu, rozhodnutí, sekci nebo preset; lze uvést vícekrát |
+| `--yes` | doinstaluje chybějící data bez ptaní, i mimo terminál |
+| `--max-warnings <n>` | skončí s exit kódem 1, zbude-li víc varování než `n`, třeba v CI |
+
+Dál `upgrade today` bere přepínače jako `fix`: `--paths`, `--config`, `--use`, `--set`, `--format`, `--jobs` a další, viz [Příkazová řádka |cli#Přepínače]. `--diff` nebere.
+
+
+Kam dál
+=======
+
+- [Knihovny Nette |upgrading-nette], [Symfony |upgrading-symfony], [Laravel |upgrading-laravel] a [Dibi a Texy |upgrading-deegee], co jejich balíčky pokrývají.
+- [Přechod na novější PHP |upgrading-php], když s knihovnami zvedáte i verzi PHP.
+- [Jak funguje upgrade knihoven |upgrading-libraries], odkud DressCode ví, co se změnilo, a co přepíše sám.
+- [Typy z PHPStanu |types], bez kterých se nepřepíšou konstanty, metody a volání.

@@ -1,0 +1,381 @@
+Classes
+*******
+
+.[perex]
+The `classes` section decides on classes and their members: the order of the members, whether each member declares its visibility, how many members may share one declaration, when empty parentheses are written after `new` and after an attribute, and what happens to a modifier, a method or an attribute that adds nothing.
+
+Some keys are only about appearance, such as the order of members or the parentheses after `new Foo`. Others make sure a class says what it should: the visibility on every member, `final` on a class marked `@internal`, `static` on a private method that does not use `$this`, and the signature of an overriding method matching the parent. The last three can change how the code behaves, so their fixes are risky fixes; the [Configuration |/configuration#risky-fixes] page explains what decides whether they are applied.
+
+```neon
+classes:
+	members:
+		order: [traitUse, constant, property]
+		grouping: separated
+	visibility:
+		constant: required
+		property: required
+		method: required
+	emptyParentheses:
+		instantiation: required
+```
+
+```php .[before]
+class Cart
+{
+	private array $items = [];  // The constant must come before the property.
+	const LIMIT = 10, MIN = 1;  // Expected one constant per declaration, 2 found. // The constant `LIMIT` must declare its visibility. // The constant `MIN` must declare its visibility.
+
+	public function add(Item $item): void
+	{
+		$this->items[] = new Entry;  // Expected `()` after `new Entry`.
+	}
+}
+```
+
+```php .[after]
+class Cart
+{
+	public const LIMIT = 10;
+	public const MIN = 1;
+	private array $items = [];
+
+	public function add(Item $item): void
+	{
+		$this->items[] = new Entry();
+	}
+}
+```
+
+
+classes.internalClass.final
+===========================
+
+The `final` of a class its author marked as internal, which nothing outside the package may extend.
+
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` · covers `final_internal_class` .[decision-facts]
+
+
+classes.internalClass.markers
+=============================
+
+The annotations, with their `@`, and the attributes, by their fully qualified classes, of which one marks a class internal.
+
+- a list of names
+
+Default `[@internal]` · standards: perCs `[@internal]`, psr12 `[@internal]`, nette `[@internal]`, symfony `[@internal]`, laravel `[@internal]` .[decision-facts]
+
+
+classes.internalClass.except
+============================
+
+The annotations and the attributes that keep an internal class as it is, an entity for instance.
+
+- a list of names
+
+Default `[@final, @Entity, '@ORM\Entity', '@ORM\Mapping\Entity', '@Mapping\Entity', @Document, '@ODM\Document', 'Doctrine\ORM\Mapping\Entity', 'Doctrine\ODM\MongoDB\Mapping\Annotations\Document']` · standards: perCs `[@final, @Entity, '@ORM\Entity', '@ORM\Mapping\Entity', '@Mapping\Entity', @Document, '@ODM\Document', 'Doctrine\ORM\Mapping\Entity', 'Doctrine\ODM\MongoDB\Mapping\Annotations\Document']`, psr12 `[@final, @Entity, '@ORM\Entity', '@ORM\Mapping\Entity', '@Mapping\Entity', @Document, '@ODM\Document', 'Doctrine\ORM\Mapping\Entity', 'Doctrine\ODM\MongoDB\Mapping\Annotations\Document']`, nette `[@final, @Entity, '@ORM\Entity', '@ORM\Mapping\Entity', '@Mapping\Entity', @Document, '@ODM\Document', 'Doctrine\ORM\Mapping\Entity', 'Doctrine\ODM\MongoDB\Mapping\Annotations\Document']`, symfony `[@final, @Entity, '@ORM\Entity', '@ORM\Mapping\Entity', '@Mapping\Entity', @Document, '@ODM\Document', 'Doctrine\ORM\Mapping\Entity', 'Doctrine\ODM\MongoDB\Mapping\Annotations\Document']`, laravel `[@final, @Entity, '@ORM\Entity', '@ORM\Mapping\Entity', '@Mapping\Entity', @Document, '@ODM\Document', 'Doctrine\ORM\Mapping\Entity', 'Doctrine\ODM\MongoDB\Mapping\Annotations\Document']` .[decision-facts]
+
+
+classes.members.order
+=====================
+
+The order of the members of a class by kind, a member taking the most particular kind listed (the constructor, the destructor or a magic method, then its visibility with `static`, its visibility, its kind) and the kinds not listed following in the order written.
+
+- a list of these words, in the order they should come in:
+	- `traitUse`: a trait use
+	- `enumCase`: a case of an enum
+	- `constant`: a constant of any visibility
+	- `publicConstant`: a public constant
+	- `protectedConstant`: a protected constant
+	- `privateConstant`: a private constant
+	- `property`: a property of any visibility
+	- `publicProperty`: a public property
+	- `protectedProperty`: a protected property
+	- `privateProperty`: a private property
+	- `publicStaticProperty`: a public static property
+	- `protectedStaticProperty`: a protected static property
+	- `privateStaticProperty`: a private static property
+	- `method`: a method of any visibility
+	- `publicMethod`: a public method
+	- `protectedMethod`: a protected method
+	- `privateMethod`: a private method
+	- `publicStaticMethod`: a public static method
+	- `protectedStaticMethod`: a protected static method
+	- `privateStaticMethod`: a private static method
+	- `constructor`: the constructor
+	- `destructor`: the destructor
+	- `magicMethod`: a method whose name begins with `__`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `[traitUse]`, psr12 `[traitUse]`, nette `[traitUse, enumCase, publicConstant, protectedConstant, privateConstant, publicProperty, protectedProperty, privateProperty]`, symfony `[traitUse]`, laravel `keep` · covers `ordered_class_elements`, `PSR12.Traits.UseDeclaration` .[decision-facts]
+
+Members of a kind the list does not name stay after the listed ones, in their original order. The most specific kind wins: with `[constant, privateConstant]`, a private constant is sorted as `privateConstant`. The list rejects a kind that has nothing left once all its more specific kinds are listed beside it: `[constant, publicConstant, protectedConstant, privateConstant]` is a configuration error. Nette Coding Standard sorts constants and properties by visibility and leaves methods in the order the author wrote them:
+
+```neon
+classes:
+	members:
+		order: [traitUse, enumCase, publicConstant, protectedConstant, privateConstant, publicProperty, protectedProperty, privateProperty]
+```
+
+
+classes.modifiers.order
+=======================
+
+The order of the modifiers of a property, a promoted one included, a method, a constant and a class, `final readonly class`.
+
+- `canonical`: `abstract` or `final`, visibility, set visibility, `static`, `readonly`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `canonical`, psr12 `canonical`, nette `canonical`, symfony `canonical`, laravel `canonical` · covers `modifier_keywords`, `visibility_required`, `PSR2.Classes.PropertyDeclaration`, `PSR2.Methods.MethodDeclaration`, `SlevomatCodingStandard.Classes.PropertyDeclaration` .[decision-facts]
+
+
+classes.members.grouping.constant
+=================================
+
+A declaration of several constants of a class, `const A = 1, B = 2;`.
+
+- `separated`: one member per declaration, each sharing the modifiers and the type of the original
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `separated`, psr12 `keep`, nette `keep`, symfony `separated`, laravel `separated` · covers `single_class_element_per_statement`, `SlevomatCodingStandard.Classes.DisallowMultiConstantDefinition` .[decision-facts]
+
+
+classes.members.grouping.property
+=================================
+
+A declaration of several properties, `public $a, $b;`.
+
+- `separated`: one member per declaration, each sharing the modifiers and the type of the original
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `separated`, psr12 `separated`, nette `separated`, symfony `separated`, laravel `separated` · covers `single_class_element_per_statement`, `SlevomatCodingStandard.Classes.DisallowMultiPropertyDefinition` .[decision-facts]
+
+
+classes.members.grouping.traitUse
+=================================
+
+A `use` of several traits, `use A, B;`.
+
+- `separated`: one member per declaration, each sharing the modifiers and the type of the original
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `separated`, psr12 `separated`, nette `separated`, symfony `separated`, laravel `keep` · covers `single_trait_insert_per_statement`, `PSR12.Traits.UseDeclaration`, `SlevomatCodingStandard.Classes.TraitUseDeclaration` .[decision-facts]
+
+
+classes.overridingMethod.signature
+==================================
+
+The return type, the types of the parameters, the parameters added with a default, the visibility and `static` of a method overriding one of a parent class or an interface, as the ancestor declares them.
+
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · needs types · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+classes.overridingMethod.parameterName
+======================================
+
+The names of the parameters of a method overriding one of a parent class or an interface, as the ancestor names them.
+
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · needs types · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+classes.protectedInEnum
+=======================
+
+A `protected` member of an enum, which is `private`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `forbidden`, psr12 `keep`, nette `forbidden`, symfony `forbidden`, laravel `keep` · covers `protected_to_private` .[decision-facts]
+
+
+classes.protectedInFinalClass
+=============================
+
+A `protected` member of a final class with no parent and no trait, which is `private`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `forbidden`, laravel `keep` · covers `protected_to_private` .[decision-facts]
+
+
+classes.visibility.publicWithSet
+================================
+
+The `public` of a property with a set visibility, `public protected(set) int $x`, which reads the same without it.
+
+- `required`: always there
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · PHP 8.4 · standards: perCs `keep`, psr12 `required`, nette `required`, symfony `required`, laravel `keep` .[decision-facts]
+
+
+classes.staticMethod
+====================
+
+The `static` keyword of a method that does not use `$this`, of the visibilities `classes.staticMethodVisibilities` names, its calls `$this->method()` written `self::method()`; a magic method and one whose body could reach the object otherwise are left.
+
+- `required`: always there, `static function`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` · covers `static_private_method` .[decision-facts]
+
+
+classes.staticMethodVisibilities
+================================
+
+The visibilities of the methods made static.
+
+- a list of these words:
+	- `private`: a private method
+	- `protected`: a protected method, where no child and no ancestor can declare it
+	- `public`: a public method, where no child and no ancestor can declare it
+
+Default `[private]` · standards: perCs `[private]`, psr12 `[private]`, nette `[private]`, symfony `[private]`, laravel `[private]` .[decision-facts]
+
+
+classes.modifiers.implied
+=========================
+
+A modifier PHP implies anyway, `final` in a final class, `readonly` in a readonly class, `protected(set)` of a public readonly property.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `no_redundant_readonly_property`, `no_unneeded_final_method`, `Generic.CodeAnalysis.UnnecessaryFinalModifier` .[decision-facts]
+
+
+classes.untypedPropertyNullDefault
+==================================
+
+`public $a = null;` says what `public $a;` says.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `forbidden`, laravel `keep` · covers `no_null_property_initialization` .[decision-facts]
+
+
+classes.overridingMethod.parentCallOnly
+=======================================
+
+A method that only forwards to the parent with the same arguments adds nothing.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · needs types · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+classes.overridingMethod.ReturnTypeWillChange
+=============================================
+
+The attribute where the method declares the return type of what it implements.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+classes.visibility.constant
+===========================
+
+The visibility of a constant of a class, an interface, a trait or an enum.
+
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `required`, psr12 `required`, nette `required`, symfony `required`, laravel `keep` · covers `modifier_keywords`, `visibility_required`, `PSR12.Properties.ConstantVisibility`, `PSR2.Classes.PropertyDeclaration`, `SlevomatCodingStandard.Classes.ClassConstantVisibility`, `Squiz.Scope.MethodScope` .[decision-facts]
+
+
+classes.visibility.property
+===========================
+
+The visibility of a property, a promoted one included, `var` becoming `public` and a set visibility counting as one.
+
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `required`, psr12 `required`, nette `required`, symfony `required`, laravel `required` · covers `modifier_keywords`, `visibility_required`, `PSR12.Properties.ConstantVisibility`, `PSR2.Classes.PropertyDeclaration`, `SlevomatCodingStandard.Classes.ClassConstantVisibility`, `Squiz.Scope.MethodScope` .[decision-facts]
+
+
+classes.visibility.method
+=========================
+
+The visibility of a method outside an interface, whose methods take `interfaceMethod`.
+
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `required`, psr12 `required`, nette `required`, symfony `required`, laravel `required` · covers `modifier_keywords`, `visibility_required`, `PSR12.Properties.ConstantVisibility`, `PSR2.Classes.PropertyDeclaration`, `SlevomatCodingStandard.Classes.ClassConstantVisibility`, `Squiz.Scope.MethodScope` .[decision-facts]
+
+
+classes.visibility.interfaceMethod
+==================================
+
+The `public` of a method of an interface, which is public whatever it says.
+
+- `required`: always there
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `required`, psr12 `required`, nette `forbidden`, symfony `required`, laravel `required` · covers `modifier_keywords`, `visibility_required`, `Squiz.Scope.MethodScope` .[decision-facts]
+
+
+classes.emptyParentheses.instantiation
+======================================
+
+The empty parentheses of `new` with a class, `new static` and `new $class` alike, which `new Foo()->bar()` keeps whatever this says, PHP 8.4 needing them there.
+
+- `required`: always there, `new Foo()`
+- `forbidden`: never there, `new Foo`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `required`, psr12 `required`, nette `forbidden`, symfony `required`, laravel `forbidden` · covers `new_with_braces`, `new_with_parentheses`, `PSR12.Classes.ClassInstantiation`, `SlevomatCodingStandard.ControlStructures.NewWithParentheses`, `SlevomatCodingStandard.ControlStructures.NewWithoutParentheses` .[decision-facts]
+
+
+classes.emptyParentheses.anonymousClass
+=======================================
+
+The empty parentheses of an anonymous class.
+
+- `required`: always there, `new class()`
+- `forbidden`: never there, `new class`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `forbidden`, psr12 `keep`, nette `forbidden`, symfony `forbidden`, laravel `forbidden` · covers `new_with_braces`, `new_with_parentheses` .[decision-facts]
+
+
+classes.emptyParentheses.attribute
+==================================
+
+The empty parentheses of an attribute.
+
+- `required`: always there, `#[Foo()]`
+- `forbidden`: never there, `#[Foo]`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `forbidden`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `attribute_empty_parentheses` .[decision-facts]
+
+
+classes.instantiationWrapping
+=============================
+
+The parentheses around an instantiation a member is accessed on, `new Foo()->bar()` or `(new Foo())->bar()`; one without the parentheses of its arguments stays wrapped.
+
+- `forbidden`: never there
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · PHP 8.4 · standards: perCs `forbidden`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `new_expression_parentheses` .[decision-facts]

@@ -1,0 +1,182 @@
+Literals
+********
+
+.[perex]
+The `literals` section decides how values are written directly in the code: arrays as `[]` instead of `array()`, the quotes around strings, digit separators like `1_000_000`, a heredoc without interpolation as a nowdoc, two strings joined with a dot on one line, and a class name in a string.
+
+The key `quotes` applies only to a plain string, that is, a string without an interpolated variable, without an escape sequence that only double quotes understand, and without a quote of the target kind inside. For all other strings, the kind of quotes matters, and they stay as they are.
+
+```neon
+literals:
+	arraySyntax:
+		array: short
+	quotes: single
+	digitSeparator:
+		integer: required
+	digitSeparatorMinDigits:
+		integer: 7
+	concatenatedLiterals: forbidden
+```
+
+```php .[before]
+$colors = array("red", "green");  // The array must be written `[…]` instead of `array(…)`. // A plain string must be written with single quotes. // A plain string must be written with single quotes.
+$limit = 1000000;  // The number `1000000` must be written `1_000_000`.
+$query = 'SELECT * ' . 'FROM users';  // Useless concatenation of two string literals, because they make one literal.
+$greeting = "Hello $name";
+```
+
+```php .[after]
+$colors = ['red', 'green'];
+$limit = 1_000_000;
+$query = 'SELECT * FROM users';
+$greeting = "Hello $name";
+```
+
+The string with a variable stays in double quotes, because they change its meaning.
+
+
+literals.arraySyntax.array
+==========================
+
+The syntax of an array.
+
+- `short`: `[1, 2]`, never `array(1, 2)`
+- `long`: `array(1, 2)`, never `[1, 2]`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `short`, psr12 `keep`, nette `short`, symfony `short`, laravel `short` · covers `array_syntax`, `Generic.Arrays.DisallowLongArraySyntax`, `Generic.Arrays.DisallowShortArraySyntax` .[decision-facts]
+
+
+literals.arraySyntax.list
+=========================
+
+The syntax of a destructuring.
+
+- `short`: `[$a, $b] =`, never `list($a, $b) =`
+- `long`: `list($a, $b) =`, never `[$a, $b] =`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `short`, symfony `keep`, laravel `short` · covers `list_syntax`, `SlevomatCodingStandard.PHP.ShortList` .[decision-facts]
+
+
+literals.classNameInString
+==========================
+
+`'Acme\Shop\Order'` is `Order::class`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · needs types · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `class_keyword` .[decision-facts]
+
+A class name in a string is rewritten to `::class` only when a class, interface or enum of that name really exists in the project; DressCode finds that out from [types from PHPStan |/types]. The name of a trait is not rewritten, and neither is a string with a leading backslash (`'\Acme\Shop\Order'`), a backslash that a class name in a string does not need. A class declared in a `.phpt` test counts only in that file, because no autoloader loads such a test. According to its own documentation, the PHP CS Fixer rule `class_keyword` cannot tell this, because with tokens alone it does not know which classes the project has.
+
+
+literals.implicitBackslash
+==========================
+
+A backslash of a string that escapes nothing, written `\\` instead.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `escape_implicit_backslashes`, `string_implicit_backslashes` .[decision-facts]
+
+
+literals.heredocWithoutInterpolation
+====================================
+
+A heredoc with nothing to interpolate, which is written as a nowdoc.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `forbidden`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `forbidden` · covers `heredoc_to_nowdoc`, `SlevomatCodingStandard.PHP.RequireNowdoc` .[decision-facts]
+
+
+literals.digitSeparator.integer
+===============================
+
+The separator grouping by three the digits of a decimal integer, or of the integer part of a decimal number, `1_000`; a number grouped already stays.
+
+- `required`: always there
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` · covers `PhpCsFixerCustomFixers/numeric_literal_separator`, `numeric_literal_separator`, `SlevomatCodingStandard.Numbers.DisallowNumericLiteralSeparator`, `SlevomatCodingStandard.Numbers.RequireNumericLiteralSeparator` .[decision-facts]
+
+
+literals.digitSeparator.fraction
+================================
+
+The separator grouping by three the digits of the fraction of a decimal number, `0.000_1`.
+
+- `required`: always there
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` · covers `PhpCsFixerCustomFixers/numeric_literal_separator`, `numeric_literal_separator`, `SlevomatCodingStandard.Numbers.DisallowNumericLiteralSeparator`, `SlevomatCodingStandard.Numbers.RequireNumericLiteralSeparator` .[decision-facts]
+
+
+literals.digitSeparatorMinDigits.integer
+========================================
+
+The number of digits from which `literals.digitSeparator.integer` groups them.
+
+- a number from 1
+
+Default `4` · standards: perCs `4`, psr12 `4`, nette `7`, symfony `4`, laravel `4` · covers `SlevomatCodingStandard.Numbers.RequireNumericLiteralSeparator` .[decision-facts]
+
+
+literals.digitSeparatorMinDigits.fraction
+=========================================
+
+The number of digits from which `literals.digitSeparator.fraction` groups them.
+
+- a number from 1
+
+Default `4` · standards: perCs `4`, psr12 `4`, nette `20`, symfony `4`, laravel `4` · covers `SlevomatCodingStandard.Numbers.RequireNumericLiteralSeparator` .[decision-facts]
+
+
+literals.quotes
+===============
+
+The quotes of a plain string, one without interpolation, without an escape sequence only double quotes know and without a quote of the wanted kind inside.
+
+- `single`: `'text'` where double quotes gain nothing
+- `double`: `"text"` for every plain string, the backslashes of a single-quoted one escaped
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `single`, symfony `single`, laravel `single` · covers `single_quote`, `Squiz.Strings.DoubleQuoteUsage` .[decision-facts]
+
+
+literals.concatenatedLiterals
+=============================
+
+Two string literals concatenated on one line, which are one literal, `'ab'` for `'a' . 'b'`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `PhpCsFixerCustomFixers/no_superfluous_concatenation`, `no_useless_concat_operator`, `Generic.Strings.UnnecessaryStringConcat` .[decision-facts]
+
+
+literals.concatenatedLiteralsOverLines
+======================================
+
+Whether two string literals concatenated over a line break are one literal too.
+
+- `yes` or `no`
+
+Default `no` · standards: perCs `no`, psr12 `no`, nette `no`, symfony `no`, laravel `no` · covers `Generic.Strings.UnnecessaryStringConcat` .[decision-facts]
+
+
+literals.emptyStringConcatenation
+=================================
+
+The concatenation with an empty string, which is a cast or nothing, `(string) $x` for `$x . ''`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `PhpCsFixerCustomFixers/no_superfluous_concatenation`, `Generic.Strings.UnnecessaryStringConcat` .[decision-facts]

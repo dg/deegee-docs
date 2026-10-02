@@ -1,0 +1,285 @@
+Hygiene
+*******
+
+.[perex]
+The `hygiene` section decides on code that can be written more simply with the same meaning: an alias instead of the function itself, `is_null()` and `intval()` instead of a language construct, `dirname(__FILE__)` instead of `__DIR__`, `get_class()` instead of `::class`, `call_user_func()` instead of a direct call, two calls of `isset()` or `unset()` instead of one, and an argument that PHP ignores or that only repeats the default.
+
+A language construct is always fast, and the namespace does not matter for it. Inside a namespace, these fixes are risky fixes: an unqualified `is_null()` can be the function `App\is_null()` declared by your project. Until the configuration says [`nameResolution: certain` |/namespaces#name-resolution], they wait for your permission.
+
+A direct call instead of `call_user_func()` is also risky in a file with `strict_types`: `call_user_func()` passes the arguments the way a caller without strict types would, so the direct call can throw a `TypeError` where the value used to be converted. This does not apply where PHP itself already turns the call into a direct one, that is, for a global function without named or unpacked arguments. A parameter passed by reference brings no risk: PHP already reports a warning for it on every call of `call_user_func()`, so the only code that changes is code that already does not work cleanly.
+
+```neon
+hygiene:
+	aliasFunctions: [core]
+	conversionFunction: forbidden
+	is_null: forbidden
+	dirnameOfFile: forbidden
+	classNameNotation:
+		object: required
+	call_user_func: forbidden
+```
+
+```php .[before]
+$count = sizeof($items);  // The alias `sizeof()` must be written `count()`.
+$id = intval($row['id']);  // The `intval()` call must be written as the `(int)` cast.
+if (is_null($user)) {  // The `is_null()` call must be written as a comparison with `null`.
+	$dir = dirname(__FILE__);  // The `dirname(__FILE__)` call must be written `__DIR__`.
+}
+$type = get_class($order);  // The class name must be obtained with `$order::class`.
+$result = call_user_func($callback, $id);  // The callable must be called directly, not through `call_user_func()`.
+```
+
+```php .[after]
+$count = count($items);
+$id = (int) $row['id'];
+if ($user === null) {
+	$dir = __DIR__;
+}
+$type = $order::class;
+$result = $callback($id);
+```
+
+The section and the [set `cleanup` |/configuration#Standards and Sets] are not the same thing: the set also makes decisions in other sections, such as unused imports or empty comments, and it takes only part of this section. In `--only`, `fixRisky` or `severity`, you write the section as `hygiene` and the set as `cleanup`. Only the section and the set `types` share a name, so where a bare `types` could mean either, DressCode rejects it: you write the section as `types.*` and the set as `types`.
+
+
+hygiene.classNameNotation.currentClass
+======================================
+
+`self::class`, `static::class` and `parent::class` for `get_class()`, `get_called_class()`, `get_parent_class()` and `__CLASS__`.
+
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` · covers `SlevomatCodingStandard.Classes.ModernClassNameReference` .[decision-facts]
+
+
+hygiene.classNameNotation.object
+================================
+
+`$object::class` for `get_class($object)`.
+
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` · covers `get_class_to_class_keyword`, `SlevomatCodingStandard.Classes.ModernClassNameReference` .[decision-facts]
+
+
+hygiene.repeatedCatchBody
+=========================
+
+Two adjacent catches of one body, written as one `catch (A|B $e)`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · PHP 7.1 · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+hygiene.unreadCatchVariable
+===========================
+
+The variable of a `catch` that is never read, `catch (E)` written instead.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · PHP 8.0 · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `SlevomatCodingStandard.Exceptions.RequireNonCapturingCatch` .[decision-facts]
+
+
+hygiene.uselessVersionCheck
+===========================
+
+A check of the version of PHP every version the code runs on decides alike, `if (PHP_VERSION_ID >= 80000)` for code on 8.0.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+hygiene.aliasFunctions
+======================
+
+The sets of functions whose aliases are written by their canonical names.
+
+- a list of these words:
+	- `all`: every set below
+	- `core`: the core functions, `sizeof()` is `count()`, `join()` is `implode()`
+	- `imap`: `imap_*`
+	- `ldap`: `ldap_*`
+	- `mysqli`: `mysqli_*`
+	- `pg`: `pg_exec()` is `pg_query()`
+	- `oci`: `oci_*`
+	- `odbc`: `odbc_*`
+	- `openssl`: `openssl_*`
+	- `sodium`: `sodium_*`
+	- `ftp`: `ftp_quit()` is `ftp_close()`
+	- `posix`: `posix_errno()` is `posix_get_last_error()`
+	- `pcntl`: `pcntl_errno()` is `pcntl_get_last_error()`
+	- `time`: `mktime()` and `gmmktime()` without arguments are `time()`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `[core, imap, pg]`, symfony `keep`, laravel `[core, imap, pg]` · covers `no_alias_functions` .[decision-facts]
+
+
+hygiene.call_user_func
+======================
+
+`call_user_func($f, $x)` is `$f($x)`, `call_user_func_array($f, $a)` is `$f(...$a)`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · PHP 7.0 · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `regular_callable_call` .[decision-facts]
+
+
+hygiene.call_user_funcMethods
+=============================
+
+Whether a method the callable names as `[$this, 'run']`, `[self::class, 'make']` or `'Acme\Shop\Order::make'` is called directly too.
+
+- `yes` or `no`
+
+Default `no` · PHP 7.0 · standards: perCs `no`, psr12 `no`, nette `no`, symfony `no`, laravel `no` .[decision-facts]
+
+
+hygiene.conversionFunction
+==========================
+
+`intval($x)` is `(int) $x`; `intval($x, 16)` is no cast.
+
+Not about which name of `floatval()` the code writes, `doubleval()` being an alias `hygiene.aliasFunctions` renames too.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `modernize_types_casting` .[decision-facts]
+
+
+hygiene.dirnameOfFile
+=====================
+
+`dirname(__FILE__)`, which is `__DIR__`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `PhpCsFixerCustomFixers/no_useless_dirname_call`, `combine_nested_dirname`, `dir_constant` .[decision-facts]
+
+
+hygiene.nestedDirname
+=====================
+
+A `dirname()` of a `dirname()`, which is one call with the `levels` argument.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+hygiene.__invokeCall
+====================
+
+`$f->__invoke($x)` is `$f($x)`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `SlevomatCodingStandard.PHP.DisallowDirectMagicInvokeCall` .[decision-facts]
+
+
+hygiene.is_null
+===============
+
+`is_null($x)` is `$x === null`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `is_null` .[decision-facts]
+
+
+hygiene.settype
+===============
+
+`settype($x, 'int')` as a statement is `$x = (int) $x`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `set_type_to_cast` .[decision-facts]
+
+
+hygiene.defaultArgument
+=======================
+
+An argument PHP ignores or that repeats the default.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` .[decision-facts]
+
+An argument that only repeats the default is always removed from a function call. For a method, a static method and `new`, DressCode needs [the types of the code |/types]: it must know every class the receiver can be, and each of them must declare the same default. It ignores a child class that might change the default, because such a class would break the contract of its type. A receiver of an unknown type, or one that can be several classes with different defaults, stays as it is, and without types, methods and `new` stay as they are everywhere.
+
+```neon
+typeAnalysis: phpstan
+
+hygiene:
+	defaultArgument: forbidden
+```
+
+```php .[before]
+$json = json_encode($data, 0);  // Useless `flags` argument of `json_encode()`, because it repeats the default value.
+$memcached->delete($key, 0);  // Useless `time` argument of `Memcached::delete()`, because it repeats the default value.
+```
+
+```php .[after]
+$json = json_encode($data);
+$memcached->delete($key);
+```
+
+
+hygiene.countEmptyTest
+======================
+
+`count($a) === 0` is `$a === []`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · needs types · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+hygiene.strlenEmptyTest
+=======================
+
+`strlen($s) === 0` is `$s === ''`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · needs types · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `PhpCsFixerCustomFixers/no_useless_strlen`, `string_length_to_empty` .[decision-facts]
+
+
+hygiene.separateIssets
+======================
+
+`isset($a) && isset($b)` is `isset($a, $b)`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `combine_consecutive_issets` .[decision-facts]
+
+
+hygiene.separateUnsets
+======================
+
+`unset($a); unset($b);` is `unset($a, $b);`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `combine_consecutive_unsets` .[decision-facts]

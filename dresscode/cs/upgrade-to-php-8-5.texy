@@ -1,0 +1,185 @@
+Přechod na PHP 8.5
+******************
+
+{{maintitle: Přechod na PHP 8.5: přepis kódu automaticky}}
+{{description: Přechod na PHP 8.5: DressCode přepíše kód na pipe operátor, array_last() a clone() s vlastnostmi a opraví nebo ohlásí vše, co PHP 8.5 zavrhlo.}}
+
+.[perex]
+Zvedněte verzi PHP v `composer.json` na 8.5 a DressCode přepíše kód na pipe operátor, `array_first()`, `array_last()` a `clone()` s vlastnostmi. Opraví nebo ohlásí i všechno, co PHP 8.5 zavrhlo, a výsledek v tomtéž běhu zformátuje podle vašeho standardu.
+
+
+Jak to vypadá
+=============
+
+Třída psaná pro PHP 8.4 v projektu, který teď vyžaduje PHP 8.5. Konfigurace přidává ke standardu sady `modernizations` a `deprecations` a říká, že jmenné prostory projektu žádné vlastní funkce nedeklarují; cílovou verzi PHP, kterou jinak DressCode vezme z `composer.json`, tu uvádí klíč `targets`:
+
+```neon
+use:
+	- perCs
+	- modernizations
+	- deprecations
+
+nameResolution: certain
+
+targets:
+	php: '8.5'
+```
+
+```php .[before]
+final class Article
+{
+    private string $title = '';
+
+    /** @var list<Item> */
+    private array $items = [];
+
+    public function withTitle(string $title): static
+    {
+        $clone = clone $this;
+        $clone->title = $title;
+        return $clone;
+    }
+
+    public function slug(string $title): string
+    {
+        return trim(strtolower(strip_tags($title)));
+    }
+
+    public function newest(): Item
+    {
+        return $this->items[array_key_last($this->items)];
+    }
+
+    public function download(string $url): string
+    {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        $data = (string) curl_exec($ch);
+        curl_close($ch);
+        return $data;
+    }
+
+    public function count(): int
+    {
+        return (integer) count($this->items);
+    }
+}
+```
+
+Po jednom `dresscode fix`:
+
+```php .[after]
+final class Article
+{
+    private string $title = '';
+
+    /** @var list<Item> */
+    private array $items = [];
+
+    public function withTitle(string $title): static
+    {
+        return clone($this, ['title' => $title]);
+    }
+
+    public function slug(string $title): string
+    {
+        return $title |> strip_tags(...) |> strtolower(...) |> trim(...);
+    }
+
+    public function newest(): Item
+    {
+        return array_last($this->items);
+    }
+
+    public function download(string $url): string
+    {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        $data = (string) curl_exec($ch);
+        return $data;
+    }
+
+    public function count(): int
+    {
+        return (int) count($this->items);
+    }
+}
+```
+
+Každá změna je jedna novinka PHP 8.5: `clone()` s vlastnostmi, pipe operátor `|>`, funkce `array_last()`, volání `curl_close()`, které už nic nedělá, a přetypování `(integer)`, které PHP 8.5 zavrhlo.
+
+
+Co se přepíše
+=============
+
+Sada `modernizations` přepíše kód na to, co přineslo PHP 8.5. Každá položka je rozhodnutí sekce [upgrading |decisions/upgrading], které projekt může zapnout i samotné.
+
+| novinka | před | po | oprava |
+|---|---|---|---|
+| pipe operátor, `upgrading.syntax.pipe` | `trim(strtolower($s))` | `$s \|> strtolower(...) \|> trim(...)` | opraví se |
+| `array_first()`, `array_last()`, `upgrading.functions.arrayFirstLast` | `$a[array_key_last($a)]` | `array_last($a)` | opraví se |
+| `clone()` s vlastnostmi, `upgrading.syntax.cloneWith` | `$c = clone $this; $c->title = $title;` | `clone($this, ['title' => $title])` | opraví se; riziková, kde může záležet na tom, že se argument vyhodnotí jednou |
+| `#[\Deprecated]` na traitu a konstantě, `upgrading.phpdoc.deprecated` | `/** @deprecated */` | `#[\Deprecated]` | riziková: zastaralý kód začne hlásit za běhu |
+| `#[\Override]` na vlastnosti, `upgrading.classes.Override` | `public string $name;` | `#[\Override] public string $name;` | v žádné sadě, zapněte si ho sami; potřebuje typy |
+
+.[note]
+Každé rozhodnutí ví, ve které verzi PHP jeho konstrukce přišla. Dokud `composer.json` dovoluje ještě PHP 8.4, přepisy na 8.5 tiše čekají a `dresscode config` je vypíše jako bez účinku.
+
+
+Co PHP 8.5 zavrhlo
+==================
+
+Sada `deprecations` opraví, co má přímou náhradu, a zbytek ohlásí i s verzí, která ho zavrhla. Metody tříd PHP přepíše jen tam, kde DressCode zná typ objektu, viz [Typy z PHPStanu |types].
+
+| zavržené | DressCode |
+|---|---|
+| `curl_close()`, `curl_share_close()`, `finfo_close()`, `imagedestroy()`, `xml_parser_free()` | opraví se: volání zmizí, protože už nic nedělá |
+| zpětné apostrofy <code>''`git log`''</code> | opraví se: `shell_exec("git log")` |
+| přetypování `(integer)`, `(boolean)`, `(double)`, `(binary)` | opraví se: `(int)`, `(bool)`, `(float)`, `(string)` |
+| středník za `case` | opraví se: `case 1:` |
+| klíč pole `null` | opraví se: `''` |
+| `SplObjectStorage::contains()`, `attach()`, `detach()` | opraví se s typy: `offsetExists()`, `offsetSet()`, `offsetUnset()` |
+| `ReflectionProperty::setAccessible()` | opraví se s typy: volání zmizí |
+| `mysqli_execute()`, `socket_set_timeout()` | ohlásí se |
+| `DATE_RFC7231`, `FILTER_DEFAULT`, `MHASH_*` | ohlásí se |
+| `__sleep()`, `__wakeup()` | ohlásí se: přepis na `__serialize()` by změnil formát uložených dat |
+
+Nález jmenuje verzi, která věc zavrhla:
+
+/--pre .[terminal]
+src/Db.php:19:5: error: Function `mysqli_execute()` is deprecated: since PHP 8.5. [upgrading.php.deprecatedApi]
+\--
+
+
+Rizikové opravy
+===============
+
+Přepis, který může změnit, co kód dělá, se jen ohlásí a udělá se, až jeho rozhodnutí uvedete ve `fixRisky`. Atribut `#[\Deprecated]` je takový ze své podstaty, protože zastaralý kód začne hlásit za běhu:
+
+```neon
+fixRisky:
+	- upgrading.phpdoc.deprecated
+```
+
+.[warning]
+Ve jmenném prostoru může být nekvalifikované `strip_tags()` funkcí toho jmenného prostoru. Dokud konfigurace neřekne `nameResolution: certain`, přepisy takových volání čekají jako rizikové, viz [Funkce a konstanty ve jmenných prostorech |namespaces].
+
+
+Krok za krokem
+==============
+
+1. Začněte s čistým pracovním stromem, ať diff ukáže jen to, co udělal DressCode.
+2. Změřte, kolik práce přechod dá: `dresscode upgrade estimate php 8.5`. Uvádí-li projekt `config.platform.php`, zvedněte ho na 8.5 předem.
+3. Uložte plán a proveďte ho: `dresscode upgrade plan php 8.5 --save`, pak `dresscode upgrade run`. U kroku Composeru se DressCode zeptá, jestli smí zvednout `require.php` na `^8.5`; zvednout ho můžete i sami a pak pustit `upgrade run`.
+4. Přečtěte, co zůstalo pro vás, a pusťte `upgrade run` znovu, dokud běh neskončí `UPGRADED`. Rizikové opravy, které čekají, rozhodnou typy, `nameResolution`, nebo vy.
+5. Výsledek commitněte samostatně, bez jiných změn.
+
+Má-li projekt sady `modernizations` a `deprecations` v konfiguraci, stačí po zvednutí `require.php` obyčejný `dresscode fix`. Celý postup s testy a commity popisuje [Upgrade kódu krok za krokem |upgrade].
+
+
+Kam dál
+=======
+
+- [Přechod na novější PHP |upgrading-php], PHP 8.6 a 8.4 i starší verze.
+- [Typy z PHPStanu |types], aby se přepsaly i metody tříd PHP.
+- [Sekce upgrading |decisions/upgrading] se všemi rozhodnutími o novějším PHP.

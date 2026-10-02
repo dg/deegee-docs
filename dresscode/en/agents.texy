@@ -1,0 +1,95 @@
+AI Agents: Claude Code and Codex
+********************************
+
+.[perex]
+An AI coding agent writes PHP code fast and in its own way. After every edit, DressCode tailors the file to your project's coding standard and, like a good tailor, tells the agent right away what it altered: a diff of the rewrite, the imports it removed, and what is still left, with advice on what to do about it.
+
+
+Installation
+============
+
+In Claude Code, two commands are enough:
+
+```shell
+/plugin marketplace add nette/agent-plugins
+/plugin install php-fixer@nette
+```
+
+From then on, after every edit of a PHP file, the `php-fixer` plugin runs DressCode with the project's configuration (the nearest `dresscode.neon`), or with the Nette standard where there is none. Codex uses the same plugin, installed with `codex plugin add php-fixer@nette`; you approve its hooks once in `/hooks`. When DressCode is installed neither in the project nor globally, the `install-php-fixer` skill installs it.
+
+The hook covers writes by the tools `Edit` and `Write` in Claude Code and `apply_patch` in Codex. The hook does not see a file the agent writes with a shell command (`Bash`); only the next edit or `dresscode fix` brings such a file into line.
+
+
+What the Agent Gets
+===================
+
+When nobody tells the agent what changed in the file it is editing, a well-known loop starts: the agent writes a `use`, the hook deletes it as unused, the agent adds the code that needed the import and wonders where the error came from. Or it edits another place based on the text it remembers, and the edit fails because the file looks different now. The hook therefore uses the `agent` output format, which tells the model in plain sentences what happened:
+
+/--pre .[terminal]
+DressCode changed `src/Cart.php`; the changes below are already in the file:
+
+- removed the import of `Acme\Shop\Payment\Gateway`: nothing used it; if you meant to use it, add the import in the same edit as the use.
+
+```diff
+@@ -12,7 +10,7 @@
+
+ 	public function add(string $name, int $price): void
+ 	{
+-		$this->items[] = ["name" => $name, "price" => $price];
++		$this->items[] = ['name' => $name, 'price' => $price];
+ 	}
+
+
+```
+
+Left in `src/Cart.php`, at the lines of the file as it is now:
+- line 19: the `@` operator must not be used (`mistakes.errorSuppression`). Fix it; where the current code is intended and you know why, keep it with a comment on its line, `// @ <why>`, giving the real reason for `<why>`; otherwise tell the user.
+\--
+
+- **A clean file prints nothing**, so the hook does not flood the context.
+- **A rewrite comes as a diff** of what is already in the file, so the next edit does not miss. When the rewrite is too long for the message, the agent gets an instruction to read the file again instead of the diff.
+- **A removed import is named**, with the advice to add it in the same edit as its use.
+- **Every violation says what to do with it.** A risky fix says why it was not made and that the change must keep the intended behavior. Where the project allows exceptions approved by a comment (the key [`suppressionComments` |suppressing]), the agent gets an example of that comment. `dresscode:ignore` is never offered to the agent.
+- **The format leaves out warnings about the configuration**, because the agent can do nothing with them.
+
+
+The Style of the File
+=====================
+
+The hook also passes DressCode the text of the file before the edit (`--before`). Whatever that text did not follow is the style of the file, not a mistake of the agent. DressCode leaves it as it is and tells the agent to follow the style of the file there:
+
+/--pre .[terminal]
+Before the edit `src/Legacy.php` did not follow `indentation.unit`, `literals.quotes`, so DressCode leaves them as the file writes them; write the code there in the style of the rest of the file.
+\--
+
+So when the agent edits one method of a file that does not meet the standard yet, the rest of the file is not reformatted. A small commit gets nothing the agent did not write, and a file indented with spaces stays indented with spaces. On the other hand, whatever the edit broke is fixed, wherever it is: an import whose last use the edit removed, or lines the edit wrapped in a new block. A new file belongs entirely to the agent, so it is fixed completely. For the rest of the project there is `dresscode fix`, to be run on purpose and committed separately.
+
+
+Without a Hook
+==============
+
+An agent or a tool that can run a command after writing a file runs the same thing itself:
+
+```shell
+dresscode fix src/Cart.php -f agent --skip-excluded --before /tmp/Cart.before.php --lines 12-14
+```
+
+Thanks to `--skip-excluded`, the command does not touch a file that the configuration excludes in `excludePaths`, for example a test fixture the agent wrote into. Without `--before`, the whole file is fixed; `--lines` only narrows the output.
+
+
+Upgrading with an Agent
+=======================
+
+After an [upgrade of libraries |upgrade], you are left with a list of places that a human must rewrite, and every message in it says what to write instead of the old API. Such a list is exactly the right job for an agent. With the `agent` format, the agent gets a diff of what DressCode rewrote and, for every remaining finding, what to do with it:
+
+```shell
+dresscode upgrade today -f agent
+```
+
+Unlike the terminal output, the `agent` format does not suggest another run, so run the command again until it rewrites nothing. The agent gets the [estimate and the plan of an upgrade |upgrade#How Much Work an Upgrade Takes] as data, such as `dresscode upgrade plan php 8.4 --format json`, and the same goes for a run of the plan, `upgrade tasks` and `upgrade status`; these commands have no `agent` format. The document carries the root of the project in `root`, and for a saved plan `planIdentity`, a fingerprint of the plan file by which the agent tells which plan the document is about. In the `json` format DressCode asks nothing, not even in a terminal, so turn the types on with `--types` and allow raising the versions in `composer.json` during `upgrade run` with `--yes`; without it, the run does not even ask Composer and ends with exit code 4. `init` and `migrate` give the agent data too: `dresscode init --format json` measures the configuration, takes the recommended answers, and returns what it would have asked under `instructions`.
+
+
+Fewer Risky Fixes
+=================
+
+The hook does not make risky fixes, it only reports them. To keep as few of them as possible, the key [`nameResolution: certain` |namespaces#name-resolution] belongs in `dresscode.neon` too: with it, the fixes that depend on a function being global are no longer risky, and the hook makes them itself. [Types |types#enable] do the same for the fixes that depend on the type of a value.

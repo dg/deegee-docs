@@ -1,0 +1,253 @@
+File
+****
+
+.[perex]
+The `file` section decides on the file as text: the opening and closing tag, the encoding, the line ending, the last line, trailing whitespace, the maximum line length and the `strict_types` declaration.
+
+Most keys of this section are the same in all standards, and a project takes them as they are. Two of them deserve attention. `lineEnding` says which line ending every line has. Its value `majority`, which all standards use, makes each file use the line ending that most of its lines already have; so a project on Windows, where Git converts line endings, does not fight with Git. And `lineLength` is the maximum line length, and it is also the switch for line splitting. On a line longer than the limit, every construct from the [multiline |multiline] section whose shape there is not `keep` is split onto several lines: a call, a signature, a condition, a method chain, an array or a list of interfaces. The outer construct is split first, then the inner ones. A line that cannot be split is reported by a separate decision, `longLines`, and what should be neither split nor reported for its width is listed in `lineLengthExcept`.
+
+```neon
+file:
+	lineEnding: majority
+	lineLength: 120
+	longLines: forbidden
+	strictTypes:
+		declaration: required
+		position: sameLine
+```
+
+The width of a line is counted the way you see it: a tab reaches to the next tab stop set by [`indentation.tabWidth` |indentation#indentation.tabWidth]; it does not count as one character. Lines that are content, where a line break would change the meaning, are not measured: the inside of a heredoc, a multiline string and HTML outside the PHP tags.
+
+
+file.finalLineEndings
+=====================
+
+Exactly one line ending after the last line; a file ending in HTML is content.
+
+- the number 1
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `1`, psr12 `1`, nette `1`, symfony `1`, laravel `1` · covers `single_blank_line_at_eof`, `PSR2.Files.EndFileNewline` .[decision-facts]
+
+
+file.lineEnding
+===============
+
+The line ending of every line, which the code written new takes too; under `keep` that follows the file.
+
+- `LF`: every line ends with LF
+- `CRLF`: every line ends with CRLF
+- `majority`: every line ends as most lines of the file do, LF on a tie
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `majority`, psr12 `majority`, nette `majority`, symfony `majority`, laravel `majority` · covers `line_ending`, `Generic.Files.LineEndings` .[decision-facts]
+
+Where the key is `keep`, nothing is reported, and new code that DressCode writes gets the line ending that most lines of the file already have.
+
+
+file.lineLength
+===============
+
+The widest line, by which what spreads over lines is split.
+
+- a number from 1
+- `none`: no line is too wide
+
+Default `none` · standards: perCs `120`, psr12 `120`, nette `140`, symfony `none`, laravel `none` · covers `Generic.Files.LineLength`, `SlevomatCodingStandard.Classes.RequireMultiLineMethodSignature`, `SlevomatCodingStandard.ControlStructures.RequireMultiLineCondition`, `SlevomatCodingStandard.Files.LineLength` .[decision-facts]
+
+
+file.lineLengthExcept
+=====================
+
+What a line too wide leaves as it is: a construct named is not spread over lines for its width, and a line it stands on, one a regular expression matches, or with `strings` one wide only for its string literals, is not reported.
+
+- a list of these words:
+	- `imports`: a `use` import other than a group use on one line, which cannot be split
+	- `strings`: a line that would fit were each of its string literals an empty pair of quotes, a string being never split
+	- `argument`: the arguments of a call, of `new` and of an attribute, the variables of `unset()` and `isset()`
+	- `parameter`: the parameters of a function or a method
+	- `closureUse`: the variables of the `use` of a closure
+	- `attribute`: the attributes of one group
+	- `condition`: a condition of `if`, `elseif`, `while` and `do-while`
+	- `chain`: a chain of method calls
+	- `ternary`: a ternary
+	- `for`: the header of a `for`
+	- `logical`: the operands of a boolean operator outside a condition
+	- `concatenation`: the operands of `.`
+	- `arithmetic`: the operands of `+`, `-`, `*`, `/`, `%` and `**`
+	- `bitwise`: the operands of `|`, `&`, `^`, `<<` and `>>`
+	- `coalesce`: the operands of `??`
+	- `pipe`: the operands of `|>`
+	- `array`: the items of an array, which `multiline.maxWidth.array` spreads all the same
+	- `list`: the items of `list()`
+	- `implements`: the interfaces a class implements or an interface extends
+	- `matchCondition`: the conditions of a `match` arm
+
+Default `[imports]` · standards: perCs `[imports]`, psr12 `[imports]`, nette `[imports, strings]`, symfony `[imports]`, laravel `[imports]` · covers `Generic.Files.LineLength`, `SlevomatCodingStandard.Files.LineLength` .[decision-facts]
+
+The list takes two kinds of items. A place, such as `argument` or `chain`, is not split because of the line width, and the line where such a construct starts is not reported either; the places have the same names as in the [multiline |multiline#Places and Kinds] section. This is useful where a project wants to split only some constructs. A regular expression is matched against the text of the line, and a line that matches is only left out of the report; it can still be split. This is useful for lines with URLs or for tables of data. With `array` in the list, an array is no longer split because of the line length, but [`multiline.maxWidth.array` |multiline#multiline.maxWidth.array], which measures the array itself, still applies. The list replaces the default, so if you still want to leave out imports, write `imports` too:
+
+```neon
+file:
+	lineLength: 60
+	longLines: forbidden
+	lineLengthExcept:
+		- imports
+		- argument
+		- '~https?://~'
+multiline:
+	items:
+		argument: perLine
+		array: perLine
+	edges:
+		argument: apart
+		array: apart
+```
+
+```php .[before]
+$user = $repository->findByEmailAndStatus($email, 'active', true);
+$docs = 'https://example.com/documentation/very/long/path/to/the/page';
+$roles = ['administrator', 'editor', 'author', 'contributor'];  // Expected a line break before the array item, because the line is 62 characters long, more than 60.
+$label = 'This account has been suspended for unusual activity';  // The line is 64 characters long, more than 60.
+```
+
+```php .[after]
+$user = $repository->findByEmailAndStatus($email, 'active', true);
+$docs = 'https://example.com/documentation/very/long/path/to/the/page';
+$roles = [
+	'administrator',
+	'editor',
+	'author',
+	'contributor'
+];
+$label = 'This account has been suspended for unusual activity';
+```
+
+The call on the first line stays as it is and is not reported, because `argument` is in the list. The line with the URL matches the regular expression, so it is not reported, even though it cannot be split. The array is split onto several lines, because `array` is not in the list, and the last line is reported: the string cannot be split, and no exception applies to it. The word `strings` would leave it out: with it, a line is not reported if it would fit within the limit with each of its strings, plain or with variables, replaced by an empty pair of quotes. Such a line is long because of text, not because of code, and a string is never split because of the line width, so `strings` only says that it should not be reported either. A line that is long because of its code is still reported, even if it contains a string.
+
+
+file.longLines
+==============
+
+A line wider than `file.lineLength` that nothing could split is reported, unless `file.lineLengthExcept` leaves a construct on it or the line itself as it is.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `forbidden`, psr12 `forbidden`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `Generic.Files.LineLength`, `SlevomatCodingStandard.Files.LineLength` .[decision-facts]
+
+Only what nothing could split is reported: calls, signatures, conditions, arrays and other constructs are split earlier by the decisions of the [multiline |multiline] section, if their `items` is not `keep` there. Only the code is measured; a comment after it does not count. A line with a comment after the code is not split, because after the split the comment would stay on the last line, far from the code it talks about. So a comment cannot make the line too long either. A line that holds only a comment is measured whole. A long string also stays whole, and it is reported unless the word `strings` in [`file.lineLengthExcept` |file#file.lineLengthExcept] leaves it out. What remains is up to you: split the expression, give an intermediate result a name, or shorten the string. Since `fix` cannot resolve such a finding, the value `warning` is a good fit: the line is still reported, but only as a [warning |/configuration#risky-fixes] that does not break the build. That is what `perCs` and `psr12` do, because PSR-12 sets only a soft limit on line length. `nette` forbids long lines, but does not report lines that are long because of strings (`lineLengthExcept: [imports, strings]`), because the text of an exception or any other string should not be cut into pieces to fit a width. To fit the page, the limit here is lowered to 60 characters:
+
+```neon
+file:
+	longLines: forbidden
+	lineLength: 60
+```
+
+```php .[before]
+use Some\Very\Long\Vendor\Namespace\WithAnEvenLonger\ClassName;
+
+$message = sprintf('%s has %d unread messages', $user->name, $count);  // The line is 69 characters long, more than 60.
+$total = $price * $quantity; // the price before any discount is applied
+```
+
+The import is longer than 60 characters, but it is not reported: an import of a single name cannot be split onto more lines, and `file.lineLengthExcept` leaves it out by default. The last line is not reported either, because its code is short and only the comment makes it long.
+
+
+file.bom
+========
+
+A byte order mark at the start of the file.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `forbidden`, psr12 `forbidden`, nette `forbidden`, symfony `forbidden`, laravel `forbidden` · covers `encoding`, `Generic.Files.ByteOrderMark` .[decision-facts]
+
+
+file.closingTagAtEnd
+====================
+
+A `?>` ending a file of PHP only; a `?>` before HTML is content.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `forbidden`, psr12 `forbidden`, nette `forbidden`, symfony `forbidden`, laravel `forbidden` · covers `no_closing_tag`, `PSR2.Files.ClosingTag` .[decision-facts]
+
+
+file.trailingWhitespace
+=======================
+
+A space or a tab at the end of a line.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `forbidden`, psr12 `forbidden`, nette `forbidden`, symfony `forbidden`, laravel `forbidden` · covers `no_trailing_whitespace`, `no_trailing_whitespace_in_comment`, `no_whitespace_in_blank_line`, `Squiz.WhiteSpace.SuperfluousWhitespace` .[decision-facts]
+
+
+file.openingTag
+===============
+
+`<?php` for `<?` and `<?PHP`.
+
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `required`, psr12 `required`, nette `required`, symfony `required`, laravel `required` · covers `full_opening_tag`, `Generic.PHP.DisallowShortOpenTag` .[decision-facts]
+
+
+file.strictTypes.declaration
+============================
+
+Every file of PHP code declares `strict_types=1` as its first statement, a file starting with markup excepted.
+
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` · covers `declare_strict_types`, `Generic.PHP.RequireStrictTypes`, `SlevomatCodingStandard.TypeHints.DeclareStrictTypes` .[decision-facts]
+
+Adding `declare(strict_types=1)` is a risky fix: PHP then rejects an argument of a scalar type that it used to convert silently, so a call that used to work ends with a `TypeError`. The fix is made once you list the decision in the [`fixRisky` |/configuration#risky-fixes] key.
+
+
+file.strictTypes.position
+=========================
+
+Where the declaration of `strict_types` stands.
+
+- `sameLine`: `<?php declare(strict_types=1);` on one line
+- `nextLine`: on the line below the opening tag
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `nextLine`, psr12 `nextLine`, nette `sameLine`, symfony `nextLine`, laravel `keep` · covers `PhpCsFixerCustomFixers/declare_after_opening_tag`, `declare_strict_types`, `Generic.PHP.RequireStrictTypes`, `SlevomatCodingStandard.TypeHints.DeclareStrictTypes` .[decision-facts]
+
+```neon
+file:
+	strictTypes:
+		position: sameLine
+```
+
+```php .[before]
+<?php  // `declare(strict_types=1)` must be on the line of the opening tag.
+declare(strict_types=1);
+
+namespace App;
+```
+
+```php .[after]
+<?php declare(strict_types=1);
+
+namespace App;
+```
+
+
+file.statementsPerLine
+======================
+
+`foo(); bar();` is two lines, and so are two members of a class, `public $a; public $b;`; `for (;;)` is one statement.
+
+- the number 1
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `1`, psr12 `1`, nette `1`, symfony `1`, laravel `1` · covers `no_multiple_statements_per_line`, `Generic.Formatting.DisallowMultipleStatements`, `PSR12.Classes.ClosingBrace`, `PSR2.ControlStructures.SwitchDeclaration` .[decision-facts]

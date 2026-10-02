@@ -1,0 +1,48 @@
+Extending DressCode
+*******************
+
+.[perex]
+Extend the PHP code style checker with your own rule and its decisions, a preset, a plugin, an analysis or upgrade data for your library: when each one is the right choice, and which parts of DressCode you can rely on as public API.
+
+
+Five Places You Can Extend
+==========================
+
+A **rule** is the answer to "I also want to check this". It declares the [decisions |rule-contract#Decisions] it enforces. Then, as a `NodeRule`, it says which nodes it cares about, asks its question and fixes the code if needed; or, as a `GapRule`, it makes a claim on the whitespace between tokens. Users then set its decisions just like those of the engine: the rules of a project in the section `project`, the rules of a plugin in a section named after the plugin. You can write one in an afternoon: [How to Write Your Own Rule |custom-rule].
+
+A **preset** is the answer to "I want this style on all my projects". It is a NEON file in the shape of a configuration that carries decisions. It can build on another preset, and you can use it for a whole project or just for a part of it. See [Your Own Preset and Plugin |presets-and-extensions].
+
+A **plugin** is the answer to "I want to share this as a package". It is a class implementing `DressCode\Plugin`, whose only method `getManifest()` returns a `PluginManifest`: the rules of the package, the section of their decisions, decisions shared by several rules, named presets, the plugins it builds on, analyses, excluded paths, a file filter and the address of the rule pages. A project names it in the key `use` next to the presets, either by its class or by the name of a package that announces it in `extra.dresscode.plugin` of its `composer.json`. A plugin that is merely installed is not loaded, because it brings code that runs on every check. A plugin does not decide how the code looks: the project or a preset writes the decisions. See [Your Own Preset and Plugin |presets-and-extensions].
+
+An **analysis** is the answer to "several rules need this information about a file". It is a plain class built on top of the tree, which rules ask for. The engine creates it once and throws it away whenever the tree changes; only an analysis implementing `PassAnalysis` lasts for the whole pass. The built-in ones are [NameResolver and Scope |phpsyntax:analyses], `PhpDoc`, `PhpSymbols` with `PhpSignatures` (what PHP itself declares) and `Types` (the types of the code from the PHPStan of the project). See [A Rule in Detail |rule-contract#Analyses].
+
+**Upgrade data** is the answer to "the new version of my library renamed its API, and users should fix their code". These are not rules but NEON files in a directory that a package announces in `extra.dresscode.upgrading-dir`. They fill the maps of the engine, such as `upgrading.api.replacedClasses`, or the maps of plugin rules. See [Replacement Maps |upgrading-data].
+
+What you cannot extend is the parser. It is a separate library, [PhpSyntax |phpsyntax:]; its grammar is PHP and nothing else, and the tree it produces is the same for all rules. That is exactly why rules can be combined without knowing about each other. You also cannot add your own output format: the output is a contract of its own, and if you want to process the results somewhere else, read the JSON from `dresscode check --format json`.
+
+
+What Is Public API
+==================
+
+A plugin can rely on these classes between minor versions:
+
+- **writing a rule**: `Rule` with its subclasses `NodeRule` and `GapRule`, `RuleInfo`, `RuleContext`, `Claim`, `Space`, `Line`, `Gap`, `Style` with `ImportStyle` (the shape of imports), `Violation` and the enums `Stage`, `Severity`, `Tristate` and `Risk`;
+- **decisions**: `Decision`, `Domain` with the domains in `Domains\` (`Words`, `Shapes`, `Count`, `Flag`, `Names`, `Text`, `GrammarEntry`, `Map`), the values `Values` and `Value` with the layer that set the value (`Config\Layer`, `Config\LayerKind`), and the catalogue `Config\Catalogue`;
+- **configuration**: `Config`, `Profile`, `Override`, `Plugin` and `PluginManifest`; presets are NEON files and their names;
+- **rule helpers**: `GlobalCalls` (which global function a call calls), `CodeWriter` (code written in the style the file uses), `QualifiedNames` (the two halves of a fully qualified name) and the grammar of the maps in `Upgrading\` (`MemberMap`, `MemberMapGrammar`, `MemberPattern`, `MemberMapMatch`, `ArgumentPattern`, `ArgumentPatternItem`, `ArgumentBindings`, `FunctionPattern`); the built-in rules in `Rules\` only by the name and namespace of their class, so that you can name them in the configuration; their methods are not public;
+- **analyses and testing**: everything in `Analyses\` except `Registry`, `PhpStan`, `PhpSymbolsData` and `PhpSignaturesData`, plus `Testing\RuleTester` and `Testing\UpgradingTester` together with their exception `Testing\TestFailure`, and the file result `FileResult` that `UpgradingTester::runSample()` returns;
+- **command line**: `Console\Application` and `Console\UsageException` for a program that wants to embed a run;
+- **exceptions**: `ConfigurationException`, `RuleException`, `ConvergenceException`;
+- from the library [PhpSyntax |phpsyntax:], everything not marked `@internal`: `Parser`, `Lexer`, `Printer`, `Node`, `Token`, `Trivia`, the nodes, the analyses, `Style`, `Indentation`, the enums and `ParseException`.
+
+Anything marked `@internal` can change at any time: the engine, loading and resolving the configuration, the output formats, and the helpers that the built-in rules share only among themselves. So a program that wants to run DressCode calls it through the command line. A test guards both lists, so a class that is in neither of them fails the test suite instead of becoming public API by accident. And because a minor version can add a new tree node for new PHP syntax, every `match` over node classes needs a `default` branch.
+
+Some public classes are created only by the engine: a rule reads `FileResult`, `ImportStyle`, `LineSplits` or `MemberMapMatch` but does not create them, so their constructor is `@internal`. The page [Version Compatibility |compatibility] sums up what may and may not change between versions.
+
+
+Naming
+======
+
+The decision path is what users write and read, so its name matters most. The path names a thing in the code, not the step the fix takes: `acme.exceptionMessagePeriod: required`, not `acme.addPeriod: true`. The value then says how the thing is written. The built-in catalogue uses settled words for that: `forbidden` and `required` for what must not, or must, appear in the code (in the section `upgrading` also for a construct of newer PHP and for replacing something deprecated); `sameLine` and `nextLine` for the position of a token; a code sample in quotes for a shape; and a number for blank lines. Where a thing has several places, each one gets its own key (`braces.position.class`, `braces.position.function`), and a parameter that only refines something carries the name of what it refines (`mistakes.debugOutputFunctions`). Paths are written in camelCase.
+
+By convention, a rule class is named after the state it enforces, with the suffix `Rule`, so `ExceptionMessagePeriodRule` enforces `acme.exceptionMessagePeriod`. `ruleUrl` builds the address of the rule's page from this name, without the suffix and with a lowercase first letter. A preset is named `vendor/name`, and a plugin's section is named after the plugin. This is the convention of the built-in catalogue, and a plugin that follows it fits right in.

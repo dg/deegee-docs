@@ -1,0 +1,156 @@
+Your Own Preset and Plugin
+**************************
+
+.[perex]
+How to package your own style as a preset and your own rules as a plugin with a section of decisions, share both through Composer, and let users turn them on with a single line, for the whole project or just for a part of it.
+
+
+Preset
+======
+
+A preset is a NEON file in the shape of a configuration. It carries decisions, the key `use` with what it builds on, and possibly `suppressionComments`; nothing more. This is what the house style of the company Acme looks like:
+
+```neon
+# Acme house style
+#
+# PER Coding Style with tabs, lines of up to 100 characters, and the messages of exceptions as sentences.
+
+use: perCs
+
+file:
+	lineLength: 100
+
+indentation:
+	unit: tab
+
+expressions:
+	comparison:
+		# a comparison reads in the order it is spoken
+		yoda: forbidden
+
+acme:
+	exceptionMessagePeriod: required
+```
+
+- A preset starts with a comment: the name on the first line, and below it what the preset is. A comment above a key says why the decision has its value; the [standards and sets |presets-reference] of DressCode are written this way too.
+- `use` names the presets yours builds on, whether standards, sets or other presets. They lie below your preset in the order they are written, each one only once, so what your preset writes wins over what it builds on, and the project above it wins over the preset. Values are merged the same way as in the [configuration |configuration#Layers]: a map by names, a word and a list replace the whole value, and `keep` on a section removes everything under it.
+- The decisions of a preset can belong to the engine as well as to a plugin, like `acme.exceptionMessagePeriod` in the example; the project must then have the plugin, otherwise the catalogue does not know the key.
+- A preset cannot make the choices that belong to the project. The facts about the project (`targets`, `typeAnalysis`, `namespaces`, `nameResolution`), the scope of the run (`paths`, `excludePaths` and others), `fixRisky`, plugins and `rules` are left to the project. DressCode rejects a preset that would set them, with the error <code>''Preset `acme/house` sets `fixRisky`, which the project decides, not a preset.''</code> But a preset may say that violations of a decision only warn, with the key `severity`, like `file.longLines: warning` in the standard `psr12`.
+- A preset meant to be added to any standard is a **set**: it does not decide the layout of the code, does not build on a standard, and does not touch spaces, indentation, line breaking or order. Say so in its opening comment.
+
+A preset does not have to think about the PHP version or about what the project has installed: a decision whose rule asks for a PHP version or a package in `requires` is silently skipped where the project does not have them. In the same way, a decision whose rule needs types is silently skipped in a project without `typeAnalysis: phpstan`.
+
+A project uses a preset by the path to its file in `use`, for example `use: tools/house.neon`, or by its name when a [plugin |#Plugin] brings it. Because it is a layer like any other, you can also use it just for a part of the project, in an [override |configuration#Different Values for Part of the Project]:
+
+```neon
+use:
+	- Acme\CodeStyle\Plugin
+	- perCs
+
+overrides:
+	-
+		paths: [src]
+		use: [acme/house]
+```
+
+
+Plugin
+======
+
+A plugin is what a package brings to a project: a class implementing `DressCode\Plugin`, whose method `getManifest()` returns a `PluginManifest`. The manifest lists the rules, the presets with their names and files, the **section** in which the rules of the plugin decide, decisions shared by several of its rules, the plugins it builds on, analyses, excluded paths, the file filter `skipWhen` and the address of the rule pages `ruleUrl`. This is what the plugin of the Acme package looks like:
+
+```php
+namespace Acme\CodeStyle;
+
+use DressCode\PluginManifest;
+
+
+final class Plugin implements \DressCode\Plugin
+{
+	public function getManifest(): PluginManifest
+	{
+		return new PluginManifest(
+			rules: [ExceptionMessagePeriodRule::class, NoDebugCallsRule::class],
+			presets: ['acme/house' => __DIR__ . '/house.neon'],
+			section: 'acme',
+			excludePaths: ['generated'],
+			ruleUrl: 'https://acme.dev/rules/{slug}',
+		);
+	}
+}
+```
+
+The **section** is the name of the plugin in the configuration. All the decisions of its rules lie under it, `acme.exceptionMessagePeriod` and `acme.debugCalls`, so they do not clash with the engine, with another plugin or with the rules of the project in the section `project`. A plugin that brings rules must have a section, and it must not be a reserved key or a section of the engine. Users then write the decisions of the plugin just like any others, see them next to findings, suppress them with `dresscode:ignore acme.debugCalls`, accept their risky fixes in `fixRisky` and have them explained by `dresscode explain acme`.
+
+**Shared decision.** A decision usually belongs to one rule, which returns it from `getDecisions()`. When two rules with independent logic enforce one thing, for example debugging output in a call and in a comment, the manifest declares the decision in `decisions`, and both rules name it in `#[RuleInfo(decisions: [...])]`. The user writes one key that turns on both rules, and the findings of both are reported under it:
+
+```php
+return new PluginManifest(
+	rules: [DebugCallsRule::class, DebugCommentsRule::class],
+	section: 'acme',
+	decisions: [new Decision('acme.debugOutput', Domain::state('forbidden'), 'Debugging output left in the code')],
+);
+```
+
+```php
+#[RuleInfo(Stage::Structure, decisions: ['acme.debugOutput'])]
+final class DebugCommentsRule extends NodeRule
+```
+
+A rule may also name a decision of the engine, such as `file.lineLength`, and follow it just like the rules of the engine do. A rule that only reads a decision of the decision tree and does not enforce it names it in `reads` instead of `decisions`: the decision does not turn it on and findings are not reported under it, but the rule finds the value in its `Values`, even when the run leaves out the rules that enforce it. Tests find shared decisions by themselves: `RuleTester` reads the plugin from the key `extra.dresscode.plugin` in the `composer.json` of the package where the rule lives.
+
+Presets from the manifest get their names in the form `vendor/name`, so the project uses them by name in `use` (`acme/house`) or for a single run with `--use`. `ruleUrl` holds the address of the rule pages with the placeholder `{slug}`, which stands for the class of the rule without the suffix `Rule` and with a lowercase first letter; `dresscode explain` prints it for every decision of the rule. The excluded paths are added to the paths of the project, the filter `skipWhen` skips a file even when the project has its own filter, and when the project lists an analysis of the same class as the plugin, the project's analysis applies. A plugin that another one builds on lies below it, and each class is used only once.
+
+Notice what is **not** in the manifest: a plugin gives no decision a value and does not set a style, because `PluginManifest` has no such key at all; `decisions` only declares decisions. The rules of the plugin turn on only when the project, or a preset the project uses, writes their decisions. Which style applies is up to the project, so you can always read it in the project's own file:
+
+```neon
+use:
+	- Acme\CodeStyle\Plugin
+	- acme/house
+
+acme:
+	debugCalls: forbidden
+
+mistakes:
+	debugOutputFunctions: [dump]
+```
+
+The rules of a plugin may also read the keys of the engine. `acme.debugCalls` in the example takes the list of debugging functions from the engine parameter `mistakes.debugOutputFunctions`, so the project writes it once for all rules that ask about debugging functions; [A Rule in Detail |rule-contract#Values in the Rule] describes how the rule does it.
+
+This is exactly how the package `dresscode/upgrade-nette` works: its plugin has the section `nette` with decisions such as `nette.linkArguments` or the map `nette.flagsAsNamedArguments`, and the package carries its upgrade data next to it, in the directory `upgrading/`.
+
+A plugin goes in the key `use` of the configuration, next to the presets, by its class or as an [entity |configuration#Objects and Callbacks] with arguments. Neither an override nor a preset can list it, because it makes rules and presets available to the whole project; DressCode rejects a preset that would list it, with the error <code>''Preset `acme/house`: Plugin `Acme\CodeStyle\Plugin` is used by the configuration of the project, never by a preset or an override.''</code> The filter `skipWhen` and the factory of an analysis, however, can also be written in `dresscode.neon` itself, as an [entity |configuration#Objects and Callbacks], and the factory of a rule with dependencies in `dresscode.php`. A plugin is the right fit where a package carries the settings and the project only turns them on.
+
+
+Package
+=======
+
+A package with a preset or with rules is an ordinary Composer package that requires `dresscode/dresscode` and shares the autoloader with the project. It announces its plugin in `composer.json` under the key `extra.dresscode.plugin`, so after installation the project does not need to know its class and lets it in by the name of the package in `use`:
+
+```json
+{
+	"name": "acme/code-style",
+	"require": {
+		"dresscode/dresscode": "^1.0"
+	},
+	"autoload": {
+		"psr-4": {"Acme\\CodeStyle\\": "src/"}
+	},
+	"extra": {
+		"dresscode": {
+			"plugin": "Acme\\CodeStyle\\Plugin"
+		}
+	}
+}
+```
+
+Besides `plugin`, DressCode knows two more keys under `extra.dresscode`, `upgrading-dir` and `packages`, with data for [upgrading libraries |upgrading-data#Data Files]; it reports any other key as a warning and skips it, because the package may be newer than the DressCode that reads it. Inside the package are the rule classes, the preset files, the plugin, and the fixtures with tests. The names of presets carry the vendor of the package (`acme/…`) and the decisions carry the section of the plugin, so that they do not clash with others. The user then installs the package, writes its name into `use` and chooses everything else in the configuration:
+
+```neon
+use:
+	- perCs
+	- acme/code-style
+	- acme/house
+```
+
+The name of a package is not a preset; it only lets its plugin in. A plugin brings code that runs on every check, so it is loaded only when the project names it, just as Composer runs only the plugins the project allows. For an installed package that `use` does not name, the run reports the warning <code>''Package `acme/code-style` brings the plugin `Acme\CodeStyle\Plugin`, which loads only where `use` names the package or the plugin; skipped.''</code> Upgrade data under the key `upgrading` is loaded even when `use` does not name the package, because it carries no code.

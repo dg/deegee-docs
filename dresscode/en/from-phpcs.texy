@@ -1,0 +1,121 @@
+Migrating from PHP_CodeSniffer and Slevomat
+*******************************************
+
+.[perex]
+Migrating from PHP_CodeSniffer and Slevomat? One command converts your `phpcs.xml`, you run `check` and `fix` instead of `phpcs` and `phpcbf`, and instead of sniffs you write how your code looks. This page shows the conversion, the different exit codes, and an overview of what matches what.
+
+
+Before You Start
+================
+
+Go through the [common steps |migration] first: you can leave the code and the comments as they are, `migrate config` converts the configuration, and `migrate suppressions` rewrites the comments. This page adds what is specific to PHP_CodeSniffer. And one piece of good news right away: `phpcs.xml` is XML, so `migrate config` reads it even after PHP_CodeSniffer and Slevomat have been uninstalled.
+
+
+Converting the Configuration
+============================
+
+```shell
+dresscode migrate config
+```
+
+The `PSR1`, `PSR2` and `PSR12` sets are translated to the `psr12` standard. Individual sniffs (rules of PHP_CodeSniffer) are translated to decisions, together with their property from `<properties>` where it has a counterpart: `Generic.Files.LineLength` is [`file.longLines` |decisions/file#file.longLines] and its `absoluteLineLimit` becomes the value of `file.lineLength`; `SlevomatCodingStandard.Namespaces.UnusedUses` is [`imports.unused` |decisions/imports], which always counts a name in a doc comment as used, as with the `searchAnnotations` property; `Squiz.WhiteSpace.OperatorSpacing` is `spacing.binaryOperator`. In DressCode there is one line length for everything, so `migrate config` also takes it from `SlevomatCodingStandard.Files.LineLength`, and from `RequireMultiLineMethodSignature` and `RequireMultiLineCondition` of Slevomat, where it uses one less than their `minLineLength`; when the values differ, `migrate config` keeps the smallest one and tells you so.
+
+Excluding a sniff inside a set (`<exclude name="…"/>`) and silencing it with `<severity>0</severity>` are both carried over by `migrate config` as the value `keep` for the decision that matches the sniff. But when the same decision is also covered by another sniff, `migrate config` leaves the decision alone and prints a warning; the same happens when you exclude one message of a sniff (`Generic.PHP.ForbiddenFunctions.Found`), because a decision cannot be narrowed to one message. A sniff with no counterpart is listed on standard error; typically these are sniffs about doc comments from the `Squiz.Commenting` group, and sniffs that check the same thing as another sniff, only in different words.
+
+`migrate config` carries the paths over by itself: `<file>` goes to `paths`, `<exclude-pattern>` to `excludePaths`, and an `<exclude-pattern>` inside a `<rule>` to an [override |configuration#Different Values for Part of the Project] that gives the decisions of the sniff the value `keep` for those paths; the patterns are described in [Configuration |configuration#Paths]. The parts of `phpcs.xml` that are neither rules nor paths, which you rewrite by hand:
+
+- `<arg name="extensions">` goes to the `fileExtensions` key.
+- `<config name="php_version">` is not needed; DressCode reads the target version from `composer.json`.
+- `<arg name="tab-width">` goes to the decision `indentation.tabWidth`; the indentation is set by the standard, or by the decision `indentation.unit`.
+
+Slevomat sniffs that DressCode covers are translated by name, like any others. Its helper classes and the `installed_paths` setting are not needed here.
+
+
+Sections Instead of Sniffs
+==========================
+
+PHP_CodeSniffer builds one area of style from sniffs by different authors, and each one has its own vocabulary. Blank lines in PSR-12, with one line between methods, none after the opening brace of a class and of a block, and one before `return`, take nine sniffs:
+
+```xml
+<rule ref="PSR2.Namespaces.NamespaceDeclaration"/>
+<rule ref="PSR2.Namespaces.UseDeclaration"/>
+<rule ref="SlevomatCodingStandard.Classes.EmptyLinesAroundClassBraces">
+	<properties>
+		<property name="linesCountAfterOpeningBrace" value="0"/>
+		<property name="linesCountBeforeClosingBrace" value="0"/>
+	</properties>
+</rule>
+<rule ref="SlevomatCodingStandard.Classes.ClassMemberSpacing">
+	<properties>
+		<property name="linesCountBetweenMembers" value="1"/>
+	</properties>
+</rule>
+<rule ref="SlevomatCodingStandard.Classes.MethodSpacing">
+	<properties>
+		<property name="minLinesCount" value="1"/>
+		<property name="maxLinesCount" value="1"/>
+	</properties>
+</rule>
+<rule ref="Squiz.WhiteSpace.FunctionOpeningBraceSpace"/>
+<rule ref="PSR2.Methods.FunctionClosingBrace"/>
+<rule ref="Squiz.WhiteSpace.ControlStructureSpacing"/>
+<rule ref="SlevomatCodingStandard.ControlStructures.JumpStatementsSpacing">
+	<properties>
+		<property name="jumpStatements" type="array">
+			<element value="return"/>
+		</property>
+		<property name="linesCountBefore" value="1"/>
+		<property name="linesCountBeforeFirst" value="0"/>
+		<property name="linesCountAfter" value="0"/>
+		<property name="linesCountAfterLast" value="0"/>
+	</properties>
+</rule>
+```
+
+In DressCode it is one section, [`blankLines` |decisions/blankLines], with six values whose keys say where the blank lines go:
+
+```neon
+blankLines:
+	afterNamespace: 1
+	afterImports: 1
+	aroundMethods: 1
+	bodyStart: 0
+	bodyEnd: 0
+	beforeStatement:
+		return: 1
+```
+
+Both configurations do the same thing with the same file. The difference is in what you need to know to write and read them: with sniffs, which sniff checks which place and what its property is called; here, only how many blank lines you want where. The whole section, including ranges like `1-2` for "one or two", is described on its page.
+
+
+Commands
+========
+
+| PHP_CodeSniffer | DressCode |
+|---|---|
+| `phpcs src` | `dresscode check src` |
+| `phpcbf src` | `dresscode fix src` |
+| `phpcs --standard=PSR12 src` | `dresscode check --use psr12 src` |
+| `phpcs --sniffs=SlevomatCodingStandard.Namespaces.UnusedUses src` | `dresscode check --only imports.unused src` |
+| `phpcs --exclude=SlevomatCodingStandard.Namespaces.UnusedUses src` | `dresscode check --set imports.unused=keep src` |
+| `phpcs -e` | `dresscode catalogue` or `dresscode config` |
+| `phpcs --report=checkstyle` | `dresscode check -f checkstyle` |
+| `phpcs --report=json` | `dresscode check -f json` |
+| `phpcs --parallel=8` | `dresscode check --jobs 8` |
+| `phpcs --cache` | the cache is on by itself; `--no-cache` bypasses it |
+| `phpcs -p` | progress is shown in the terminal by itself |
+
+PHP_CodeSniffer uses its exit code to tell whether the violations found can be fixed, and `phpcbf` has its own scale. DressCode returns `0` for clean, `1` for violations, `2` for a failure on some file and `3` for an error on the command line or in the configuration; the summary of `check` and the `json` format tell you how many violations remain after a fix. A script that evaluates the exit code needs one change.
+
+
+What Is Different
+=================
+
+- **One tool for checking and fixing.** `phpcs` and `phpcbf` were two commands that sometimes disagreed, because a fix could reveal more violations. Here `fix` is the same as `check` plus writing the files, and what `fix` does not fix, it reports just like `check`.
+- **The message tells you what the fix can change.** The messages of both tools give the expected and the found value; the difference is elsewhere. Slevomat has the `StrictCall` sniff, and for two `in_array()` calls without `$strict` it writes the same thing twice: `Strict parameter missing in in_array() call.` DressCode with [types from PHPStan |types] can tell that the first call searches for an `int` in a `list<int>`, and adds `true` there by itself; in the second call the value searched for is `mixed`, so it only reports the fix with the sentence `Risky because a strict search no longer finds a value of another type.` The same output also shows things that no standard shipped with PHP_CodeSniffer has a sniff for: an overriding method whose parameter is named differently than in the parent, so a call with a named argument fails with an error, and a call to a method the library marked as deprecated, together with the library's advice on what to write instead. The full output is shown in [Getting Started |getting-started#Checking Code].
+- **PSR-12 even where `phpcbf` only reports.** `phpcbf` reports missing constant visibility, which PSR-12 requires, but cannot add it; DressCode adds it. In Laravel, after `phpcbf` DressCode still finds 772 places, see [the comparison |how-it-works#PER Coding Style and PSR-12 Compared to PHP CS Fixer and PHP_CodeSniffer].
+- **You can also try a decision that the standard does not have.** In PHP_CodeSniffer, `--sniffs` can only choose from the sniffs the selected standard contains. `dresscode check --set path=value --only path --diff` gives a decision a value for one run and shows only its changes. The name of a set or a section in `--only`, on the other hand, only narrows the run to the decisions the configuration makes, so it does not turn on anything the project left at `keep` on purpose, see [Command Line |cli#One Decision for One Run: --set and --only].
+- **There are no sniff priorities.** The rules run again and again until the code settles; see [why |how-it-works#No Priorities: Rules Run Until the Code Settles].
+- **The comments `phpcs:ignore`, `phpcs:disable`, `phpcs:enable`, `phpcs:ignoreFile` and `@phpcsSuppress` keep working**, even with the sniff names, which DressCode translates to decisions. The only difference is that `phpcs:ignore` on a line of its own covers the whole next statement, not just one line, see the [common steps |migration#1. Leave the Code as It Is]. Rewriting them to `dresscode:*` is one command, and it is optional.
+- **The baseline is built in.** In PHP_CodeSniffer it has been discussed for years and is solved by third-party add-ons. Here the `dresscode baseline` command records it, and it contains only what `fix` cannot fix, so it does not get in the way of fixes; see [Baseline |suppressing#baseline].
+- **A custom sniff** is not carried over but rewritten; written against the tree, it usually shrinks to a fraction of its length. The guide is on a [separate page |porting-rules].

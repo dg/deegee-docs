@@ -1,0 +1,131 @@
+Přechod na Nette 4
+******************
+
+{{maintitle: Přechod na Nette 4: přepis kódu automaticky}}
+{{description: Přechod na nette/utils 4 a další knihovny Nette 4: co DressCode přepíše sám, co ohlásí a jak upgrade změřit, naplánovat a provést krok za krokem.}}
+
+.[perex]
+Nette 4 je řada knihoven, které přešly na novou hlavní verzi: `nette/utils` 4, `nette/php-generator` 4, `nette/mail` 4 a `nette/robot-loader` 4. Konstanty dostaly nová jména, příznaky se staly pojmenovanými argumenty a několik metod zmizelo. DressCode s balíčkem `dresscode/upgrade-nette` přepíše, co přepsat jde, a u zbytku řekne, co napsat místo toho.
+
+
+Jak to vypadá
+=============
+
+Aplikace na Nette 3 chce přejít na `nette/utils` 4.0. Odhad řekne, kolik práce to dá, ještě než se cokoli změní:
+
+/--pre .[terminal]
+DRESS|CODE 1.3.0
+Config     /var/www/shop/dresscode.neon
+Upgrade    nette/utils 4.0 over 3 files
+
+Must change, 2 topics with 12 findings
+  nette/utils  10 findings in 3 files    needs ^4.0, automatic
+  nette/utils  2 findings in 1 file      works on ^3.2, automatic
+\--
+
+Po zvednutí `nette/utils` na `^4.0` přepíše DressCode kód sám:
+
+```php .[before]
+$image->resize(300, 200, Image::FIT | Image::SHRINK_ONLY);
+file_put_contents($this->file, Json::encode($products, Json::PRETTY));
+return Strings::startsWith($code, 'sale-');
+```
+
+```php .[after]
+$image->resize(300, 200, Image::OrSmaller | Image::ShrinkOnly);
+file_put_contents($this->file, Json::encode($products, pretty: true));
+return \str_starts_with($code, 'sale-');
+```
+
+Volání metody přepíše jen tam, kde typy z PHPStanu říkají, že patří té třídě, a ve stylu, který kód projektu má. Jak se k tomu dostat, popisuje [Krok za krokem |#Krok za krokem].
+
+
+Co se přepíše
+=============
+
+Tabulky ukazují vzorky z dat balíčku `dresscode/upgrade-nette`, každý ověřený během DressCode. Úplný seznam je v datech balíčku po knihovnách, třeba [utils.neon |https://github.com/dg/dresscode-upgrade-nette/blob/master/upgrading/utils.neon].
+
+
+nette/utils 4
+-------------
+
+| staré API | nové API | od verze |
+|---|---|---|
+| `Strings::startsWith($s, 'x')` | `\str_starts_with($s, 'x')` | 4.0 |
+| `Strings::normalizeNewLines($s)` | `Strings::unixNewLines($s)` | 4.0 |
+| `Image::FIT \| Image::SHRINK_ONLY` | `Image::OrSmaller \| Image::ShrinkOnly` | 4.0 |
+| `Json::encode($v, Json::PRETTY)` | `Json::encode($v, pretty: true)` | 4.0 |
+| `Arrays::grep($a, $p, PREG_GREP_INVERT)` | `Arrays::grep($a, $p, invert: true)` | 4.0 |
+| `Arrays::map($a, callback: $fn)` | `Arrays::map($a, transformer: $fn)` | 4.0.4 |
+| `Html::fromHtml($s)` | `Html::html($s)` | 4.1.5 |
+
+Stejně se přepíšou i ostatní konstanty `Image` (`EXACT`, `FILL`, `STRETCH`, `EMPTY_GIF`), `Strings::contains()` a `endsWith()` a příznaky `Json::decode()`, `Strings::match()`, `matchAll()` a `split()`.
+
+
+nette/php-generator 4
+---------------------
+
+| staré API | nové API | od verze |
+|---|---|---|
+| `ClassType::class('Order')` | `new ClassType('Order')` | 4.0.1 |
+| `ClassType::VISIBILITY_PUBLIC` | `Visibility::Public` | 4.0.10 |
+| `$method->body` | `$method->getBody()` | 4.0 |
+| `ClassType::withBodiesFrom($c)` | `ClassType::from($c, withBodies: true)` | 4.0 |
+
+Import `Nette\PhpGenerator\Visibility` DressCode doplní sám.
+
+
+nette/mail 4 a nette/robot-loader 4
+-----------------------------------
+
+| staré API | nové API | od verze |
+|---|---|---|
+| `Message::HIGH` | `Message::High` | `nette/mail` 4.0 |
+| `$mail->subject` | `$mail->getSubject()` | `nette/mail` 4.0 |
+| `$loader->setTempDirectory($dir)` | `$loader->setCacheDirectory($dir)` | `nette/robot-loader` 4.1.3 |
+
+
+Co se jen ohlásí
+================
+
+Kde náhrada není, nebo ji musí vybrat člověk, DressCode místo ohlásí a kód nechá být. Hláška řekne, co napsat místo toho:
+
+/--pre .[terminal]
+app/Samples.php:30:22: error: Static method `Nette\Utils\Finder::findFiles()` is deprecated: pass the masks as one array, since nette/utils 4.0. [upgrading.api.forbiddenMembers]
+app/Samples.php:32:9: error: Static property `Nette\Utils\Html::$xhtml` is removed: there is no replacement; the output is always HTML5; drop the setting, since nette/utils 4.0. [upgrading.api.forbiddenMembers]
+\--
+
+| staré API | co místo toho | od verze |
+|---|---|---|
+| `Finder::findFiles('*.php', '*.phpt')` | masky jako jedno pole, `findFiles(['*.php', '*.phpt'])` | `nette/utils` 4.0 |
+| `Html::$xhtml` | nic, výstup je vždy HTML5; nastavení smažte | `nette/utils` 4.0 |
+| `Image::rgb()` | `ImageColor::rgb()`, které vrací objekt a krytí bere jako číslo od 0 do 1 | `nette/utils` 4.0.3 |
+| `Nette\Iterators\Mapper` | `Iterables::map()`, které vrací generátor, projít se dá jen jednou | `nette/utils` 4.0.5 |
+| `ClassType::addExtend()` | `setExtends()`, třída dědí nejvýš z jedné | `nette/php-generator` 4.0.1 |
+
+Takové místo potvrdíte komentářem `// dresscode:ignore <rozhodnutí> -- <důvod>`, nebo ho přepíšete; podrobnosti jsou v [Místa pro vás |upgrade#Místa pro vás].
+
+
+Krok za krokem
+==============
+
+DressCode potřebuje `nette/utils` 4.1, a tak se do aplikace na Nette 3 jako vývojová závislost nevejde. Nainstalujte ho globálně, s PHPStanem a s daty pro Nette:
+
+```shell
+composer global require dresscode/dresscode dresscode/upgrade-nette phpstan/phpstan
+```
+
+1. Změřte, kolik práce upgrade dá: `dresscode upgrade estimate nette/utils 4.0`. Řádek `Composer` řekne, jestli cílovou verzi něco v `composer.lock` nepouští.
+2. Uložte plán i s příkazem testů, ať ho tým může projít: `dresscode upgrade plan nette/utils 4.0 --save --test-command "vendor/bin/tester tests -o junit:{junit}"`.
+3. Proveďte ho: `dresscode upgrade run`. Po každém kroku se pustí testy a krok, po kterém nově spadne test, se vrátí. U kroku Composeru se DressCode zeptá, jestli smí zvednout `nette/utils` na `^4.0`.
+4. Projděte, co zůstalo pro vás, a pusťte `upgrade run` znovu, dokud běh neskončí `UPGRADED`.
+
+Ostatní knihovny se převádějí stejně, jen s jiným cílem, třeba `dresscode upgrade estimate nette/php-generator 4.2`. Bez cíle DressCode navrhne všechny knihovny, o kterých má novější data, než projekt dnes dovoluje. Celý postup s testy, commity a místy pro vás popisuje [Upgrade kódu krok za krokem |upgrade].
+
+
+Kam dál
+=======
+
+- [Upgrade kódu krok za krokem |upgrade], odhad, plán a běh podrobně.
+- [Knihovny Nette |upgrading-nette], co balíček `dresscode/upgrade-nette` pokrývá u dalších knihoven a verzí.
+- [Jak funguje upgrade knihoven |upgrading-libraries], odkud DressCode ví, co se změnilo.

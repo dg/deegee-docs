@@ -1,0 +1,285 @@
+Hygiena
+*******
+
+.[perex]
+Sekce `hygiene` rozhoduje o kódu, který jde napsat jednodušeji a se stejným významem: alias místo funkce, `is_null()` a `intval()` místo jazykové konstrukce, `dirname(__FILE__)` místo `__DIR__`, `get_class()` místo `::class`, `call_user_func()` místo přímého volání, dvě volání `isset()` nebo `unset()` místo jednoho a argument, který PHP ignoruje nebo který jen opakuje výchozí hodnotu.
+
+Jazyková konstrukce je rychlá vždy a nezáleží u ní na jmenném prostoru. Ve jmenném prostoru jsou opravy rizikové (risky fixes): nekvalifikované `is_null()` může být funkce `App\is_null()`, kterou deklaruje váš projekt. Dokud konfigurace neřekne [`nameResolution: certain` |/namespaces#name-resolution], čekají na svolení.
+
+Přímé volání místo `call_user_func()` je rizikové ještě v souboru se `strict_types`: `call_user_func()` předává argumenty jako volající bez striktních typů, takže přímé volání může vyhodit `TypeError` tam, kde se hodnota dosud převedla. Neplatí to, kde volání přeloží na přímé už samo PHP, tedy u globální funkce bez pojmenovaných a rozbalených argumentů. Parametr předávaný referencí riziko nepřináší, protože PHP při něm u `call_user_func()` hlásí varování při každém volání a změní se jen kód, který už teď čistě nefunguje.
+
+```neon
+hygiene:
+	aliasFunctions: [core]
+	conversionFunction: forbidden
+	is_null: forbidden
+	dirnameOfFile: forbidden
+	classNameNotation:
+		object: required
+	call_user_func: forbidden
+```
+
+```php .[before]
+$count = sizeof($items);  // The alias `sizeof()` must be written `count()`.
+$id = intval($row['id']);  // The `intval()` call must be written as the `(int)` cast.
+if (is_null($user)) {  // The `is_null()` call must be written as a comparison with `null`.
+	$dir = dirname(__FILE__);  // The `dirname(__FILE__)` call must be written `__DIR__`.
+}
+$type = get_class($order);  // The class name must be obtained with `$order::class`.
+$result = call_user_func($callback, $id);  // The callable must be called directly, not through `call_user_func()`.
+```
+
+```php .[after]
+$count = count($items);
+$id = (int) $row['id'];
+if ($user === null) {
+	$dir = __DIR__;
+}
+$type = $order::class;
+$result = $callback($id);
+```
+
+Sekce a [sada `cleanup` |/configuration#Standardy a sady] nejsou totéž: sada rozhoduje i v jiných sekcích, o nepoužitých importech nebo prázdných komentářích, a z téhle sekce bere jen část. Do `--only`, `fixRisky` nebo `severity` napíšete sekci jako `hygiene` a sadu jako `cleanup`. Stejné jméno mají jen sekce a sada `types`, a tak tam, kde by holé `types` mohlo znamenat obojí, ho DressCode odmítne: sekci napíšete `types.*`, sadu `types`.
+
+
+hygiene.classNameNotation.currentClass
+======================================
+
+`self::class`, `static::class` and `parent::class` for `get_class()`, `get_called_class()`, `get_parent_class()` and `__CLASS__`.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` · pokrývá `SlevomatCodingStandard.Classes.ModernClassNameReference` .[decision-facts]
+
+
+hygiene.classNameNotation.object
+================================
+
+`$object::class` for `get_class($object)`.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` · pokrývá `get_class_to_class_keyword`, `SlevomatCodingStandard.Classes.ModernClassNameReference` .[decision-facts]
+
+
+hygiene.repeatedCatchBody
+=========================
+
+Two adjacent catches of one body, written as one `catch (A|B $e)`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · PHP 7.1 · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+hygiene.unreadCatchVariable
+===========================
+
+The variable of a `catch` that is never read, `catch (E)` written instead.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · PHP 8.0 · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · pokrývá `SlevomatCodingStandard.Exceptions.RequireNonCapturingCatch` .[decision-facts]
+
+
+hygiene.uselessVersionCheck
+===========================
+
+A check of the version of PHP every version the code runs on decides alike, `if (PHP_VERSION_ID >= 80000)` for code on 8.0.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+hygiene.aliasFunctions
+======================
+
+The sets of functions whose aliases are written by their canonical names.
+
+- seznam z těchto slov:
+	- `all`: every set below
+	- `core`: the core functions, `sizeof()` is `count()`, `join()` is `implode()`
+	- `imap`: `imap_*`
+	- `ldap`: `ldap_*`
+	- `mysqli`: `mysqli_*`
+	- `pg`: `pg_exec()` is `pg_query()`
+	- `oci`: `oci_*`
+	- `odbc`: `odbc_*`
+	- `openssl`: `openssl_*`
+	- `sodium`: `sodium_*`
+	- `ftp`: `ftp_quit()` is `ftp_close()`
+	- `posix`: `posix_errno()` is `posix_get_last_error()`
+	- `pcntl`: `pcntl_errno()` is `pcntl_get_last_error()`
+	- `time`: `mktime()` and `gmmktime()` without arguments are `time()`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `[core, imap, pg]`, symfony `keep`, laravel `[core, imap, pg]` · pokrývá `no_alias_functions` .[decision-facts]
+
+
+hygiene.call_user_func
+======================
+
+`call_user_func($f, $x)` is `$f($x)`, `call_user_func_array($f, $a)` is `$f(...$a)`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · PHP 7.0 · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · pokrývá `regular_callable_call` .[decision-facts]
+
+
+hygiene.call_user_funcMethods
+=============================
+
+Whether a method the callable names as `[$this, 'run']`, `[self::class, 'make']` or `'Acme\Shop\Order::make'` is called directly too.
+
+- `yes`, nebo `no`
+
+Výchozí `no` · PHP 7.0 · standardy: perCs `no`, psr12 `no`, nette `no`, symfony `no`, laravel `no` .[decision-facts]
+
+
+hygiene.conversionFunction
+==========================
+
+`intval($x)` is `(int) $x`; `intval($x, 16)` is no cast.
+
+Not about which name of `floatval()` the code writes, `doubleval()` being an alias `hygiene.aliasFunctions` renames too.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · pokrývá `modernize_types_casting` .[decision-facts]
+
+
+hygiene.dirnameOfFile
+=====================
+
+`dirname(__FILE__)`, which is `__DIR__`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · pokrývá `PhpCsFixerCustomFixers/no_useless_dirname_call`, `combine_nested_dirname`, `dir_constant` .[decision-facts]
+
+
+hygiene.nestedDirname
+=====================
+
+A `dirname()` of a `dirname()`, which is one call with the `levels` argument.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+hygiene.__invokeCall
+====================
+
+`$f->__invoke($x)` is `$f($x)`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · pokrývá `SlevomatCodingStandard.PHP.DisallowDirectMagicInvokeCall` .[decision-facts]
+
+
+hygiene.is_null
+===============
+
+`is_null($x)` is `$x === null`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · pokrývá `is_null` .[decision-facts]
+
+
+hygiene.settype
+===============
+
+`settype($x, 'int')` as a statement is `$x = (int) $x`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · pokrývá `set_type_to_cast` .[decision-facts]
+
+
+hygiene.defaultArgument
+=======================
+
+An argument PHP ignores or that repeats the default.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` .[decision-facts]
+
+Argument, který jen opakuje výchozí hodnotu, zmizí z volání funkce vždy. U metody, statické metody a `new` potřebuje DressCode [typy kódu |/types]: musí znát každou třídu, kterou příjemce může být, a každá z nich musí deklarovat stejnou výchozí hodnotu. Potomka, který by si ji změnil, nebere v úvahu, protože by porušil kontrakt svého typu. Příjemce neznámého typu nebo takový, který může být několika třídami s různými výchozími hodnotami, zůstane, jak je, a bez typů zůstanou metody i `new` všude.
+
+```neon
+typeAnalysis: phpstan
+
+hygiene:
+	defaultArgument: forbidden
+```
+
+```php .[before]
+$json = json_encode($data, 0);  // Useless `flags` argument of `json_encode()`, because it repeats the default value.
+$memcached->delete($key, 0);  // Useless `time` argument of `Memcached::delete()`, because it repeats the default value.
+```
+
+```php .[after]
+$json = json_encode($data);
+$memcached->delete($key);
+```
+
+
+hygiene.countEmptyTest
+======================
+
+`count($a) === 0` is `$a === []`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · jen s typy · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+hygiene.strlenEmptyTest
+=======================
+
+`strlen($s) === 0` is `$s === ''`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · jen s typy · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · pokrývá `PhpCsFixerCustomFixers/no_useless_strlen`, `string_length_to_empty` .[decision-facts]
+
+
+hygiene.separateIssets
+======================
+
+`isset($a) && isset($b)` is `isset($a, $b)`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · pokrývá `combine_consecutive_issets` .[decision-facts]
+
+
+hygiene.separateUnsets
+======================
+
+`unset($a); unset($b);` is `unset($a, $b);`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · pokrývá `combine_consecutive_unsets` .[decision-facts]

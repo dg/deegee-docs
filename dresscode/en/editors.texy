@@ -1,0 +1,169 @@
+Editors and IDEs: PhpStorm and VS Code
+**************************************
+
+.[perex]
+Formatting PHP code on save works today: in PhpStorm, in VS Code and in any editor that runs a formatter over standard input, with no DressCode extension needed. This page shows how to set it up, what to turn off, and what the planned language server will bring.
+
+
+What the Integration Does
+=========================
+
+A tool that runs only in continuous integration gives you half the benefit: you learn about a violation only after the push and fix it in a different frame of mind than when you wrote the code. The most useful thing is **format on save**: after you save a file, it is fixed the way `dresscode fix` would fix it. Editors can do this in two ways. Some send the content of the buffer to a formatter on standard input and take back the result; that is what `fix --stdin` is for. Others run a command on the file on disk after saving and can read its output as a list of findings; that is what the `lines` format is for, one line per finding, in the form compilers use.
+
+Underlining violations directly in the code, fixing a single violation from the quick-fix menu, and suppressing with one click are planned, see [below |#Planned].
+
+
+A Formatter over Standard Input
+===============================
+
+`dresscode fix --stdin <path>` is a formatter: it reads code from standard input, makes all the fixes the configuration allows, and prints the whole resulting text to standard output. The path tells DressCode which settings apply to the code (the overrides for paths and the exclusions); nothing is written to disk. The formatter exits with code 0 even when the code still contains something the fix cannot solve, because an editor takes any other exit code as a failure and would throw the result away. Findings are the job of `check --stdin`, which is why `fix --stdin` rejects the report options (`--format`, `--diff`, `--max-warnings`, `--ask-risky`).
+
+| State | Standard output | Standard error | Exit |
+|---|---|---|---|
+| code without changes | exactly the original bytes | nothing | 0 |
+| fixed code, whatever remains in it | the whole resulting text | nothing | 0 |
+| a path excluded by `excludePaths`, with `--skip-excluded` | exactly the original bytes | nothing | 0 |
+| syntax error | the original text | one line with the error | 1 |
+| failure of a rule | the original text | one line with the failure | 2 |
+| error in the configuration or on the command line | nothing | the error | 3 |
+
+The formatter never outputs a partially fixed intermediate result. It also makes the fixes the project has accepted in `fixRisky`, so format on save does more than change the looks.
+
+**Zed** (`settings.json`):
+
+```json
+{
+	"languages": {
+		"PHP": {
+			"formatter": {
+				"external": {
+					"command": "vendor/bin/dresscode",
+					"arguments": ["fix", "--stdin", "{buffer_path}", "--skip-excluded"]
+				}
+			}
+		}
+	}
+}
+```
+
+**Helix** (`languages.toml`):
+
+```toml
+[[language]]
+name = "php"
+auto-format = true
+formatter = { command = "vendor/bin/dresscode", args = ["fix", "--stdin", "%{buffer_name}", "--skip-excluded"] }
+```
+
+**Neovim** with the conform.nvim plugin:
+
+```lua
+require('conform').setup({
+	formatters = {
+		dresscode = {
+			command = 'vendor/bin/dresscode',
+			args = { 'fix', '--stdin', '$FILENAME', '--skip-excluded' },
+			stdin = true,
+		},
+	},
+	formatters_by_ft = { php = { 'dresscode' } },
+	format_on_save = {},
+})
+```
+
+**Emacs** with the apheleia package:
+
+```
+(with-eval-after-load 'apheleia
+  (push '(dresscode . ("vendor/bin/dresscode" "fix" "--stdin" filepath "--skip-excluded")) apheleia-formatters)
+  (push '(php-mode . dresscode) apheleia-mode-alist))
+```
+
+In **VS Code**, you connect the formatter over standard input with a generic extension for a custom formatter, or run a command on the file after saving, see [below |#Visual Studio Code].
+
+
+Findings in the Editor: the lines Format
+========================================
+
+`-f lines` prints one line per finding, with the path, the line and the column, the severity, the message and, in square brackets, the decision path; for a risky fix that the run did not make, also the risk:
+
+/--pre .[terminal]
+src/Order.php:6:5: error: The import of `Gateway` is unused. [imports.unused]
+src/Order.php:19:20: warning: The `==` comparison must be written `===`. [expressions.comparison.loose; risk=typeUnknown]
+src/Order.php:20:11: error: The `@` operator must not be used. [mistakes.errorSuppression]
+\--
+
+The path is relative to the working directory, or absolute for a file outside it, and always uses forward slashes. The column is missing where the finding has none; a line break in the message becomes a space. With `fix`, these are the findings the fix left, with the lines of the fixed file. A clean file prints nothing, and so does a rewritten file in which nothing remains.
+
+
+PhpStorm
+========
+
+PhpStorm has no generic formatter over standard input, so you use a **File Watcher** (Settings › Tools › File Watchers): file type PHP, program `$ProjectFileDir$/vendor/bin/dresscode`, arguments `fix $FilePath$ -f lines --skip-excluded`, working directory `$ProjectFileDir$`. In the Output filters field, write `$FILE_PATH$:$LINE$:$COLUMN$: $MESSAGE$`, and you can then click the findings the fix left in the output of the watcher. For a clean file, the watcher is silent. The option `--skip-excluded` makes sure the watcher does not touch a file that the configuration excludes in `excludePaths`.
+
+At the same time, turn off the built-in PHP formatting (Settings › Tools › Actions on Save › Reformat code), otherwise the two formatters fight each other and the file changes twice on every save.
+
+
+Visual Studio Code
+==================
+
+To format on save, use the extension **Run on Save** (`emeraldwalk.RunOnSave`) with a command for PHP files:
+
+```json
+{
+	"emeraldwalk.runonsave": {
+		"commands": [
+			{
+				"match": "\\.php$",
+				"cmd": "${workspaceFolder}/vendor/bin/dresscode fix ${file} -f lines --skip-excluded"
+			}
+		]
+	}
+}
+```
+
+To get the findings of the whole project into the Problems panel, add a task with a problem matcher to `.vscode/tasks.json`:
+
+```json
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "DressCode",
+			"type": "shell",
+			"command": "${workspaceFolder}/vendor/bin/dresscode check -f lines",
+			"problemMatcher": {
+				"owner": "dresscode",
+				"fileLocation": ["autoDetect", "${workspaceFolder}"],
+				"pattern": {
+					"regexp": "^(.+?):(\\d+)(?::(\\d+))?: (error|warning): (.*?)(?: \\[([^\\]]+)\\])?$",
+					"file": 1, "line": 2, "column": 3, "severity": 4, "message": 5, "code": 6
+				}
+			}
+		}
+	]
+}
+```
+
+Turn off any other PHP formatter (for example Intelephense) for format on save, or leave it only the things DressCode does not handle.
+
+
+Broken Code
+===========
+
+When a file cannot be parsed, `fix` leaves it untouched and reports only the syntax error: better an unfixed file than a mangled one.
+
+The same holds for every fix. DressCode writes a result only if it parses again and prints back as the same text. This is the same round trip the whole tool is built on: the printed tree gives back the original file byte by byte. In the editor, it guarantees that format on save cannot break the file.
+
+
+Planned
+=======
+
+We are planning a language server, `dresscode lsp`, which will ship with the package, and on top of it a **DressCode** plugin for PhpStorm and a **DressCode** extension for VS Code. The server will bring what running a command after saving cannot do:
+
+- **underlined violations** directly in the code, with the message and the decision path in a tooltip, already while you type, over unsaved content;
+- **fixing a single violation** from the quick-fix menu, not the whole file at once;
+- **suppressing with one click**, which inserts `dresscode:ignore` with the decision path on the right line;
+- **a process that keeps running**, so PHP does not have to start on every save, and with `typeAnalysis: phpstan`, neither does PHPStan.
+
+The server will speak the Language Server Protocol, so Neovim, Zed, Helix or Sublime Text will get the same. Until then, the formatter over standard input and the `lines` format described above do the job.

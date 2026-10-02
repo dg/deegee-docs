@@ -1,0 +1,122 @@
+Upgrading Nette
+***************
+
+{{description: Upgrade Nette automatically: dresscode/upgrade-nette carries the migrations of all Nette libraries from 3.0 to today, over 900 renames, moves and changed calls that DressCode rewrites or reports.}}
+
+.[perex]
+The package `dresscode/upgrade-nette` carries the migrations of all Nette libraries from version 3.0 to the current ones. It holds over 900 items: interfaces that lost the prefix `I`, constants renamed from uppercase, renamed methods and parameters, magic properties replaced by getters, flags replaced by named arguments. DressCode fixes roughly 700 of them right away and reports the rest, together with what to write instead.
+
+
+Installation
+============
+
+```shell
+composer require --dev dresscode/upgrade-nette phpstan/phpstan
+vendor/bin/dresscode upgrade today
+```
+
+That is all an upgrade needs: `upgrade today` takes the data of the package and its rules by itself, with no configuration, and leaves the style of the code as it is. [Upgrading Code |upgrade] describes the procedure, one major version at a time, and what to do with what is left. The data of each library applies only when the project has that library, and only for the versions the project reaches. Installed into the project like this, DressCode needs the project to run on PHP 8.4 to 8.6, see [Installation |getting-started#Installation].
+
+If you want every check to catch the old API too, add three things to the configuration: the types, the set `deprecations`, and the name of the package, which lets in its rules from the section `nette`, as described in [How Upgrading Libraries Works |upgrading-libraries#Enabling It in the Configuration]:
+
+```neon
+typeAnalysis: phpstan
+
+use:
+	- nette           # your standard
+	- deprecations
+	- upgrade-nette
+```
+
+The set `deprecations` turns on the conversion of flags to named arguments, the map `nette.flagsAsNamedArguments`, together with the data. The data also turns on two decisions, about link destinations and about component hooks: `nette.linkArguments` from `nette/application` 3.3 and `nette.monitorCallbacks` from `nette/component-model` 3.0. So you do not have to write them into the configuration, and `upgrade today` runs them too. If you do not want one of them, turn it off in the section `nette` with the value `keep`.
+
+
+What Gets Fixed
+===============
+
+This is a model class written for Nette 3.0, in a project that now uses the current versions:
+
+```php .[before]
+public function add(string $code): void
+{
+	$section = $this->session->getSection('cart');
+	$items = $section->items ?? [];  // Method `Nette\Http\SessionSection::__get()` is replaced by `get($name)`.
+	$items[] = Strings::match($code, '~^[A-Z]+-\d+$~', PREG_OFFSET_CAPTURE);  // Static method `Nette\Utils\Strings::match()` takes `captureOffset: true` instead of `PREG_OFFSET_CAPTURE`.
+	$section->items = $items;  // Method `Nette\Http\SessionSection::__set()` is replaced by `set($name, $value)`.
+	$section->source = $this->request->getQuery('utm_source', 'direct');  // Method `Nette\Http\SessionSection::__set()` is replaced by `set($name, $value)`.
+	                                                                      // Method `Nette\Http\IRequest::getQuery()` is replaced by `getQuery($key) ?? $default`.
+}
+```
+
+After `dresscode upgrade today`:
+
+```php .[after]
+public function add(string $code): void
+{
+	$section = $this->session->getSection('cart');
+	$items = $section->items ?? [];
+	$items[] = Strings::match($code, '~^[A-Z]+-\d+$~', captureOffset: true);
+	$section->set('items', $items);
+	$section->set('source', $this->request->getQuery('utm_source') ?? 'direct');
+}
+```
+
+The line `$items = $section->items ?? []` stayed: on `SessionSection`, reading a property on the left of `??` first asks whether the property is set, while `get()` does not ask. So the fix is [risky |configuration#risky-fixes], and it is made once you accept it in `dresscode upgrade today --ask-risky`, or once you list the decision `upgrading.api.replacedCalls` in the key `fixRisky`.
+
+What the package fixes:
+
+- **renamed classes and interfaces**: `Nette\Configurator` to `Nette\Bootstrap\Configurator`, `IRouter` to `Nette\Routing\Router`, `IControl` to `Nette\Forms\Control` and others; the import, the type, `new`, `instanceof` and the attribute are all rewritten,
+- **constants** renamed from uppercase: `Form::FILLED` to `Form::Filled`, `IResponse::S404_NOT_FOUND` to `IResponse::S404_NotFound`, `Presenter::INVALID_LINK_WARNING` to `InvalidLinkWarning`, including chains across several versions,
+- **renamed methods**: `invalidateControl()` to `redrawControl()`, `getUnsafeValues()` to `getUntrustedValues()`, `Strings::contains()` to `str_contains()`,
+- **renamed parameters** in calls with named arguments: `setExpiration(time: ...)` to `setExpiration(expire: ...)`, `Arrays::map(callback: ...)` to `Arrays::map(transformer: ...)`, also in `parent::__construct()` of a child class,
+- **the default value after `??`**: `getParameter('page', 1)` to `getParameter('page') ?? 1`, and the same for `getQuery()`, `getPost()`, `getCookie()`, `getHeader()` and `getOption()`,
+- **magic properties** to getters and setters: `$form->action`, `$control->caption`, `$section->user`, `$section['user']`,
+- **flags** to named arguments: `Json::encode($value, Json::PRETTY)` and `Json::decode()`, `Strings::match()`, `matchAll()`, `split()` and `Arrays::grep()` with the constants `PREG_*`, `Neon::encode()` with `Neon::BLOCK`, the router's `add()`, `prepend()` and `addRoute()` with `Router::ONE_WAY`, `User::setExpiration()` with `IUserStorage::CLEAR_IDENTITY`, and the Tester's `Job::run()` with `RUN_ASYNC`,
+- **calls of a different shape**: `addUpload($name, $label, true)` to `addMultiUpload()`, `getValues(true)` to `getValues('array')`, `Callback::closure()` to `Closure::fromCallable()`,
+- **annotations** to attributes: `@persistent` and `@crossOrigin` in presenters, `@filter` and `@function` in Latte template parameter classes, and the attribute `#[CrossOrigin]` to `#[Requires(sameOrigin: false)]`,
+- **the hooks** `attached()` and `detached()` of components to callbacks of the method `monitor()` in the constructor, and **the query string and fragment in a link destination**, `link('Product:show?id=1#reviews')`, to arguments.
+
+The map `nette.flagsAsNamedArguments` rewrites the flags according to the data; the decisions `nette.monitorCallbacks` and `nette.linkArguments` rewrite the hooks and the link destinations. The package brings their rules. The rest is done by the rules of the DressCode engine, following the data.
+
+
+What Is Left to You
+===================
+
+Where there is no replacement, or the replacement is used differently, DressCode reports the place and says what to write. For example, methods of `Url` and `UrlScript` that moved elsewhere, constants that disappeared without a replacement, or an `attached()` hook where it cannot be decided which type it was called for:
+
+```
+Method `Nette\Http\UrlScript::setPath()` is forbidden: the class is immutable; take a changed copy with `withPath()`.
+Constant `Nette\Application\IRouter::SECURED` is forbidden: write the protocol, `https://`, into the mask of the route.
+```
+
+When a library only quietly marks something as deprecated, it is not in the data; with types, DressCode reports it, and where the annotation names the replacement, it also rewrites it through `upgrading.declarations.deprecatedMember`. The data does not capture changes in behavior, configuration in NEON or the syntax of Latte templates at all; you will find them in the upgrade guides of the individual libraries.
+
+
+What the Package Covers
+=======================
+
+| library | versions |
+|---|---|
+| `nette/application` | 3.0 to 3.3 |
+| `nette/assets` | 1.0 |
+| `nette/bootstrap` | 3.0 to 3.2 |
+| `nette/caching` | 3.0 to 3.4 |
+| `nette/command-line` | 1.9 to 2.0 |
+| `nette/component-model` | 3.0 to 4.0 |
+| `nette/database` | 3.0 to 3.2 |
+| `nette/di` | 3.0 to 3.2 |
+| `nette/forms` | 3.0 to 3.3 |
+| `nette/http` | 3.0 to 3.4 |
+| `nette/mail` | 3.1 to 4.1 |
+| `nette/neon` | 3.2 to 3.4 |
+| `nette/php-generator` | 3.3 to 4.2 |
+| `nette/robot-loader` | 3.2 to 4.1 |
+| `nette/routing` | 3.0 to 3.1 |
+| `nette/schema` | 1.2 to 1.3 |
+| `nette/security` | 3.0 to 3.2 |
+| `nette/tester` | 2.2 to 2.6 |
+| `nette/utils` | 3.0 to 4.1 |
+| `latte/latte` | 3.0 to 3.1 |
+| `tracy/tracy` | 2.6 to 2.10 |
+
+The versions say in which releases a library changed something that the data captures; a newer version of a library that renamed nothing needs no new data. An application on Nette 2.4 is upgraded the same way, with version 3.0 as the first step; [Upgrading Code |upgrade#One Major Version at a Time, by Hand] describes how to proceed one major version at a time.

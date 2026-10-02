@@ -1,0 +1,107 @@
+Přechod z Nette Coding Standardu
+********************************
+
+.[perex]
+Vývoj Nette Coding Standardu, tedy balíčku `nette/coding-standard` s příkazem `ecs`, skončil a verze 3 je poslední. Nahradil ho DressCode, který má standard vestavěný pod jménem `nette`. Jak projekt převést z `ecs` na DressCode, jak přenést `ncs.php` a `ncs.xml` a proč první oprava přeformátuje víc souborů, než čekáte.
+
+
+Co se změnilo
+=============
+
+Nette Coding Standard byl tenká obálka nad PHP CS Fixerem a PHP_CodeSniffer s balíkem pravidel od Slevomatu: dva nástroje, dvě konfigurace (`ncs.php` pro fixer, `ncs.xml` pro sniffer) a příkaz `ecs`, který to celé spouštěl.
+
+V DressCode je standard **presetem**. Jmenuje se `nette` a je součástí DressCode, takže ho má k dispozici každý projekt bez ohledu na to, jestli s Nette pracuje. Stojí na PER Coding Style, který upravuje podle rozvržení knihoven Nette (tabulátory, dva prázdné řádky mezi metodami a další), a navíc používá [sady |configuration#Standardy a sady] `cleanup`, `types` a `correctness`, z nichž pár rozhodnutí vypíná; co přesně obsahuje, ukazuje [přehled standardů a sad |presets-reference]. Nic dalšího nepotřebujete:
+
+- žádný balíček kromě samotného DressCode; `nette/coding-standard` zůstává ve verzi 3 a z projektu ho odeberete;
+- žádný příkaz kromě `dresscode`; `ecs` se už nepoužívá.
+
+
+Instalace a konfigurace
+=======================
+
+```shell
+composer require --dev dresscode/dresscode
+```
+
+Počítejte s tím, že DressCode vyžaduje PHP 8.4 až 8.6, a protože jde o vývojovou závislost, musí na jedné z těchto verzí běžet i váš projekt. Verze PHP, na které nástroj běží, a verze, pro kterou je psaný váš kód, jsou přitom dvě různá čísla: cílovou verzi si DressCode přečte z `composer.json` projektu, viz [Instalace |getting-started#Instalace]. Pokud váš projekt běží na starším PHP, nainstalujte DressCode raději globálně.
+
+Do kořene projektu přijde `dresscode.neon` se standardem a sadami, které chcete navíc:
+
+```neon
+use:
+	- nette
+	- compilerOptimizations   # volitelně
+
+nameResolution: certain
+
+# volitelně: nativní typy všude, kde je PHP čte
+types:
+	declaration:
+		parameter: required
+		property: required
+		return: required
+
+paths:
+	- src
+	- tests
+```
+
+Verze 3 sama vynechávala adresáře `expected`, `tmp` a `fixtures*`. DressCode vynechává `tmp` také; ostatní přidejte do `excludePaths`, pokud je váš projekt má, například `excludePaths: [tests/**/expected, tests/**/fixtures*]`.
+
+Opravy, které stojí na tom, že je funkce globální, a mezi nimi i to, co dělá sada [`compilerOptimizations` |optimizations], udělá DressCode bez svolení jen tehdy, když ví, co ve vašich jmenných prostorech je. Proto v konfiguraci stojí `nameResolution: certain`, a pokud nějaké funkce nebo konstanty ve jmenných prostorech opravdu máte, patří k němu i jejich seznam v klíči `namespaces`; bez toho se takové opravy jen ohlásí. Proč, vysvětluje stránka [Funkce a konstanty ve jmenných prostorech |namespaces].
+
+Kontroluje a opravuje se pak samotným DressCode:
+
+```shell
+dresscode check
+dresscode fix
+```
+
+Co se od verze 3 liší jen hodnotou, napíšete jako rozhodnutí. Projekt, který chce mezi metodami jeden prázdný řádek místo dvou a nechce `===` všude, kde stojí `==`, přidá:
+
+```neon
+blankLines:
+	aroundMethods: 1
+
+expressions:
+	comparison:
+		loose: keep
+```
+
+
+Převod konfigurace
+==================
+
+Příkaz, který by `ncs.php` a `ncs.xml` převedl, neexistuje, ale bývá to jen pár řádků, takže je přenesete ručně. Rozhodnutí, které nahrazuje fixer nebo sniff z verze 3, najdete podle jeho jména v [`dresscode catalogue` |cli#Katalog rozhodnutí: catalogue]:
+
+```shell
+dresscode catalogue | grep strict_comparison
+```
+
+Vypíše rozhodnutí, čeho se týká, a jména pravidel jiných nástrojů, která pokrývá: `expressions.comparison.loose  A loose comparison, ...  (covers strict_comparison, SlevomatCodingStandard.Operators.DisallowEqualOperators)`.
+
+| verze 3 | DressCode |
+|---|---|
+| `ncs.php` s `'fixer' => false` | rozhodnutí, které fixer pokrývá, s hodnotou `keep` |
+| `ncs.xml` s `<rule ref="$presets/optimize-fn.xml"/>` | sada `compilerOptimizations` v klíči `use` |
+| `ncs.xml` s `<exclude-pattern>` | klíč `excludePaths` |
+| `ncs.xml` s `<exclude-pattern>` uvnitř `<rule>` | přepis v klíči `overrides`, který rozhodnutí pro ty cesty dá `keep` |
+| `--config-file overrides.php` | `dresscode.neon` v kořeni projektu |
+| `--preset php81`, `--preset php` | nic, cílovou verzi PHP bere DressCode z vašeho `composer.json` |
+
+Pak v CI, v Git hooks i v editoru nahraďte `ecs check` a `ecs fix` za `dresscode check` a `dresscode fix`, odinstalujte `nette/coding-standard` a smažte `ncs.php` a `ncs.xml`.
+
+
+První oprava přeformátuje víc, než čekáte
+=========================================
+
+DressCode není řádek po řádku totéž co verze 3, a je to tak schválně. Některé rozdíly jsou opravy toho, co verze 3 nechávala být: velké písmeno na začátku komentáře `// Komentář`, komentář `/* enum */` před `case`, `declare(strict_types=1)` na řádku otevíracího tagu, nezlomitelná mezera zapsaná doslova v řetězci. Napříč balíčky Nette to bylo víc než sto souborů z necelých tří tisíc.
+
+Udělejte to jako samostatný commit: `dresscode fix`, commit bez jiných změn, hotovo. Procházet to řádek po řádku nemá cenu; cenu má vědět, že v tom commitu není nic jiného.
+
+
+Co zůstalo
+==========
+
+- Komentáře `phpcs:ignore` se jmény sniffů PHP_CodeSniffer a Slevomatu fungují dál; přepis na `dresscode:ignore` udělá [dresscode migrate suppressions |migration#3. Přepište komentáře].
+- Vlastní sniffy a fixery, pokud nějaké byly, se přepisují podle [návodu |porting-rules]; přepsaný sniff bývá několikanásobně kratší.

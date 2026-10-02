@@ -1,0 +1,107 @@
+Testing Rules
+*************
+
+.[perex]
+How to test a rule with `RuleTester`: the fixture files `.code`, `.expected` and `.violations`, decision values in `values.neon` and in the fixture header, the target PHP version, and everything the tester checks for you.
+
+
+Fixtures
+========
+
+Each rule is tested on a directory of fixtures of its own. A fixture is a group of up to three files with the same name:
+
+- `basic.code` is the code before the fix;
+- `basic.expected` is the code after the fix; when the file is missing, the rule must not change the code;
+- `basic.violations` are the expected reports, each on its own line, as a line number and a message:
+
+```
+3: The message of an exception must end with a period.
+6: The message of an exception must end with a period.
+```
+
+The report of a risky fix is followed by an indented line that names what would decide the risk, plus the reason if the rule gave one, so the tester also checks the cause of the risk:
+
+```
+4: The loop must be written with `array_any()`.
+	risky TypeUnknown: the loop may go through an object, which `array_any()` does not take
+```
+
+The fixture must give a value to the decisions the rule enforces; otherwise they are `keep` and the rule does nothing, and the tester then insists that the fixture changes nothing and reports nothing. The values for the whole directory go into the file `values.neon` next to the fixtures, written the same way as in the configuration:
+
+```neon
+acme:
+	debugCalls: forbidden
+```
+
+In comments at its start, a fixture can add: values just for itself, as JSON layered on top of `values.neon`; the PHP version it is written for; the maximum line length to check against; and the word `risky`, which also allows the rule to make fixes that change the behavior of the code:
+
+```php
+<?php
+// {"mistakes.debugOutputFunctions": ["var_dump", "dump"]}
+// php 8.4
+// lineLength 80
+// risky
+```
+
+A key is written with its full path. For a rule whose decisions are in a single section, the key without the section is enough, so `{"debugCalls": "keep"}` means `acme.debugCalls`. It also works for a key the rule reads but does not own, like the engine parameter `mistakes.debugOutputFunctions` here. When no length is given, lines are measured against 120 characters, as in the standards. When no version is given, the rule is tested on the version it asked for in `requires`, otherwise on PHP 8.0; a version passed to the tester with the parameter `$phpVersion` wins over the header. It is never the version of the interpreter running the tests, because the verdict of a rule should not depend on the computer. Without `risky`, a risky occurrence is only reported, and the file `.expected` must leave it as it was; a fixture with `risky` is also proof for the reference that the rule has such fixes.
+
+Headers tell what namespaces outside the fixture declare. They are written like the items of a `use` statement, just like the keys [`namespaces` and `nameResolution` |namespaces] in the configuration:
+
+```php
+<?php
+// namespacedFunctions App\helper, App\Utils\{format}
+// namespacedConstants App\LIMIT
+// nameResolution certain
+```
+
+A rule with `typesRequired` gets the types of the code from the PHPStan of the project in which the tests run, computed on the fixture and on the declarations from the subdirectory `stubs/` of the fixture directory. A rule that only benefits from types gets them where the directory `stubs/` exists, and a fixture with `// types off` in its header does not get them even there. This is how you test what the rule recognizes without types, only from the declarations in view.
+
+A fixture is not an example for the documentation: it should be ugly and full of edge cases. A comment in the middle of a construct, a construct on one line and across three, an empty body, an interpolated string, alternative syntax. These are exactly the places where rules break.
+
+
+RuleTester
+==========
+
+```php
+use DressCode\Testing\RuleTester;
+use Tester\Assert;
+
+Assert::noError(fn() => RuleTester::run(ExceptionMessagePeriodRule::class, __DIR__ . '/fixtures/exceptionMessagePeriod'));
+```
+
+The method `run()` goes through all `*.code` files in the directory and returns their count; a directory without them is a failure, not an empty success. A failure is the exception `DressCode\Testing\TestFailure` with the name of the fixture and a diff, so every test framework shows it clearly. Nette Tester wants at least one assertion in every test, which is why the call in the example is wrapped in `Assert::noError()`; with PHPUnit, it is a single call in a test method.
+
+For every fixture, the tester checks:
+
+- **the output** equals the file `.expected` (or the input, when there is no `.expected`);
+- **the reports** equal the file `.violations`, line by line and in the same order, and the message of each of them ends with a period;
+- **idempotence**: running the rule again on its own output changes nothing;
+- **comments**: the output contains all comments from the input, unless the rule has `modifiesComments`;
+- **suppression**: with the comment `dresscode:ignoreFile` in the header, the rule reports nothing and changes nothing;
+- **the contract of fixes**: no change of the tree without a successful report, no report under a decision the rule did not declare, no report without `fixable: false` that is still there after a pass that changed nothing, and no risky violation left in a fixture with `// risky`, where the fix was allowed;
+- **the rest**: what the rule reports in the last pass is exactly what a fresh run reports on the output;
+- **the tree**: every node has the correct parent, which is what a wrong insertion breaks.
+
+If a rule needs something in its constructor, pass a factory `fn(array $values): Rule` instead of its class. The factory gets the values from the header of the fixture as they are written in the JSON, or an empty array when there is no header, and returns the finished rule; with a factory, the tester does not call `configure()` and does not check the reports against the values of the decisions. A rule that asks for its plugin's own analysis (here `ClockRule` asks for the analysis `Clock`, which the engine cannot build by itself) gets its factory through the parameter `analyses`, in the same shape as the key `analyses` of the configuration and of the plugin manifest:
+
+```php
+RuleTester::run(ClockRule::class, __DIR__ . '/fixtures/clock', analyses: [
+	Clock::class => fn(FileNode $file, string $path) => new Clock('noon'),
+]);
+```
+
+For special cases there are smaller tools: `RuleTester::runFixture()` runs a single fixture, `RuleTester::check()` checks a finished instance of a rule on a string without files (useful for a quick reproduction), `RuleTester::collectViolations()` returns the reports on a fixture directly in the form of a `.violations` file, and `collectOutput()` the output in the form of an `.expected` file, so you can have them written out and only check the diff instead of copying them by hand. `run()`, `runFixture()` and both `collect*()` methods accept `$phpVersion` and `analyses`. The method `check()` also accepts the whole style used to process the code (`style: new Style(indent: '    ', maxLineLength: 80)`) instead of the longest line from the header.
+
+
+Data for Upgrading Libraries
+============================
+
+A package that supplies [upgrade data |upgrading-data] instead of rules, or next to them, tests the data with the class `Testing\UpgradingTester`. The method `collectProblems($file, $root, $packageRules)` reads the file the way a run would read it in a project whose `vendor/` contains the library, and returns the problems found as sentences; an empty array means the file is fine. You pass the rules the package supplies itself as the third parameter. The method `collectPackageProblems($root)` checks that `extra.dresscode.packages` in the `composer.json` of the package names exactly the libraries its files talk about. The method `runSample()` then fixes a sample of code in the old API the way a project with the data turned on would fix it, and returns a `FileResult` with the fixed code and the findings. As the third parameter, it takes the decisions of the package's own rules that the data do not set, grouped by section. Both are described in detail on the page [Replacement Maps |upgrading-data].
+
+
+A Test on Real Code
+===================
+
+A rule test checks the rule by itself. Only a run on real code shows how it behaves together with the other rules. The option `dresscode check --strict-rules` turns every broken contract into an error instead of a warning, and `--jobs 1` lets everything run in a single process, where it is easy to debug.
+
+Before you publish a rule, run `fix` on a large amount of someone else's code, for example on the directory `vendor/`, and go through the diff. The tester checks idempotence and comments, but not taste.

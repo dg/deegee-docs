@@ -1,0 +1,72 @@
+Troubleshooting
+***************
+
+{{description: Troubleshooting DressCode: why a check reports nothing, what the messages about rules that never settle mean, and how to make DressCode agree with your editor's formatter and line endings.}}
+
+.[perex]
+Why everything is suddenly clean, what the messages about rules that never settle or about a broken contract mean, and what to do when DressCode fights with your editor's formatter.
+
+
+Why It Is Clean When It Shouldn't Be
+====================================
+
+The run ended with `OK` and you know it shouldn't have. The answer is in the header and in the summary:
+
+- **`OK  36 violations in the baseline`**: the violations are there, but the [baseline |suppressing#baseline] knows them. Generate it again, or remove it from the configuration.
+- **The file is not in the scope of the check.** The header says how many files are checked. By default, `vendor`, `node_modules`, `temp`, `tmp`, `log` and all directories and files starting with a dot are excluded, plus `excludePaths` from the configuration and from plugins. Note that excluded paths only add up: once a path is excluded, no layer can include it again.
+- **A decision does not apply.** `dresscode config` prints the value of every decision and the layer that set it, and for a decision that does not apply, the reason: `no effect: php` when it needs a newer PHP than the target version, `no effect: types` when it needs types the configuration does not have, and so on. A decision that no standard, set or configuration sets is `keep` and requires nothing; `dresscode explain <path>` tells you which values it takes and what the standards give it.
+- **A rule was skipped because of the PHP version.** A rule for newer syntax turns itself off below the target version of the project, and if you turned it on by name, the run prints a warning about it. The header shows the target version, for example <code>''Target PHP 8.2 from `composer.json`''</code>. If it says <code>''PHP 8.0 by default, `composer.json` names no PHP version in `require`''</code> even though you have a `composer.json`, DressCode could not read the lowest version from its `require.php`. It reads any constraint Composer understands, but a constraint without a lower bound (`<8.4`, `*`) does not define a lowest version, and from an invalid constraint DressCode does not try to guess one. In that case set the version with the key `targets: {php: '8.2'}`.
+- **The fix is risky.** The summary says, for example, <code>''1 risky fix waits, the type is unknown: set `typeAnalysis: phpstan`''</code>: this is a risky fix, one that could change the behavior of the code, so `fix` only reported it. The sentence in the summary says what would decide the fix, and the link after it leads to a guide. Where types are missing, turn on [`typeAnalysis: phpstan` |types#enable]; for decisions like `hygiene.is_null` or `hygiene.aliasFunctions`, whose fix depends on the function being global, tell DressCode what is in your namespaces, and with the key [`nameResolution: certain` |namespaces#name-resolution] these fixes are not risky at all. Where a fix changes behavior by its nature, the choice is yours: one by one with `fix --ask-risky`, by the decision path in the [`fixRisky` |configuration#risky-fixes] list, or with the `--fix-risky` option for a single run. The line under the violation in the listing shows why that particular place is risky. `dresscode config` marks the decisions whose risky fixes you have accepted with the note `risky fixes accepted`.
+- **The rule only warns.** The `severity` key softened it to `warning` (the `psr12` and `perCs` standards do this for `file.longLines`), so it reports with the label `warning` and does not change the exit code; `--max-warnings` sets a threshold. `dresscode config` marks such a decision with the note `only warns`.
+- **The cache.** A file with the same path, the same content and the same configuration is skipped. The configuration, the baseline and the files of the project's own rules are all part of the cache key, so changing them invalidates the cache by itself. The exception is a rule built by a factory that reads some file other than the configuration: the cache does not notice when that file changes, and `--no-cache` helps there.
+- **A suppression in the code.** `dresscode:ignore` and `phpcs:ignore` apply to fixing too, and a `dresscode:disable` without an `enable` lasts until the end of the file. In the comment, write a decision by its whole path, as in the configuration (`mistakes.strictArgument`), or by its section alone, which suppresses everything under it. DressCode does not recognize any other form, such as `strict-calls`, and such a comment suppresses nothing.
+
+
+Messages Worth Explaining
+=========================
+
+**<code>''No `dresscode.neon` or `dresscode.php` found in `/var/www/shop` or above it, so there is no dress code to check against. Run `dresscode init` to have one made to measure from the code, or name a standard with `--use`.''</code>** DressCode has no style of its own, so without a configuration it neither checks nor fixes anything. The command [`dresscode init` |cli#init] measures a configuration from your code; to try it out, choosing a standard with the `--use` option is enough, for example `--use perCs`.
+
+**`No paths given and none configured.`** Without a configuration file, you must give the paths on the command line; with a file, the `paths` key is enough.
+
+**<code>''Key `no_unused_imports` is unknown. It is the name of a rule of another tool, covered by `imports.unused`; `dresscode migrate config` translates a configuration of another tool.''</code>** The configuration and the command line take DressCode decision paths; names from other tools are valid only in suppression comments. The message translates a foreign name for you, and the command [migrate config |migration#migrate-config] converts a whole configuration file of another tool. When the key came from the `--set` option, the message starts with `The command line:`.
+
+**<code>''Key `imports.unsed` is unknown; write `imports.unused`.''</code>** A typo in the path; the message offers the closest known one. When the path belongs to a plugin's section, such as `acme.debugCalls`, and the message does not know it, the plugin is missing from the `use` key: neither its class nor the name of the package that brings it is listed there.
+
+**<code>''Package `acme/code-style` brings the plugin `Acme\CodeStyle\Plugin`, which loads only where `use` names the package or the plugin; skipped.''</code>** An installed package carries a plugin, but the project did not let it in. A plugin brings code that runs on every check, so it is loaded only when you write the name of the package or the class of the plugin into the `use` key; see [Plugins |configuration#Plugins].
+
+**<code>''Name `types` is both a section of decisions and the preset `dresscode/types`; write `types.*` for the section or `dresscode/types` for the preset.''</code>** A name in `--only`, `fixRisky` or `severity` is both a section and a set, and DressCode does not know which one you mean. Write what you want: `types.*` for the section, `dresscode/types` for the set. No other section is confused with a set; the sets `cleanup` and `correctness` have their sections named `hygiene` and `mistakes`.
+
+**<code>''Rule `Acme\CodeStyle\NoDebugCallsRule` declares no decision.''</code>** A rule from the `rules` key or from a plugin returns no decision from `getDecisions()`. Every violation is reported under a decision, so a rule must have at least one; see [A Rule in Detail |rule-contract#Decisions].
+
+**<code>''Decision `classes.overridingMethod.signature` needs the types of the code; set `typeAnalysis: phpstan` in the configuration and install `phpstan/phpstan` beside DressCode.''</code>** Your configuration names a decision whose rule needs the types of the code, but the configuration has no types. Coming from a standard or a set, such a decision would silently not apply, but a decision in the configuration is one you asked for explicitly, so this is a configuration error with exit code `3`. Set `typeAnalysis: phpstan`, as the message advises, or remove the decision from the configuration; see [Types from PHPStan |types].
+
+**<code>''Key `file.lineLength` does not take `abc`; write a count from `1` or `none`.''</code>** A value outside the range the decision takes; the message says what it takes. `dresscode explain file.lineLength` prints the whole range, with the meaning of every word.
+
+**<code>''Rules `Acme\CodeStyle\OneRule` and `Acme\CodeStyle\TwoRule` do not converge in `src/Cart.php`.''</code>** Two rules are fighting: one changes the code, the other changes it back, and so the tree got into a state it had already been in. The engine detects this, reports the file as a failure (exit code `2`) and writes nothing into it. The built-in rules do not conflict with each other, so the message points to your own rule or a plugin, and it names both sides of the conflict. Below it there is usually a diff between the two states, which shows what the rules disagree about. Until you solve it, leave the decision of one of them at `keep`. If the message names two built-in rules, it is a bug in DressCode; "report it":https://github.com/dg/dresscode/issues, together with that diff. .[#no-convergence]
+
+**<code>''The file changed while it was being fixed, so it was not written; run `fix` again.''</code>** An editor or another tool saved the file in the meantime. Right before writing, DressCode checks that the file still contains the text it was fixing, and if not, it writes nothing, so that it does not overwrite your changes. The file is reported as a failure (exit code `2`); just run `fix` again.
+
+**<code>''Rule `Acme\CodeStyle\NoDebugCallsRule` is faulty: it changed the file without reporting a violation.''</code>** (or `after a suppressed report`) means that the rule broke the contract: every change of the tree must come only after a call to `report()` that returned `true`. For built-in rules, `RuleTester` checks this; in your own rule, it is a bug in that rule. The `--strict-rules` option turns such a warning into an error, so that it does not slip through the tests.
+
+**A configuration error about two rules that want to decide the same gap.** Two [whitespace rules |whitespace-rules] claim the same place; the engine refuses this, because otherwise the result would depend on their order. Claims that are fixed in advance are compared right at the first file it processes; when a rule decides its claim only from the code, the conflict is reported at the place where the two claims meet. This can happen only with a rule from a plugin or with the project's own rule.
+
+**A file with a syntax error** is listed with its line number, and the exit code is `1`, the same as for violations. DressCode does not fix it, but it does not silently skip it either: you cannot measure style on code that PHP does not accept.
+
+**<code>''Warning: 3 entries of the baseline no longer match a violation; regenerate it with `dresscode baseline`.''</code>** means that a violation the baseline knows is no longer in the code: someone fixed it by hand, or `fix` did once it became fixable. Nothing is wrong, the baseline just no longer matches reality; generate it again. Only entries of files the run processed are reported, and with `--only` only entries of the decisions that ran, so checking part of the project does not mark as stale what it never asked about.
+
+**<code>''Baseline file `/var/www/shop/dresscode-baseline.neon` is not of the version this DressCode writes; generate it again with `dresscode baseline`.''</code>** The baseline file does not start with `version: 2`, the form DressCode reads, and the run ends with exit code `3`. Delete the old file, run `fix`, and `dresscode baseline` writes it again.
+
+
+The Editor and the Configuration
+================================
+
+When your editor reformats a file on save and undoes what `dresscode fix` did, two formatters are fighting over it: DressCode and the editor's built-in formatter. Turn off the built-in PHP formatting in PhpStorm or the default PHP formatter in VS Code, or at least turn off format on save.
+
+When DressCode says it did not find a configuration even though the project has one, check where you run it from. It looks for the configuration from the working directory upward, not from the checked files, so when you run it outside the project, it does not find it. Run it from the root of the project, or pass the path to the configuration with the `--config` option.
+
+
+Line Endings
+============
+
+The message `Expected LF line endings, CRLF found.` means that the configuration or a preset requires a fixed line ending (`file.lineEnding: LF`) and the file has a different one; there is one finding for the whole file. A project that wants to keep line endings as they are, and only make them consistent within each file, sets `file.lineEnding: majority`, and so do all four standards. A project on Windows where Git converts line endings should leave the conversion to Git and stay with `majority`: the file in the working tree has CRLF, and DressCode leaves it that way.

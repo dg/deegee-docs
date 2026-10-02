@@ -1,0 +1,1532 @@
+Víceřádkové konstrukce
+**********************
+
+.[perex]
+Sekce `multiline` rozhoduje o konstrukcích rozepsaných na víc řádků: o parametrech, argumentech, poli, podmínce, řetězu volání, ternárním operátoru a dalších operátorech, o tom, jak se rozloží příliš široký řádek, kam se při zalomení řádku dává operátor, a o čárce za poslední položkou víceřádkového seznamu.
+
+Konstrukce je rozepsaná, když se v ní láme řádek, ať ji tak napsal autor, nebo ji zlomila šířka řádku. Na rozepsanou konstrukci se DressCode ptá dvakrát: jak stojí její položky, to říká `multiline.items`, a jak stojí vůči tomu, co ji otevírá a zavírá, to říká `multiline.edges`. Poslední článek klíče je místo, kde konstrukce stojí: `parameter`, `argument`, `array`, `condition`, `chain` a další, všechna jsou [níže |#Místa a druhy]. Hodnota `perLine` dá každé položce vlastní řádek a `apart` dá vlastní řádek i závorkám; PER Coding Style to chce u parametrů, argumentů, podmínky, řetězu i pole. A každé místo, kde stojí seznam, má vlastní klíč pro čárku na konci: pole, argumenty, parametry, větve `match`, `use` u closure, skupinový import a `list()`.
+
+```neon
+multiline:
+	items: perLine
+	edges: apart
+	operatorPosition:
+		condition: lineStart
+	trailingComma:
+		parameter: required
+		argument: required
+		array: required
+```
+
+```php .[before]
+class Cart
+{
+	public function __construct(private Clock $clock,  // Expected a line break before the parameter, because the signature spans several lines.
+		private Logger $logger, private Tax $tax)  // A multi-line parameter list must end with a trailing comma.
+	{
+	}
+
+	public function add(string $name, int $count): void
+	{
+		$this->logger->log('added', [
+			'name' => $name, 'count' => $count,  // Expected a line break before the array item, because the array spans several lines.
+			'time' => $this->clock->now()]);  // A multi-line array must end with a trailing comma.
+		if ($count > 10 &&  // Expected a line break before the expression, because the condition is not in the `apart` shape. // Expected a line break before the `&&` operator.
+			$name !== '') {
+			$this->tax->apply($name,  // Expected a line break before the argument, because the arguments span several lines.
+				$count);  // A multi-line argument list must end with a trailing comma.
+		}
+	}
+}
+```
+
+```php .[after]
+class Cart
+{
+	public function __construct(
+		private Clock $clock,
+		private Logger $logger,
+		private Tax $tax,
+	)
+	{
+	}
+
+	public function add(string $name, int $count): void
+	{
+		$this->logger->log('added', [
+			'name' => $name,
+			'count' => $count,
+			'time' => $this->clock->now(),
+		]);
+		if (
+			$count > 10
+			&& $name !== ''
+		) {
+			$this->tax->apply(
+				$name,
+				$count,
+			);
+		}
+	}
+}
+```
+
+Ukázka nastavuje jen sekci `multiline`, a proto `{` konstruktoru zůstala, kde byla; kam patří, rozhoduje [`braces.position.multilineSignature` |braces#braces.position.multilineSignature]. Jak se odsadí řádky, které rozepsáním vzniknou, říká sekce [indentation |indentation].
+
+
+Položky a okraje
+================
+
+Položky stojí buď `perLine`, každá na vlastním řádku, nebo `fill`, kdy smějí sdílet řádky. `fill` projde i seznam s položkami po jedné, protože i řádek s jedinou položkou je plný. Okraje jsou tři: `apart`, kdy první položka začíná na řádku pod otevírací závorkou a zavírací závorka stojí na vlastním řádku, `attached`, kdy první položka zůstane na řádku otevírací závorky a zavírací následuje hned za poslední položkou, a `closingApart`, kdy první položka zůstane u otevírací závorky, ale zavírací stojí na vlastním řádku. Obě osy jsou na sobě nezávislé, takže vznikne šest tvarů; tady jsou čtyři z nich:
+
+```php
+// items: perLine, edges: apart
+$mailer->send(
+	$to,
+	$subject,
+	$body
+);
+
+// items: fill, edges: apart
+$mailer->send(
+	$to, $subject,
+	$body
+);
+
+// items: perLine, edges: attached
+$mailer->send($to,
+	$subject,
+	$body);
+
+// items: fill, edges: closingApart
+$mailer->send($to, $subject,
+	$body
+);
+```
+
+Okraje nejsou všude závorky. U `implements` je otevírá klíčové slovo a první rozhraní buď zůstane za ním (`attached`), nebo začne další řádek (`apart`). U řetězu volání je otevírá objekt a `attached` nechá na jeho řádku články až po první volání metody, takže `$this->db->table()` zůstane pohromadě. Operátory mimo podmínku okraje nemají, ty mají jen `items`. Které slovo které místo bere, říká blok každého rozhodnutí níže.
+
+Seznam napsaný na jednom řádku projde vždy a rozepsaný seznam DressCode zpátky na jeden řádek nespojuje. Výjimkou jsou argumenty s hodnotou `fillPlain`: když jsou všechny jednoduché a vejdou se na řádek otevírací závorky, spojí je. Seznam z jednoho řádku rozloží jen [příliš široký řádek |#Příliš široký řádek], `multiline.maxWidth.array` nebo `multiline.spreadAlways`.
+
+
+Víc přijatých tvarů
+===================
+
+Hodnota je jeden tvar, nebo seznam tvarů. Ze seznamu projde každý a ten první se píše: když DressCode rozkládá příliš široký řádek, a když autor seznam rozepsal tvarem, který v seznamu není. Přepisuje se přitom jen ta osa, na které autorův tvar neprošel, druhá zůstane, jak ji napsal. Tady autor položky plnil, což seznam bere, ale okraje přilepil, což ne:
+
+```neon
+multiline:
+	items:
+		argument: [perLine, fill]
+	edges:
+		argument: apart
+```
+
+```php .[before]
+$mailer->send($to,
+	$subject, $body);
+```
+
+```php .[after]
+$mailer->send(
+	$to,
+	$subject, $body
+);
+```
+
+Okraje se přepsaly na `apart` a položky zůstaly rozdělené, jak je rozdělil autor. Na ose položek mají smysl tři zápisy, protože `fill` přijme i položky po jedné:
+
+| zápis | co projde | co se píše |
+|---|---|---|
+| `perLine` | jen položky po jedné | po jedné |
+| `[perLine, fill]` | jakékoli rozdělení | po jedné |
+| `fill` | jakékoli rozdělení | výplní |
+
+Nette Coding Standard tak třeba píše pole výplní a okraje mu projdou oddělené i přilepené: `multiline.items.array: fill` a `multiline.edges.array: [apart, attached]`.
+
+
+Celá skupina naráz
+==================
+
+Slovo nebo seznam napsaný přímo u skupiny platí pro každé místo, které ho bere. `multiline.items: perLine` tedy dá položky po jedné všem seznamům i operátorům. Místo, které slovo nezná, se přeskočí: `multiline.edges: closingApart` nastaví pole, argumenty, parametry, podmínku a další místa se závorkami, ale `implements` ani řetězu se nedotkne. Slovo, které nezná žádné místo skupiny, je chyba konfigurace, stejně jako `keep` uvnitř seznamu.
+
+Mezi celou skupinou a jedním místem stojí dva druhy míst: `lists` jsou seznamy a `operators` řetězy operátorů včetně podmínky, ternárního operátoru a řetězu volání. "Seznamy takhle, operátory jinak" je tak jeden řádek pro každou polovinu, a místo napsané ve stejné mapě má před svým druhem přednost:
+
+```neon
+multiline:
+	items:
+		lists: perLine
+		operators: [perLine, fill]
+		array: fill
+```
+
+Položky všech seznamů tu stojí po jedné, jen pole smí plnit řádky. Operátory rozložené autorem zůstanou, jak jsou, a ty, které rozkládá šířka řádku, dostanou každý operand na vlastní řádek. Druhy fungují v každé skupině, jejíž klíče jsou místa, takže `multiline.trailingComma: {lists: required}` vyžaduje čárku u všech seznamů, které tu hodnotu berou, a `multiline.operatorPosition: {operators: lineStart}` dá všechny operátory na začátek řádku.
+
+Vaše konfigurace, která stojí na standardu, přepíše všechna místa, která její hodnota pokrývá, ať je standard jmenoval jednotlivě, druhem, nebo celou skupinou. `multiline.items: {lists: perLine}` nad `nette` tedy dá po jedné i pole, kterému `nette` předepisuje `fill`.
+
+
+Místa a druhy
+=============
+
+Slova míst jsou ve všech skupinách stejná, v `items`, `edges`, `trailingComma`, `operatorPosition`, `maxWidth` i `fillMinItems`, a stejnými slovy se jmenují konstrukce v [`file.lineLengthExcept` |file#file.lineLengthExcept].
+
+Druh `lists`:
+
+- `array`: pole a destrukturace v hranatých závorkách
+- `list`: `list()`
+- `argument`: argumenty volání, `new` a atributu, proměnné `isset()` a `unset()`
+- `parameter`: parametry funkce a metody
+- `closureUse`: `use` u closure (anonymní funkce), jen v `multiline.trailingComma`
+- `import`: jména skupinového importu `use A\{B, C}`
+- `matchArm`: větve `match`
+- `matchCondition`: podmínky jedné větve `match`
+- `for`: sekce hlavičky `for`
+- `implements`: rozhraní za `implements` a za `extends` rozhraní
+
+Druh `operators`:
+
+- `condition`: podmínka `if`, `elseif`, `while` a `do-while` spojená logickými operátory
+- `logical`: `&&`, `||`, `and`, `or` a `xor` mimo podmínku
+- `concatenation`: `.`
+- `arithmetic`: `+`, `-`, `*`, `/`, `%` a `**`
+- `bitwise`: `|`, `&`, `^`, `<<` a `>>`
+- `coalesce`: `??`
+- `comparison`: porovnání, jen poloha operátoru na zlomu
+- `pipe`: `|>`
+- `ternary`: ternární operátor
+- `chain`: řetěz volání metod a přístupů k vlastnostem
+
+Rozkládá se vždy řetěz operátorů stejné priority: v `$a - $b + $c` tvoří `-` i `+` jeden řetěz místa `arithmetic`, zatímco závorky nebo operátor jiné priority začínají řetěz vnitřní, který se rozloží, až když se nevejde ani na svůj řádek.
+
+
+Příliš široký řádek
+===================
+
+Tvar je zároveň spínač: místo, jehož `items` není `keep`, se rozloží i tehdy, když ho autor napsal na jeden řádek, ale řádek je širší než [`file.lineLength` |file#file.lineLength]. Rozloží se do prvního tvaru obou os, a proto se `items` a `edges` píšou spolu: s `edges` na `keep` by první položka zůstala u otevírací závorky. Měří se kód řádku, komentář za ním se nepočítá. Láme se zvenku dovnitř: napřed vnější konstrukce, a vnitřní se pak měří na řádku, kde zůstala. Délka je tu kvůli místu na stránce snížená na 60 znaků:
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	items:
+		argument: perLine
+	edges:
+		argument: apart
+```
+
+```php .[before]
+$order = $this->orders->create($customer, new Address($street, $city), $items);  // Expected a line break before the argument, because the line is 79 characters long, more than 60.
+throw new InvalidArgumentException("Customer $customer->name has no address.");
+$this->mailer->send($order->customer->email, $order->invoice); // a copy goes to accounting
+```
+
+```php .[after]
+$order = $this->orders->create(
+	$customer,
+	new Address($street, $city),
+	$items
+);
+throw new InvalidArgumentException("Customer $customer->name has no address.");
+$this->mailer->send($order->customer->email, $order->invoice); // a copy goes to accounting
+```
+
+Volání `create()` je vnější, a tak se rozložilo první; `new Address(...)` se pak na svůj řádek vešlo a zůstalo celé. Celá zůstala i hláška výjimky: volání nebo `new`, jehož jediným argumentem je řetězec, i spojený s dalším výrazem, se podle šířky neláme. A celý zůstal řádek s komentářem za kódem, protože komentář by po rozložení zůstal na posledním řádku, daleko od kódu, o kterém mluví, a `dresscode:ignore` by přestal umlčovat řádek, ke kterému patří. Stejně zůstává řádek, který otevírá text (konec heredocu, HTML), klíč v hranatých závorkách přístupu do pole a konstrukce, za kterou je zbytek řádku sám širší než limit, protože ten by zůstal na jejím posledním řádku a pořád by se nevešel. Když na řádku stojí dvě konstrukce, které žádná společná nedrží, třeba klíč a hodnota přiřazení do prvku pole nebo podmínka a výsledek větve `match`, láme se napřed ta vpravo.
+
+Výjimku z pořadí zvenku dovnitř mají operátory. Když je první nebo poslední operand volání, `new` nebo pole a nevešel by se ani na vlastní řádek, jeho závorky by se rozložily tak jako tak a rozložené operátory by jen přidaly další řádky. Rozloží se proto jen závorky a ostatní operandy zůstanou vedle nich:
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	items:
+		argument: perLine
+		logical: perLine
+	edges:
+		argument: apart
+```
+
+```php .[before]
+$valid = in_array($order->status, $allowedStatuses, strict: true) || $order->isPaid();  // Expected a line break before the argument, because the line is 86 characters long, more than 60.
+$valid = $order->isPaid() || in_array($order->status, $allowedStatuses, strict: true);  // Expected a line break before the argument, because the line is 86 characters long, more than 60.
+$valid = in_array($order->status, $allowedStatuses) || $order->isPaid() || $order->isRefunded();  // Expected a line break before the `||` operator, because the line is 96 characters long, more than 60.
+```
+
+```php .[after]
+$valid = in_array(
+	$order->status,
+	$allowedStatuses,
+	strict: true
+) || $order->isPaid();
+$valid = $order->isPaid() || in_array(
+	$order->status,
+	$allowedStatuses,
+	strict: true
+);
+$valid = in_array($order->status, $allowedStatuses)
+	|| $order->isPaid()
+	|| $order->isRefunded();
+```
+
+Na třetím řádku se operandy na vlastní řádky vejdou, a tak se rozložily operátory a volání zůstalo celé. Závorky se rozloží místo operátorů, jen když se vedle nich všechno vejde a operandy před posledním zaberou nejvýš polovinu délky řádku, aby se operátor neztratil někde vpravo. Operátorů, které spojují části samotné podmínky `if`, `elseif`, `while` nebo `do-while`, se to netýká, ty se řídí [`multiline.items.condition` |#multiline.items.condition].
+
+Co zalomit nejde, třeba dlouhý řetězec, nahlásí [`file.longLines` |file#file.longLines]. Které konstrukce nechat i na příliš širokém řádku být, říká [`file.lineLengthExcept` |file#file.lineLengthExcept]: místo v seznamu (`argument`, `array`, `chain`…) se podle šířky neláme a jeho řádek se nehlásí. Řádek dlouhý jen kvůli řetězcům z hlášení vynechá slovo `strings`. Konstrukci napsanou na jednom řádku rozloží i bez ohledu na šířku řádku `multiline.maxWidth.array`, když je pole širší než daný počet znaků, a `multiline.spreadAlways`, když signatura deklaruje vlastnost v konstruktoru.
+
+
+Čárka na konci seznamu
+======================
+
+Čárka za poslední položkou víceřádkového seznamu má praktický důvod: přidání další položky změní v diffu jeden řádek, ne dva. U `required` rozhoduje zavírací závorka: když stojí na vlastním řádku, čárka tam patří, když stojí na řádku poslední položky, čárka tam být nesmí. `optional` ji tam, kde zavírací závorka stojí na vlastním řádku, nechá na autorovi. Ze seznamu na jednom řádku se čárka odstraní při obou hodnotách, jen `keep` nechá daný druh seznamu úplně být.
+
+```neon
+multiline:
+	trailingComma:
+		array: required
+```
+
+```php .[before]
+$colors = [
+	'red',
+	'green'
+];  // A multi-line array must end with a trailing comma.
+
+$sizes = ['S', 'M', 'L',];  // A one-line list must not end with a trailing comma.
+
+$matrix = [
+	[1, 2],
+	[3, 4],];  // A trailing comma must not precede a closing bracket on the line of the last item.
+```
+
+```php .[after]
+$colors = [
+	'red',
+	'green',
+];
+
+$sizes = ['S', 'M', 'L'];
+
+$matrix = [
+	[1, 2],
+	[3, 4]];
+```
+
+Poslední případ ukazuje, kdo rozhoduje: pole je rozepsané na řádky, ale jeho zavírací závorka stojí na řádku poslední položky, takže tam čárka nepatří. Přesunout závorku na vlastní řádek je práce klíče `multiline.edges.array`; teprve pak sem čárka přijde.
+
+
+multiline.items.array
+=====================
+
+The items of an array or of a destructuring in brackets spread over lines, by their author, for the width of their line or for `multiline.maxWidth.array`, the opening bracket staying on the line of the code before it.
+
+Written as `fill`, the items without keys fill the lines evenly from `multiline.fillMinItems.array` of them, fewer standing one on a line.
+
+- `perLine`: every item on a line of its own
+- `fill`: the items may share lines, one on a line passing too, and one spanning lines stands on lines of its own
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `perLine`, psr12 `keep`, nette `fill`, symfony `keep`, laravel `keep` .[decision-facts]
+
+Pole aspoň o dvou položkách se rozloží, když se nevejde jeho řádek; šířku pole samotného od závorky k závorce k tomu přidává `multiline.maxWidth.array`. `file.lineLengthExcept: [array]` vypne jen to první.
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	items:
+		array: perLine
+	edges:
+		array: apart
+```
+
+```php .[before]
+$row = ['id' => $order->id, 'total' => $order->total, 'paid' => $order->paidAt];  // Expected a line break before the array item, because the line is 80 characters long, more than 60.
+```
+
+```php .[after]
+$row = [
+	'id' => $order->id,
+	'total' => $order->total,
+	'paid' => $order->paidAt
+];
+```
+
+
+multiline.edges.array
+=====================
+
+Where the items spread over lines begin against the opening bracket and where the closing one stands.
+
+- `apart`: the first item on the line after the opening bracket, the closing one on a line of its own
+- `attached`: the first item on the line of the opening bracket, the closing one right after the last one
+- `closingApart`: the first item on the line of the opening bracket, the closing one on a line of its own
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `apart`, psr12 `keep`, nette `[apart, attached]`, symfony `keep`, laravel `keep` · pokrývá `SlevomatCodingStandard.Arrays.MultiLineArrayEndBracketPlacement` .[decision-facts]
+
+
+multiline.items.list
+====================
+
+The items of `list()` spread over lines, by their author or for the width of their line.
+
+Written as `fill`, the items without keys fill the lines evenly from `multiline.fillMinItems.list` of them, fewer standing one on a line.
+
+- `perLine`: every item on a line of its own
+- `fill`: the items may share lines, one on a line passing too, and one spanning lines stands on lines of its own
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `perLine`, psr12 `keep`, nette `fill`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+multiline.edges.list
+====================
+
+Where the items spread over lines begin against `(` and where `)` stands.
+
+- `apart`: the first item on the line after `(`, `)` on a line of its own
+- `attached`: the first item on the line of `(`, `)` right after the last one
+- `closingApart`: the first item on the line of `(`, `)` on a line of its own
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `apart`, psr12 `keep`, nette `[apart, attached]`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+multiline.maxWidth.array
+========================
+
+The width from bracket to bracket over which an array of several items written on one line is spread over lines.
+
+- počet od 1
+- `none`: never spread for its width
+
+Výchozí `none` · standardy: perCs `none`, psr12 `none`, nette `130`, symfony `none`, laravel `none` .[decision-facts]
+
+
+multiline.fillMinItems.array
+============================
+
+From how many items without keys an array written in `fill` fills its lines.
+
+- počet od 2
+
+Výchozí `2` · standardy: perCs `2`, psr12 `2`, nette `6`, symfony `2`, laravel `2` .[decision-facts]
+
+
+multiline.fillMinItems.list
+===========================
+
+From how many items without keys `list()` written in `fill` fills its lines.
+
+- počet od 2
+
+Výchozí `2` · standardy: perCs `2`, psr12 `2`, nette `6`, symfony `2`, laravel `2` .[decision-facts]
+
+
+multiline.trailingComma.array
+=============================
+
+The trailing comma of a multi-line array, a destructuring written with `[...]` included; any value but `keep` also removes the one a list written on one line has.
+
+- `required`: always there where the closing bracket stands on its own line, never where it follows the last item
+- `optional`: as the author wrote it where the closing bracket stands on its own line, never where it follows the last item
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `required`, psr12 `keep`, nette `required`, symfony `required`, laravel `required` · pokrývá `no_trailing_comma_in_singleline`, `trailing_comma_in_multiline`, `SlevomatCodingStandard.Arrays.TrailingArrayComma` .[decision-facts]
+
+
+multiline.trailingComma.argument
+================================
+
+The trailing comma of the multi-line arguments of a call and the variables of `isset()` and `unset()`; any value but `keep` also removes the one a list written on one line has.
+
+- `required`: always there where the closing bracket stands on its own line, never where it follows the last item
+- `optional`: as the author wrote it where the closing bracket stands on its own line, never where it follows the last item
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `required`, psr12 `keep`, nette `required`, symfony `optional`, laravel `optional` · pokrývá `no_trailing_comma_in_singleline`, `SlevomatCodingStandard.Functions.RequireTrailingCommaInCall` .[decision-facts]
+
+```neon
+multiline:
+	trailingComma:
+		argument: required
+```
+
+```php .[before]
+mail(
+	$to,
+	$subject
+);  // A multi-line argument list must end with a trailing comma.
+```
+
+```php .[after]
+mail(
+	$to,
+	$subject,
+);
+```
+
+
+multiline.trailingComma.parameter
+=================================
+
+The trailing comma of a multi-line list of parameters; any value but `keep` also removes the one a list written on one line has.
+
+- `required`: always there where the closing bracket stands on its own line, never where it follows the last item
+- `optional`: as the author wrote it where the closing bracket stands on its own line, never where it follows the last item
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `required`, psr12 `keep`, nette `required`, symfony `required`, laravel `optional` · pokrývá `function_declaration`, `SlevomatCodingStandard.Functions.RequireTrailingCommaInDeclaration` .[decision-facts]
+
+
+multiline.trailingComma.matchArm
+================================
+
+The trailing comma of the arms of a multi-line `match`; any value but `keep` also removes the one a list written on one line has.
+
+- `required`: always there where the closing bracket stands on its own line, never where it follows the last item
+- `optional`: as the author wrote it where the closing bracket stands on its own line, never where it follows the last item
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `required`, psr12 `keep`, nette `required`, symfony `required`, laravel `keep` .[decision-facts]
+
+
+multiline.trailingComma.closureUse
+==================================
+
+The trailing comma of a multi-line `use` of a closure; any value but `keep` also removes the one a list written on one line has.
+
+- `required`: always there where the closing bracket stands on its own line, never where it follows the last item
+- `optional`: as the author wrote it where the closing bracket stands on its own line, never where it follows the last item
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `required`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+multiline.trailingComma.import
+==============================
+
+The trailing comma of the names of a multi-line group use; any value but `keep` also removes the one a list written on one line has.
+
+- `required`: always there where the closing bracket stands on its own line, never where it follows the last item
+- `optional`: as the author wrote it where the closing bracket stands on its own line, never where it follows the last item
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `optional`, psr12 `keep`, nette `required`, symfony `optional`, laravel `optional` · pokrývá `no_trailing_comma_in_singleline` .[decision-facts]
+
+
+multiline.trailingComma.list
+============================
+
+The trailing comma of a multi-line `list()`; any value but `keep` also removes the one a list written on one line has.
+
+- `required`: always there where the closing bracket stands on its own line, never where it follows the last item
+- `optional`: as the author wrote it where the closing bracket stands on its own line, never where it follows the last item
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `optional`, psr12 `keep`, nette `required`, symfony `optional`, laravel `optional` · pokrývá `no_trailing_comma_in_singleline` .[decision-facts]
+
+
+multiline.items.implements
+==========================
+
+The interfaces a class or an enum implements, or an interface extends, spread over lines by their author or for the width of their line.
+
+- `perLine`: every interface on a line of its own
+- `fill`: the interfaces may share lines, one on a line passing too, and one spanning lines stands on lines of its own
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `perLine`, psr12 `perLine`, nette `perLine`, symfony `keep`, laravel `keep` · pokrývá `PSR12.Classes.AnonClassDeclaration`, `PSR2.Classes.ClassDeclaration` .[decision-facts]
+
+Podle šířky řádku se rozloží seznam aspoň dvou rozhraní, za `implements` i za `extends` rozhraní:
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	items:
+		implements: perLine
+	edges:
+		implements: apart
+```
+
+```php .[before]
+class OrderCollection implements Countable, IteratorAggregate, JsonSerializable  // Expected a line break before the name, because the line is 79 characters long, more than 60.
+{
+}
+```
+
+```php .[after]
+class OrderCollection implements
+	Countable,
+	IteratorAggregate,
+	JsonSerializable
+{
+}
+```
+
+
+multiline.edges.implements
+==========================
+
+Where the interfaces spread over lines begin against the keyword.
+
+- `apart`: the first interface on the line after the keyword
+- `attached`: the first interface on the line of the keyword
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `apart`, psr12 `apart`, nette `apart`, symfony `keep`, laravel `keep` · pokrývá `PSR12.Classes.AnonClassDeclaration`, `PSR2.Classes.ClassDeclaration` .[decision-facts]
+
+
+multiline.items.condition
+=========================
+
+A condition of `if`, `elseif`, `while` and `do-while` joined by boolean operators that stands on several lines or on one too wide.
+
+- `perLine`: every part on a line of its own
+- `fill`: the parts may share lines, one on a line passing too, and one spanning lines stands on lines of its own
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `[perLine, fill]`, psr12 `[perLine, fill]`, nette `[perLine, fill]`, symfony `keep`, laravel `keep` · pokrývá `PSR12.ControlStructures.ControlStructureSpacing`, `SlevomatCodingStandard.ControlStructures.RequireMultiLineCondition` .[decision-facts]
+
+Podmínka napsaná na jednom řádku se rozloží, když je kód jejího řádku širší než `file.lineLength`. Komentář za kódem se do šířky nepočítá, a proto druhá podmínka zůstane, jak je:
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	items:
+		condition: perLine
+	edges:
+		condition: apart
+```
+
+```php .[before]
+if ($order->isPaid() && $order->isShipped() && !$order->isReturned()) {  // Expected a line break before the expression, because the line is 71 characters long, more than 60.
+	archive($order);
+}
+if ($order->isPaid() && $order->isShipped()) { // kept for a year
+	archive($order);
+}
+```
+
+```php .[after]
+if (
+	$order->isPaid()
+	&& $order->isShipped()
+	&& !$order->isReturned()
+) {
+	archive($order);
+}
+if ($order->isPaid() && $order->isShipped()) { // kept for a year
+	archive($order);
+}
+```
+
+
+multiline.edges.condition
+=========================
+
+Where the parts spread over lines begin against `(` and where `)` stands.
+
+- `apart`: the first part on the line after `(`, `)` on a line of its own
+- `attached`: the first part on the line of `(`, `)` right after the last one
+- `closingApart`: the first part on the line of `(`, `)` on a line of its own
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `apart`, psr12 `apart`, nette `[apart, closingApart]`, symfony `keep`, laravel `keep` · pokrývá `PSR12.ControlStructures.ControlStructureSpacing`, `SlevomatCodingStandard.ControlStructures.RequireMultiLineCondition` .[decision-facts]
+
+Nette Coding Standard připouští oba tvary, podmínku začínající na dalším řádku i tu, která začíná hned za závorkou; `)` stojí v obou na vlastním řádku, aby se poslední řádek podmínky neslil s prvním řádkem těla:
+
+```neon
+multiline:
+	edges:
+		condition: [apart, closingApart]
+```
+
+```php .[before]
+if ($order->isPaid()
+	&& $order->isShipped()
+) {
+	archive($order);
+}
+
+if (
+	$order->isPaid()
+	&& $order->isShipped()
+) {
+	archive($order);
+}
+```
+
+
+multiline.operatorPosition.condition
+====================================
+
+Where a boolean operator chaining a condition of `if`, `elseif`, `while` and `do-while` stands at a line break.
+
+- `lineStart`: one ending a line opens the next, unless a comment follows it
+- `lineEnd`: one opening a line ends the one before, unless a comment precedes it
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `lineStart`, psr12 `lineStart`, nette `lineStart`, symfony `lineStart`, laravel `keep` · pokrývá `operator_linebreak`, `PSR12.ControlStructures.BooleanOperatorPlacement` .[decision-facts]
+
+Standardy dávají operátor na začátek řádku, kde ho čtenář uvidí jako první. Kdo ho chce mít na konci řádku, napíše `lineEnd`; stejně se dá napsat i u každého dalšího operátoru této sekce. Operátor, před kterým stojí komentář, zůstane na místě.
+
+```neon
+multiline:
+	operatorPosition:
+		condition: lineEnd
+```
+
+```php .[before]
+if (
+	$order->isPaid()
+	&& $order->isShipped()  // Expected no line break before the `&&` operator.
+) {
+	archive($order);
+}
+```
+
+```php .[after]
+if (
+	$order->isPaid() &&
+	$order->isShipped()
+) {
+	archive($order);
+}
+```
+
+
+multiline.items.for
+===================
+
+The sections of the header of a `for` spread over lines by its author or for the width of its line, the first on the line after the opening parenthesis and the closing one then standing on a line of its own.
+
+- `perLine`: every section on a line of its own
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `perLine`, psr12 `perLine`, nette `perLine`, symfony `keep`, laravel `keep` .[decision-facts]
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	items:
+		for: perLine
+```
+
+```php .[before]
+for ($i = 0, $count = count($this->items); $i < $count; $i++) {  // Expected a line break after the opening parenthesis, because the line is 63 characters long, more than 60.
+}
+```
+
+```php .[after]
+for (
+	$i = 0, $count = count($this->items);
+	$i < $count;
+	$i++
+) {
+}
+```
+
+
+multiline.operatorPosition.comparison
+=====================================
+
+Where a comparison stands at a line break: one ending its line moves only where the line joined after it would be too wide, one opening its line joins the line before it, what follows staying on its line unless it would be too wide.
+
+- `lineStart`: one ending a line opens the next, unless a comment follows it
+- `lineEnd`: one opening a line ends the one before, unless a comment precedes it
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `lineStart`, psr12 `lineStart`, nette `lineStart`, symfony `keep`, laravel `keep` · pokrývá `operator_linebreak` .[decision-facts]
+
+
+multiline.expressionStart.assignment
+====================================
+
+Where an expression spanning several lines after the `=` of an assignment, a constant, a property or a default begins.
+
+- `sameLine`: on the line of what comes before
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+multiline.expressionStart.arrayItem
+===================================
+
+Where an expression spanning several lines after the `=>` of an array item begins.
+
+- `sameLine`: on the line of what comes before
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+multiline.expressionStart.arrowFunction
+=======================================
+
+Where an expression spanning several lines after the `=>` of an arrow function begins.
+
+- `sameLine`: on the line of what comes before
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+multiline.items.logical
+=======================
+
+The operands of `&&`, `||`, `and`, `or` and `xor` outside a condition spread over lines by their author or for the width of their line.
+
+Not about the operators of one place joined by another, which begin a family of their own.
+
+- `perLine`: every operand on a line of its own
+- `fill`: the operands may share lines, one on a line passing too, and one spanning lines may share them as well
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `[perLine, fill]`, psr12 `[perLine, fill]`, nette `[perLine, fill]`, symfony `keep`, laravel `keep` .[decision-facts]
+
+Rozkládá se celý řetěz operátorů naráz. Závorky nebo operátor jiné priority začínají řetěz vnitřní, který se rozloží, až když se nevejde ani na svůj řádek. Řádek se součtem v ukázce zůstane celý, protože `multiline.items.arithmetic` v ní nastavené není. Podmínku `if` a `while` rozkládá `multiline.items.condition`.
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	items:
+		logical: perLine
+```
+
+```php .[before]
+$visible = $user->isAdmin() || ($order->isPaid() && $order->ownerId === $user->id);  // Expected a line break before the `||` operator, because the line is 83 characters long, more than 60.
+$total = $order->subtotal + $order->shipping + $order->tax - $order->discountAmount;
+```
+
+```php .[after]
+$visible = $user->isAdmin()
+	|| ($order->isPaid() && $order->ownerId === $user->id);
+$total = $order->subtotal + $order->shipping + $order->tax - $order->discountAmount;
+```
+
+
+multiline.operatorPosition.logical
+==================================
+
+Where `&&`, `||`, `and`, `or` and `xor` outside a condition stand at a line break.
+
+- `lineStart`: one ending a line opens the next, unless a comment follows it
+- `lineEnd`: one opening a line ends the one before, unless a comment precedes it
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `lineStart`, psr12 `lineStart`, nette `lineStart`, symfony `lineStart`, laravel `keep` · pokrývá `operator_linebreak` .[decision-facts]
+
+
+multiline.items.concatenation
+=============================
+
+The operands of `.` spread over lines by their author or for the width of their line.
+
+Not about the operators of one place joined by another, which begin a family of their own.
+
+- `perLine`: every operand on a line of its own
+- `fill`: the operands may share lines, one on a line passing too, and one spanning lines may share them as well
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `[perLine, fill]`, psr12 `[perLine, fill]`, nette `[perLine, fill]`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+multiline.operatorPosition.concatenation
+========================================
+
+Where `.` stands at a line break.
+
+- `lineStart`: one ending a line opens the next, unless a comment follows it
+- `lineEnd`: one opening a line ends the one before, unless a comment precedes it
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `lineStart`, psr12 `keep`, nette `lineStart`, symfony `keep`, laravel `keep` · pokrývá `operator_linebreak` .[decision-facts]
+
+
+multiline.items.arithmetic
+==========================
+
+The operands of `+`, `-`, `*`, `/`, `%` and `**` spread over lines by their author or for the width of their line.
+
+Not about the operators of one place joined by another, which begin a family of their own.
+
+- `perLine`: every operand on a line of its own
+- `fill`: the operands may share lines, one on a line passing too, and one spanning lines may share them as well
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `[perLine, fill]`, psr12 `[perLine, fill]`, nette `[perLine, fill]`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+multiline.operatorPosition.arithmetic
+=====================================
+
+Where `+`, `-`, `*`, `/`, `%` and `**` stand at a line break.
+
+- `lineStart`: one ending a line opens the next, unless a comment follows it
+- `lineEnd`: one opening a line ends the one before, unless a comment precedes it
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `lineStart`, psr12 `lineStart`, nette `lineStart`, symfony `keep`, laravel `keep` · pokrývá `operator_linebreak` .[decision-facts]
+
+
+multiline.items.bitwise
+=======================
+
+The operands of `|`, `&`, `^`, `<<` and `>>` spread over lines by their author or for the width of their line.
+
+Not about the operators of one place joined by another, which begin a family of their own.
+
+- `perLine`: every operand on a line of its own
+- `fill`: the operands may share lines, one on a line passing too, and one spanning lines may share them as well
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `[perLine, fill]`, psr12 `[perLine, fill]`, nette `[perLine, fill]`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+multiline.operatorPosition.bitwise
+==================================
+
+Where `|`, `&`, `^`, `<<` and `>>` stand at a line break.
+
+- `lineStart`: one ending a line opens the next, unless a comment follows it
+- `lineEnd`: one opening a line ends the one before, unless a comment precedes it
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `lineStart`, psr12 `lineStart`, nette `lineStart`, symfony `keep`, laravel `keep` · pokrývá `operator_linebreak` .[decision-facts]
+
+
+multiline.items.coalesce
+========================
+
+The operands of `??` spread over lines by their author or for the width of their line.
+
+Not about the operators of one place joined by another, which begin a family of their own.
+
+- `perLine`: every operand on a line of its own
+- `fill`: the operands may share lines, one on a line passing too, and one spanning lines may share them as well
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+multiline.operatorPosition.coalesce
+===================================
+
+Where `??` stands at a line break.
+
+- `lineStart`: one ending a line opens the next, unless a comment follows it
+- `lineEnd`: one opening a line ends the one before, unless a comment precedes it
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `lineStart`, psr12 `lineStart`, nette `lineStart`, symfony `keep`, laravel `keep` · pokrývá `operator_linebreak` .[decision-facts]
+
+
+multiline.items.pipe
+====================
+
+The operands of `|>` spread over lines by their author or for the width of their line.
+
+Not about the operators of one place joined by another, which begin a family of their own.
+
+- `perLine`: every operand on a line of its own
+- `fill`: the operands may share lines, one on a line passing too, and one spanning lines may share them as well
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+multiline.operatorPosition.pipe
+===============================
+
+Where `|>` stands at a line break.
+
+- `lineStart`: one ending a line opens the next, unless a comment follows it
+- `lineEnd`: one opening a line ends the one before, unless a comment precedes it
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `lineStart`, psr12 `lineStart`, nette `lineStart`, symfony `keep`, laravel `keep` · pokrývá `operator_linebreak` .[decision-facts]
+
+
+multiline.items.chain
+=====================
+
+The links of a chain of method calls and property accesses spread over lines by its author, or for the width of its line where it has two method calls or more.
+
+- `perLine`: every link on a line of its own
+- `fill`: the links may share lines, one on a line passing too, and one spanning lines stands on lines of its own
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `perLine`, psr12 `keep`, nette `perLine`, symfony `keep`, laravel `keep` .[decision-facts]
+
+Podle šířky se rozloží jen řetěz aspoň dvou volání metod; `$this->customer->getAddress()->city` zůstane celý. Kde stojí články před prvním zalomeným, říká `multiline.edges.chain`.
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	items:
+		chain: perLine
+	edges:
+		chain: apart
+```
+
+```php .[before]
+$orders = $repository->findPaid()->sortBy('date')->limit(10)->toArray();  // Expected a line break before the object operator, because the line is 72 characters long, more than 60.
+```
+
+```php .[after]
+$orders = $repository
+	->findPaid()
+	->sortBy('date')
+	->limit(10)
+	->toArray();
+```
+
+
+multiline.edges.chain
+=====================
+
+Where the links spread over lines begin against the object.
+
+- `apart`: the first link on the line after the object
+- `attached`: the links up to the first method call on the line of the object
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `apart`, psr12 `keep`, nette `attached`, symfony `keep`, laravel `keep` .[decision-facts]
+
+S `attached` zůstanou na řádku objektu všechny články až po první volání metody:
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	items:
+		chain: perLine
+	edges:
+		chain: attached
+```
+
+```php .[before]
+$orders = $this->repository->findPaid()->sortBy('date')->limit(10);  // Expected a line break before the object operator, because the line is 67 characters long, more than 60.
+```
+
+```php .[after]
+$orders = $this->repository->findPaid()
+	->sortBy('date')
+	->limit(10);
+```
+
+
+multiline.items.matchCondition
+==============================
+
+The conditions of a `match` arm spread over lines by their author or for the width of their line, `=>` after the last one.
+
+Written as `fill`, the conditions fill the lines evenly from `multiline.fillMinItems.matchCondition` of them, fewer standing one on a line.
+
+- `perLine`: every condition on a line of its own
+- `fill`: the conditions may share lines, one on a line passing too, and one spanning lines stands on lines of its own
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `perLine`, psr12 `perLine`, nette `fill`, symfony `keep`, laravel `keep` .[decision-facts]
+
+Podmínky větve stojí po jedné na řádku se stejným odsazením jako větev a `=>` s výsledkem následuje za poslední; větev s jedinou podmínkou zůstane:
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	items:
+		matchCondition: perLine
+```
+
+```php .[before]
+$kind = match (true) {
+	$node instanceof FunctionNode, $node instanceof MethodNode => 'function',  // Expected a line break before the expression, because the line is 77 characters long, more than 60.
+	default => null,
+};
+```
+
+```php .[after]
+$kind = match (true) {
+	$node instanceof FunctionNode,
+	$node instanceof MethodNode => 'function',
+	default => null,
+};
+```
+
+
+multiline.fillMinItems.matchCondition
+=====================================
+
+From how many conditions an arm written in `fill` fills its lines.
+
+- počet od 2
+
+Výchozí `2` · standardy: perCs `2`, psr12 `2`, nette `6`, symfony `2`, laravel `2` .[decision-facts]
+
+
+multiline.items.matchArm
+========================
+
+The arms of a `match` whose braces stand on different lines.
+
+Not about the conditions of one arm, which `multiline.items.matchCondition` spreads.
+
+- `perLine`: every arm on a line of its own
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `perLine`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+multiline.items.ternary
+=======================
+
+A ternary spread over lines by its author, or for the width of its line.
+
+- `perLine`: every operand on a line of its own
+- `fill`: the operands may share lines, one on a line passing too, and one spanning lines stands on lines of its own
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `perLine`, psr12 `keep`, nette `perLine`, symfony `keep`, laravel `keep` · pokrývá `SlevomatCodingStandard.ControlStructures.RequireMultiLineTernaryOperator` .[decision-facts]
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	items:
+		ternary: perLine
+```
+
+```php .[before]
+$label = $order->isPaid() ? $this->formatDate($order->paidAt) : 'unpaid';  // Expected a line break before the `?` operator, because the line is 73 characters long, more than 60.
+```
+
+```php .[after]
+$label = $order->isPaid()
+	? $this->formatDate($order->paidAt)
+	: 'unpaid';
+```
+
+
+multiline.operatorPosition.ternary
+==================================
+
+Where `?`, `:` and `?:` of a ternary stand at a line break, of a ternary spread over lines too.
+
+- `lineStart`: one ending a line opens the next, unless a comment follows it
+- `lineEnd`: one opening a line ends the one before, unless a comment precedes it
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `lineStart`, psr12 `keep`, nette `lineStart`, symfony `keep`, laravel `keep` · pokrývá `operator_linebreak`, `SlevomatCodingStandard.ControlStructures.DisallowTrailingMultiLineTernaryOperator` .[decision-facts]
+
+
+multiline.items.argument
+========================
+
+The arguments of a call, of `new` or of an attribute and the variables of `isset()` and `unset()` spread over lines by their author, which is one where an argument or the closing parenthesis begins a line, or for the width of their line, each comma on the line of its argument.
+
+A sole argument that is a string, a message, is not spread for its width.
+
+- `perLine`: every argument on a line of its own
+- `fill`: the arguments may share lines, one on a line passing too, and one spanning lines stands on lines of its own
+- `fillPlain`: as `fill` where every argument is a variable, a constant, a literal or a property, joined where they fit on one line, as `perLine` otherwise
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `perLine`, psr12 `perLine`, nette `fillPlain`, symfony `keep`, laravel `keep` · pokrývá `method_argument_space`, `PSR2.Methods.FunctionCallSignature` .[decision-facts]
+
+Hodnota `fill` s okraji `apart` dá na příliš širokém řádku na vlastní řádky jen závorky a argumenty nechá pohromadě:
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	items:
+		argument: fill
+	edges:
+		argument: apart
+```
+
+```php .[before]
+$invoice = $this->invoices->create($order, $customer, $dueDate);  // Expected a line break before the argument, because the line is 64 characters long, more than 60.
+```
+
+```php .[after]
+$invoice = $this->invoices->create(
+	$order, $customer, $dueDate
+);
+```
+
+
+multiline.edges.argument
+========================
+
+Where the arguments spread over lines begin against `(` and where `)` stands.
+
+- `apart`: the first argument on the line after `(`, `)` on a line of its own
+- `attached`: the first argument on the line of `(`, `)` right after the last one
+- `closingApart`: the first argument on the line of `(`, `)` on a line of its own
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `apart`, psr12 `apart`, nette `apart`, symfony `keep`, laravel `keep` · pokrývá `method_argument_space`, `PSR2.Methods.FunctionCallSignature` .[decision-facts]
+
+
+multiline.spreadItem
+====================
+
+What a call too wide spreads where an argument could spread in its place; one so spread by its author stays whatever it says.
+
+- `never`: the call spreads its arguments
+- `sole`: a sole argument that is a call, `new` or an array spreads in the parentheses, `foo(bar(` and `))` together
+- `last`: as `sole`, and so does the last argument after those before it where the line fits up to its bracket, `foo($a, [` and `])` together
+
+Výchozí `never` · standardy: perCs `never`, psr12 `never`, nette `sole`, symfony `never`, laravel `never` .[decision-facts]
+
+Rozloží se jen jediný argument; volání s víc argumenty se rozloží jako každé jiné:
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	items:
+		argument: perLine
+	edges:
+		argument: apart
+	spreadItem: sole
+```
+
+```php .[before]
+throw new InvalidOrder(sprintf('Order %d cannot be shipped.', $id));  // Expected a line break before the argument, because the line is 68 characters long, more than 60.
+$this->logger->info(sprintf('Order %d shipped.', $id), ['id' => $id]);  // Expected a line break before the argument, because the line is 70 characters long, more than 60.
+```
+
+```php .[after]
+throw new InvalidOrder(sprintf(
+	'Order %d cannot be shipped.',
+	$id
+));
+$this->logger->info(
+	sprintf('Order %d shipped.', $id),
+	['id' => $id]
+);
+```
+
+
+multiline.items.closureUse
+==========================
+
+The variables of the `use` of a closure spread over lines by their author or for their width, each comma on the line of its variable.
+
+- `perLine`: every variable on a line of its own
+- `fill`: the variables may share lines, one on a line passing too, and one spanning lines stands on lines of its own
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+multiline.edges.closureUse
+==========================
+
+Where the variables spread over lines begin against `(` and where `)` stands.
+
+- `apart`: the first variable on the line after `(`, `)` on a line of its own
+- `attached`: the first variable on the line of `(`, `)` right after the last one
+- `closingApart`: the first variable on the line of `(`, `)` on a line of its own
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+multiline.items.parameter
+=========================
+
+The parameters of a function or a method spread over lines by their author or for their width, or with a parameter whose hooks span lines, each comma on the line of its parameter.
+
+- `perLine`: every parameter on a line of its own
+- `fill`: the parameters may share lines, one on a line passing too, and one spanning lines stands on lines of its own
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `perLine`, psr12 `perLine`, nette `perLine`, symfony `keep`, laravel `keep` · pokrývá `SlevomatCodingStandard.Classes.RequireMultiLineMethodSignature`, `Squiz.Functions.MultiLineFunctionDeclaration` .[decision-facts]
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	items:
+		parameter: perLine
+	edges:
+		parameter: apart
+```
+
+```php .[before]
+class Shipping
+{
+	public function ship(Order $order, Address $address, bool $express): void  // Expected a line break before the parameter, because the line is 77 characters long, more than 60.
+	{
+	}
+}
+```
+
+```php .[after]
+class Shipping
+{
+	public function ship(
+		Order $order,
+		Address $address,
+		bool $express
+	): void
+	{
+	}
+}
+```
+
+
+multiline.edges.parameter
+=========================
+
+Where the parameters spread over lines begin against `(` and where `)` stands.
+
+- `apart`: the first parameter on the line after `(`, `)` on a line of its own
+- `attached`: the first parameter on the line of `(`, `)` right after the last one
+- `closingApart`: the first parameter on the line of `(`, `)` on a line of its own
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `apart`, psr12 `apart`, nette `apart`, symfony `keep`, laravel `keep` · pokrývá `SlevomatCodingStandard.Classes.RequireMultiLineMethodSignature`, `Squiz.Functions.MultiLineFunctionDeclaration` .[decision-facts]
+
+
+multiline.spreadAlways
+======================
+
+What is spread over lines whatever its width.
+
+- seznam z těchto slov:
+	- `promotedProperty`: the parameters of a signature declaring a promoted property
+
+Výchozí `[]` · standardy: perCs `[]`, psr12 `[]`, nette `[promotedProperty]`, symfony `[]`, laravel `[]` · pokrývá `multiline_promoted_properties`, `SlevomatCodingStandard.Classes.RequireMultiLineMethodSignature` .[decision-facts]
+
+Rozkládá se do tvaru, který dávají `multiline.items.parameter` a `multiline.edges.parameter`. `promotedProperty` v seznamu rozloží i krátký konstruktor, který deklaruje vlastnost (promoted property):
+
+```neon
+multiline:
+	items:
+		parameter: perLine
+	edges:
+		parameter: apart
+	spreadAlways: [promotedProperty]
+```
+
+```php .[before]
+class Shipping
+{
+	public function __construct(private Carrier $carrier)  // Expected a line break before the parameter, because the signature declares a promoted property.
+	{
+	}
+}
+```
+
+```php .[after]
+class Shipping
+{
+	public function __construct(
+		private Carrier $carrier
+	)
+	{
+	}
+}
+```
+
+
+multiline.items.import
+======================
+
+The names of a group use spread over lines, by their author or for the width the import would have on one line.
+
+Written as `fill`, the names fill the lines evenly from `multiline.fillMinItems.import` of them, fewer standing one on a line.
+
+- `perLine`: every name on a line of its own
+- `fill`: the names may share lines, one on a line passing too, and one spanning lines stands on lines of its own
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `fill`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+multiline.edges.import
+======================
+
+Where the names spread over lines begin against `{` and where `}` stands.
+
+- `apart`: the first name on the line after `{`, `}` on a line of its own
+- `attached`: the first name on the line of `{`, `}` right after the last one
+- `closingApart`: the first name on the line of `{`, `}` on a line of its own
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `apart`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+multiline.fillMinItems.import
+=============================
+
+From how many names a group use written in `fill` fills its lines.
+
+- počet od 2
+
+Výchozí `2` · standardy: perCs `2`, psr12 `2`, nette `2`, symfony `2`, laravel `2` .[decision-facts]
+
+
+multiline.attributePosition.declaration
+=======================================
+
+The attributes of a class, a function, a method, a property, a constant, a case of an enum or a hook of a property whose hooks span lines stand right above it, no blank line between the groups; those of a closure, an anonymous class or a hook in hooks written on one line may share its line.
+
+- `above`: every group on a line of its own above the declaration
+- `sameLine`: every group on the line of the declaration
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `above`, psr12 `keep`, nette `above`, symfony `above`, laravel `keep` · pokrývá `SlevomatCodingStandard.Attributes.DisallowMultipleAttributesPerLine` .[decision-facts]
+
+
+multiline.attributePosition.parameter
+=====================================
+
+Where the attributes of a parameter stand.
+
+- `above`: every group on a line of its own above the parameter in a list of parameters spread over lines, on the line of the parameter in a list on one line
+- `sameLine`: every group on the line of the parameter, in a list spread over lines too
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `above`, psr12 `keep`, nette `above`, symfony `keep`, laravel `keep` · pokrývá `SlevomatCodingStandard.Attributes.DisallowMultipleAttributesPerLine` .[decision-facts]
+
+
+multiline.expressionStart.return
+================================
+
+Where an expression spanning several lines after `return` begins.
+
+- `sameLine`: on the line of what comes before
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `sameLine`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+multiline.expressionStart.throw
+===============================
+
+Where an expression spanning several lines after `throw` begins.
+
+- `sameLine`: on the line of what comes before
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `sameLine`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+multiline.expressionStart.yield
+===============================
+
+Where an expression spanning several lines after `yield` and `yield from` begins.
+
+- `sameLine`: on the line of what comes before
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `sameLine`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+multiline.expressionStart.echo
+==============================
+
+Where an expression spanning several lines after `echo` and `print` begins.
+
+- `sameLine`: on the line of what comes before
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `sameLine`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+multiline.items.attribute
+=========================
+
+The attributes of one group spread over lines by their author or for their width, each comma on the line of its attribute.
+
+- `perLine`: every attribute on a line of its own
+- `fill`: the attributes may share lines, one on a line passing too, and one spanning lines stands on lines of its own
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+multiline.edges.attribute
+=========================
+
+Where the attributes spread over lines begin against `#[` and where `]` stands.
+
+- `apart`: the first attribute on the line after `#[`, `]` on a line of its own
+- `attached`: the first attribute on the line of `#[`, `]` right after the last one
+- `closingApart`: the first attribute on the line of `#[`, `]` on a line of its own
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+multiline.semicolon
+===================
+
+Where the semicolon of a statement spanning several lines stands.
+
+- `sameLine`: closing the last line of the statement
+- `nextLine`: on a line of its own below a chain of method calls spread over lines, closing the last line of any other statement
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `sameLine`, symfony `keep`, laravel `sameLine` · pokrývá `multiline_whitespace_before_semicolons`, `Squiz.WhiteSpace.SemicolonSpacing` .[decision-facts]
+
+Hodnota `nextLine` se hodí projektu, který píše dotazy jako řetěz volání: se středníkem na vlastním řádku jde poslední volání přidat nebo smazat, aniž by se měnil jiný řádek. Ostatní příkazy rozložené na víc řádků mají středník na konci posledního řádku i tady.
+
+```neon
+multiline:
+	semicolon: nextLine
+```
+
+```php .[before]
+$orders = $this->db->table('orders')
+	->where('paid', true)
+	->orderBy('created');  // Expected a line break before the semicolon.
+```
+
+```php .[after]
+$orders = $this->db->table('orders')
+	->where('paid', true)
+	->orderBy('created')
+;
+```

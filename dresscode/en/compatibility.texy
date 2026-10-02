@@ -1,0 +1,38 @@
+Version Compatibility
+*********************
+
+{{description: What you can rely on between DressCode versions: what a minor version may change in the configuration, the standards and sets, the output for tools, and the public API for custom rules.}}
+
+.[perex]
+What may and may not change in a minor version of DressCode, so you know what your configuration, your CI, a tool that reads the output, or your own rule can rely on.
+
+
+Standards and Sets
+==================
+
+A standard or a set may gain new decisions in a minor version. A new rule that belongs to a standard is added to it, and after the update `fix` will change code it used to leave alone. This is on purpose: a standard describes a style, not a list of rules frozen on the day you installed it.
+
+If you want these changes under control, you have two options. Lock the version of DressCode in `composer.lock` and run the update on purpose, reviewing the diff it brings. Or set the decision you don't like to `keep` in your configuration; a value from the configuration beats every preset, even one that gains the decision only in a new version. What you write in your configuration does not change unless you change it.
+
+The listing of [`dresscode config` |cli#What the Configuration Means: config] shows where every value came from.
+
+
+Output for Tools
+================
+
+The `json` output has a `version` key. It goes up only when a key disappears, is renamed or changes its meaning. New keys are added in minor versions, so a tool that reads the document should skip keys it does not know. The text of violation messages may change, to make it clearer or more precise; a tool that acts on violations should read the decision path in the `decision` key, not the message.
+
+The `lines` format keeps its grammar, one line per finding in the form `path:line:column: severity: message [decision]`, so a matcher in your editor set up by [the guide |editors#Findings in the Editor: the lines Format] keeps working after an update. The `agent` format is written for a model, and its wording changes with what helps the agent; its meaning does not: a clean file stays silent, a rewrite is reported only for a written file, and the line numbers belong to the file as it is on disk now.
+
+
+Public API
+==========
+
+The page [Extending DressCode |extending#What Is Public API] describes what the public API is. For everything listed there:
+
+- **Parameter names are a contract.** Methods may be called with named arguments, so a parameter is never renamed in a minor version.
+- **A public enum may gain a case.** `Severity` or `Risk` may get a new value in a minor version. A `match` over them in a rule or a plugin therefore needs a `default` arm.
+- **New node classes.** The PhpSyntax tree may get a new node for new PHP syntax in a minor version, so a `match` over node classes needs a `default` too.
+- **The order of rules is not guaranteed.** Rules run in the order they were registered, but that may change in a minor version; a rule must not count on another rule running before it or after it. What rules pass to each other is a decision, the style of the run or an analysis of the file, see [A Rule in Detail |rule-contract].
+
+A class or method marked `@internal` is not part of the public API and may change at any time.

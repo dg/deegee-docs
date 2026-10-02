@@ -1,0 +1,253 @@
+Soubor
+******
+
+.[perex]
+Sekce `file` rozhoduje o souboru jako o textu: otevírací a zavírací tag, kódování, konec řádku, poslední řádek, mezery na koncích řádků, nejdelší řádek a deklarace `strict_types`.
+
+Většina klíčů sekce je pro všech pět standardů stejná a projekt je přebírá, jak jsou. Dva si zaslouží pozornost. `lineEnding` říká, jakým koncem řádku končí každý řádek, a jeho hodnota `majority`, kterou mají všechny standardy, sjednotí každý soubor na konec řádku, který v něm převládá; projekt na Windows, kde konce řádků převádí Git, tak s Gitem nebojuje. A `lineLength` je nejdelší řádek a zároveň spínač lámání: každý konstrukt sekce [multiline |multiline], jehož tvar tam není `keep`, se na řádku širším než limit rozloží na víc řádků, ať je to volání, signatura, podmínka, řetěz metod, pole nebo seznam rozhraní, a to od vnějšího konstruktu k vnitřnímu. Řádek, který zlomit nejde, ohlásí samostatné rozhodnutí `longLines`, a co se podle šířky lámat ani hlásit nemá, vyjmenuje `lineLengthExcept`.
+
+```neon
+file:
+	lineEnding: majority
+	lineLength: 120
+	longLines: forbidden
+	strictTypes:
+		declaration: required
+		position: sameLine
+```
+
+Šířka řádku se počítá tak, jak ho vidíte: tabulátor do další zarážky podle [`indentation.tabWidth` |indentation#indentation.tabWidth], ne za jeden znak. Neměří se řádky, které jsou obsahem a zalomením by změnily význam: vnitřek heredocu, víceřádkový řetězec a HTML mimo PHP tagy.
+
+
+file.finalLineEndings
+=====================
+
+Exactly one line ending after the last line; a file ending in HTML is content.
+
+- počet 1
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `1`, psr12 `1`, nette `1`, symfony `1`, laravel `1` · pokrývá `single_blank_line_at_eof`, `PSR2.Files.EndFileNewline` .[decision-facts]
+
+
+file.lineEnding
+===============
+
+The line ending of every line, which the code written new takes too; under `keep` that follows the file.
+
+- `LF`: every line ends with LF
+- `CRLF`: every line ends with CRLF
+- `majority`: every line ends as most lines of the file do, LF on a tie
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `majority`, psr12 `majority`, nette `majority`, symfony `majority`, laravel `majority` · pokrývá `line_ending`, `Generic.Files.LineEndings` .[decision-facts]
+
+Kde je klíč `keep`, nic se nehlásí a kód, který DressCode napíše nově, dostane konec řádku, který v souboru převládá.
+
+
+file.lineLength
+===============
+
+The widest line, by which what spreads over lines is split.
+
+- počet od 1
+- `none`: no line is too wide
+
+Výchozí `none` · standardy: perCs `120`, psr12 `120`, nette `140`, symfony `none`, laravel `none` · pokrývá `Generic.Files.LineLength`, `SlevomatCodingStandard.Classes.RequireMultiLineMethodSignature`, `SlevomatCodingStandard.ControlStructures.RequireMultiLineCondition`, `SlevomatCodingStandard.Files.LineLength` .[decision-facts]
+
+
+file.lineLengthExcept
+=====================
+
+What a line too wide leaves as it is: a construct named is not spread over lines for its width, and a line it stands on, one a regular expression matches, or with `strings` one wide only for its string literals, is not reported.
+
+- seznam z těchto slov:
+	- `imports`: a `use` import other than a group use on one line, which cannot be split
+	- `strings`: a line that would fit were each of its string literals an empty pair of quotes, a string being never split
+	- `argument`: the arguments of a call, of `new` and of an attribute, the variables of `unset()` and `isset()`
+	- `parameter`: the parameters of a function or a method
+	- `closureUse`: the variables of the `use` of a closure
+	- `attribute`: the attributes of one group
+	- `condition`: a condition of `if`, `elseif`, `while` and `do-while`
+	- `chain`: a chain of method calls
+	- `ternary`: a ternary
+	- `for`: the header of a `for`
+	- `logical`: the operands of a boolean operator outside a condition
+	- `concatenation`: the operands of `.`
+	- `arithmetic`: the operands of `+`, `-`, `*`, `/`, `%` and `**`
+	- `bitwise`: the operands of `|`, `&`, `^`, `<<` and `>>`
+	- `coalesce`: the operands of `??`
+	- `pipe`: the operands of `|>`
+	- `array`: the items of an array, which `multiline.maxWidth.array` spreads all the same
+	- `list`: the items of `list()`
+	- `implements`: the interfaces a class implements or an interface extends
+	- `matchCondition`: the conditions of a `match` arm
+
+Výchozí `[imports]` · standardy: perCs `[imports]`, psr12 `[imports]`, nette `[imports, strings]`, symfony `[imports]`, laravel `[imports]` · pokrývá `Generic.Files.LineLength`, `SlevomatCodingStandard.Files.LineLength` .[decision-facts]
+
+Seznam bere dva druhy položek. Místo, třeba `argument` nebo `chain`, se podle šířky neláme a řádek, na kterém taková konstrukce začíná, se ani nehlásí; místa se jmenují stejně jako v sekci [multiline |multiline#Místa a druhy]; hodí se tam, kde projekt chce lámat jen některé konstrukty. Regulární výraz se porovná s textem řádku a řádek, který mu odpovídá, jen vynechá z hlášení, lámat se na něm dál může; hodí se pro řádky s URL nebo pro tabulky dat. S `array` v seznamu se pole přestane lámat kvůli šířce řádku, ale [`multiline.maxWidth.array` |multiline#multiline.maxWidth.array], který měří pole samo, platí dál. Seznam nahrazuje výchozí, takže kdo chce dál vynechávat importy, napíše i `imports`:
+
+```neon
+file:
+	lineLength: 60
+	longLines: forbidden
+	lineLengthExcept:
+		- imports
+		- argument
+		- '~https?://~'
+multiline:
+	items:
+		argument: perLine
+		array: perLine
+	edges:
+		argument: apart
+		array: apart
+```
+
+```php .[before]
+$user = $repository->findByEmailAndStatus($email, 'active', true);
+$docs = 'https://example.com/documentation/very/long/path/to/the/page';
+$roles = ['administrator', 'editor', 'author', 'contributor'];  // Expected a line break before the array item, because the line is 62 characters long, more than 60.
+$label = 'This account has been suspended for unusual activity';  // The line is 64 characters long, more than 60.
+```
+
+```php .[after]
+$user = $repository->findByEmailAndStatus($email, 'active', true);
+$docs = 'https://example.com/documentation/very/long/path/to/the/page';
+$roles = [
+	'administrator',
+	'editor',
+	'author',
+	'contributor'
+];
+$label = 'This account has been suspended for unusual activity';
+```
+
+Volání na prvním řádku zůstane, jak je, a nehlásí se, protože `argument` je v seznamu. Řádek s URL odpovídá regulárnímu výrazu, a tak se nehlásí, ačkoli zlomit nejde. Pole se rozloží, protože `array` v seznamu není, a poslední řádek se hlásí: řetězec zlomit nejde a žádná výjimka se na něj nevztahuje. Vynechalo by ho slovo `strings`: řádek se s ním nehlásí, když by se do limitu vešel, kdyby každý jeho řetězec, prostý i s proměnnými, byl jen prázdný pár uvozovek. Takový řádek je dlouhý kvůli textu, ne kvůli kódu, a řetězec se podle šířky nikdy neláme, takže `strings` jen řekne, že se nemá ani hlásit. Řádek dlouhý kvůli kódu se hlásí dál, i když na něm řetězec stojí.
+
+
+file.longLines
+==============
+
+A line wider than `file.lineLength` that nothing could split is reported, unless `file.lineLengthExcept` leaves a construct on it or the line itself as it is.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `forbidden`, psr12 `forbidden`, nette `forbidden`, symfony `keep`, laravel `keep` · pokrývá `Generic.Files.LineLength`, `SlevomatCodingStandard.Files.LineLength` .[decision-facts]
+
+Hlásí se až to, co nic nedokázalo zlomit: volání, signatury, podmínky, pole a další konstrukty rozloží rozhodnutí sekce [multiline |multiline] dřív, pokud tam jejich `items` není `keep`. Měří se šířka kódu a komentář za ním se do ní nepočítá: řádek s komentářem za kódem se neláme, protože komentář by po zlomu zůstal na posledním řádku daleko od kódu, o kterém mluví, a tak ho komentář nemůže ani udělat příliš dlouhým. Řádek, na kterém je jen komentář, se měří celý. Celý zůstane i dlouhý řetězec a hlásí se, pokud ho nevynechá slovo `strings` v [`file.lineLengthExcept` |file#file.lineLengthExcept]. Co zbude, je na vás: rozdělit výraz, pojmenovat mezivýsledek, zkrátit řetězec. Protože takový nález `fix` neopraví, hodí se hodnota `warning`: řádek se hlásí stejně, ale jen jako [varování |/configuration#risky-fixes], které neshodí build. Tak to mají `perCs` a `psr12`, protože PSR-12 dává délce řádku jen měkký limit; `nette` dlouhé řádky zakazuje, jen z hlášení vynechává řádky dlouhé kvůli řetězcům (`lineLengthExcept: [imports, strings]`), protože text výjimky ani jiný řetězec se nemá kvůli šířce sekat na kusy. Délka je tu kvůli místu na stránce snížená na 60 znaků:
+
+```neon
+file:
+	longLines: forbidden
+	lineLength: 60
+```
+
+```php .[before]
+use Some\Very\Long\Vendor\Namespace\WithAnEvenLonger\ClassName;
+
+$message = sprintf('%s has %d unread messages', $user->name, $count);  // The line is 69 characters long, more than 60.
+$total = $price * $quantity; // the price before any discount is applied
+```
+
+Import je širší než 60 znaků, ale nehlásí se: import jediného jména rozdělit na víc řádků nejde a `file.lineLengthExcept` ho ve výchozím stavu vynechává. Nehlásí se ani poslední řádek, protože jeho kód je krátký a široký ho dělá jen komentář.
+
+
+file.bom
+========
+
+A byte order mark at the start of the file.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `forbidden`, psr12 `forbidden`, nette `forbidden`, symfony `forbidden`, laravel `forbidden` · pokrývá `encoding`, `Generic.Files.ByteOrderMark` .[decision-facts]
+
+
+file.closingTagAtEnd
+====================
+
+A `?>` ending a file of PHP only; a `?>` before HTML is content.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `forbidden`, psr12 `forbidden`, nette `forbidden`, symfony `forbidden`, laravel `forbidden` · pokrývá `no_closing_tag`, `PSR2.Files.ClosingTag` .[decision-facts]
+
+
+file.trailingWhitespace
+=======================
+
+A space or a tab at the end of a line.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `forbidden`, psr12 `forbidden`, nette `forbidden`, symfony `forbidden`, laravel `forbidden` · pokrývá `no_trailing_whitespace`, `no_trailing_whitespace_in_comment`, `no_whitespace_in_blank_line`, `Squiz.WhiteSpace.SuperfluousWhitespace` .[decision-facts]
+
+
+file.openingTag
+===============
+
+`<?php` for `<?` and `<?PHP`.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `required`, psr12 `required`, nette `required`, symfony `required`, laravel `required` · pokrývá `full_opening_tag`, `Generic.PHP.DisallowShortOpenTag` .[decision-facts]
+
+
+file.strictTypes.declaration
+============================
+
+Every file of PHP code declares `strict_types=1` as its first statement, a file starting with markup excepted.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` · pokrývá `declare_strict_types`, `Generic.PHP.RequireStrictTypes`, `SlevomatCodingStandard.TypeHints.DeclareStrictTypes` .[decision-facts]
+
+Doplnit `declare(strict_types=1)` je riziková oprava (risky fix): PHP pak odmítne argument skalárního typu, který dřív potichu převedl, takže volání, které fungovalo, skončí `TypeError`. Udělá se, až rozhodnutí uvedete v klíči [`fixRisky` |/configuration#risky-fixes].
+
+
+file.strictTypes.position
+=========================
+
+Where the declaration of `strict_types` stands.
+
+- `sameLine`: `<?php declare(strict_types=1);` on one line
+- `nextLine`: on the line below the opening tag
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `nextLine`, psr12 `nextLine`, nette `sameLine`, symfony `nextLine`, laravel `keep` · pokrývá `PhpCsFixerCustomFixers/declare_after_opening_tag`, `declare_strict_types`, `Generic.PHP.RequireStrictTypes`, `SlevomatCodingStandard.TypeHints.DeclareStrictTypes` .[decision-facts]
+
+```neon
+file:
+	strictTypes:
+		position: sameLine
+```
+
+```php .[before]
+<?php  // `declare(strict_types=1)` must be on the line of the opening tag.
+declare(strict_types=1);
+
+namespace App;
+```
+
+```php .[after]
+<?php declare(strict_types=1);
+
+namespace App;
+```
+
+
+file.statementsPerLine
+======================
+
+`foo(); bar();` is two lines, and so are two members of a class, `public $a; public $b;`; `for (;;)` is one statement.
+
+- počet 1
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `1`, psr12 `1`, nette `1`, symfony `1`, laravel `1` · pokrývá `no_multiple_statements_per_line`, `Generic.Formatting.DisallowMultipleStatements`, `PSR12.Classes.ClosingBrace`, `PSR2.ControlStructures.SwitchDeclaration` .[decision-facts]
