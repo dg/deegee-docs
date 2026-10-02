@@ -1,0 +1,61 @@
+From Laravel Pint to DressCode
+******************************
+
+.[perex]
+Laravel Pint formats code with its `laravel` preset, and the `laravel` standard of DressCode has the same style. Migrating takes one line of configuration, and in a project with Pint, `dresscode init` writes it by itself. The same run that formats your code can also upgrade it to a newer PHP and Laravel.
+
+
+DressCode as an Alternative to Laravel Pint
+===========================================
+
+The default preset of Pint, `laravel`, is a list of fixers from PHP CS Fixer, which Pint is built on. The `laravel` standard carries the same list, so it leaves code that Pint formatted almost unchanged. This was verified on fourteen Laravel packages, 1,615 files run through Pint 1.32: `dresscode check --use laravel` found 129 places in them, and each of them is one of the differences described below (October 2026).
+
+What you get in addition:
+
+- **Upgrading in the same run.** The `modernizations` set rewrites code to the constructs of a newer PHP version, `deprecations` fixes what PHP has deprecated, and the `dresscode/upgrade-laravel` package rewrites the API that Laravel changed between versions. See [Upgrading to a Newer PHP |upgrading-php] and [Laravel |upgrading-laravel].
+- **Class names in phpDoc are imported in every tag**, even in `@template` and `@method`, where Pint leaves them fully qualified.
+- **Output for AI agents and editors.** The `agent` format tells an AI agent what changed in a file after the agent edited it, so that its next edit does not fail. See [AI agents |ai-agents].
+
+Pint has one advantage DressCode cannot match: it comes with Laravel. Every new Laravel application has it in `require-dev`, so it is there before anyone decides anything, while DressCode is something you [install |getting-started#Installation] yourself.
+
+
+Converting the Configuration
+============================
+
+In a project that requires `laravel/pint` or has a `pint.json`, [`dresscode init` |generate-configuration] writes the standard that matches the Pint preset by itself; for the default `laravel` preset, it prints:
+
+/--pre .[terminal]
+Standard   laravel (the style of Laravel Pint), Laravel Pint formats the project in this style
+\--
+
+A configuration written by hand is one line:
+
+```neon
+use: laravel
+```
+
+If your `pint.json` has extra rules in its `rules` key on top of the preset, `dresscode migrate config` translates them together with the preset, because they are rules of PHP CS Fixer; it lists what has no counterpart, see [Migrating to DressCode |migration#migrate-config]. You can also look them up yourself: `dresscode catalogue` lists, for every decision, the PHP CS Fixer fixers it covers, so you will find `no_unused_imports` as `imports.unused`. `migrate config` carries the `exclude` key over to `excludePaths`, see [Configuration |configuration#Paths].
+
+| Pint | DressCode |
+|---|---|
+| `pint` | `dresscode fix` |
+| `pint --test` | `dresscode check` |
+| `pint app/Models` | `dresscode fix app/Models` |
+| `pint --preset laravel` | `dresscode fix --use laravel` |
+
+
+Where DressCode Differs from Pint
+=================================
+
+On code that Pint formatted, you will run into these differences:
+
+- DressCode shortens and imports a class name in a doc comment in every tag; Pint does it only in the tags its `fully_qualified_strict_types` lists, which means not in `@template` or `@method`.
+- DressCode merges two blank lines in a row inside a doc comment into one. Pint trims only its start and end.
+- DressCode treats an import whose name appears only in the text of a comment as unused and removes it. Pint keeps it.
+- In a comparison of a literal with a constant, `'\\' === DIRECTORY_SEPARATOR`, DressCode puts the constant on the left. Pint leaves both sides as they are.
+- Line endings follow the majority in the file (`file.lineEnding: majority`), so a project on Windows with CRLF stays with CRLF. Pint writes LF.
+
+And here is what Pint does and DressCode does not do yet: renaming test methods to snake_case (`php_unit_method_casing`), sorting traits (`ordered_traits`), and aligning or sorting phpDoc tags (`phpdoc_align`, `phpdoc_order`, `phpdoc_separation`). The page [Standards and Sets |php-coding-standards#laravel] shows the whole preset, with comments.
+
+{{maintitle: Laravel Pint Alternative: Migrate to DressCode}}
+{{description: Migrate from Laravel Pint in one line of configuration: the laravel standard of DressCode has Pint's style, and the same run upgrades code to newer PHP and Laravel.}}

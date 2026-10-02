@@ -1,0 +1,46 @@
+Git hooky
+*********
+
+.[perex]
+Pre-commit hook o šesti řádcích shellu zkontroluje styl PHP kódu přesně v té podobě, v jaké jde do commitu, a dokud je čisto, mlčí. Hooky AI agentů, které kód opravují po každé editaci, popisuje stránka [AI agenti |ai-agents].
+
+
+Hook pre-commit
+===============
+
+Do commitu nejde soubor z disku, ale jeho obsah v indexu, a po `git add -p` se ty dva liší. Hook proto bere obsah z indexu a předává ho přepínačem `--stdin`; formát `lines` k tomu vypíše jeden řádek na nález, a když je čisto, nic:
+
+```shell
+#!/bin/sh
+status=0
+for file in $(git diff --cached --name-only --diff-filter=ACM -- '*.php'); do
+	git show ":$file" | dresscode check --stdin "$file" -f lines --skip-excluded || status=1
+done
+exit $status
+```
+
+Uložte jako `.git/hooks/pre-commit` a nastavte spustitelný bit. Když je vše v pořádku, hook nic nevypíše a commit projde; jinak vypíše každé porušení na jeden řádek s cestou, řádkem, zprávou a cestou rozhodnutí a commit zastaví:
+
+/--pre .[terminal]
+src/Cart.php:5:5: error: The import of `Gateway` is unused. [imports.unused]
+src/Cart.php:15:21: error: A plain string must be written with single quotes. [literals.quotes]
+\--
+
+Díky `--skip-excluded` hook přeskočí soubor, který konfigurace vylučuje v `excludePaths` nebo který neleží v jejích `paths`; bez něj by se se `--stdin` zkontroloval i ten.
+
+Kdo chce hook, který rovnou opravuje, pustí `fix` nad pracovním stromem a opravené soubory přidá do indexu. Je to pohodlné, ale znamená to, že commit obsahuje změny, které vývojář neviděl. Mně je bližší první varianta: hook jen hlásí a opravu si pustím vědomě.
+
+S nástrojem `pre-commit` je to jeden záznam v konfiguraci. Nástroj předává DressCode jména souborů, a proto záznam potřebuje `--skip-excluded`, jinak by zkontroloval i soubor, který konfigurace vylučuje v `excludePaths`:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: dresscode
+        name: DressCode
+        entry: dresscode check -f lines --skip-excluded
+        language: system
+        types: [php]
+```
+
+{{maintitle: Styl PHP kódu v Git hooku pre-commit}}

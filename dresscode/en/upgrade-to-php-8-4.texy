@@ -1,0 +1,272 @@
+Upgrade to PHP 8.4
+******************
+
+.[perex]
+When you upgrade to PHP 8.4, DressCode turns a `foreach` that looks for the first match into `array_find()`, `int $x = null` into `?int $x = null`, and `(new Foo())->bar()` into `new Foo()->bar()`. It fixes the PHP 8.4 deprecations that have a direct replacement and reports the rest, such as `E_STRICT`. In the same run, it dresses the rewritten code in your coding standard.
+
+
+What It Looks Like
+==================
+
+The class `Invoice` is written for PHP 8.3. Once the project requires PHP 8.4, six places in it change. The configuration adds the sets `modernizations` and `deprecations` to the standard. `nameResolution: certain` says that the namespaces of the project declare no functions of their own, so `round()` and `fputcsv()` are certainly the built-in functions of PHP. The key `targets` gives the target PHP version, which DressCode would otherwise read from `composer.json`:
+
+```neon
+use:
+	- perCs
+	- modernizations
+	- deprecations
+
+nameResolution: certain
+
+targets:
+	php: '8.4'
+```
+
+```php .[before]
+final class Invoice
+{
+    /** @param list<Item> $items */
+    public function __construct(
+        private array $items,
+    ) {}
+
+    public function hasGift(): bool
+    {
+        foreach ($this->items as $item) {
+            if ($item->isGift()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public function findItem(string $sku): ?Item
+    {
+        foreach ($this->items as $item) {
+            if ($item->sku === $sku) {
+                return $item;
+            }
+        }
+        return null;
+    }
+
+    public function price(Item $item, Discount $discount = null): float
+    {
+        return round($item->price * ($discount?->ratio ?? 1), 2, PHP_ROUND_HALF_UP);
+    }
+
+    public function export(string $file): void
+    {
+        $handle = fopen($file, 'w');
+        foreach ($this->items as $item) {
+            fputcsv($handle, [$item->sku, $this->price($item)]);
+        }
+    }
+
+    public function render(): string
+    {
+        return (new InvoiceTemplate())->render($this->items);
+    }
+}
+```
+
+After one `dresscode fix`:
+
+```php .[after]
+final class Invoice
+{
+    /** @param list<Item> $items */
+    public function __construct(
+        private array $items,
+    ) {}
+
+    public function hasGift(): bool
+    {
+        return array_any($this->items, fn($item) => $item->isGift());
+    }
+
+    public function findItem(string $sku): ?Item
+    {
+        return array_find($this->items, fn($item) => $item->sku === $sku);
+    }
+
+    public function price(Item $item, ?Discount $discount = null): float
+    {
+        return round($item->price * ($discount?->ratio ?? 1), 2, RoundingMode::HalfAwayFromZero);
+    }
+
+    public function export(string $file): void
+    {
+        $handle = fopen($file, 'w');
+        foreach ($this->items as $item) {
+            fputcsv($handle, [$item->sku, $this->price($item)], escape: '\\');
+        }
+    }
+
+    public function render(): string
+    {
+        return new InvoiceTemplate()->render($this->items);
+    }
+}
+```
+
+Four of the changes use what PHP 8.4 added: the two loops became `array_any()` and `array_find()`, the rounding mode is now a case of the enum `RoundingMode`, and `new` no longer needs parentheses around it. The other two deal with what PHP 8.4 deprecated: the parameter `$discount` got its `?`, and `fputcsv()` passes its `escape` argument explicitly, with the same backslash it used by default, so the CSV file stays the same.
+
+
+What Gets Rewritten
+===================
+
+The set `modernizations` rewrites code to use what PHP 8.4 added. Behind each feature is a decision that a project can also turn on without the set, for example with `upgrading.functions.roundingMode: required`.
+
+| feature | before | after | fix |
+|---|---|---|---|
+| `array_any()`, `array_all()`, `array_find()`, `array_find_key()`, `upgrading.functions.arraySearchFunctions` | a `foreach` that returns the first item that matches | `array_find($items, fn($item) => $item->sku === $sku)` | fixed; risky where the loop may go through an object |
+| the same functions instead of `array_filter()` | `array_key_first(array_filter($a, fn($v) => $v === 0))` | `array_find_key($a, fn($v) => $v === 0)` | fixed; risky where the callback may do more than compare |
+| `RoundingMode`, `upgrading.functions.roundingMode` | `round($x, 2, PHP_ROUND_HALF_UP)` | `round($x, 2, RoundingMode::HalfAwayFromZero)` | fixed |
+| `new` without parentheses, `classes.instantiationWrapping` | `(new Foo())->bar()` | `new Foo()->bar()` | fixed; the standards `perCs` and `nette` require it too |
+| `#[\Deprecated]`, `upgrading.phpdoc.deprecated` | `/** @deprecated 2.1 use format() */` | `#[\Deprecated('use format()', since: '2.1')]` | risky: PHP then reports every use of the deprecated code |
+
+.[note]
+A rewrite for PHP 8.4 does not get ahead of the project. As long as `require.php` in `composer.json` allows PHP 8.3, no `array_find()` appears in the code, and `dresscode config` marks the decision with `no effect: php`.
+
+
+What PHP 8.4 Deprecated
+=======================
+
+The set `deprecations` fixes what has a direct replacement and reports the rest, with the version that deprecated it. It works even in a project that still allows PHP 8.1: its code will run on PHP 8.4 one day, so you can clean up before you upgrade.
+
+| deprecated | DressCode |
+|---|---|
+| a parameter made nullable by its default alone, `int $x = null` | fixed: `?int $x = null` |
+| the default `escape` of `fputcsv()`, `fgetcsv()` and `str_getcsv()` | fixed: the argument `escape` is written out with the backslash it had by default |
+| `E_STRICT` | reported |
+| `E_USER_ERROR` passed to `trigger_error()` | reported: throw an exception instead |
+| `_` as the name of a class | reported |
+| `lcg_value()`, `mysqli_ping()`, `mysqli_kill()`, `mysqli_refresh()`, `xml_set_object()`, `intlcal_set()`, `intlgregcal_create_instance()` | reported |
+| `DOM_PHP_ERR`, `SOAP_FUNCTIONS_ALL`, `SUNFUNCS_RET_*`, `MYSQLI_STORE_RESULT_COPY_DATA` | reported |
+
+Each finding names the PHP version that deprecated it:
+
+/--pre .[terminal]
+src/Bootstrap.php:11:34: error: Constant `E_STRICT` is deprecated: since PHP 8.4. [upgrading.php.deprecatedApi]
+src/Config.php:17:47: error: Passing `E_USER_ERROR` to `trigger_error()` is deprecated since PHP 8.4 in favor of throwing an exception. [upgrading.php.deprecatedArgument]
+\--
+
+
+What Is Left to You
+===================
+
+DressCode does not find everything PHP 8.4 deprecated. It leaves alone the CSV methods of `SplFileObject`, because the code does not say which object a call is made on. It does not report the constants `CURLOPT_BINARYTRANSFER`, `MYSQLI_REFRESH_*` and `SID`, a `DatePeriod` created from a string, raising zero to a negative power, or the session settings such as `session.sid_length`. Check these by hand against the [UPGRADING file of PHP 8.4 |https://github.com/php/php-src/blob/php-8.4.0/UPGRADING], which lists every deprecation of the version.
+
+
+Risky Fixes
+===========
+
+A rewrite that may change what the code does waits until you list its decision in `fixRisky`. For PHP 8.4, this is mainly `#[\Deprecated]`. The annotation `@deprecated` only informs the reader, while the attribute makes PHP report a deprecation at every use. DressCode moves the version from the annotation to `since` and the rest of the text to the message. In PHP 8.4, the attribute goes on a function, a method, a class constant and an enum case; a trait and a constant declared with `const` accept it only since PHP 8.5.
+
+```neon
+use:
+	- perCs
+	- modernizations
+
+fixRisky:
+	- upgrading.phpdoc.deprecated
+
+targets:
+	php: '8.4'
+```
+
+```php .[before]
+class Invoice
+{
+    /** @deprecated 2.1 use format() */
+    public function toString(): string
+    {
+        return $this->format();
+    }
+}
+```
+
+```php .[after]
+class Invoice
+{
+    #[\Deprecated('use format()', since: '2.1')]
+    public function toString(): string
+    {
+        return $this->format();
+    }
+}
+```
+
+The new array functions take only an array, and they call the callback only until they know the answer. So the rewrite waits for a `foreach` over an `iterable` or over a value of unknown type, and for `array_filter()` with a callback that calls a method, because such a callback might count its calls or throw an exception on a later item. [Types from PHPStan |phpstan-types] tell DressCode which loops go through an array; you decide the rest one by one with `dresscode fix --ask-risky`.
+
+.[warning]
+Inside a namespace, `round()` or `fputcsv()` without a leading backslash may mean a function of that namespace. DressCode rewrites such calls only when the configuration says `nameResolution: certain`; until then, they wait as risky, see [Functions and Constants in Namespaces |php-functions-in-namespaces].
+
+
+Property Hooks
+==============
+
+PHP 8.4 also added property hooks, code that runs when a property is read or written. They are new syntax, not a shorter form of an old one, so no decision rewrites your code to them. But DressCode reads them like any other code. Its parser [PhpSyntax |phpsyntax:] builds a syntax tree from the grammar of PHP, so the body of a property hook is a body like any other, and both the rewrites and the rules of your standard reach inside it:
+
+```neon
+use:
+	- perCs
+	- modernizations
+
+targets:
+	php: '8.4'
+```
+
+```php .[before]
+final class User
+{
+    public string $email {
+        set(string $value) {
+            if (strpos($value, '@') === false) { throw new ValueError('Invalid e-mail'); }
+            $this->email = strtolower($value);
+        }
+    }
+}
+```
+
+```php .[after]
+final class User
+{
+    public string $email {
+        set(string $value) {
+            if (!str_contains($value, '@')) {
+                throw new ValueError('Invalid e-mail');
+            }
+            $this->email = strtolower($value);
+        }
+    }
+}
+```
+
+Tools whose rules work directly with a flat array of tokens have a harder job with new syntax, and it is not the fault of their authors: every rule has to learn it on its own. Almost two years after the release of PHP 8.4, the [issue of PHP_CodeSniffer |https://github.com/PHPCSStandards/PHP_CodeSniffer/issues/734] that tracks the new syntax still lists support for the property hook syntax in its tokenizer as work to be done.
+
+
+Step by Step
+============
+
+DressCode itself needs PHP 8.4, so for a project that still runs on PHP 8.3, install it [globally |upgrade#Where DressCode Runs], not as a development dependency.
+
+1. Commit or stash your work in progress, so that the diff holds only what DressCode changed.
+2. Find out how many places will change: `dresscode upgrade estimate php 8.4`. If `composer.json` sets `config.platform.php`, raise it to 8.4 before you start.
+3. Plan the upgrade and carry it out: `dresscode upgrade plan php 8.4 --save`, then `dresscode upgrade run`. DressCode asks before it raises `require.php` to `^8.4`; if you raise it yourself, just run `upgrade run` afterwards.
+4. Go through what DressCode left for you, including the risky fixes that wait for types, for `nameResolution` or for your decision, and repeat `upgrade run` until it ends with `UPGRADED`.
+5. Commit the upgrade separately from other changes.
+
+When the configuration already has the sets `modernizations` and `deprecations`, it is enough to raise `require.php` and run `dresscode fix`. [Upgrade Your Code Step by Step |upgrade] covers the whole procedure, with tests, commits and manual tasks.
+
+
+Where to Go Next
+================
+
+- [Upgrading to a newer PHP |upgrading-php], PHP 8.5, 8.6 and the versions before 8.4.
+- [Types from PHPStan |phpstan-types], so that fewer rewrites to `array_find()` and its siblings wait as risky.
+- [The section upgrading |decisions/upgrading] with every decision about a newer PHP.
+
+{{maintitle: Upgrade Your Code to PHP 8.4 Automatically}}
+{{description: PHP 8.4 migration: DressCode rewrites code to array_find(), array_any() and RoundingMode, and fixes or reports PHP 8.4 deprecations such as int $x = null.}}

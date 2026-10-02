@@ -1,0 +1,185 @@
+Přechod na Symfony 8
+********************
+
+.[perex]
+V Symfony 8 se z `$application->add()` stalo `addCommand()`, constraint už nebere pole voleb a místo `#[TaggedIterator]` se píše `#[AutowireIterator]`. Symfony 8.0 odstranilo, co řada 7.x zavrhla, a vyžaduje PHP 8.4. Na upgrade ze Symfony 7.4 na 8 vás DressCode s balíčkem `dresscode/upgrade-symfony` připraví ještě na 7.4: přepíše váš kód na nové API a po přechodu pokračuje tím, co zavrhlo Symfony 8.1.
+
+Data balíčku nesou 217 změn, které Symfony zavrhlo ve verzích 7.1 až 7.4 a ve verzi 8.0 odstranilo: 152 z nich DressCode přepíše sám a zbylých 65 ohlásí. Symfony 7.4, které vyšlo spolu s 8.0 na konci listopadu 2025, má podle [UPGRADE-8.0.md |https://github.com/symfony/symfony/blob/8.0/UPGRADE-8.0.md] stejné funkce, a tak všechny náhrady najdete už v něm.
+
+
+Jak to vypadá
+=============
+
+Příkaz a dvě funkce aplikace na Symfony 7.4, s balíčky Symfony na `7.4.*` v `composer.json`:
+
+```php .[before]
+class ExportCommand extends Command
+{
+	public function __construct(
+		#[TaggedIterator('app.exporter')]
+		private iterable $exporters,
+	) {
+		parent::__construct();
+	}
+
+
+	public static function getDefaultName(): ?string
+	{
+		return 'app:export';
+	}
+}
+
+
+function createApplication(ExportCommand $export): Application
+{
+	$application = new Application('shop');
+	$application->add($export);
+	return $application;
+}
+
+
+function nameConstraints(): array
+{
+	return [
+		new NotBlank(['message' => 'Fill in the name.']),
+		new Length(['min' => 3, 'max' => 50]),
+	];
+}
+```
+
+Po `dresscode upgrade today`, pořád na Symfony 7.4:
+
+```php .[after]
+#[AsCommand(name: 'app:export')]
+class ExportCommand extends Command
+{
+	public function __construct(
+		#[AutowireIterator('app.exporter')]
+		private iterable $exporters,
+	) {
+		parent::__construct();
+	}
+}
+
+
+function createApplication(ExportCommand $export): Application
+{
+	$application = new Application('shop');
+	$application->addCommand($export);
+	return $application;
+}
+
+
+function nameConstraints(): array
+{
+	return [
+		new NotBlank(message: 'Fill in the name.'),
+		new Length(min: 3, max: 50),
+	];
+}
+```
+
+Čtyři změny ze tří verzí Symfony 7: z `#[TaggedIterator]` je `#[AutowireIterator]` (7.1); metoda `getDefaultName()` se přestěhovala do atributu `#[AsCommand]` a volby constraintů se staly pojmenovanými argumenty (7.3); z `add()` je `addCommand()` (7.4). Importy obou atributů DressCode přepsal také a kód dál běží na 7.4.
+
+
+Co se přepíše
+=============
+
+Tabulky ukazují příklady z dat balíčku, každý ověřený během DressCode. Úplný seznam je v datech, kde má každá komponenta svůj soubor, třeba [validator.neon |https://github.com/dg/dresscode-upgrade-symfony/blob/master/upgrading/validator.neon].
+
+
+Zavrženo v Symfony 7.1 až 7.4
+-----------------------------
+
+| staré API | nové API | od verze |
+|---|---|---|
+| `#[TaggedIterator('app.exporter')]` | `#[AutowireIterator('app.exporter')]` | `symfony/dependency-injection` 7.1 |
+| `new UriSigner($secret, parameter: '_sig')` | `new UriSigner($secret, hashParameter: '_sig')` | `symfony/http-foundation` 7.1 |
+| `$type->isA(TypeIdentifier::STRING)` | `$type->isIdentifiedBy(TypeIdentifier::STRING)` | `symfony/type-info` 7.2 |
+| `getDefaultName()` příkazu | `#[AsCommand(name: 'app:export')]` u třídy | `symfony/console` 7.3 |
+| `new Length(['min' => 3, 'max' => 50])` | `new Length(min: 3, max: 50)` | `symfony/validator` 7.3 |
+| `Type::iterable(Type::string(), asList: true)` | `Type::list(Type::string())` | `symfony/type-info` 7.3 |
+| `$application->add($command)` | `$application->addCommand($command)` | `symfony/console` 7.4 |
+| `Symfony\Component\Serializer\Annotation\Groups` | `Symfony\Component\Serializer\Attribute\Groups` | `symfony/serializer` 7.4 |
+| `new Crawler($html, $uri, null, true)` | `new Crawler($html, $uri, null)` | `symfony/dom-crawler` 7.4 |
+| `new MastermindsParser()` | `new NativeParser()` | `symfony/html-sanitizer` 7.4 |
+
+Na constrainty validátoru připadá 47 z těchto přepisů. U 46 tříd constraintů DressCode převede pole voleb na pojmenované argumenty a z `new Choice(['a', 'b'])` udělá `new Choice(choices: ['a', 'b'])`.
+
+
+Zavrženo v Symfony 8.1 a 8.2
+----------------------------
+
+Symfony 8.1 zavrhlo dalších 37 věcí a 22 z nich DressCode přepíše. Uplatní je, jakmile `composer.json` vyžaduje 8.1; s `8.0.*` je nechá být:
+
+| staré API | nové API | od verze |
+|---|---|---|
+| `extends Symfony\Component\HttpKernel\DependencyInjection\Extension` | `extends Symfony\Component\DependencyInjection\Extension\Extension` | `symfony/http-kernel` 8.1 |
+| `new ValidatorExtension($validator, false)` | `new ValidatorExtension($validator)` | `symfony/form` 8.1 |
+| `mirror($source, $target, options: ['copy_on_windows' => $follow])` | `mirror($source, $target, options: ['follow_symlinks' => $follow])` | `symfony/filesystem` 8.1 |
+
+Symfony 8.2 má vyjít v listopadu 2026 ([Symfony 8.2 |https://symfony.com/releases/8.2]). Data už nesou šest změn z jeho [UPGRADE-8.2.md |https://github.com/symfony/symfony/blob/8.2/UPGRADE-8.2.md] a DressCode je uplatní, jakmile projekt začne vyžadovat 8.2.
+
+
+Co se jen ohlásí
+================
+
+Kde se náhrada používá jinak nebo žádná není, DressCode do kódu nesáhne, jen místo ohlásí a poradí, co tam napsat:
+
+```
+Method `Symfony\Component\HttpFoundation\Request::get()` is deprecated: read the bag the value comes from, the `attributes`, `query` or `request` property, such as `query->get()`, since symfony/http-foundation 7.4.
+Method `Symfony\Component\Security\Core\User\UserInterface::eraseCredentials()` is deprecated: there is no replacement; nothing calls it any more; leave the plain password out of `__serialize()` where the method erased it, since symfony/security-core 7.3.
+```
+
+| staré API | co místo toho | od verze |
+|---|---|---|
+| `Symfony\Component\PropertyInfo\Type` | `Symfony\Component\TypeInfo\Type`, který se staví továrnami jako `Type::int()` nebo `Type::list()` | `symfony/property-info` 7.3 |
+| `LazyGhostTrait` | `ReflectionClass::newLazyGhost()`, nativní lazy ghost z PHP 8.4 | `symfony/var-exporter` 7.3 |
+| `ConfigBuilderGenerator` a fluent config buildery | pole PHP vrácené z konfiguračního souboru | `symfony/config` 7.4 |
+| `XmlFileLoader` kontejneru | `PhpFileLoader` nebo `YamlFileLoader` s konfigurací přepsanou do PHP nebo YAMLu | `symfony/dependency-injection` 7.4 |
+| `$request->query = new InputBag($query)` | parametry query předané konstruktoru nebo `initialize()`, nebo `$request->query->set()` | `symfony/http-foundation` 8.1 |
+| `Bundle::registerCommands()` | každý příkaz jako služba s `#[AsCommand]` nebo s tagem `console.command` | `symfony/http-kernel` 8.1 |
+| `ConstraintValidatorInterface::validate()` | `validateInContext()`, které bere i kontext validace | `symfony/validator` 8.1 |
+
+Takové místo potvrdíte komentářem `// dresscode:ignore <rozhodnutí> -- <důvod>`, nebo ho přepíšete; podrobnosti najdete v kapitole [Ruční úkoly po cestě |upgrade#Ruční úkoly po cestě]. Změny konfigurace v YAMLu, šablon Twig a chování data nezachytí; vypisuje je [UPGRADE-8.0.md |https://github.com/symfony/symfony/blob/8.0/UPGRADE-8.0.md].
+
+
+Symfony 7.4 LTS, nebo 8.x
+=========================
+
+Symfony 7.4 je verze s dlouhodobou podporou (LTS). Opravy chyb dostává do listopadu 2028, bezpečnostní opravy do listopadu 2029 a běží na PHP 8.2 ([Symfony 7.4 |https://symfony.com/releases/7.4]). Verze 8.x potřebují PHP 8.4 a podporu mají kratší: u 8.0 skončila v červenci 2026, 8.1 je podporovaná do ledna 2027 ([Symfony 8.1 |https://symfony.com/releases/8.1]).
+
+První krok je v obou případech stejný. Na 7.4 přepíše `dresscode upgrade today` všechno, co zavrhly verze 7.1 až 7.4, takže aplikace, která na LTS zůstane, má kód psaný pro API Symfony 8, nakolik data sahají, a pozdější přechod na 8.x je menší krok.
+
+
+Krok za krokem
+==============
+
+DressCode potřebuje PHP 8.4. Pokud vaše aplikace na Symfony 7.4 běží na starším PHP, nainstalujte DressCode globálně, s PHPStanem a s daty pro Symfony:
+
+```shell
+composer global require dresscode/dresscode dresscode/upgrade-symfony phpstan/phpstan
+```
+
+Na PHP 8.4 a novějším může být vývojovou závislostí projektu, jak ukazuje [Instalace |upgrading-symfony#Instalace].
+
+1. Začněte na Symfony 7.4 s čistým pracovním stromem. Pusťte `dresscode upgrade today`, a pokud to poradí, ještě jednou. Projděte, co ohlásí, pusťte testy a PHPStan a commitněte.
+2. Zvedněte `require.php` aspoň na 8.4. Další běh `upgrade today` pak opraví nebo ohlásí i to, co PHP zavrhlo do verze 8.4, viz [Přechod na novější PHP |upgrading-php].
+3. Zvedněte balíčky Symfony v `composer.json` na `8.0.*`; se Symfony Flex i `extra.symfony.require`. Pusťte `composer update "symfony/*" -W --prefer-lowest` a znovu `dresscode upgrade today`, pak pusťte testy a commitněte.
+4. Stejně pokračujte na `8.1.*`. Teprve teď DressCode přepíše, co zavrhlo 8.1, třeba základní třídu `Extension` rozšíření bundlu.
+
+.[warning]
+Verzi každého balíčku DressCode čte z jeho omezení v `composer.json`. Když má balíček Symfony v `composer.json` jen `*` a verzi nechává na `extra.symfony.require`, DressCode dolní mez nevidí a změny toho balíčku jen ohlásí. Napište verzi do omezení, třeba `7.4.*`.
+
+Proč `--prefer-lowest` a proč po jedné verzi, vysvětluje [Upgrade kódu krok za krokem |upgrade#Po jedné hlavní verzi, ručně].
+
+
+Kam dál
+=======
+
+- [Symfony |upgrading-symfony], všechny komponenty, které balíček pokrývá, i starší verze.
+- [Upgrade kódu krok za krokem |upgrade], celý postup s testy a commity.
+- [Přechod na novější PHP |upgrading-php], protože Symfony 8 potřebuje PHP 8.4.
+
+{{maintitle: Přechod ze Symfony 7.4 na 8: automatický přepis kódu}}
+{{description: Upgrade ze Symfony 7.4 na 8: DressCode ještě na 7.4 přepíše Application::add() na addCommand(), volby constraintů na pojmenované argumenty a další API.}}

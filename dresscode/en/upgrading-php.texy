@@ -1,0 +1,180 @@
+Upgrading to a Newer PHP
+************************
+
+.[perex]
+Raise the PHP version in `composer.json`, run `dresscode fix`, and the diff shows the code you would have written for the new version yourself, already formatted by your coding standard. It works for code written for PHP 8.0 or newer, all the way to PHP 8.6, which has not been released yet.
+
+
+PHP Versions
+============
+
+For each version, the table gives a few examples from both sides: what DressCode rewrites your code to, and which deprecated features it fixes or reports. PHP 8.4, 8.5 and 8.6 have pages of their own, with an example, the full list of items and the upgrade steps.
+
+| version | DressCode rewrites to | deprecated, DressCode fixes or reports |
+|---|---|---|
+| PHP 8.0 | `str_contains()`, `match`, `?->`, promoted properties, `get_debug_type()`, `throw` in an expression | `libxml_disable_entity_loader()`, `zip_open()`, `pg_numrows()` |
+| PHP 8.1 | `$this->save(...)`, `array_is_list()`, `0o755`, `[...$a, ...$b]`, `new` in a default value | `strftime()`, `FILTER_SANITIZE_STRING`, `null` passed to a PHP function that does not accept it, `Serializable` without `__serialize()` |
+| PHP 8.2 | `readonly` on a whole class | `utf8_encode()`, `${name}` in a string, the callable `'self::sort'`, a dynamic property |
+| PHP 8.3 | `json_validate()`, `Foo::{$name}`, `#[\Override]` | `assert_options()`, `ASSERT_*`, `MT_RAND_PHP` |
+| [PHP 8.4 |upgrade-to-php-8-4] | `array_any()`, `array_find()` and their siblings, `RoundingMode`, `#[\Deprecated]`, `new Foo()->bar()` | `int $x = null` without `?`, the default `escape` of `fgetcsv()`, `E_STRICT`, `E_USER_ERROR` in `trigger_error()` |
+| [PHP 8.5 |upgrade-to-php-8-5] | the pipe operator, `array_first()`, `array_last()`, `clone()` with properties | `curl_close()`, backticks, `(integer)`, a semicolon after `case`, `MHASH_*`, `__sleep()` |
+| [PHP 8.6 |upgrade-to-php-8-6] | `clamp()`, partial application `str_pad(?, 10, '-')`, `#[\Override]` on a constant | a value returned from a constructor, `return` in `finally`, the names `let` and `is`, `doubleval()` |
+
+
+What It Looks Like
+==================
+
+These four lines were written for PHP 8.0. The project is now moving to PHP 8.6, and its configuration adds the set `modernizations` to the standard:
+
+```neon
+use:
+	- perCs
+	- modernizations
+targets:
+	php: '8.6'
+```
+
+```php .[before]
+$isExternal = strpos($url, '://') !== false;
+$author = $article === null ? null : $article->getAuthor();
+$slug = trim(strtolower(strip_tags($title)));
+$rating = max(0, min(5, $votes));
+```
+
+After one `dresscode fix`:
+
+```php .[after]
+$isExternal = str_contains($url, '://');
+$author = $article?->getAuthor();
+$slug = $title |> strip_tags(...) |> strtolower(...) |> trim(...);
+$rating = clamp($votes, 0, 5);
+```
+
+Each line shows one new PHP feature: the function `str_contains()` and the operator `?->` from PHP 8.0, the pipe operator `|>` from PHP 8.5, and the function `clamp()` from PHP 8.6. What the other versions brought is in the [table above |#PHP Versions].
+
+
+Rewriting and Formatting in One Run
+===================================
+
+The decision `upgrading.syntax.pipe`, which turns nested calls into a pipe, does not deal with indentation, spaces or where a parenthesis belongs. The decisions of your standard take care of that, in the same run: DressCode runs the rules again and again until the code settles, so the new code gets exactly the shape your standard would give it if you had written it by hand. And because DressCode works on a [lossless tree |how-it-works#A Syntax Tree Instead of an Array of Tokens], the lines no rule touched stay the same byte for byte. In a project that already uses DressCode, the diff contains the move to the new PHP version and nothing else.
+
+For you, this means one tool, one configuration and one step in continuous integration. The same configuration that checks the style on every commit rewrites the code to the new PHP version on the day you raise it.
+
+
+The Version in composer.json Decides
+====================================
+
+DressCode reads the PHP version the code is written for from `require.php` in `composer.json`: it takes the lowest version the constraint allows, because the code must work on it. The PHP that DressCode happens to run on plays no role. Composer does not raise the lower bound by itself, even when the project runs on a newer PHP. `config.platform.php` in `composer.json` raises it: with `^8.1` and the platform `8.3`, PHP 8.3 decides. The only way to set a different version is the key `targets` in the configuration, for example `targets: {php: '8.3'}`, and it takes precedence. The oldest version DressCode fixes code for is PHP 8.0: when the project allows an older one, DressCode checks the code as PHP 8.0 and warns that a fix may write syntax the older version does not have. Every decision that writes the syntax or a function of a newer PHP knows which PHP version introduced it, and below that version it quietly waits. So you do not have to keep track of anything: as long as the project allows PHP 8.3, `array_any()` does not appear in the code, and on the day you raise the constraint to `^8.4`, the rewrite takes effect. `dresscode config` tells you what is waiting:
+
+/--pre .[terminal]
+upgrading:
+	functions:
+		arraySearchFunctions: required          # dresscode/modernizations, no effect: php
+		arrayFirstLast: required                # dresscode/modernizations, no effect: php
+\--
+
+The decisions for upgrading to a newer PHP are grouped in the [set |configuration#Standards and Sets] `modernizations`. No standard includes it, because rewriting to a newer PHP is part of an upgrade, not a rule for everyday checks. Add it on top of your standard:
+
+```neon
+use:
+	- perCs
+	- modernizations
+```
+
+
+What Gets Rewritten
+===================
+
+Besides what each version brought, the set `modernizations` rewrites code to forms that PHP already had before version 8.0: an anonymous function that only returns an expression to an arrow function `fn`; a ternary operator that tests `null` to `??`; a ternary operator that repeats its condition to `?:`; `array()` and `list()` to `[]`; an assignment that repeats its target to `+=`, `??=` and the like; a chain `isset() && isset()` to a single `isset()`; several `unset()` calls in a row to one; `if` and `else` that only choose one of two values to a ternary operator; `__CLASS__` and `get_class()` without an argument to `self::class`.
+
+The set `modernizations` turns these rewrites on, as well as those of the newer versions from the [table above |#PHP Versions], and each item has its own key in the section [`upgrading` |decisions/upgrading], which a project can also set by itself (`upgrading.syntax.match: required`). The attribute `#[\Deprecated]` changes the behavior of the program by its very nature, because the deprecated method starts reporting at runtime that it is deprecated. So every such fix is risky and is made only once you list the decision `upgrading.phpdoc.deprecated` in the key `fixRisky`, see [below |#Risky Fixes]. The rewrites to `array_any()` and its siblings can be risky too, because these functions also pass the key to the callback and call it only until they know the answer; so can the rewrites to partial application and to `clone()`, because their arguments are evaluated only once, at the moment of creation. Where the code shows that this does not matter, the fix is made right away.
+
+The set `modernizations` also reports the methods `__sleep()` and `__wakeup()`, which PHP 8.5 marked as superseded by `__serialize()` and `__unserialize()`; they cannot be rewritten, because the format of stored data would change. It also writes the short form `new Foo()->bar()` from PHP 8.4, without parentheses around `new` (`classes.instantiationWrapping: forbidden`), and the set `cleanup` removes, depending on the PHP version, what newer PHP no longer needs: a variable in `catch` that the block does not read (8.0), the attribute `#[\ReturnTypeWillChange]` on a method that already declares its return type (8.1), and an argument that PHP no longer reads. The return type `never` from PHP 8.1 is added by the set `types`, through the decisions of the group `mistakes.neverReturnType`.
+
+No set includes the attribute `#[\Override]` from PHP 8.3, because it does not replace an older form but adds a guarantee that each project chooses for itself, by writing `upgrading.classes.Override: required`. DressCode then adds the attribute to a method that overrides a method of the parent class, from PHP 8.5 also to a property, and from PHP 8.6 to a constant and to an enum `case`. It skips the implementation of an abstract method or an interface method, because PHP checks that itself. [Types from PHPStan |phpstan-types] tell it what a class inherits.
+
+The set `modernizations` also makes a whole `final` class `readonly` when all its properties are `readonly` (PHP 8.2), instead of marking each of them. Plain `readonly` on a property that only the constructor writes (8.1) is in no set: like `#[\Override]`, it does not replace an older form but adds a guarantee, and the project turns it on with the decision `mistakes.readonlyProperty: required` from the section [`mistakes` |decisions/mistakes]. From PHP 8.6, a property with a default value that nobody writes, not even the constructor, gets `readonly` too. `readonly` on a property that is not private is risky, because code that writes it from outside is not visible in the file; DressCode considers such a property only in a `final` class. The keyword `readonly` instead of the annotation `@readonly` (8.1) concerns the design of your code: no set includes it, and you turn it on yourself once you decide on it. Its fix is always risky: the annotation only asks an analyzer to complain, while PHP throws an `Error` on a write the annotation let through, for example from a hydrator or during cloning. Both risky fixes are made once you list the decisions in the key `fixRisky`:
+
+```neon
+use:
+	- perCs
+	- modernizations
+
+mistakes:
+	readonlyProperty: required
+
+upgrading:
+	phpdoc:
+		readonly: required
+
+fixRisky:
+	- mistakes.readonlyProperty
+	- upgrading.phpdoc.readonly
+```
+
+
+What Newer PHP Has Deprecated
+=============================
+
+A new PHP version does not only add things; it also deprecates some and then warns at runtime wherever the code still uses them. The set `deprecations` fixes what has a direct replacement and reports the rest. It reports a deprecated feature whenever the constraint in `composer.json` allows the version that deprecated it: code written for `^8.1` will run on PHP 8.4 one day, so `E_STRICT`, which PHP 8.4 deprecated, is reported in it too. What each version deprecated is in the [table above |#PHP Versions].
+
+DressCode keeps the list of what PHP deprecated as upgrade data of the package `php`, written the same way as the [data for libraries |replacement-maps]. The requirement `upgrading.php.deprecatedApi` turns it on, and what the data finds is also reported under it, so you name it in `--only`, in `severity` and in a `dresscode:ignore` comment. A function or constant without a direct replacement is reported together with the version that deprecated it, <code>''Function `strftime()` is deprecated: since PHP 8.1.''</code>; each one needs a different change. To exclude a single item of the data, set it to `keep` in the map it belongs to, for example `upgrading: api: replacedCalls: {'curl_close($handle)': keep}`.
+
+A deprecated method of a PHP class is rewritten only where DressCode knows the type of the object, see [Types |phpstan-types]. The rewrite of `utf8_encode()` to `mb_convert_encoding()` is a risky fix, because that function needs the mbstring extension. Argument values that PHP deprecated, such as `E_USER_ERROR` in `trigger_error()`, are reported by a separate decision, `upgrading.php.deprecatedArgument`. The same set also rewrites the deprecated API of libraries, see [Upgrading Code |upgrade], and you add it next to `modernizations`:
+
+```neon
+use:
+	- perCs
+	- modernizations
+	- deprecations
+```
+
+
+Risky Fixes
+===========
+
+Some rewrites can change what the code does, so DressCode does not make them on its own. A typical example is `switch` to `match`: `switch` compares loosely and `match` strictly, so `case 1` today also catches the string `'1'`, while the arm `1 =>` in `match` no longer does. Such a risky fix is only reported, and it is made once you list the decision in the key `fixRisky`, or for one run with the option `--fix-risky`. With [types |phpstan-types], DressCode makes it by itself where the types say that integers or enum cases are compared, because there both ways of comparing give the same result.
+
+```neon
+fixRisky:
+	- upgrading.syntax.match
+```
+
+Before you write a decision into `fixRisky`, it is worth giving DressCode what it is missing: where types or the name of a function would decide the fix, it reports the fix only as a warning, and the summary says what to turn on.
+
+Even a plain rewrite to `str_contains()` is often risky when the code lives in a namespace. An unqualified `strpos()` in the namespace `App` may be the function `App\strpos()` at runtime, and a single file cannot show which one it is. When the configuration says `nameResolution: certain`, this uncertainty disappears, and the risk with it, see [Functions and Constants in Namespaces |php-functions-in-namespaces].
+
+One thing DressCode never does, not even with `--fix-risky`: it never writes code that will not compile. A risky fix may change behavior, but whether the code compiles must not depend on a file DressCode cannot see at the moment. That is why only a private property, or a property of a final class, gets `readonly`: otherwise a child class in another file could redeclare the property, and in PHP that is a fatal error, not a change of behavior.
+
+
+A New PHP Before the Tools Catch Up
+===================================
+
+PHP 8.6 is due on November 19, 2026, and DressCode already rewrites code to its function `clamp()` and to partial application, and reports what this version deprecated. It understands the syntax of the new version even when it runs on an older one: the parser [PhpSyntax |phpsyntax:] reads the source code with the PHP tokenizer, adds on its own the tokens the running interpreter does not know yet, and builds the structure of the code with its own grammar. So DressCode running on PHP 8.4 reads a file with the pipe operator from PHP 8.5, which PHP 8.4 itself rejects as a syntax error.
+
+Tools whose rules work directly with a flat array of tokens have a harder job here, and it is not the fault of their authors. Each of the dozens of rules has to learn the new syntax on its own, and until it does, it can damage new code. That is why PHP CS Fixer refused to run on PHP 8.4 until July 2025, 227 days after its release; it could be run only with the environment variable `PHP_CS_FIXER_IGNORE_ENV` and with its own warning that it might change the code incorrectly. Its issue tracker has reports from that time where individual fixers rewrote property hooks into code that did not compile. PHP_CodeSniffer still does not support property hooks today, almost two years after the release of PHP 8.4.
+
+For years, with every new PHP version, I waited for the style tools to catch up, and I did not use the new syntax in my code until they could handle it. With DressCode it is the other way around: the tool is ready for the new version before the project is.
+
+
+Upgrading in Practice
+=====================
+
+1. Start with a clean working tree, so that the diff shows only what DressCode did.
+2. Raise the lower bound of `require.php` in `composer.json` to the version you are moving to, and `config.platform.php` too if the project sets it.
+3. Run `dresscode fix` if the configuration has the sets `modernizations` and `deprecations`. Without them, or when you want to leave the style alone, run [`dresscode upgrade today --modernize` |upgrade]: it turns the sets on by itself and takes from the style of the project only what the code already follows. What could not be fixed or waits for permission stays in the output, and the summary says what decides the risky fixes: types, `nameResolution`, or you.
+4. Provide what the summary advises, then go through the remaining risky findings and decide which decisions to list in `fixRisky`, or go through them one by one with `--ask-risky`.
+5. Commit the result on its own, without other changes.
+
+You do not have to jump straight to the newest version. When the project moves one version at a time, make a separate commit for each; the decisions follow what `composer.json` allows at the moment.
+
+
+Where to Go Next
+================
+
+- [Types from PHPStan |phpstan-types], so that DressCode adds `#[\Override]`, rewrites deprecated API and recognizes that a string is a class name.
+- [Upgrading code |upgrade], when you also move to a new version of Nette or another library along with the new PHP version.
+- [The upgrading section |decisions/upgrading] with all the decisions about upgrading to a newer PHP, and [the whole set `modernizations` |php-coding-standards#modernizations].
+
+{{maintitle: Upgrade PHP Code from 8.0 to 8.6 Automatically}}
+{{description: DressCode rewrites PHP code from 8.0 up to 8.6 to the syntax of each newer version and formats it in the same run. Pipe operator, array_any(), match, clamp() and more.}}

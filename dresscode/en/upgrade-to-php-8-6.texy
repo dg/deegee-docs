@@ -1,0 +1,173 @@
+Upgrade to PHP 8.6
+******************
+
+.[perex]
+PHP 8.6 is due on November 19, 2026, but you can upgrade your code to it today, in a branch, with DressCode running on PHP 8.4 or 8.5. DressCode turns `max(0, min(5, $votes))` into `clamp($votes, 0, 5)`, and `fn($x) => str_pad($x, 10, '-')` into the partial function application `str_pad(?, 10, '-')`. It also fixes or reports what PHP 8.6 deprecated.
+
+
+What It Looks Like
+==================
+
+This class was written for PHP 8.5, and the project now requires PHP 8.6. The configuration adds the sets `modernizations` and `deprecations` to the standard, `nameResolution: certain` tells DressCode that the namespaces of the project declare no functions of their own, and `targets` sets the target PHP version it would otherwise take from `composer.json`:
+
+```neon
+use:
+	- perCs
+	- modernizations
+	- deprecations
+
+nameResolution: certain
+
+targets:
+	php: '8.6'
+```
+
+```php .[before]
+final class Rating
+{
+    /** @param list<int> $votes */
+    public function __construct(
+        private array $votes,
+    ) {
+        return $this;
+    }
+
+    public function stars(int $votes): int
+    {
+        return max(0, min(5, $votes));
+    }
+
+    /**
+     * @param list<string> $names
+     * @return list<string>
+     */
+    public function labels(array $names): array
+    {
+        return array_map(fn($name) => str_pad($name, 10, '-'), $names);
+    }
+
+    public function isValid(mixed $value): bool
+    {
+        return is_integer($value);
+    }
+}
+```
+
+After one `dresscode fix`:
+
+```php .[after]
+final class Rating
+{
+    /** @param list<int> $votes */
+    public function __construct(
+        private array $votes,
+    ) {}
+
+    public function stars(int $votes): int
+    {
+        return clamp($votes, 0, 5);
+    }
+
+    /**
+     * @param list<string> $names
+     * @return list<string>
+     */
+    public function labels(array $names): array
+    {
+        return array_map(str_pad(?, 10, '-'), $names);
+    }
+
+    public function isValid(mixed $value): bool
+    {
+        return is_integer($value);
+    }
+}
+```
+
+Behind each change is one new thing in PHP 8.6: the function `clamp()`, partial application with the placeholder `?`, and the value returned from a constructor, which PHP 8.6 deprecated. Without the `return`, the body of the constructor is empty, and the standard writes it as `{}`. The function `is_integer()` stays and is only reported, because the set `deprecations` only reports a deprecated function; the set `cleanup` would rewrite it to `is_int()`.
+
+
+What Gets Rewritten
+===================
+
+The set `modernizations` rewrites code to what PHP 8.6 brought. Each item is a decision that a project can also turn on by itself.
+
+| feature | before | after | fix |
+|---|---|---|---|
+| `clamp()`, `upgrading.functions.clamp` | `max(0, min(5, $votes))` | `clamp($votes, 0, 5)` | fixed; risky unless both bounds are numbers, because `clamp()` refuses a minimum above its maximum |
+| partial application, `upgrading.syntax.firstClassCallables` | `fn($x) => str_pad($x, 10, '-')` | `str_pad(?, 10, '-')` | fixed; risky where an argument would be evaluated earlier or passed by reference |
+| `#[\Override]` on a constant and an enum case, `upgrading.classes.Override` | `public const TABLE = 'children';` | `#[\Override] public const TABLE = 'children';` | in no set, turn it on yourself; needs types |
+| `readonly` with a default value, `mistakes.readonlyProperty` | `private int $limit = 10;` | `private readonly int $limit = 10;` | in no set; only where nothing writes the property |
+
+Partial application is the same decision as the first-class callable `strlen(...)` from PHP 8.1: a closure that only forwards its parameters to one call becomes the call itself, with `?` in place of each parameter. A closure that does more, has a typed parameter or one with a default value, or reads the outer scope, stays as it is.
+
+.[note]
+Every decision knows the PHP version that brought its feature. While `composer.json` still allows PHP 8.5, the rewrites for 8.6 wait quietly, and `dresscode config` lists them as having no effect.
+
+
+What PHP 8.6 Deprecated
+=======================
+
+The set `deprecations` fixes what has a direct replacement and reports the rest, with the version that deprecated it. A deprecation is reported regardless of the target version, so you can clean it up before the move.
+
+| deprecated | DressCode |
+|---|---|
+| a value returned from a constructor or a destructor | fixed: `return $this;` is removed; a returned call stays as a statement, so its effect is kept |
+| a constructor or a destructor that is a generator | reported |
+| `return` in `finally` | reported |
+| the names `let` and `is` for a class, a function or a constant, `readonly` for a function, `namespace` for a class constant | reported, nothing is renamed |
+| `doubleval()`, `is_double()`, `is_integer()`, `is_long()` | reported; the set `cleanup` rewrites them to `floatval()`, `is_float()` and `is_int()` |
+| `mb_ereg()` and the other `mb_ereg*` functions, `mb_split()`, `mb_regex_encoding()`, `mb_regex_set_options()` | reported |
+| `spl_object_hash()`, `strcoll()`, `metaphone()`, `spl_classes()`, `mysqli_get_charset()`, `mysqli_stmt_init()` | reported: no replacement behaves the same |
+| the third argument of `define()` | fixed by the set `cleanup`: the argument is removed |
+| `?array` as the return type of `__debugInfo()` | fixed by the set `correctness`: `array` |
+
+A finding names the PHP version that deprecated it:
+
+/--pre .[terminal]
+src/Rating.php:28:16: error: Function `is_integer()` is deprecated: since PHP 8.6. [upgrading.php.deprecatedApi]
+\--
+
+
+Risky Fixes
+===========
+
+A rewrite that may change what the code does is only reported, and is made only once you list its decision in `fixRisky`. Both new rewrites have such cases. `clamp()` throws an error when the minimum is above the maximum, while `max($lo, min($x, $hi))` quietly returns something, so when the bounds are not numbers, the fix waits. A partial application evaluates its arguments when it is created, not when it is called, so `fn($x) => array_slice($x, 0, $this->limit)` waits as well:
+
+```neon
+fixRisky:
+	- upgrading.functions.clamp
+	- upgrading.syntax.firstClassCallables
+```
+
+.[warning]
+In a namespace, an unqualified `min()` may be a function of that namespace. Until the configuration says `nameResolution: certain`, the rewrites of such calls wait as risky, see [Functions and Constants in Namespaces |php-functions-in-namespaces].
+
+
+Ready Before the Release
+========================
+
+DressCode reads the syntax of PHP 8.6 even when it runs on PHP 8.4 or 8.5. Its parser [PhpSyntax |phpsyntax:] adds the tokens the running interpreter does not know yet, so a file with `str_pad(?, 10, '-')` is a file like any other, and the rules of your standard format it. You can raise the version and rewrite the code on the day PHP 8.6 is released, or earlier, in a branch.
+
+
+Step by Step
+============
+
+1. Start with a clean working tree, so that the diff shows only what DressCode did.
+2. Measure how much work the move takes: `dresscode upgrade estimate php 8.6`. If the project sets `config.platform.php`, raise it to 8.6 first.
+3. Save the plan and carry it out: `dresscode upgrade plan php 8.6 --save`, then `dresscode upgrade run`. At the Composer step, DressCode asks whether it may raise `require.php` to `^8.6`; you can also raise it yourself and then run `upgrade run`.
+4. Read what is left for you, and run `upgrade run` again until the run ends with `UPGRADED`. Whether the waiting risky fixes are made is decided by the types, by `nameResolution`, or by you.
+5. Commit the result on its own, without other changes.
+
+If the project has the sets `modernizations` and `deprecations` in its configuration, a plain `dresscode fix` after raising `require.php` is enough. [Upgrade Your Code Step by Step |upgrade] describes the whole procedure with tests and commits.
+
+
+Where to Go Next
+================
+
+- [Upgrading to a newer PHP |upgrading-php], the other versions since PHP 8.0.
+- [Types from PHPStan |phpstan-types], so that constants get `#[\Override]` too.
+- [The section upgrading |decisions/upgrading] with every decision about a newer PHP.
+
+{{maintitle: Upgrade Your Code to PHP 8.6 Automatically}}
+{{description: Upgrade to PHP 8.6 before it is released: DressCode rewrites your code to clamp() and partial function application, and fixes or reports what PHP 8.6 deprecated.}}

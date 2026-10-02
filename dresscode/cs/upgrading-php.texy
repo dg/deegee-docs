@@ -1,0 +1,180 @@
+Přechod na novější PHP
+**********************
+
+.[perex]
+Zvednete verzi PHP v `composer.json`, pustíte `dresscode fix` a v diffu uvidíte kód, jaký byste pro novou verzi napsali sami, rovnou zformátovaný podle vašeho standardu. Funguje to pro kód psaný pro PHP 8.0 a novější, až po PHP 8.6, které teprve vyjde.
+
+
+Verze PHP
+=========
+
+U každé verze tabulka uvádí pár jmen z obou stran: na co DressCode kód přepíše a co ze zavrženého opraví nebo ohlásí. PHP 8.4, 8.5 a 8.6 mají vlastní stránku s příkladem, všemi položkami a postupem přechodu.
+
+| verze | DressCode přepíše na | zavrženo, DressCode opraví nebo ohlásí |
+|---|---|---|
+| PHP 8.0 | `str_contains()`, `match`, `?->`, vlastnosti deklarované v konstruktoru (promoted properties), `get_debug_type()`, `throw` ve výrazu | `libxml_disable_entity_loader()`, `zip_open()`, `pg_numrows()` |
+| PHP 8.1 | `$this->save(...)`, `array_is_list()`, `0o755`, `[...$a, ...$b]`, `new` ve výchozí hodnotě | `strftime()`, `FILTER_SANITIZE_STRING`, `null` předaný funkci PHP, která ho nepřijímá, `Serializable` bez `__serialize()` |
+| PHP 8.2 | `readonly` u celé třídy | `utf8_encode()`, `${name}` v řetězci, callable `'self::sort'`, dynamická vlastnost |
+| PHP 8.3 | `json_validate()`, `Foo::{$name}`, `#[\Override]` | `assert_options()`, `ASSERT_*`, `MT_RAND_PHP` |
+| [PHP 8.4 |upgrade-to-php-8-4] | `array_any()`, `array_find()` a jejich sourozence, `RoundingMode`, `#[\Deprecated]`, `new Foo()->bar()` | `int $x = null` bez `?`, výchozí `escape` u `fgetcsv()`, `E_STRICT`, `E_USER_ERROR` v `trigger_error()` |
+| [PHP 8.5 |upgrade-to-php-8-5] | pipe operátor, `array_first()`, `array_last()`, `clone()` s vlastnostmi | `curl_close()`, zpětné apostrofy, `(integer)`, středník za `case`, `MHASH_*`, `__sleep()` |
+| [PHP 8.6 |upgrade-to-php-8-6] | `clamp()`, částečnou aplikaci (partial application) `str_pad(?, 10, '-')`, `#[\Override]` u konstanty | hodnota vrácená z konstruktoru, `return` ve `finally`, jména `let` a `is`, `doubleval()` |
+
+
+Jak to vypadá
+=============
+
+Tyhle čtyři řádky jsou psané pro PHP 8.0. Projekt teď přechází na PHP 8.6 a jeho konfigurace ke standardu přidává sadu `modernizations`:
+
+```neon
+use:
+	- perCs
+	- modernizations
+targets:
+	php: '8.6'
+```
+
+```php .[before]
+$isExternal = strpos($url, '://') !== false;
+$author = $article === null ? null : $article->getAuthor();
+$slug = trim(strtolower(strip_tags($title)));
+$rating = max(0, min(5, $votes));
+```
+
+Po jednom `dresscode fix`:
+
+```php .[after]
+$isExternal = str_contains($url, '://');
+$author = $article?->getAuthor();
+$slug = $title |> strip_tags(...) |> strtolower(...) |> trim(...);
+$rating = clamp($votes, 0, 5);
+```
+
+Každý řádek je jedna novinka PHP: funkce `str_contains()` a operátor `?->` z PHP 8.0, pipe operátor `|>` z PHP 8.5 a funkce `clamp()` z PHP 8.6. Co přinesly ostatní verze, ukazuje [tabulka nahoře |#Verze PHP].
+
+
+Přepis a formátování v jednom
+=============================
+
+Rozhodnutí `upgrading.syntax.pipe`, které z vnořených volání dělá pipe, neřeší odsazení, mezery ani to, kam patří závorka. To obstarají rozhodnutí vašeho standardu, a to v tomtéž běhu: DressCode pouští pravidla opakovaně, dokud se kód nepřestane měnit, takže nový kód dostane přesně tu podobu, jakou by mu standard dal, kdybyste ho napsali ručně. A protože pracuje nad [bezztrátovým stromem |how-it-works#Syntaktický strom místo pole tokenů], řádky, na které žádné pravidlo nesáhlo, zůstanou bajt po bajtu stejné. V projektu, který DressCode už používá, tak diff obsahuje přechod na novou verzi PHP a nic jiného.
+
+Pro vás to znamená jeden nástroj, jednu konfiguraci a jeden krok v průběžné integraci. Tatáž konfigurace, která při každém commitu hlídá styl, převede kód na novou verzi PHP v den, kdy ji zvednete.
+
+
+Verze z composer.json rozhoduje
+===============================
+
+Pro jakou verzi PHP je kód psaný, čte DressCode z `require.php` v `composer.json`: bere nejnižší verzi, kterou omezení dovoluje, protože na ní musí kód fungovat. PHP, na kterém DressCode zrovna běží, nerozhoduje. Composer sám dolní mez nezvedne, ani když projekt běží na novějším PHP. Zvedne ji `config.platform.php` v `composer.json`: s `^8.1` a platformou `8.3` rozhoduje PHP 8.3. Jinou verzi určí jen klíč `targets` v konfiguraci, třeba `targets: {php: '8.3'}`, a ten má přednost. Nejstarší verze, pro kterou DressCode kód opravuje, je PHP 8.0: když projekt dovoluje starší, kontroluje ho jako PHP 8.0 a upozorní, že oprava může napsat syntaxi, kterou starší verze nemá. Každé rozhodnutí, které zapisuje syntaxi nebo funkci novějšího PHP, ví, od které verze ji jazyk má, a pod ní tiše čeká. Nemusíte tedy nic hlídat: dokud projekt dovoluje PHP 8.3, `array_any()` se do kódu nedostane, a v den, kdy omezení zvednete na `^8.4`, přepis začne platit. Co čeká, řekne `dresscode config`:
+
+/--pre .[terminal]
+upgrading:
+	functions:
+		arraySearchFunctions: required          # dresscode/modernizations, no effect: php
+		arrayFirstLast: required                # dresscode/modernizations, no effect: php
+\--
+
+Rozhodnutí pro přechod na novější PHP sdružuje [sada |configuration#Standardy a sady] `modernizations`. Žádný standard ji nenese, protože přepis na novější PHP je věc aktualizace, ne měřítko každodenní kontroly. Přidejte si ji ke svému standardu:
+
+```neon
+use:
+	- perCs
+	- modernizations
+```
+
+
+Co všechno se přepíše
+=====================
+
+Kromě toho, co přinesla jednotlivá verze, přepisuje sada `modernizations` kód i na zápisy, které PHP umělo už před verzí 8.0: anonymní funkci, která jen vrací výraz, na arrow funkci `fn`; ternární operátor, který testuje `null`, na `??`; ternární operátor, který opakuje podmínku, na `?:`; `array()` a `list()` na `[]`; přiřazení, které opakuje svůj cíl, na `+=`, `??=` a spol.; řetěz `isset() && isset()` na jedno `isset()`; několik `unset()` za sebou na jedno; `if` a `else`, které jen vybírají jednu ze dvou hodnot, na ternární operátor; `__CLASS__` a `get_class()` bez argumentu na `self::class`.
+
+Tyhle přepisy zapne sada `modernizations`, stejně jako přepisy novějších verzí z [tabulky nahoře |#Verze PHP], a každá položka má v sekci [`upgrading` |decisions/upgrading] vlastní klíč, který projekt může napsat i sám (`upgrading.syntax.match: required`). Atribut `#[\Deprecated]` mění chování programu ze své podstaty, protože zastaralá metoda začne za běhu hlásit, že je zastaralá. Každá jeho oprava je proto riziková (risky fix) a udělá se, až rozhodnutí `upgrading.phpdoc.deprecated` uvedete v klíči `fixRisky`, viz [dál |#Rizikové opravy]. Rizikové můžou být i přepisy na `array_any()` a jeho sourozence, protože ty volají callback i s klíčem a jen dokud neznají odpověď, a přepisy na částečnou aplikaci a na `clone()`, protože jejich argumenty se vyhodnotí jednou, hned při vytvoření; kde kód ukazuje, že na tom nezáleží, udělá se oprava rovnou.
+
+Sada `modernizations` také ohlásí metody `__sleep()` a `__wakeup()`, které PHP 8.5 označilo za překonané ve prospěch `__serialize()` a `__unserialize()`; přepsat je nejde, protože by se změnil formát uložených dat. Píše i zkrácený zápis `new Foo()->bar()` z PHP 8.4, tedy bez závorek kolem `new` (`classes.instantiationWrapping: forbidden`), a sada `cleanup` podle verze PHP odstraní, co novější PHP už nepotřebuje: proměnnou v `catch`, kterou blok nečte (8.0), atribut `#[\ReturnTypeWillChange]` u metody, která návratový typ už deklaruje (8.1), a argument, který PHP přestalo číst. Návratový typ `never` z PHP 8.1 přidá sada `types` rozhodnutími skupiny `mistakes.neverReturnType`.
+
+Atribut `#[\Override]` z PHP 8.3 žádná sada nenese, protože nenahrazuje starší zápis, ale přidává záruku, pro kterou se projekt rozhoduje sám: napíše `upgrading.classes.Override: required`. DressCode pak doplní atribut k metodě, která přepisuje metodu rodiče, od PHP 8.5 i k vlastnosti a od PHP 8.6 ke konstantě a k `case` výčtu. Implementaci abstraktní metody nebo metody rozhraní vynechá, tu PHP pohlídá samo. Co třída dědí, mu řeknou [typy z PHPStanu |phpstan-types].
+
+Sada `modernizations` dá také `readonly` celé třídě `final`, jejíž vlastnosti jsou všechny `readonly` (PHP 8.2), místo `readonly` u každé z nich. Samotné `readonly` u vlastnosti, kterou zapisuje jen konstruktor (8.1), žádná sada nenese: stejně jako `#[\Override]` nenahrazuje starší zápis, ale přidává záruku, a projekt ho zapne rozhodnutím `mistakes.readonlyProperty: required` ze sekce [`mistakes` |decisions/mistakes]. Od PHP 8.6 dostane `readonly` i vlastnost s výchozí hodnotou, kterou nikdo nezapisuje, ani konstruktor. Rizikové je `readonly` u vlastnosti, která není privátní, protože kód, který ji zapisuje zvenku, v souboru vidět není; takovou vlastnost DressCode zvažuje jen ve třídě `final`. Klíčové slovo `readonly` místo anotace `@readonly` (8.1) se týká návrhu vašeho kódu, žádná sada ho nenese a zapnete ho sami, až se pro něj rozhodnete. Jeho oprava je riziková vždy: anotace jen žádá analyzátor, aby si stěžoval, kdežto PHP při zápisu, který anotace propustila, třeba z hydrátoru nebo při klonování, vyhodí `Error`. Obě rizikové opravy se udělají, až rozhodnutí uvedete v klíči `fixRisky`:
+
+```neon
+use:
+	- perCs
+	- modernizations
+
+mistakes:
+	readonlyProperty: required
+
+upgrading:
+	phpdoc:
+		readonly: required
+
+fixRisky:
+	- mistakes.readonlyProperty
+	- upgrading.phpdoc.readonly
+```
+
+
+Co novější PHP zavrhlo
+======================
+
+Nová verze PHP věci nejen přidává, ale i zavrhuje, a na zavržené věci v kódu pak za běhu upozorňuje. Sada `deprecations` opraví, co má přímou náhradu, a zbytek ohlásí. Zavrženou věc hlásí, kdykoli omezení v `composer.json` dovoluje verzi, která ji zavrhla: kód psaný pro `^8.1` jednou poběží na PHP 8.4, takže se v něm ohlásí i `E_STRICT`, které PHP 8.4 zavrhlo. Co která verze zavrhla, ukazuje [tabulka nahoře |#Verze PHP].
+
+Co PHP zavrhlo, zná DressCode jako data pro upgrade balíčku `php`, zapsaná stejně jako [data knihoven |replacement-maps]. Zapíná je požadavek `upgrading.php.deprecatedApi` a pod ním se také hlásí, co data najdou, takže ho jmenujete v `--only`, `severity` i v komentáři `dresscode:ignore`. Funkce nebo konstanta bez přímé náhrady se ohlásí i s verzí, která ji zavrhla, <code>''Function `strftime()` is deprecated: since PHP 8.1.''</code>; každá chce jiný zásah. Jednotlivou položku dat vyjme hodnota `keep` v mapě, do které patří, třeba `upgrading: api: replacedCalls: {'curl_close($handle)': keep}`.
+
+Zastaralou metodu třídy PHP přepíše DressCode jen tam, kde zná typ objektu, viz [Typy |phpstan-types]. Přepis `utf8_encode()` na `mb_convert_encoding()` je riziková oprava, protože ta funkce potřebuje rozšíření mbstring. Hodnoty argumentů, které PHP zavrhlo, třeba `E_USER_ERROR` v `trigger_error()`, hlásí samostatné rozhodnutí `upgrading.php.deprecatedArgument`. Tatáž sada přepisuje i zastaralé API knihoven, viz [Upgrade kódu |upgrade], a přidáte ji vedle `modernizations`:
+
+```neon
+use:
+	- perCs
+	- modernizations
+	- deprecations
+```
+
+
+Rizikové opravy
+===============
+
+Některé přepisy můžou změnit, co kód dělá, a DressCode je proto sám od sebe neudělá. Typickým příkladem je `switch` na `match`: `switch` porovnává volně a `match` přísně, takže `case 1` dnes zachytí i řetězec `'1'`, kdežto větev `1 =>` v `match` už ne. Taková riziková oprava se jen ohlásí a udělá se, až rozhodnutí uvedete v klíči `fixRisky`, nebo na jeden běh s přepínačem `--fix-risky`. S [typy |phpstan-types] ji DressCode udělá sám tam, kde typy řeknou, že se porovnávají celá čísla nebo případy enumu, protože tam oba způsoby porovnání dávají totéž.
+
+```neon
+fixRisky:
+	- upgrading.syntax.match
+```
+
+Než rozhodnutí do `fixRisky` zapíšete, vyplatí se dodat DressCode, co mu chybí: kde by o opravě rozhodly typy nebo jméno funkce, ohlásí ji jen jako varování a shrnutí řekne, co zapnout.
+
+Rizikový bývá i obyčejný přepis na `str_contains()`, když kód leží ve jmenném prostoru. Nekvalifikované `strpos()` v prostoru `App` může být za běhu funkce `App\strpos()` a z jednoho souboru se to poznat nedá. Když konfigurace řekne `nameResolution: certain`, tahle nejistota zmizí a s ní i riziko, viz [Funkce a konstanty ve jmenných prostorech |php-functions-in-namespaces].
+
+Jedno DressCode neudělá nikdy, ani s `--fix-risky`: nenapíše kód, který nepůjde přeložit. Riziková oprava smí změnit chování, ale o tom, jestli se kód přeloží, nesmí rozhodovat soubor, který DressCode zrovna nevidí. Proto `readonly` dostane jen privátní vlastnost nebo vlastnost finální třídy: potomek v jiném souboru by jinak mohl vlastnost předeklarovat a to je v PHP fatální chyba, ne změna chování.
+
+
+Nové PHP dřív, než ho dohoní nástroje
+=====================================
+
+PHP 8.6 má vyjít 19. listopadu 2026 a DressCode už dnes přepisuje na jeho funkci `clamp()` a na částečnou aplikaci a hlásí, co tahle verze zavrhla. Syntaxi nové verze přitom rozumí, i když sám běží na starší: parser [PhpSyntax |phpsyntax:] čte zdrojový kód tokenizérem PHP, tokeny, které běžící interpret ještě nezná, si doplní sám a stavbu kódu skládá vlastní gramatikou. DressCode spuštěný na PHP 8.4 tak přečte soubor s pipe operátorem z PHP 8.5, který samo PHP 8.4 odmítne jako syntaktickou chybu.
+
+Nástroje, jejichž pravidla pracují přímo s plochým polem tokenů, to mají těžší, a nejde o chybu jejich autorů. Každé z desítek pravidel si novou syntaxi musí ošetřit samo, a dokud to neudělá, může nový kód poškodit. PHP CS Fixer se proto na PHP 8.4 odmítal spustit až do července 2025, 227 dní po jeho vydání; pustit šel jen s proměnnou prostředí `PHP_CS_FIXER_IGNORE_ENV` a s vlastním varováním, že kód může změnit špatně. Z té doby jsou v jeho issue trackeru hlášení o tom, jak jednotlivé fixery přepsaly property hooks na kód, který nešel přeložit. PHP_CodeSniffer property hooks nepodporuje ani dnes, bezmála dva roky po vydání PHP 8.4.
+
+Léta jsem při každé nové verzi PHP čekal, až ji nástroje na kontrolu stylu doženou, a novou syntaxi do kódu nepsal, dokud to nešlo. S DressCode je to obráceně: nástroj je na novou verzi připravený dřív než projekt.
+
+
+Jak na přechod v praxi
+======================
+
+1. Začněte s čistým pracovním stromem, ať v diffu vidíte jen to, co udělal DressCode.
+2. Zvedněte dolní mez `require.php` v `composer.json` na verzi, na kterou přecházíte, a uvádí-li ho projekt, i `config.platform.php`.
+3. Pusťte `dresscode fix`, má-li konfigurace sady `modernizations` a `deprecations`. Bez nich, nebo když chcete styl nechat být, pusťte [`dresscode upgrade today --modernize` |upgrade]: sady si zapne sám a ze stylu projektu vezme jen to, co kód už dodržuje. Co se opravit nedalo nebo čeká na svolení, zůstane ve výpisu a shrnutí řekne, co rizikové opravy rozhodne: typy, `nameResolution`, nebo vy.
+4. Dodejte, co shrnutí radí. Zbylé rizikové nálezy projděte a rozhodněte, která rozhodnutí uvedete v `fixRisky`, nebo je s `--ask-risky` posuďte jeden po druhém.
+5. Výsledek commitněte samostatně, bez jiných změn.
+
+Nemusíte přitom skákat rovnou na nejnovější verzi. Když projekt přechází po jedné verzi, udělejte pro každou vlastní commit; rozhodnutí se řídí tím, co zrovna povoluje `composer.json`.
+
+
+Kam dál
+=======
+
+- [Typy z PHPStanu |phpstan-types], aby DressCode doplnil `#[\Override]`, přepsal zastaralé API a poznal, že řetězec je jméno třídy.
+- [Upgrade kódu |upgrade], když s novou verzí PHP přechází i Nette nebo jiná knihovna.
+- [Sekce upgrading |decisions/upgrading] se všemi rozhodnutími o přechodu na novější PHP a [sada `modernizations` |php-coding-standards#modernizations] celá.
+
+{{maintitle: Automatický přechod PHP kódu z 8.0 na 8.6}}
+{{description: DressCode přepíše kód z PHP 8.0 na syntaxi a funkce novějších verzí až po PHP 8.6 a v témž běhu ho zformátuje. Pipe operátor, array_any(), match, clamp() a další.}}

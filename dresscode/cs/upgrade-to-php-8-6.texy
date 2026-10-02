@@ -1,0 +1,173 @@
+Přechod na PHP 8.6
+******************
+
+.[perex]
+PHP 8.6 vyjde 19. listopadu 2026, ale kód na něj můžete ve větvi převést už dnes, a DressCode to zvládne, i když sám běží na PHP 8.4 nebo 8.5. Z `max(0, min(5, $votes))` udělá `clamp($votes, 0, 5)` a z `fn($x) => str_pad($x, 10, '-')` částečnou aplikaci funkce (partial function application) `str_pad(?, 10, '-')`. Co PHP 8.6 zavrhlo, opraví nebo ohlásí.
+
+
+Jak to vypadá
+=============
+
+Tahle třída vznikla pro PHP 8.5 a projekt teď vyžaduje PHP 8.6. Konfigurace přidává ke standardu sady `modernizations` a `deprecations`, `nameResolution: certain` ujišťuje DressCode, že jmenné prostory projektu žádné vlastní funkce nedeklarují, a `targets` určuje cílovou verzi PHP, kterou by jinak vzal z `composer.json`:
+
+```neon
+use:
+	- perCs
+	- modernizations
+	- deprecations
+
+nameResolution: certain
+
+targets:
+	php: '8.6'
+```
+
+```php .[before]
+final class Rating
+{
+    /** @param list<int> $votes */
+    public function __construct(
+        private array $votes,
+    ) {
+        return $this;
+    }
+
+    public function stars(int $votes): int
+    {
+        return max(0, min(5, $votes));
+    }
+
+    /**
+     * @param list<string> $names
+     * @return list<string>
+     */
+    public function labels(array $names): array
+    {
+        return array_map(fn($name) => str_pad($name, 10, '-'), $names);
+    }
+
+    public function isValid(mixed $value): bool
+    {
+        return is_integer($value);
+    }
+}
+```
+
+Po jednom `dresscode fix`:
+
+```php .[after]
+final class Rating
+{
+    /** @param list<int> $votes */
+    public function __construct(
+        private array $votes,
+    ) {}
+
+    public function stars(int $votes): int
+    {
+        return clamp($votes, 0, 5);
+    }
+
+    /**
+     * @param list<string> $names
+     * @return list<string>
+     */
+    public function labels(array $names): array
+    {
+        return array_map(str_pad(?, 10, '-'), $names);
+    }
+
+    public function isValid(mixed $value): bool
+    {
+        return is_integer($value);
+    }
+}
+```
+
+Každá změna je jedna novinka PHP 8.6: funkce `clamp()`, částečná aplikace se zástupným znakem `?` a hodnota vrácená z konstruktoru, kterou PHP 8.6 zavrhlo. Bez `return` je tělo konstruktoru prázdné a standard ho zapíše jako `{}`. Funkce `is_integer()` zůstane a jen se ohlásí, protože sada `deprecations` zavrženou funkci nepřepisuje; na `is_int()` by ji přepsala sada `cleanup`.
+
+
+Co se přepíše
+=============
+
+Sada `modernizations` přepíše kód na to, co přineslo PHP 8.6. Každá položka je rozhodnutí, které projekt může zapnout i samotné.
+
+| novinka | před | po | oprava |
+|---|---|---|---|
+| `clamp()`, `upgrading.functions.clamp` | `max(0, min(5, $votes))` | `clamp($votes, 0, 5)` | opraví se; riziková, pokud nejsou obě meze čísla, protože `clamp()` odmítne minimum větší než maximum |
+| částečná aplikace, `upgrading.syntax.firstClassCallables` | `fn($x) => str_pad($x, 10, '-')` | `str_pad(?, 10, '-')` | opraví se; riziková, kde by se argument vyhodnotil dřív nebo předal referencí |
+| `#[\Override]` na konstantě a případu výčtu, `upgrading.classes.Override` | `public const TABLE = 'children';` | `#[\Override] public const TABLE = 'children';` | v žádné sadě, zapněte si ho sami; potřebuje typy |
+| `readonly` s výchozí hodnotou, `mistakes.readonlyProperty` | `private int $limit = 10;` | `private readonly int $limit = 10;` | v žádné sadě; jen kde vlastnost nikdo nezapisuje |
+
+Částečná aplikace je totéž rozhodnutí jako first-class callable `strlen(...)` z PHP 8.1: closure (anonymní funkce), která jen předává své parametry jednomu volání, se změní na samotné volání se `?` místo každého parametru. Closure, která dělá víc, má typovaný parametr nebo parametr s výchozí hodnotou, nebo čte vnější rozsah, zůstane, jak je.
+
+.[note]
+Každé rozhodnutí ví, ve které verzi PHP jeho konstrukce přišla. Dokud `composer.json` dovoluje ještě PHP 8.5, přepisy na 8.6 tiše čekají a `dresscode config` u nich vypíše, že nemají účinek.
+
+
+Co PHP 8.6 zavrhlo
+==================
+
+Sada `deprecations` opraví, co má přímou náhradu, a zbytek ohlásí i s verzí, která ho zavrhla. Zavržení se hlásí bez ohledu na cílovou verzi, takže zavržené věci můžete uklidit ještě před přechodem.
+
+| zavržené | DressCode |
+|---|---|
+| hodnota vrácená z konstruktoru nebo destruktoru | opraví se: `return $this;` zmizí, vrácené volání zůstane jako příkaz, takže zůstane i jeho účinek |
+| konstruktor nebo destruktor, který je generátor | ohlásí se |
+| `return` ve `finally` | ohlásí se |
+| jména `let` a `is` pro třídu, funkci nebo konstantu, `readonly` pro funkci, `namespace` pro konstantu třídy | ohlásí se, nic se nepřejmenuje |
+| `doubleval()`, `is_double()`, `is_integer()`, `is_long()` | ohlásí se; sada `cleanup` je přepíše na `floatval()`, `is_float()` a `is_int()` |
+| `mb_ereg()` a další funkce `mb_ereg*`, `mb_split()`, `mb_regex_encoding()`, `mb_regex_set_options()` | ohlásí se |
+| `spl_object_hash()`, `strcoll()`, `metaphone()`, `spl_classes()`, `mysqli_get_charset()`, `mysqli_stmt_init()` | ohlásí se: žádná náhrada se nechová stejně |
+| třetí argument `define()` | opraví sada `cleanup`: argument zmizí |
+| `?array` jako návratový typ `__debugInfo()` | opraví sada `correctness`: `array` |
+
+Nález jmenuje verzi, která věc zavrhla:
+
+/--pre .[terminal]
+src/Rating.php:28:16: error: Function `is_integer()` is deprecated: since PHP 8.6. [upgrading.php.deprecatedApi]
+\--
+
+
+Rizikové opravy
+===============
+
+Přepis, který může změnit, co kód dělá, se jen ohlásí a udělá se, až jeho rozhodnutí uvedete ve `fixRisky`. Oba nové přepisy takové případy mají. `clamp()` vyhodí chybu, když je minimum větší než maximum, kdežto `max($lo, min($x, $hi))` potichu něco vrátí, takže s mezemi, které nejsou čísla, oprava čeká. Částečná aplikace vyhodnotí argumenty, když vzniká, ne když se volá, takže čeká i `fn($x) => array_slice($x, 0, $this->limit)`:
+
+```neon
+fixRisky:
+	- upgrading.functions.clamp
+	- upgrading.syntax.firstClassCallables
+```
+
+.[warning]
+Ve jmenném prostoru může být nekvalifikované `min()` funkcí toho jmenného prostoru. Dokud konfigurace neřekne `nameResolution: certain`, přepisy takových volání čekají jako rizikové, viz [Funkce a konstanty ve jmenných prostorech |php-functions-in-namespaces].
+
+
+Připraveno před vydáním
+=======================
+
+DressCode čte syntaxi PHP 8.6, i když běží na PHP 8.4 nebo 8.5. Jeho parser [PhpSyntax |phpsyntax:] doplní tokeny, které běžící interpret ještě nezná, takže soubor se `str_pad(?, 10, '-')` je soubor jako každý jiný a pravidla vašeho standardu ho zformátují. Verzi můžete zvednout a kód přepsat v den vydání PHP 8.6, nebo už před ním ve větvi.
+
+
+Krok za krokem
+==============
+
+1. Začněte s čistým pracovním stromem, ať diff ukáže jen to, co udělal DressCode.
+2. Změřte, kolik práce přechod dá: `dresscode upgrade estimate php 8.6`. Uvádí-li projekt `config.platform.php`, zvedněte ho na 8.6 předem.
+3. Uložte plán a proveďte ho: `dresscode upgrade plan php 8.6 --save`, pak `dresscode upgrade run`. U kroku Composeru se DressCode zeptá, jestli smí zvednout `require.php` na `^8.6`; zvednout ho můžete i sami a pak pustit `upgrade run`.
+4. Projděte, co zůstalo na vás, a pusťte `upgrade run` znovu, dokud běh neskončí řádkem `UPGRADED`. Rizikové opravy, které čekají, rozhodnou typy, `nameResolution`, nebo vy.
+5. Výsledek commitněte samostatně, bez jiných změn.
+
+Má-li projekt sady `modernizations` a `deprecations` v konfiguraci, stačí po zvednutí `require.php` obyčejný `dresscode fix`. Celý postup s testy a commity popisuje [Upgrade kódu krok za krokem |upgrade].
+
+
+Kam dál
+=======
+
+- [Přechod na novější PHP |upgrading-php], ostatní verze od PHP 8.0.
+- [Typy z PHPStanu |phpstan-types], aby `#[\Override]` dostaly i konstanty.
+- [Sekce upgrading |decisions/upgrading] se všemi rozhodnutími o novějším PHP.
+
+{{maintitle: Přechod na PHP 8.6: automatický přepis kódu}}
+{{description: Přechod na PHP 8.6 ještě před jeho vydáním: DressCode přepíše kód na clamp() a částečnou aplikaci funkcí a opraví nebo ohlásí, co PHP 8.6 zavrhlo.}}

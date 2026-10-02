@@ -1,0 +1,272 @@
+Přechod na PHP 8.4
+******************
+
+.[perex]
+Při přechodu na PHP 8.4 změní DressCode `foreach`, který hledá první shodu, na `array_find()`, `int $x = null` na `?int $x = null` a `(new Foo())->bar()` na `new Foo()->bar()`. Co PHP 8.4 zavrhlo a má přímou náhradu, rovnou opraví; zbytek, třeba `E_STRICT`, ohlásí. Přepsaný kód přitom v tomtéž běhu oblékne podle vašeho standardu.
+
+
+Jak to vypadá
+=============
+
+Třída `Invoice` je psaná pro PHP 8.3. Jakmile projekt začne vyžadovat PHP 8.4, změní se v ní šest míst. Konfigurace přidává ke standardu sady `modernizations` a `deprecations`. `nameResolution: certain` říká, že jmenné prostory projektu žádné vlastní funkce nedeklarují, takže `round()` i `fputcsv()` jsou jistě vestavěné funkce PHP. Klíč `targets` udává cílovou verzi PHP, kterou by DressCode jinak vyčetl z `composer.json`:
+
+```neon
+use:
+	- perCs
+	- modernizations
+	- deprecations
+
+nameResolution: certain
+
+targets:
+	php: '8.4'
+```
+
+```php .[before]
+final class Invoice
+{
+    /** @param list<Item> $items */
+    public function __construct(
+        private array $items,
+    ) {}
+
+    public function hasGift(): bool
+    {
+        foreach ($this->items as $item) {
+            if ($item->isGift()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public function findItem(string $sku): ?Item
+    {
+        foreach ($this->items as $item) {
+            if ($item->sku === $sku) {
+                return $item;
+            }
+        }
+        return null;
+    }
+
+    public function price(Item $item, Discount $discount = null): float
+    {
+        return round($item->price * ($discount?->ratio ?? 1), 2, PHP_ROUND_HALF_UP);
+    }
+
+    public function export(string $file): void
+    {
+        $handle = fopen($file, 'w');
+        foreach ($this->items as $item) {
+            fputcsv($handle, [$item->sku, $this->price($item)]);
+        }
+    }
+
+    public function render(): string
+    {
+        return (new InvoiceTemplate())->render($this->items);
+    }
+}
+```
+
+Po jednom `dresscode fix`:
+
+```php .[after]
+final class Invoice
+{
+    /** @param list<Item> $items */
+    public function __construct(
+        private array $items,
+    ) {}
+
+    public function hasGift(): bool
+    {
+        return array_any($this->items, fn($item) => $item->isGift());
+    }
+
+    public function findItem(string $sku): ?Item
+    {
+        return array_find($this->items, fn($item) => $item->sku === $sku);
+    }
+
+    public function price(Item $item, ?Discount $discount = null): float
+    {
+        return round($item->price * ($discount?->ratio ?? 1), 2, RoundingMode::HalfAwayFromZero);
+    }
+
+    public function export(string $file): void
+    {
+        $handle = fopen($file, 'w');
+        foreach ($this->items as $item) {
+            fputcsv($handle, [$item->sku, $this->price($item)], escape: '\\');
+        }
+    }
+
+    public function render(): string
+    {
+        return new InvoiceTemplate()->render($this->items);
+    }
+}
+```
+
+Čtyři změny využívají novinky PHP 8.4: ze dvou smyček se staly `array_any()` a `array_find()`, režim zaokrouhlení je teď případ výčtu `RoundingMode` a `new` už kolem sebe nepotřebuje závorky. Zbylé dvě řeší, co PHP 8.4 zavrhlo: parametr `$discount` dostal svůj `?` a `fputcsv()` předává argument `escape` výslovně, se zpětným lomítkem, které bylo dosud výchozí, takže soubor CSV zůstane stejný.
+
+
+Co se přepíše
+=============
+
+Sada `modernizations` přepíše kód tak, aby využíval, co PHP 8.4 přidalo. Za každou novinkou stojí rozhodnutí, které projekt může zapnout i bez sady, třeba zápisem `upgrading.functions.roundingMode: required`.
+
+| novinka | před | po | oprava |
+|---|---|---|---|
+| `array_any()`, `array_all()`, `array_find()`, `array_find_key()`, `upgrading.functions.arraySearchFunctions` | `foreach`, který vrací první vyhovující položku | `array_find($items, fn($item) => $item->sku === $sku)` | opraví se; riziková, kde smyčka může procházet objekt |
+| tytéž funkce místo `array_filter()` | `array_key_first(array_filter($a, fn($v) => $v === 0))` | `array_find_key($a, fn($v) => $v === 0)` | opraví se; riziková, kde callback může dělat víc než porovnávat |
+| `RoundingMode`, `upgrading.functions.roundingMode` | `round($x, 2, PHP_ROUND_HALF_UP)` | `round($x, 2, RoundingMode::HalfAwayFromZero)` | opraví se |
+| `new` bez závorek, `classes.instantiationWrapping` | `(new Foo())->bar()` | `new Foo()->bar()` | opraví se; vyžadují ho i standardy `perCs` a `nette` |
+| `#[\Deprecated]`, `upgrading.phpdoc.deprecated` | `/** @deprecated 2.1 use format() */` | `#[\Deprecated('use format()', since: '2.1')]` | riziková: PHP pak hlásí každé použití zastaralého kódu |
+
+.[note]
+Přepis na PHP 8.4 projekt nepředběhne. Dokud `require.php` v `composer.json` dovoluje PHP 8.3, žádné `array_find()` se v kódu neobjeví a `dresscode config` u rozhodnutí vypíše `no effect: php`.
+
+
+Co PHP 8.4 zavrhlo
+==================
+
+Sada `deprecations` opraví, co má přímou náhradu, a zbytek ohlásí i s verzí, která ho zavrhla. Pracuje i v projektu, který ještě dovoluje PHP 8.1: jeho kód jednou poběží na PHP 8.4, takže uklidit můžete ještě před přechodem.
+
+| zavržené | DressCode |
+|---|---|
+| parametr, který připouští `null` jen díky výchozí hodnotě, `int $x = null` | opraví se: `?int $x = null` |
+| výchozí `escape` u `fputcsv()`, `fgetcsv()` a `str_getcsv()` | opraví se: argument `escape` se vypíše se zpětným lomítkem, které měl jako výchozí |
+| `E_STRICT` | ohlásí se |
+| `E_USER_ERROR` předaný `trigger_error()` | ohlásí se: místo něj vyhoďte výjimku |
+| `_` jako jméno třídy | ohlásí se |
+| `lcg_value()`, `mysqli_ping()`, `mysqli_kill()`, `mysqli_refresh()`, `xml_set_object()`, `intlcal_set()`, `intlgregcal_create_instance()` | ohlásí se |
+| `DOM_PHP_ERR`, `SOAP_FUNCTIONS_ALL`, `SUNFUNCS_RET_*`, `MYSQLI_STORE_RESULT_COPY_DATA` | ohlásí se |
+
+Každý nález říká, od které verze PHP je věc zavržená:
+
+/--pre .[terminal]
+src/Bootstrap.php:11:34: error: Constant `E_STRICT` is deprecated: since PHP 8.4. [upgrading.php.deprecatedApi]
+src/Config.php:17:47: error: Passing `E_USER_ERROR` to `trigger_error()` is deprecated since PHP 8.4 in favor of throwing an exception. [upgrading.php.deprecatedArgument]
+\--
+
+
+Co zbude na vás
+===============
+
+DressCode nenajde všechno, co PHP 8.4 zavrhlo. Metody `SplFileObject` pro CSV nechá být, protože z kódu není poznat, na jakém objektu se volají. Neohlásí konstanty `CURLOPT_BINARYTRANSFER`, `MYSQLI_REFRESH_*` a `SID`, `DatePeriod` vytvořený z řetězce, umocnění nuly na záporný exponent ani nastavení session jako `session.sid_length`. Ty zkontrolujte ručně podle [souboru UPGRADING k PHP 8.4 |https://github.com/php/php-src/blob/php-8.4.0/UPGRADING], který vyjmenovává všechna zavržení této verze.
+
+
+Rizikové opravy
+===============
+
+Přepis, který může změnit, co kód dělá, počká, dokud jeho rozhodnutí neuvedete ve `fixRisky`. U PHP 8.4 je to především `#[\Deprecated]`. Anotace `@deprecated` jen informuje čtenáře, kdežto atribut přiměje PHP hlásit zavržení při každém použití. DressCode přesune verzi z anotace do `since` a zbytek textu do zprávy. V PHP 8.4 patří atribut na funkci, metodu, konstantu třídy a případ výčtu; trait a konstanta deklarovaná přes `const` ho berou až od PHP 8.5.
+
+```neon
+use:
+	- perCs
+	- modernizations
+
+fixRisky:
+	- upgrading.phpdoc.deprecated
+
+targets:
+	php: '8.4'
+```
+
+```php .[before]
+class Invoice
+{
+    /** @deprecated 2.1 use format() */
+    public function toString(): string
+    {
+        return $this->format();
+    }
+}
+```
+
+```php .[after]
+class Invoice
+{
+    #[\Deprecated('use format()', since: '2.1')]
+    public function toString(): string
+    {
+        return $this->format();
+    }
+}
+```
+
+Nové funkce pro pole berou jen pole a callback volají jen do chvíle, kdy znají odpověď. Přepis proto počká u `foreach` přes `iterable` nebo přes hodnotu neznámého typu a u `array_filter()` s callbackem, který volá metodu, protože takový callback může počítat svá volání nebo u pozdější položky vyhodit výjimku. Které smyčky procházejí pole, řeknou DressCode [typy z PHPStanu |phpstan-types]; o zbytku rozhodnete případ od případu s `dresscode fix --ask-risky`.
+
+.[warning]
+Ve jmenném prostoru může `round()` nebo `fputcsv()` bez úvodního zpětného lomítka znamenat funkci téhož jmenného prostoru. DressCode taková volání přepíše, jen když konfigurace říká `nameResolution: certain`; do té doby jejich přepis čeká jako rizikový, viz [Funkce a konstanty ve jmenných prostorech |php-functions-in-namespaces].
+
+
+Property hooks
+==============
+
+PHP 8.4 přidalo také property hooks, kód, který běží při čtení nebo zápisu vlastnosti. Jde o novou syntaxi, ne o kratší zápis staré, takže žádné rozhodnutí na ně kód nepřepisuje. DressCode je ale čte jako každý jiný kód. Jeho parser [PhpSyntax |phpsyntax:] staví syntaktický strom podle gramatiky PHP, takže tělo property hooku je tělo jako každé jiné a dosáhnou do něj přepisy i pravidla vašeho standardu:
+
+```neon
+use:
+	- perCs
+	- modernizations
+
+targets:
+	php: '8.4'
+```
+
+```php .[before]
+final class User
+{
+    public string $email {
+        set(string $value) {
+            if (strpos($value, '@') === false) { throw new ValueError('Invalid e-mail'); }
+            $this->email = strtolower($value);
+        }
+    }
+}
+```
+
+```php .[after]
+final class User
+{
+    public string $email {
+        set(string $value) {
+            if (!str_contains($value, '@')) {
+                throw new ValueError('Invalid e-mail');
+            }
+            $this->email = strtolower($value);
+        }
+    }
+}
+```
+
+Nástroje, jejichž pravidla pracují přímo s plochým polem tokenů, to mají s novou syntaxí těžší, a není to vina jejich autorů: každé pravidlo se ji musí naučit samo. Skoro dva roky po vydání PHP 8.4 vede [issue PHP_CodeSnifferu |https://github.com/PHPCSStandards/PHP_CodeSniffer/issues/734], které novou syntaxi sleduje, podporu zápisu property hooků v tokenizeru pořád mezi úkoly, na které teprve dojde.
+
+
+Krok za krokem
+==============
+
+DressCode sám potřebuje PHP 8.4, takže v projektu, který ještě běží na PHP 8.3, ho nainstalujte [globálně |upgrade#Kde DressCode běží], ne jako vývojovou závislost.
+
+1. Rozdělanou práci commitněte nebo odložte, ať diff obsahuje jen to, co změnil DressCode.
+2. Zjistěte, kolik míst se změní: `dresscode upgrade estimate php 8.4`. Nastavuje-li `composer.json` klíč `config.platform.php`, zvedněte ho na 8.4 ještě předtím.
+3. Naplánujte přechod a proveďte ho: `dresscode upgrade plan php 8.4 --save`, pak `dresscode upgrade run`. Než DressCode zvedne `require.php` na `^8.4`, zeptá se; zvednete-li ho sami, pusťte potom prostě `upgrade run`.
+4. Projděte, co vám DressCode nechal, včetně rizikových oprav, které čekají na typy, na `nameResolution` nebo na vaše rozhodnutí, a opakujte `upgrade run`, dokud neskončí řádkem `UPGRADED`.
+5. Přechod commitněte zvlášť, bez jiných změn.
+
+Má-li konfigurace už sady `modernizations` a `deprecations`, stačí zvednout `require.php` a spustit `dresscode fix`. Celý postup s testy, commity a ručními úkoly popisuje [Upgrade kódu krok za krokem |upgrade].
+
+
+Kam dál
+=======
+
+- [Přechod na novější PHP |upgrading-php], PHP 8.5, 8.6 a verze před 8.4.
+- [Typy z PHPStanu |phpstan-types], aby méně přepisů na `array_find()` a jeho sourozence čekalo jako rizikové.
+- [Sekce upgrading |decisions/upgrading] se všemi rozhodnutími o novějším PHP.
+
+{{maintitle: Přechod na PHP 8.4: automatický přepis kódu}}
+{{description: Přechod na PHP 8.4: DressCode přepíše kód na array_find(), array_any() a RoundingMode a opraví nebo ohlásí, co PHP 8.4 zavrhlo, třeba int $x = null.}}

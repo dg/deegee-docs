@@ -1,0 +1,46 @@
+Git Hooks
+*********
+
+.[perex]
+A six-line pre-commit hook checks the PHP code style of exactly what goes into the commit, and stays silent while everything is clean. Hooks that fix an AI agent's code after every edit are described on the page [AI Agents |ai-agents].
+
+
+A Pre-commit Hook
+=================
+
+A commit does not take the file on disk; it takes the file's content in the index, and after `git add -p` the two differ. So the hook reads the content from the index and passes it in with the `--stdin` option; the `lines` format then prints one line per finding, and nothing when the code is clean:
+
+```shell
+#!/bin/sh
+status=0
+for file in $(git diff --cached --name-only --diff-filter=ACM -- '*.php'); do
+	git show ":$file" | dresscode check --stdin "$file" -f lines --skip-excluded || status=1
+done
+exit $status
+```
+
+Save it as `.git/hooks/pre-commit` and make it executable. When everything is fine, the hook prints nothing and the commit goes through; otherwise it prints each violation on one line with the path, the line, the message and the decision path, and stops the commit:
+
+/--pre .[terminal]
+src/Cart.php:5:5: error: The import of `Gateway` is unused. [imports.unused]
+src/Cart.php:15:21: error: A plain string must be written with single quotes. [literals.quotes]
+\--
+
+Thanks to `--skip-excluded`, the hook skips a file that the configuration excludes in `excludePaths` or that is outside its `paths`; without it, `--stdin` would check that file too.
+
+If you want a hook that fixes the code right away, run `fix` over the working tree and add the fixed files to the index. It is convenient, but it means the commit contains changes the developer has not seen. I prefer the first variant: the hook only reports, and I run the fix on purpose.
+
+With the `pre-commit` tool, it is one entry in the configuration. The tool passes file names to DressCode, so the entry needs `--skip-excluded`; otherwise it would also check a file that the configuration excludes in `excludePaths`:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: dresscode
+        name: DressCode
+        entry: dresscode check -f lines --skip-excluded
+        language: system
+        types: [php]
+```
+
+{{maintitle: PHP Code Style in a Git Pre-commit Hook}}

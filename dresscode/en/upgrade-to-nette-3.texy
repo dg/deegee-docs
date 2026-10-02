@@ -1,0 +1,164 @@
+Upgrade to Nette 3
+******************
+
+.[perex]
+The upgrade from Nette 2.4 to the last version of Nette 3 is a long road. Version 3.0 removed `Nette\Object` and changed the routers, and the 3.x releases then renamed `Nette\Database\Context` to `Explorer`, `Cache::EXPIRE` to `Cache::Expire`, `FileUpload::getName()` to `getUntrustedName()` and `IMailer` to `Mailer`. DressCode covers most of that road for you: with the data of the package `dresscode/upgrade-nette`, it rewrites the deprecated API by itself, and where you have to decide, it stops and tells you what to do.
+
+For Nette 3, the data of the package holds about 500 changes, about 190 of them from version 3.0 alone. DressCode rewrites more than 350 of them by itself and reports about 140. The data covers version 3.0 up to the last versions of Nette 3 that run on `nette/utils` 3; `nette/application` 3.2, `nette/forms` 3.2 and `nette/database` 3.2 already require `nette/utils` 4 (see [Packagist |https://packagist.org/packages/nette/application]), so they belong to the page [Nette 4 |upgrade-to-nette-4]. There is no data for versions before 3.0, so DressCode does not help with the step from Nette 2.3 or older to 2.4.
+
+
+What It Looks Like
+==================
+
+Take a presenter written for Nette 2.4. In the first step, you raise every Nette library in `composer.json` to `^3.0`, and `dresscode upgrade today` rewrites two places. It only reports six more, because their replacements came in later versions of Nette 3 and the code must still work on 3.0. Three of them:
+
+/--pre .[terminal]
+app/ProductPresenter.php:27:30: error: Class `Nette\Database\Context` is deprecated: replaced by `Nette\Database\Explorer`, since nette/database 3.1. [upgrading.api.forbiddenClasses]
+app/ProductPresenter.php:40:25: error: Constant `Nette\Caching\Cache::EXPIRE` is deprecated: replaced by `Expire`, since nette/caching 3.1.3. [upgrading.api.forbiddenMembers]
+app/ProductPresenter.php:67:44: error: Method `Nette\Http\FileUpload::getName()` is deprecated: replaced by `getUntrustedName`, since nette/http 3.0.5. [upgrading.api.forbiddenMembers]
+\--
+
+Once the lower bounds reach the last releases of Nette 3, such as `^3.1.15` for `nette/application` and `nette/forms`, `upgrade today` rewrites the reported places as well. Five lines of the presenter, before the first step and at the end:
+
+```php .[before]
+$sort = $this->getHttpRequest()->getQuery('sort', 'name');
+$dependencies[Cache::EXPIRE] = '20 minutes';
+$this->invalidateControl('products');
+$form->addText('email')->addCondition(Form::FILLED);
+$mail->setSubject('New photo ' . $photo->getName());
+```
+
+```php .[after]
+$sort = $this->getHttpRequest()->getQuery('sort') ?? 'name';
+$dependencies[Cache::Expire] = '20 minutes';
+$this->redrawControl('products');
+$form->addText('email')->addCondition(Form::Filled);
+$mail->setSubject('New photo ' . $photo->getUntrustedName());
+```
+
+The same run also rewrote the imports, the parameter types and the `@var` annotations: `Context`, `IMailer` and `IStorage` are now `Explorer`, `Mailer` and `Storage`. The types from PHPStan tell DressCode that `$photo` is a `FileUpload`, so it leaves the `getName()` of a component or a form control alone. [Step by Step |#Step by Step] shows how to take the steps.
+
+
+What Gets Rewritten
+===================
+
+Each row below was checked by a run of DressCode on an application upgraded to the last versions of Nette 3. The rows are only a sample: every library has its own file in the package, and [http.neon |https://github.com/dg/dresscode-upgrade-nette/blob/master/upgrading/http.neon] alone holds more than 150 entries. A few rewrites, such as `queryArgs()` of `nette/database`, are [risky |configuration#risky-fixes] and wait for your permission.
+
+
+nette/application 3
+-------------------
+
+| old API | new API | since |
+|---|---|---|
+| `IRouter` | `Nette\Routing\Router` | 3.0 |
+| `$this->invalidateControl($snippet)` | `$this->redrawControl($snippet)` | 3.0 |
+| `getParameter('page', 1)` | `getParameter('page') ?? 1` | 3.1.8 |
+| `ITemplate` | `Nette\Application\UI\Template` | 3.1 |
+| `Presenter::INVALID_LINK_WARNING` | `Presenter::InvalidLinkWarning` | 3.1.11 |
+
+
+nette/database 3 and nette/caching 3
+------------------------------------
+
+| old API | new API | since |
+|---|---|---|
+| `Nette\Database\Context` | `Nette\Database\Explorer` | `nette/database` 3.1 |
+| `$result->fetchField('title')` | `$result->fetch()['title'] ?? null` | `nette/database` 3.0 |
+| `Cache::EXPIRE`, `Cache::TAGS` | `Cache::Expire`, `Cache::Tags` | `nette/caching` 3.1.3 |
+| `$cache->start($key)` | `$cache->capture($key)` | `nette/caching` 3.1 |
+| `IStorage` | `Nette\Caching\Storage` | `nette/caching` 3.1 |
+
+
+nette/http 3
+------------
+
+| old API | new API | since |
+|---|---|---|
+| `$upload->getName()` | `$upload->getUntrustedName()` | 3.0.5 |
+| `$request->getQuery('sort', 'name')` | `$request->getQuery('sort') ?? 'name'` | 3.0 |
+| `$request->isPost()` | `$request->isMethod('POST')` | 3.0 |
+| `IResponse::S404_NOT_FOUND` | `IResponse::S404_NotFound` | 3.2.1 |
+| `$section->user = $user` | `$section->set('user', $user)` | 3.2.1 |
+
+A default value is moved behind `??` in `getPost()`, `getCookie()` and `getHeader()` as well, and the other HTTP status codes are renamed like `S404_NOT_FOUND`.
+
+
+nette/forms 3
+-------------
+
+| old API | new API | since |
+|---|---|---|
+| `Form::FILLED` | `Form::Filled` | 3.1.11 |
+| `$form->getUnsafeValues(null)` | `$form->getUntrustedValues(null)` | 3.1.10 |
+| `addUpload($name, $label, true)` | `addMultiUpload($name, $label)` | 3.0 |
+| `$input->setAttribute($name, $value)` | `$input->setHtmlAttribute($name, $value)` | 3.0 |
+| `IControl` | `Nette\Forms\Control` | 3.1 |
+
+The other validation constants of `Form`, such as `EMAIL`, `REQUIRED` and `MIN_LENGTH`, are renamed the same way.
+
+
+nette/bootstrap, nette/mail, nette/security and nette/utils 3
+-------------------------------------------------------------
+
+| old API | new API | since |
+|---|---|---|
+| `Nette\Configurator` | `Nette\Bootstrap\Configurator` | `nette/bootstrap` 3.1 |
+| `$configurator->enableDebugger()` | `$configurator->enableTracy()` | `nette/bootstrap` 3.0 |
+| `IMailer` | `Nette\Mail\Mailer` | `nette/mail` 3.1 |
+| `Nette\Security\Identity` | `Nette\Security\SimpleIdentity` | `nette/security` 3.1 |
+| `Strings::random(10)` | `Random::generate(10)` | `nette/utils` 3.0 |
+| `Callback::invoke($callback, $a, $b)` | `$callback($a, $b)` | `nette/utils` 3.0 |
+
+
+What Gets Reported
+==================
+
+Where Nette 3 removed something without a direct replacement, DressCode stops at the place, changes nothing, and its message says what to do:
+
+/--pre .[terminal]
+app/Model/Visits.php:26:9: error: Method `Nette\Http\UrlScript::setQuery()` is removed: the class is immutable; take a changed copy with `withQuery()`, since nette/http 3.0. [upgrading.api.forbiddenMembers]
+app/Model/Visits.php:29:33: error: Method `Nette\Http\Request::getReferer()` is deprecated: use `getOrigin()`, which reads the Origin header and gives only the scheme, the host and the port instead of the whole URL of the referring page, since nette/http 3.1.7. [upgrading.api.forbiddenMembers]
+\--
+
+| old API | what to write instead | since |
+|---|---|---|
+| `extends Nette\Object` | the trait `Nette\SmartObject` | `nette/utils` 3.0 |
+| `$url->setQuery()` on `UrlScript` | `withQuery()`, because the class is immutable | `nette/http` 3.0 |
+| `$request->getReferer()` | `getOrigin()`, which gives only the scheme, the host and the port | `nette/http` 3.1.7 |
+| `$presenter->getContext()` | inject the services the presenter needs | `nette/application` 3.1 |
+| `IAuthenticator` | `Nette\Security\Authenticator`, whose `authenticate()` takes the user name and the password instead of an array | `nette/security` 3.1 |
+
+Most of `nette/di` belongs here: of its 84 entries for Nette 3, 46 are only reported, mostly methods of the compiler and of the container builder that extensions call. When you have dealt with a place, its finding disappears; mark a place you keep on purpose with the comment `// dresscode:ignore <decision> -- <reason>`, see [Manual Tasks Along the Way |upgrade#Manual Tasks Along the Way].
+
+Some changes of Nette 3 are not in the data at all. Since 3.0, a method that overrides a method of Nette in your presenter or component must declare the same parameter and return types, and Nette checks that a signal comes from the same origin ([upgrade guide of nette/application |https://doc.nette.org/en/application/upgrading]). DressCode does not add the types, and the data does not capture changes in behavior, in the NEON configuration or in Latte templates; the [upgrade guides of the libraries |https://doc.nette.org/en/migrations] describe them.
+
+
+Step by Step
+============
+
+DressCode runs on PHP 8.4 and needs `nette/utils` 4.1, so it cannot be a development dependency of an application on Nette 2.4 or 3. Install it globally, with PHPStan and the data for Nette:
+
+```shell
+composer global require dresscode/dresscode dresscode/upgrade-nette phpstan/phpstan
+```
+
+The Nette libraries require one another, for example `nette/application` 3.0 requires `nette/utils` 3, so they move together and you raise their versions yourself. The Nette documentation recommends one version at a time ([Upgrade Guide |https://doc.nette.org/en/migrations]), so repeat these steps for 3.0, then for 3.1, and so on:
+
+1. In `composer.json`, raise the lower bound of every Nette library to the next version, for example `"nette/application": "^3.0"`. Within Nette 3, write the newest release of that version, such as `^3.1.15`, because the code is rewritten for the lowest version the constraint allows, see [Lower Bounds Decide |upgrade#Lower Bounds Decide].
+2. Run `composer update --prefer-lowest`, so that the vendor directory holds exactly those versions.
+3. Run `dresscode upgrade today`, and once more if it advises you to.
+4. Go through what it reported, run the tests and PHPStan, read the diff and commit.
+
+On PHP 7, every run starts with a warning that DressCode is tested on code for PHP 8.0 and later, so it leaves the fixes of PHP 8 constructs off; the API of Nette is rewritten all the same. A library the application does not require in `composer.json` itself, such as `nette/routing` or `nette/component-model`, only has its changes reported; add it to `require` with a lower bound, and they are rewritten. [Upgrade Your Code Step by Step |upgrade#One Major Version at a Time, by Hand] describes the procedure in detail.
+
+
+Where to Go Next
+================
+
+- [Nette 4 |upgrade-to-nette-4], the next step after Nette 3: `nette/utils` 4 and the libraries that require it.
+- [Nette libraries |upgrading-nette], what the package `dresscode/upgrade-nette` covers in all versions.
+- [Upgrading to a newer PHP |upgrading-php], because Nette 3.1 needs at least PHP 7.2, while Nette 2.4 runs even on PHP 5.6.
+- [Upgrade Your Code Step by Step |upgrade], `upgrade today`, the estimate and the plan in detail.
+
+{{maintitle: Upgrade to Nette 3 Automatically}}
+{{description: Upgrade Nette 2.4 to 3: DressCode rewrites deprecated API, such as Context to Explorer and Cache::EXPIRE to Cache::Expire, and reports the rest.}}

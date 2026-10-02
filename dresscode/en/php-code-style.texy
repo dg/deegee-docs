@@ -1,0 +1,149 @@
+Format Your Code Step by Step
+*****************************
+
+.[perex]
+Your project already has a code style, even if nobody ever wrote it down. DressCode takes its measure, records it in a configuration and keeps the first fix down to a few files. Six steps take you from the first `dresscode init` to a coding standard that CI, a Git hook, your editor and your AI agent enforce for you, and that you can tighten whenever you want.
+
+If DressCode is not installed yet, or you only want to try it first, [Getting Started |getting-started#Installation] takes five minutes. Every option of [`init` |cli#init], [`check` |cli#check], [`fix` |cli#fix] and [`baseline` |cli#baseline] is listed in the command line reference.
+
+
+1. Measure What Your Code Already Does
+======================================
+
+The usual way to adopt a coding standard is to pick one, run the fixer and get a diff that touches half of the project. Nobody reviews such a diff, and every open branch conflicts with it. DressCode goes the other way and starts from the code you already have. Run this in the root of the project:
+
+```shell
+dresscode init
+```
+
+`init` checks your code against each standard and picks the one under which a fix would change the fewest files. Then it measures the decisions in which your code departs from that standard and records them with the values your code uses. The report says what it found:
+
+/--pre .[terminal]
+Standard   perCs (PER Coding Style), the nearest to your code by the files a fix changes, 13 under psr12; `--use` names another
+Measured   your code departs from it in 3 decisions over 13 files; perCs as it is, with no decision below `use`, would rewrite 13 of them
+As written indentation.unit: tab   your code, 92% of 13 files
+           blankLines.beforeDeclaration: 2   your code, all 13 places
+           braces.emptyBody.function: expanded   your code, all 26 places
+Checked    all 13 files: a fix changes 1 file, 1 of them for the indentation, the line endings or the long lines the rest of the code has
+...
+Written    `dresscode.neon`
+\--
+
+Here the nearest standard is `perCs`, that is [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/]. Look at the `Measured` line: taken as it is, the standard would rewrite all 13 files. With the three decisions set to the values your code uses, the `Checked` line says that the fix changes a single file. That is the idea of the whole step: the standard provides the base, your code provides the values where the two differ, and each value says what it is based on (`your code, 92% of 13 files`).
+
+Even so, a project may depart from its nearest standard in many places, and the first fix should not rewrite half of it. So `init` keeps a budget: the fix may change 1% of the files, but never fewer than 2 or more than 20, and the `--budget` option sets a different number. Only the indentation, the line length and the line endings are fixed regardless of the budget, because everything else depends on them, and the `Checked` line counts those files separately. When the fixes together would change more, `init` leaves some decisions unchecked and asks you about them, showing a place in the code that each one concerns. It also asks about other things that are yours to decide, such as which of two close standards you prefer. The recommended answer always comes first, and pressing Enter accepts it. That answer leaves your code as it is, so if you are not sure, you cannot break anything.
+
+Without a terminal, or with the `--yes` option, `init` asks nothing and takes the recommended answers; it prints each question on a `Your call` line instead, in the form of a `dresscode.neon` line or a command that gives a different answer. To measure against a standard of your choice, name it: `dresscode init --use nette`. If the project already uses PHP_CodeSniffer, PHP CS Fixer or Laravel Pint, `init` reads its configuration as well, and [Migrating to DressCode |migration] shows how to translate its rules instead. The page on the [`init` command |generate-configuration] has all the details.
+
+
+2. Read and Adjust the Configuration
+====================================
+
+`init` has written `dresscode.neon` into the root of the project. Apart from the excluded paths and what `init` found in the namespaces, the file looks like this:
+
+```neon
+# made to measure by `dresscode init`; run it again to see what has moved since, it writes nothing over this file
+use: perCs   # PER Coding Style, of the standards the one a fix changes the fewest files of your code under
+
+paths: [src, tests]
+
+indentation:
+	unit: tab                # your code, 92% of 13 files
+
+braces:
+	emptyBody:
+		function: expanded   # your code, all 26 places
+
+blankLines:
+	beforeDeclaration: 2     # your code, all 13 places
+```
+
+The file answers two questions. The `use` key says how the code should look: it names the standard, and after it you can add [sets |configuration#Standards and Sets] such as `cleanup`, which want more from the code than its looks. The keys below it say, decision by decision, where your project writes things differently. A decision the file does not mention takes its value from the standard.
+
+Each key is a decision path, the same one you see next to every finding in the output. When a path means nothing to you, ask: `dresscode explain braces.emptyBody.function` prints what the decision is for, which values it takes, which one it has in this project and what the standards say. `dresscode config` prints every decision that applies in the end, with the layer that set it.
+
+You can change any value, or delete a line and let the standard decide. Before you change the file, try the value for one run: `dresscode check --set literals.quotes=single --only literals.quotes --diff` shows what single quotes everywhere would change, and writes nothing. The value `keep` means "do not check this" and turns a decision off, even one the standard makes. Everything the file can say is described on the [Configuration |configuration] page.
+
+
+3. The First Fix as a Commit of Its Own
+=======================================
+
+Before the first fix, commit your work in progress, or at least have a clean working tree, so that the diff shows exactly what DressCode changed. Then look at what the fix will do, and let it do it:
+
+```shell
+dresscode check --diff
+dresscode fix
+```
+
+`check --diff` shows the changes and writes nothing; `fix` makes them. Every file it changed is marked `rewritten` in the output. Below each file, the output lists what could not be fixed automatically, for example a method name, which would also have to change everywhere the method is called.
+
+Commit the result together with `dresscode.neon`, which explains it, and with no other changes. Nobody reads such a commit line by line, and nobody has to: it is enough to know that it contains nothing else. `git blame` then points to this commit for the reformatted lines, not to your next commit with a real change. The budget keeps the commit small, so an open branch rarely conflicts with it. If you raised the budget or chose values that change more code, split the cleanup into several commits, one for each set or section (see [Cleaning Up Old Code Step by Step |configuration#Cleaning Up Old Code Step by Step]).
+
+
+4. What No Rule Fixes
+=====================
+
+After the first fix, `check` may still report places that need a person: a method named `get_total` that must be written in camelCase, a [risky fix |configuration#risky-fixes] the project has not allowed, or a line longer than `file.lineLength` allows that DressCode cannot break for you. Each of them has three ways out.
+
+If there are only a few, fix them by hand. If the decision is simply wrong in one place, suppress it there with the comment `// dresscode:ignore naming.method` and write the reason after two dashes. And if the decision is right but you cannot fix everything today, record the rest in the baseline:
+
+```shell
+dresscode baseline
+```
+
+/--pre .[terminal]
+Baseline with 312 violations written to `dresscode-baseline.neon`.
+\--
+
+From then on, only new violations are reported. The baseline contains only what the fix leaves, so write it after `fix`; when a fix would still change something, `baseline` writes nothing and tells you to run `fix` first. The difference from a suppression matters: a suppression says "the decision is wrong here" and stops the fix as well, while a baseline says "we can't do this yet" and never stops a fix. A baseline should shrink, and when one of its entries no longer matches anything, the run tells you. All levels of suppression and the baseline are described on the [Suppressions and the Baseline |suppressions-and-baseline] page.
+
+
+5. Keep It That Way
+===================
+
+A standard that depends on someone remembering to run it will slowly fade. Let the tools you already have enforce it:
+
+- **Continuous integration** runs `dresscode check` on every push, and exit code 1 fails the job. On GitHub Actions, every finding appears as an annotation right at its line in the pull request. See [Continuous Integration |continuous-integration].
+- **A Git hook** checks only the files that go into the commit and prints nothing while everything is clean. See [Git Hooks |git-hooks].
+- **The editor** formats the file on save with `dresscode fix --stdin`, in PhpStorm, in VS Code and in any editor that runs a formatter over standard input. See [Editors and IDEs |editors].
+- **An AI agent** with the `php-fixer` plugin, in Claude Code or Codex, gets every file it edits tailored to your configuration right away, and learns what was changed in it. See [AI Agents |ai-agents].
+
+All four read the same `dresscode.neon`, so the server, the hook, the editor and the agent hold the code to the same standard. The [Integrations |integrations] page suggests which one to set up first.
+
+
+6. Tighten It Over Time
+=======================
+
+The configuration `init` wrote describes the code as it was on that day, compromises included. A decision the budget left out stays in the file as `keep`, with the comment `not checked: a fix would change …` and the number of files. When you have time for it, try it first and then make it a commit of its own:
+
+```shell
+dresscode check --set literals.quotes=single --only literals.quotes --diff
+dresscode fix --set literals.quotes=single
+```
+
+The first command shows what the decision would change and writes nothing. The second runs the whole configuration plus this one decision, so its changes come out already formatted by your standard. Then write the value into `dresscode.neon` in place of `keep` and commit both at once (see [Introducing a New Decision in One Commit |configuration#Introducing a New Decision in One Commit]).
+
+A value `init` measured from your code can go the same way. Such a value is often a trace of a standard that has changed since; when you want to follow it, delete the line from `dresscode.neon` and run `fix`. Sets work the same way: `dresscode check --use cleanup --diff` shows what the `cleanup` set would change before you add it to the `use` key.
+
+After you update DressCode, or after you have worked on the project for a while, run `dresscode init` again. When a configuration already exists, it writes nothing. It measures the code again and lists every decision it would write differently today, with the number of files a fix under the value in the file would rewrite. It also lists every decision the file sets differently from the standard although the code already follows the standard. When nothing has moved, it says so:
+
+/--pre .[terminal]
+Compared   the code with the standard and the decisions of `dresscode.neon`, over the files it checks
+Moved      nothing: `dresscode.neon` says what init measures
+
+`dresscode.neon` exists, so nothing is written; `dresscode check --set path=value` shows what a value would change.
+\--
+
+
+Where to Go Next
+================
+
+- [Getting Started |getting-started], if you have not installed DressCode yet.
+- [Configuration |configuration], everything the configuration file can say.
+- [Rules |decisions/@home], all decisions with their values and examples.
+- [Standards and Sets |php-coding-standards], exactly what each standard and set decides.
+- [Suppressions and the Baseline |suppressions-and-baseline], the four levels of suppression and the baseline in detail.
+- [Command Line |cli], every command and option, including [`init` |generate-configuration].
+
+{{maintitle: Adopt a PHP Coding Standard Step by Step}}
+{{description: Adopt a PHP coding standard in an existing project: DressCode measures your code style, keeps the first fix small, and CI keeps it that way.}}

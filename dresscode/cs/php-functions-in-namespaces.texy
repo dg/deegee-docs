@@ -1,0 +1,455 @@
+Funkce a konstanty ve jmenných prostorech
+*****************************************
+
+.[perex]
+Nekvalifikované `strlen()` uvnitř jmenného prostoru může znamenat dvě různé funkce a z kódu se nedá poznat, kterou. Nástroje, které hlídají styl kódu, proto u celé řady oprav hádají a samo PHP nemůže použít zkratky, se kterými je takové volání dvakrát až třikrát rychlejší. Většinou stačí jeden řádek konfigurace, kterým DressCode řeknete, co ve vašich jmenných prostorech je: opravy pak nestojí na odhadu a kód se dá zapsat tak, aby PHP volalo funkce rychlou cestou.
+
+
+Jedno jméno, dva významy
+========================
+
+Podívejte se na tenhle kód:
+
+```php
+namespace App;
+
+if (is_null($user)) {
+	// ...
+}
+```
+
+Která funkce se tu volá? Nejspíš globální `is_null()`, kterou zná každý. Jenže PHP to rozhodne až za běhu: nejdřív se podívá, jestli existuje funkce `App\is_null()`, a teprve když ne, sáhne po globální. Stačí, aby ji kdekoli v projektu deklaroval jiný soubor:
+
+```php
+namespace App;
+
+function is_null(mixed $value): bool
+{
+	return $value === null || $value === '';
+}
+```
+
+a volání nahoře najednou dělá něco jiného. Na souboru, ve kterém je volání zapsané, přitom vůbec nezáleží. Rozhoduje jen to, jestli se načetl ten druhý soubor.
+
+Úplně stejně se chovají konstanty: `PHP_EOL` ve jmenném prostoru `App` je `App\PHP_EOL`, pokud existuje, jinak globální `PHP_EOL`. Třídy tohle nedělají. `Exception` ve jmenném prostoru `App` je vždy `App\Exception` a globální třída se píše `\Exception` nebo se importuje.
+
+
+Kus historie
+============
+
+Jmenné prostory přišly s PHP 5.3 a jejich podoba se rodila těžce. Verze měla vyjít na podzim 2008, první alfa byla venku v srpnu, a o tom, jak mají jmenné prostory vlastně fungovat, se mezi vývojáři PHP rozhodovalo ještě v říjnu. Tehdy padlo i slavné rozhodnutí vyměnit oddělovač `::` za zpětné lomítko, protože `::` se nedalo spolehlivě odlišit od volání statické metody. PHP 5.3.0 nakonec vyšlo 30. června 2009, o tři čtvrtě roku později.
+
+Jedna z nejtěžších otázek byla právě tahle: co znamená jméno, před kterým žádný jmenný prostor není. Návrh z 30. října 2008 ji pro třídy a pro funkce vyřešil různě. U tříd se PHP ke globálnímu jménu nevrací, protože spolu s autoloadingem by to běh výrazně zpomalilo: u každého `new Exception` by napřed zkoušelo načíst `App\Exception`. Funkce a konstanty autoloading nemají, takže tohle nebezpečí nehrozilo, a protože většinu toho, co PHP umí, poskytují právě globální funkce, PHP se u nich ke globálnímu jménu vrací. Kód psaný před jmennými prostory tak mohl do jmenného prostoru přejít, aniž by bylo nutné psát před každé `strlen()` zpětné lomítko.
+
+Byl to rozumný kompromis. Jeho cenou je, že o významu nekvalifikovaného jména funkce nerozhoduje soubor, ale celý běžící program.
+
+
+Proč to pálí nástroje
+=====================
+
+Nástroj, který hlídá styl kódu, pracuje se soubory, ne s běžícím programem. U každého `is_null($x)` ve jmenném prostoru proto stojí před stejnou otázkou jako vy nahoře a odpověď nezná. A přitom celá řada užitečných oprav předpokládá právě to, že jde o známou globální funkci:
+
+- `is_null($x)` na `$x === null`,
+- `intval($x)` na `(int) $x`,
+- `sizeof($a)` na `count($a)`,
+- `dirname(__FILE__)` na `__DIR__`,
+- `get_class()` na `self::class`,
+- doplnění `use function count;`, aby kompilátor mohl [volání optimalizovat |#Rychlejší volání, když je jméno jisté].
+
+Kdyby šlo o vaši funkci `App\is_null()`, každá z těch oprav by změnila, co program dělá. Poctivý nástroj je proto musí brát jako rizikové opravy (risky fixes) a bez svolení se do nich nepouštět. PHP CS Fixer má mezi rizikovými pravidly třeba `is_null`, `no_alias_functions` nebo `dir_constant`, všechna se stejným zdůvodněním: jsou riziková, pokud je funkce předefinovaná.
+
+Nejde přitom jen o teoretickou možnost. Přesně na tomhle chování stojí známý trik z testů: knihovny jako php-mock deklarují v testu `App\time()` nebo `App\file_get_contents()`, aby kód ve jmenném prostoru `App` místo skutečné funkce zavolal podvrh.
+
+
+Buďme pragmatičtí
+=================
+
+Kolik funkcí a konstant ve svých jmenných prostorech opravdu máte? Skoro jistě málo, často žádné. Funkce se totiž **neautoloadují**: aby funkce šla zavolat, musí někdo načíst její soubor přes `require` nebo záznamem `files` v `composer.json`, a to dřív, než ji kód použije. Proto se kód dávno přesunul do tříd a funkce ve jmenných prostorech zůstaly okrajovou věcí. Autoloading funkcí se v PHP navrhoval opakovaně, součástí jazyka se ale dosud nestal.
+
+To je zároveň dobrý důvod, proč na nekvalifikované volání funkce ze jmenného prostoru nespoléhat: když se soubor s funkcí náhodou nenačte, PHP neohlásí chybu, ale potichu zavolá globální funkci stejného jména, pokud nějaká existuje. Import `use function App\is_null;` funkci také nenačte, volání ale v takové chvíli skončí srozumitelnou chybou `Call to undefined function App\is_null()`.
+
+Situace je tedy jasná: nejistota se týká všech, ale skutečná funkce ve jmenném prostoru je vzácnost. Stačí ji vyjmenovat.
+
+
+Řekněte DressCode, co je co .[#name-resolution]
+===============================================
+
+Nejčastěji váš projekt ve jmenných prostorech nedeklaruje žádné funkce ani konstanty. Pak stačí jediný řádek konfigurace:
+
+```neon
+nameResolution: certain
+```
+
+Z něj DressCode ví, že každé nekvalifikované jméno funkce nebo konstanty, které soubor neimportuje ani sám nedeklaruje, je globální. Ne "nejspíš", ale jistě.
+
+Když nějaké funkce nebo konstanty máte, vyjmenujete je v klíči `namespaces`, funkce pod `functions` a konstanty pod `constants`. Zápis je stejný jako v příkazu `use`, včetně skupin ve složených závorkách. Položku se skupinou dejte do uvozovek, jinak by ji NEON četl jako mapu:
+
+```neon
+nameResolution: certain
+
+namespaces:
+	functions:
+		- 'App\Utils\{format, parse}'
+		- App\Legacy\helper
+	constants:
+		- 'App\{VERSION, DEBUG}'
+```
+
+Funkci ze seznamu pak DressCode čte jako funkci ze jmenného prostoru všude, kde se v tom jmenném prostoru volá bez importu. U funkcí nezáleží na velikosti písmen vůbec, u konstant jen v jejich vlastním jméně, ve jmenném prostoru ne, přesně jako v PHP.
+
+Seznamy a `nameResolution` jsou dvě různé věci, a proto má každá svůj klíč. Seznam je fakt: tahle funkce existuje. `nameResolution` je rozhodnutí: nic dalšího tam není.
+
+| `nameResolution` | co znamená |
+|---|---|
+| `certain` | seznamy jsou úplné, a co v nich není, je globální |
+| `uncertain` | seznamy úplné být nemusejí; totéž, jako když klíč chybí |
+
+S `uncertain` se DressCode chová opatrně: nekvalifikované jméno bere jako globální, ale opravu, která na tom stojí, považuje za [rizikovou |configuration#risky-fixes]. Ohlásí ji jako varování i s důvodem na řádku pod porušením, třeba <code>''the namespace may declare `is_null()`''</code>, a udělá ji teprve tehdy, když rozhodnutí uvedete v `fixRisky` nebo spustíte `fix --fix-risky`. Proto je `uncertain` výchozí hodnota: napsat rozhodnutí do konfigurace ještě neznamená souhlasit s tím, že smí měnit chování kódu. Jakmile napíšete `certain`, tyhle opravy přestanou být rizikové.
+
+
+Každé pravidlo z toho těží
+==========================
+
+Podstatné je, *kde* se tahle znalost uplatní. DressCode ji nepředává jednotlivým rozhodnutím, ale analýze `NameResolver`, která pro všechna pravidla překládá jména. Ptají se jí vestavěná pravidla a ptá se jí i [vaše vlastní pravidlo |rule-contract#Analýzy]. Znalost tak leží na jednom místě a žádné pravidlo si nevede vlastní seznam výjimek.
+
+Pravidla se jí ptají na dvě věci:
+
+- **Co je co.** `isGlobalFunctionCall($node, 'is_null')` vrátí `true` pro globální funkci a `App\is_null()` ze seznamu za ni nepovažuje. S `certain` je odpověď jistá, jinak jen předpoklad.
+- **Jak jistá je odpověď.** `getUnqualifiedResolution('is_null', SymbolKind::Function, $node)` řekne, kam nekvalifikované jméno míří: jistě do globálního prostoru (`Global`), jistě do jmenného prostoru (`Namespaced`), nebo do globálního jen za předpokladu, že ho jmenný prostor jinde nedeklaruje (`Uncertain`). Pravidlo, které se takhle zeptá, ohlásí svou opravu jako rizikovou právě u výskytu s `Uncertain`, a v projektu s `certain` tedy nikdy.
+
+A funguje to i obráceně, když pravidlo jméno funkce do kódu samo zapisuje. `hygiene.aliasFunctions` přepisuje `sizeof()` na `count()` a nové jméno napíše stejně jako to původní: `\sizeof()` na `\count()`, `sizeof()` na `count()`. Když ale soubor importuje nebo deklaruje vlastní `count`, nebo když podle konfigurace deklaruje `count()` jeho jmenný prostor, zapíše `\count()`, aby opravený kód volal totéž co původní.
+
+Všechna pravidla tak čtou každé jméno stejně a výsledek nezávisí na tom, které z nich se na něj ptá.
+
+
+Nová funkce neproklouzne
+========================
+
+Seznam by nebyl k ničemu, kdyby zastaral. Proto ho hlídá sám DressCode, jakmile konfigurace řekne `nameResolution: certain`, a nález ohlásí pod cestou seznamu, `namespaces.functions` nebo `namespaces.constants`. Ohlásí funkci deklarovanou ve jmenném prostoru, která v seznamu `namespaces.functions` chybí, a totéž udělá pro `const` a pro `define('App\X', ...)`. Počítá i s deklarací uvnitř podmínky, třeba s polyfillem v `if (!function_exists(...))`. Jakmile někdo do projektu přidá funkci `App\Utils\slugify()`, `dresscode check` upozorní, že patří do konfigurace:
+
+/--pre .[terminal]
+src/Utils/helpers.php
+  error  12:10  Function `App\Utils\slugify()` must be listed in `namespaces.functions`.  namespaces.functions
+\--
+
+Tohle stačí, protože deklaraci jde na rozdíl od volání poznat: stojí v souboru, který DressCode kontroluje. Pozor jen na cesty vyloučené z kontroly. Funkci deklarovanou třeba v testech, které DressCode vynechává, ohlásit nemůže, a pokud ji kód volá bez importu, zapište ji do seznamu sami. S `uncertain` hlídač mlčí, protože není co hlídat. S `certain` ho nevypne ani `--only`: oprava, která na úplných seznamech stojí, nesmí přijít o kontrolu, která jejich úplnost hlídá.
+
+Ani první seznam nemusíte psát ručně. [`dresscode init` |generate-configuration] projde všechny soubory v cestách projektu, najde funkce a konstanty deklarované ve jmenných prostorech a zapíše jejich seznamy spolu s `nameResolution: certain`. Když parser některý soubor nepřečte, zůstane neznámé, co v něm je deklarované, a tak `init` jistotu nezapíše a v komentáři ten soubor jmenuje.
+
+.[note]
+Do budoucna se nabízí, aby nový záznam do konfigurace zapsal rovnou `dresscode fix`, místo aby na něj jen upozornil.
+
+
+Pomocné funkce v testech
+========================
+
+Testy si často deklarují pomocné funkce přímo ve svém jmenném prostoru, třeba `App\Tests\createUser()`. Psát je do konfigurace nemá smysl a hlídat je taky ne. Pro takovou část projektu stačí [přepis |configuration#Jiné hodnoty pro část projektu], který řekne, že tam seznamy úplné nejsou:
+
+```neon
+nameResolution: certain
+
+overrides:
+	- paths: [tests]
+	  nameResolution: uncertain
+```
+
+Soubory v `tests` pak DressCode čte opatrně: opravy, které stojí na tom, že je funkce globální, se tam jen ohlásí jako rizikové a hlídač nevyjmenovaných deklarací tam mlčí. Soubory v `src` přitom dál těží z jistoty. Funguje to proto, že kód v `src` pomocné funkce testů nevolá, takže na význam jmen v `src` nemají vliv.
+
+Jedna výjimka stojí za pozornost: trik s podvržením funkce, o kterém byla řeč [výš |#Proč to pálí nástroje]. Když test deklaruje `App\time()`, aby kód ve jmenném prostoru `App` zavolal podvrh, týká se to volání v `src`, ne v testech. Taková funkce proto patří do seznamu `namespaces.functions` projektu, aby ji pravidla v `src` nechala být.
+
+
+Funkce, které deklaruje framework
+=================================
+
+Někdy píšete kód přímo do jmenného prostoru frameworku, protože vás k tomu framework vede. Symfony nechává psát konfiguraci služeb do souboru, který začíná `namespace Symfony\Component\DependencyInjection\Loader\Configurator;`, právě proto, aby šlo volat `service()`, `param()` nebo `env()` bez importu. Ty funkce deklaruje Symfony ve složce `vendor`, kam DressCode nevidí.
+
+Tyhle funkce proto DressCode zná sám: když má projekt nainstalovaný balíček `symfony/dependency-injection`, přidá je do seznamu `namespaces.functions` bez jediného řádku konfigurace a s jakýmkoli standardem. Ve výpisu `dresscode config` je najdete pod řádkem `Names`, každou se zdrojem `DressCode for symfony/dependency-injection`.
+
+Jiné balíčky dodají takové seznamy klíčem `namespaces` svého [souboru dat |replacement-maps], a ty se sčítají s tím, co napíšete vy. Klíč `nameResolution` ale balíček ani preset nastavit nemůže: framework znají, váš projekt ne.
+
+
+Rychlejší volání, když je jméno jisté
+=====================================
+
+PHP váš kód před spuštěním přeloží do instrukcí pro svůj virtuální stroj a u některých funkcí a konstant přitom umí zkrátit cestu: volání nahradí jedinou instrukcí, výsledek spočítá dopředu, nebo funkci zavolá bez obvyklé režie. Podíváme se, co přesně PHP dělá, co mu v tom nejčastěji překáží a jak DressCode zapíše kód tak, aby PHP zkratky mohlo použít.
+
+
+Co PHP s kódem dělá, než ho spustí
+----------------------------------
+
+PHP nespouští zdrojový kód tak, jak ho vidíte v editoru. Nejdřív ho přeloží do posloupnosti jednoduchých instrukcí, takzvaných opcodů, a teprve ty provádí virtuální stroj Zend Engine. Se zapnutou OPcache, která je na produkčních serverech běžná, se přeložené instrukce uloží do paměti, aby se soubor nemusel překládat při každém požadavku znovu, a před uložením je ještě projde optimalizátor.
+
+Obyčejné volání funkce je pro virtuální stroj docela dost práce. Třeba `$len = foo($s);` se přeloží zhruba takhle:
+
+```
+INIT_FCALL "foo"     připrav volání
+SEND_VAR $s          předej argument
+DO_ICALL             zavolej funkci
+```
+
+Stroj na zásobníku vytvoří rámec volání, uloží do něj argumenty a zavolá funkci napsanou v C, která si argumenty ještě ověří a přečte. U funkce, která dělá hodně práce, je tahle obsluha zanedbatelná. U funkce jako `strlen()`, která jen přečte délku uloženou u řetězce, je ale mnohonásobně dražší než samotná práce.
+
+Proto má PHP pro řadu funkcí zkratky. A skoro všechny mají stejnou podmínku: PHP musí už při překladu vědět, kterou funkci voláte.
+
+
+Když PHP ví, co voláte
+----------------------
+
+Kompilátor PHP zná zhruba tři desítky základních funkcí a jejich volání umí nahradit přímo instrukcí. Napište `\strlen($s)` a z celého volání zbude jediný řádek:
+
+```
+T1 = STRLEN $s
+```
+
+Žádný rámec a žádné předávání argumentů. Podobnou zkratku mají i další funkce:
+
+- `is_array()`, `is_string()`, `is_int()`, `is_null()` a ostatní `is_*()` se promění v prostou kontrolu typu,
+- `intval()`, `strval()`, `boolval()` a `floatval()` v přetypování,
+- `count()`, `gettype()`, `get_class()`, `array_key_exists()`, `defined()` nebo `func_get_args()` ve vlastní instrukce,
+- `in_array()` s polem řetězců nebo čísel zapsaným přímo v kódu se promění ve vyhledání v předem sestavené hashovací tabulce, takže na délce pole nezáleží,
+- `sprintf()` se od PHP 8.4 promění v obyčejné spojení řetězců, pokud jeho formát nemá jiné zástupné znaky než `%s` a `%d` a má jich právě tolik, kolik hodnot volání předává,
+- `strlen('hello')` nebo `chr(65)` s hodnotou zapsanou přímo v kódu se rovnou promění ve výsledek.
+
+Proč tedy nestačí `strlen($s)` bez lomítka? Kvůli jmenným prostorům. V souboru s `namespace App;` může nekvalifikované `strlen()` za běhu znamenat funkci `App\strlen()`, pokud ji někdo deklaruje. Kompilátor to předem vědět nemůže, a tak vyrobí obecné volání, o jehož cíli se rozhodne až za běhu:
+
+```
+INIT_NS_FCALL_BY_NAME "App\strlen"
+SEND_VAR_EX $s
+V1 = DO_FCALL_BY_NAME
+```
+
+Zkratku kompilátor použije jen tam, kde je jméno jisté: když ho napíšete s úvodním lomítkem jako `\strlen()`, když ho importujete příkazem `use function strlen;`, nebo když soubor žádný jmenný prostor nemá.
+
+Kolik to ušetří? Dvacet milionů volání ve smyčce na PHP 8.5 se zapnutou OPcache a vypnutým JIT:
+
+| volání ve jmenném prostoru | čas |
+|---|---|
+| `strlen($s)` | 384 ms |
+| `\strlen($s)` | 165 ms |
+| `is_array($s)` | 473 ms |
+| `\is_array($s)` | 151 ms |
+
+Se zkratkou je volání dvakrát až třikrát rychlejší. V absolutních číslech je to zhruba deset až patnáct nanosekund na jedno volání, takže v jednom požadavku rozdíl nepoznáte, ve smyčce přes statisíce položek už ano.
+
+
+Co spočítá OPcache předem
+-------------------------
+
+Optimalizátor OPcache jde ještě o krok dál. Když zná hodnoty všech argumentů už při překladu, funkci rovnou zavolá a do instrukcí zapíše jen výsledek. Tahle funkce:
+
+```php
+function separator(): string
+{
+	return \str_repeat('-', 3);
+}
+```
+
+se přeloží na prosté `RETURN "---"`. Funguje to i přes proměnnou: z `$sep = ', '; return \implode($sep, ['a', 'b']);` zbude jen hotový řetězec `"a, b"`. PHP 8.4 takhle umí předem spočítat výsledek více než 170 funkcí, které pro stejné argumenty vracejí vždy stejný výsledek, například `str_repeat()`, `implode()`, `strtoupper()`, `substr()`, `trim()` nebo `version_compare()`.
+
+Zvlášť se OPcache stará o funkce, které zjišťují, co má PHP k dispozici: `function_exists('mb_strlen')`, `extension_loaded('intl')`, `is_callable('strlen')`, `defined('PHP_EOL')` nebo `constant('PHP_INT_SIZE')`. Když odpověď zná, zapíše rovnou `true` nebo hodnotu konstanty. U `function_exists()` ovšem jen tehdy, když funkce opravdu existuje: chybějící funkce se může objevit později, třeba po načtení dalšího souboru, a tak se záporná odpověď zjišťuje až za běhu.
+
+I tady platí stejná podmínka jako výš: jméno funkce musí být jisté.
+
+
+Konstanty se dosadí rovnou
+--------------------------
+
+Konstanty, které definuje PHP nebo jeho rozšíření, jako `PHP_EOL`, `PHP_INT_MAX`, `PHP_VERSION_ID` nebo `E_ALL`, se za běhu nemění. Kompilátor proto místo nich rovnou zapíše jejich hodnotu, takže `'a' . \PHP_EOL` se přeloží na hotový řetězec. Víc než samotné dosazení ale znamená to, co umožní dál: optimalizátor OPcache s hodnotou počítá a dokáže vyhodit celou větev kódu.
+
+```php
+if (\PHP_VERSION_ID >= 80400) {
+	// kód pro nové PHP
+} else {
+	// kód pro starší PHP
+}
+```
+
+Na PHP 8.5 z celé podmínky zbude jen první větev a druhá se do instrukcí vůbec nedostane. Stejně dopadne třeba `if (\PHP_OS_FAMILY === 'Windows')`.
+
+A zase platí, že jméno musí být jisté. Nekvalifikované `PHP_VERSION_ID` ve jmenném prostoru může být `App\PHP_VERSION_ID`, [stejně jako u funkcí |#Jedno jméno, dva významy], a tak ho PHP hledá až za běhu a podmínka zůstane v instrukcích celá. Pomůže `\PHP_VERSION_ID` nebo `use const PHP_VERSION_ID;`. Jedinou výjimkou jsou `true`, `false` a `null`, které PHP dosadí vždy.
+
+Globální konstanty, které definujete sami, PHP se zapnutou OPcache nedosazuje, protože jejich hodnota nemusí být při každém požadavku stejná.
+
+
+Jen tam, kde to kompilátor využije
+----------------------------------
+
+Nejjednodušší by bylo dát lomítko nebo import každé konstantě, kterou PHP zná. Tak to dělají běžné nástroje: lomítko píšou před každou vestavěnou konstantu. Jenže samotné dosazení hodnoty ušetří jen načtení konstanty, v našem měření zhruba 2,5 nanosekundy. Opravdový užitek přichází až tam, kde s hodnotou kompilátor dál počítá: v podmínce, jejíž mrtvou větev OPcache vyhodí, nebo ve výrazu, který se celý spočítá předem, jako `ENT_QUOTES | ENT_HTML5`.
+
+DressCode proto sleduje, kde konstanta v kódu stojí. `PHP_VERSION_ID` v podmínce `if (PHP_VERSION_ID >= 80400)` dostane `use const`, protože z instrukcí zmizí celá větev. `E_USER_DEPRECATED` předaná do `trigger_error()` zůstane, jak je, protože by tam import přinesl jen řádek navíc v hlavičce.
+
+Změřili jsme to na rozsáhlém open-source kódu s téměř třemi tisíci soubory. Holá konstanta PHP v něm stojí na 627 místech, ale kompilátor s její hodnotou počítá jen na 117 z nich. Import všeho by do hlaviček přidal 457 řádků ve 136 souborech. DressCode jich doplní 82 ve 40 souborech, tedy více než pětkrát méně, a zachytí přitom každé místo, kde na tom opravdu záleží.
+
+
+Volání bez rámce
+----------------
+
+PHP 8.4 přidalo ještě jednu zkratku, tentokrát pro devatenáct často používaných funkcí: `str_contains()`, `str_starts_with()`, `strpos()`, `strstr()`, `substr()`, `str_replace()`, `strtr()`, `trim()`, `implode()`, `in_array()`, `preg_match()`, `preg_replace()`, `min()`, `max()`, `class_exists()`, `property_exists()`, `dirname()`, `dechex()` a `is_numeric()`. Každá z nich má vedle běžné podoby ještě zvláštní variantu, které virtuální stroj předá argumenty napřímo, bez rámce volání. PHP jim říká frameless funkce.
+
+Tahle zkratka jako jediná funguje i s nekvalifikovaným jménem ve jmenném prostoru. Kompilátor vyrobí obě cesty a vybere si mezi nimi za běhu:
+
+```
+JMP_FRAMELESS "app\str_contains"               když App\str_contains() neexistuje, skoč dolů
+INIT_NS_FCALL_BY_NAME "App\str_contains"       obecné volání
+...
+V1 = FRAMELESS_ICALL_2(str_contains) $s "x"    volání bez rámce
+```
+
+Odpověď na otázku, jestli `App\str_contains()` existuje, si PHP při prvním průchodu zapamatuje, takže každé další volání stojí jen jeden skok. Import tu skoro nic nepřidá.
+
+
+Co zkratky vypne
+----------------
+
+Žádná ze zkratek pro funkce neplatí, když má volání pojmenované nebo rozbalené argumenty. Kompilátor pro ně vždy vyrobí obecné volání.
+
+Pojmenovaný argument se píše hlavně kvůli čitelnosti: `in_array($role, $roles, strict: true)` na první pohled říká, co znamená `true`. Jenže PHP pak funkci zavolá obecně a parametr ještě dohledá podle jména:
+
+| volání | čas |
+|---|---|
+| `\in_array('c', $list, strict: true)` | 677 ms |
+| `\in_array('c', $list, true)` | 499 ms |
+| `\in_array('c', ['a', 'b', 'c', 'd'], true)` | 170 ms |
+
+Druhý řádek je volání bez rámce, třetí instrukce s předem sestavenou hashovací tabulkou. Pojmenovaný argument zdrží dokonce víc než nekvalifikované jméno: `str_contains($s, 'x')` bez lomítka ve jmenném prostoru trvá 304 ms, `\str_contains($s, needle: 'x')` 462 ms.
+
+Rozbalené argumenty, třeba `\strlen(...$args)`, zkratku vypnou taky, protože kompilátor předem neví, kolik argumentů přijde. A volání bez rámce má navíc každá funkce jen pro určitý počet argumentů: `preg_match($pattern, $s)` ho má, `preg_match($pattern, $s, $matches)` už ne.
+
+
+Nečekejte zázraky
+-----------------
+
+Tyhle zkratky zrychlí jednotlivé volání o nanosekundy. Webová aplikace ale většinu času čeká na databázi, síť nebo disk, a tak se odezva stránky znatelně nezmění. Rozdíl poznáte v kódu, který se točí v těsných smyčkách: v parserech, šablonovacích systémech, při zpracování velkých polí nebo v knihovnách volaných tisíckrát za požadavek. Dobrá zpráva je, že vás nestojí nic. DressCode kód upraví sám a ten zůstane stejně čitelný, jen s pár importy navíc a s `true` místo `strict: true`.
+
+
+Sada compilerOptimizations
+==========================
+
+Hlídat to všechno ručně by bylo úmorné. Proto to za vás udělá [sada |configuration#Standardy a sady] `compilerOptimizations`, kterou přidáte ke svému standardu:
+
+```neon
+use:
+	- compilerOptimizations
+```
+
+Žádný standard sadu sám nezapíná. Sada importuje funkci, se kterou kompilátor zachází zvlášť, tam, kde se některé její volání s danými argumenty opravdu zrychlí, a konstantu tam, kde s ní kompilátor počítá; konstanta smí místo importu nést i lomítko. Ostatní globální funkce a konstanty píše holé, protože jim kvalifikované jméno nic neušetří. A u volání, které kompilátor optimalizuje, přepíše pojmenované argumenty na poziční a rozbalené ohlásí.
+
+Sadu tvoří čtyři klíče sekce [`qualification` |decisions/qualification]: `function.global: bare`, `function.optimized: imported`, `constant.global: bare` a `constant.optimized: [imported, backslashed]`. Kdo dává přednost lomítku před importem, napíše si v konfiguraci u optimalizovaných jmen `backslashed`. Podrobně to popisuje [další kapitola |#Jak se píšou globální jména].
+
+Volání, které jde nahradit jazykovou konstrukcí, třeba `is_null($x)` porovnáním `$x === null` nebo `intval($x)` přetypováním `(int) $x`, sada nepřepisuje. Takové přepisy patří rozhodnutím sekce [`hygiene` |decisions/hygiene]: jazyková konstrukce žádnou zkratku nepotřebuje, je rychlá vždy a na jmenném prostoru nezáleží. Standard `nette` je zapíná.
+
+Takhle vypadá metoda před opravou, v projektu pro PHP 8.4 s `nameResolution: certain`:
+
+```neon
+use:
+	- compilerOptimizations
+nameResolution: certain
+targets:
+	php: '8.4'
+```
+
+```php .[before]
+namespace App;
+
+class Access
+{
+	public function isAllowed(array $roles, string $role): bool
+	{
+		if (PHP_VERSION_ID < 80400) {  // Global constant `PHP_VERSION_ID` must be imported.
+			trigger_error('Old PHP', E_USER_DEPRECATED);
+		}
+
+		return in_array($role, $roles, strict: true) && strlen($role) > 2;  // A named argument disables the compiler optimization of `in_array()`. // Global function `strlen()` must be imported.
+	}
+}
+```
+
+```php .[after]
+namespace App;
+
+use function strlen;
+use const PHP_VERSION_ID;
+
+class Access
+{
+	public function isAllowed(array $roles, string $role): bool
+	{
+		if (PHP_VERSION_ID < 80400) {
+			trigger_error('Old PHP', E_USER_DEPRECATED);
+		}
+
+		return in_array($role, $roles, true) && strlen($role) > 2;
+	}
+}
+```
+
+Import dostaly `strlen()`, které PHP optimalizuje vždy, a `PHP_VERSION_ID`, se kterou kompilátor v podmínce počítá, takže může vyhodit celou větev. `in_array()` zůstalo holé: import by mu pomohl jen s polem zapsaným přímo ve volání, kdežto `$roles` je proměnná, a volání bez rámce z PHP 8.4 funguje i s holým jménem. Pojmenovaný argument `strict` z něj ale zmizel, protože právě volání bez rámce by vypnul. A `E_USER_DEPRECATED`, která stojí jen jako argument, zůstala, jak je: import by jí ušetřil jen samotné načtení. Proč je to lepší než import všeho, ukazuje [měření výše |#Jen tam, kde to kompilátor využije].
+
+Všechny tyhle opravy stojí na tom, že jde o globální funkci PHP. Pokud konfigurace neříká `nameResolution: certain`, DressCode je proto ohlásí jako rizikové opravy (risky fixes) a udělá je jen se svolením. Podrobnosti jsou v kapitole [Řekněte DressCode, co je co |#name-resolution].
+
+Sada přitom nehledí na verzi PHP, pro kterou kód píšete. Funkci, kterou optimalizuje až novější verze, kvalifikuje stejně: starší PHP zkratku jen nevyužije, nic se nerozbije, a až na novější PHP přejdete, kód bude připravený. Pojmenovaný argument přepíše DressCode jen tam, kde stojí na místě svého parametru, takže se význam volání nezmění; ani tady nehledí na verzi PHP, protože poziční argument je správně všude.
+
+
+Jak se píšou globální jména
+===========================
+
+O tom, jak se jméno globální funkce nebo konstanty zapisuje, rozhoduje sekce [`qualification` |decisions/qualification]. Každé jméno se dá napsat třemi způsoby a hodnotou každého klíče sekce je slovo pro jeden z nich: `bare` je holé jméno, které spoléhá na to, že se PHP vrátí ke globálnímu jménu, `imported` jméno z příkazu `use function` nebo `use const` a `backslashed` jméno s úvodním lomítkem.
+
+```neon
+qualification:
+	function:
+		global: bare
+		optimized: imported
+	constant:
+		global: bare
+		optimized: imported
+```
+
+S touhle konfigurací zůstanou globální funkce a konstanty holé a jen ty, se kterými umí pracovat kompilátor PHP, dostanou import:
+
+```php
+namespace App;
+
+use function count;
+use function in_array;
+```
+
+Na první pohled zbytečnost: `count()` by fungovalo i bez importu. Jde ale o rychlost: s importem kompilátor ví, že je funkce globální, a může použít svou zkratku, jak ukazuje [kapitola o rychlejším volání |#Rychlejší volání, když je jméno jisté].
+
+.[note]
+S `optimized: imported` se hlavička souboru snadno protáhne do dlouhého sloupce řádků `use function`. Zkrátí ji klíč [`imports.grouping.function: combined` |decisions/imports#imports.grouping.function], který všechny funkce zapíše do jednoho příkazu: `use function count, in_array, strlen;`. Méně řádků znamená i méně tokenů: AI agent, který čte začátek souboru, se dřív dostane ke kódu, na kterém záleží, a nemusí se nejdřív prokousat stěnou importů. Standard `nette` je zapisuje právě takhle.
+
+Klíče jdou od obecného ke zvláštnímu:
+
+| klíč | o jakých jménech rozhoduje |
+|---|---|
+| `function.global`, `constant.global` | o globálních funkcích a konstantách ve jmenném prostoru, kromě těch, o kterých rozhodují klíče `optimized` |
+| `function.optimized` | o funkcích, se kterými kompilátor zachází zvlášť, tam, kde volání s danými argumenty opravdu optimalizuje |
+| `constant.optimized` | o konstantách, se kterými kompilátor počítá: v podmínce nebo v konstantním výrazu |
+| `function.currentNamespace`, `constant.currentNamespace` | o funkcích a konstantách jmenného prostoru, ve kterém soubor sám stojí |
+
+`function.optimized` se u části funkcí řídí argumenty: `strlen()` optimalizuje PHP vždy, ale `dirname()`, `defined()` nebo `function_exists()` jen s konstantním argumentem, `sprintf()` jen s konstantním formátem, který nemá jiné zástupné znaky než `%s` a `%d` a má jich právě tolik, kolik hodnot volání předává, a `in_array()` jen s polem zapsaným přímo v kódu. Funkce se kvalifikuje, když ji jmenný prostor aspoň jednou takhle volá, a pak se tak v tom jmenném prostoru píše každé její použití. O funkci, kterou takhle nevolá nikde, rozhoduje `function.global`, protože import, který nic nezrychlí, by byl v kódu jen navíc. `constant.optimized` se zase neřídí jménem, ale tím, kde konstanta v kódu stojí. Hodnota `bare` v nich znamená, že se projekt optimalizace vzdává ve prospěch holého jména. Každé jméno patří jen jednomu klíči: kde je `function.optimized` `keep`, zůstanou optimalizované funkce, jak jsou, a samotné `function.global: bare` sebere lomítko funkci `\array_map()`, ale `\strlen()` a `\count()` nechá být.
+
+Import zapíše DressCode tak, jak soubor importy už píše: do příkazu, který jich vyjmenovává víc, do skupinového importu, který pro jmenný prostor toho jména už existuje, a na místo, kam patří podle abecedy, takže rozhodnutí sekce [`imports` |decisions/imports] pak nemají co hlásit. Když soubor funkci už importuje pod jiným jménem, použije ten import. Kde import přidat nejde, třeba proto, že je jméno zabrané, napíše úvodní lomítko. Holé jméno naopak udělá jen tam, kde holé jméno opravdu znamená globální funkci, a import, který už nikdo nepotřebuje, odebere.
+
+A tady se vracíme ke jmenným prostorům. Import `use function strlen;` přišpendlí volání ke globální funkci. Kdyby projekt měl vlastní `App\strlen()`, import by změnil chování. S `uncertain` proto DressCode každý přechod mezi holým jménem a importem nebo zpětným lomítkem považuje za rizikový. S `certain` ví, že `App\strlen()` neexistuje, a import prostě doplní. Funkci ze seznamu `namespaces.functions` přirozeně neimportuje.
+
+Třídy se tímhle netrápí: u holého jména třídy ve jmenném prostoru se PHP ke globální třídě nikdy nevrací, takže `class.otherNamespace` a `class.global` volí u tříd jen mezi importem a lomítkem a žádná jejich oprava riziková není. Jméno bez úvodního lomítka, třeba `Model\User` s `use App\Model;`, se nechává být, protože se čte relativně k importu nebo k jmennému prostoru souboru. V souboru bez jmenného prostoru je lomítko vždy zbytečné a odstraní ho `qualification.leadingBackslash`.
+
+
+Shrnutí
+=======
+
+- Nekvalifikovaná funkce nebo konstanta ve jmenném prostoru znamená podle PHP buď tu ze jmenného prostoru, nebo globální, a z jednoho souboru se to poznat nedá.
+- Napište do konfigurace `nameResolution: certain` a případně seznamy v klíči `namespaces`. Chování všech pravidel je pak jednoznačné a opravy, které stály na odhadu, přestanou být rizikové.
+- Část projektu, kde seznamy úplné nejsou, třeba testy s pomocnými funkcemi, dostane v přepisu `nameResolution: uncertain`.
+- Bez toho je DressCode opatrný a takové opravy dělá jen se svolením v `fixRisky` nebo s `--fix-risky`.
+- Novou deklaraci ve jmenném prostoru ohlásí DressCode pod cestou `namespaces.functions`; první seznamy napíše `dresscode init`.
+- Funkci ze jmenného prostoru volejte přes `use function`. Když se její soubor nenačte, dozvíte se to hned.
+- PHP kód před spuštěním překládá do instrukcí a u desítek funkcí a u konstant umí zkrátit cestu: volání nahradí instrukcí, výsledek spočítá předem, nebo funkci zavolá bez rámce.
+- Skoro všechny zkratky potřebují jisté jméno: `\strlen()`, `use function strlen;` nebo soubor bez jmenného prostoru. Totéž platí pro konstanty jako `PHP_VERSION_ID`.
+- Volání bez rámce z PHP 8.4 funguje i s nekvalifikovaným jménem ve jmenném prostoru.
+- Pojmenované a rozbalené argumenty vypnou všechny zkratky.
+- Sada `compilerOptimizations` zapíše kód tak, aby PHP zkratky mohlo použít: optimalizované funkce kvalifikuje tam, kde je PHP s danými argumenty opravdu zrychlí, a konstanty PHP jen tam, kde s nimi kompilátor počítá.
+
+{{maintitle: Funkce ve jmenných prostorech PHP: jistá jména a rychlejší volání}}

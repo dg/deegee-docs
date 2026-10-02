@@ -1,0 +1,181 @@
+Upgrade to Laravel 13
+*********************
+
+.[perex]
+The official [upgrade guide |https://laravel.com/docs/13.x/upgrade] estimates ten minutes for the move from Laravel 12 to 13. Laravel 13 was released on March 17, 2026, and in your PHP code it mostly changes names: the middleware `VerifyCsrfToken` is now `PreventRequestForgery`, and `$request->get()` is now `input()`. A queued job can also declare `#[Tries]` and `#[Timeout]` instead of properties. With the package `dresscode/upgrade-laravel`, DressCode makes all eleven API changes by itself, offers the attributes, and tells you what is left to you.
+
+
+What It Looks Like
+==================
+
+These six lines come from an application for Laravel 12.0, and each of them uses API that Laravel deprecated during the 12.x series or changed in 13:
+
+```php .[before]
+$middleware->validateCsrfTokens(except: ['stripe/*']);
+$coupon = $request->get('coupon');
+$single = $items->containsOneItem();
+$failed = $attempt->exceptionOccurred;
+$queue = $busy->connection;
+$this->withoutMiddleware(VerifyCsrfToken::class);
+```
+
+Once you raise `laravel/framework` to `^13.0`, one run of DressCode rewrites them for Laravel 13 and also changes the import of the middleware:
+
+```php .[after]
+$middleware->preventRequestForgery(except: ['stripe/*']);
+$coupon = $request->input('coupon');
+$single = $items->hasSole();
+$failed = $attempt->exception !== null;
+$queue = $busy->connectionName;
+$this->withoutMiddleware(PreventRequestForgery::class);
+```
+
+Two of these lines would fail on Laravel 13: the events `JobAttempted` and `QueueBusy` no longer have the properties `$exceptionOccurred` and `$connection`. The other four still work, because Laravel 13 keeps the old names, most of them marked as deprecated. From the types of PHPStan, DressCode knows that `$request` is a request and `$items` a collection, so it rewrites `get()` only where it is called on a request.
+
+
+What Gets Rewritten
+===================
+
+The tables list every change between Laravel 12.0 and 13 in the data of the package `dresscode/upgrade-laravel`, each verified by a run of DressCode. The data are in the file [framework.neon |https://github.com/dg/dresscode-upgrade-laravel/blob/master/upgrading/framework.neon], in the sections `since 12.4` to `since 13`.
+
+
+Laravel 13
+----------
+
+| old API | new API |
+|---|---|
+| `VerifyCsrfToken`, `ValidateCsrfToken` | `PreventRequestForgery` |
+| `$middleware->validateCsrfTokens()` | `$middleware->preventRequestForgery()` |
+| `$event->connection` of `QueueBusy` | `$event->connectionName` |
+| `$event->exceptionOccurred` of `JobAttempted` | `$event->exception !== null` |
+
+DressCode renames the middleware wherever the code names the class: in the import, in `extends` and in `::class`, for example in `withoutMiddleware()` in a test. The upgrade guide rates this change as high impact and says that `VerifyCsrfToken` and `ValidateCsrfToken` remain as deprecated aliases.
+
+
+Deprecated During Laravel 12.x
+------------------------------
+
+| old API | new API | deprecated in |
+|---|---|---|
+| `$request->get('page')`, `Request::get('page')` | `$request->input('page')`, `Request::input('page')` | 12.51 |
+| `$collection->containsManyItems()` | `$collection->hasMany()` | 12.50 |
+| `$collection->containsOneItem()` | `$collection->hasSole()` | 12.49 |
+| `$this->possibleModels()` in a generator command | `$this->findAvailableModels()` | 12.38 |
+| `PostgresGrammar::cascadeOnTrucate()` | `PostgresGrammar::cascadeOnTruncate()` | 12.5 |
+
+While `composer.json` allows `^12.0`, DressCode only reports these places, because the code must also work on Laravel 12.0. It rewrites them once the lower bound reaches the version that deprecated them, and raising it to `^13.0` does that for all of them. DressCode rewrites a call through the facade `Request::get()` only when it knows what is behind the facade, which it does with Larastan in the project, see [Upgrading Laravel |upgrading-laravel#Installation].
+
+
+Laravel 13 Attributes
+=====================
+
+Laravel 13 lets a class declare with an attribute what it used to declare with a property. The [release notes |https://laravel.com/docs/13.x/releases] name the queue attributes `#[Tries]`, `#[Backoff]`, `#[Timeout]` and `#[FailOnTimeout]`, and add that there are more across Eloquent and other parts of the framework. The properties keep working, so the attributes are an offer, not a fix. The data of the package know 33 of them and write them in place of 33 properties and the method `getRouteKeyName()`. You get them with the rest of the data, and the name of the package in `use` adds its two rules, so the configuration is:
+
+```neon
+typeAnalysis: phpstan
+
+use:
+	- perCs           # your standard
+	- deprecations
+	- upgrade-laravel
+```
+
+A queued job written for Laravel 12:
+
+```php .[before]
+class ImportOrders implements ShouldQueue, ShouldBeUnique
+{
+	public $tries = 3;
+
+	public $timeout = 120;
+
+	public $backoff = [10, 60];
+
+	public $uniqueFor = 3600;
+
+
+	public function handle(): void
+	{
+	}
+}
+```
+
+After `dresscode fix`, which also adds four imports from `Illuminate\Queue\Attributes`:
+
+```php .[after]
+#[Tries(3)]
+#[Timeout(120)]
+#[Backoff([10, 60])]
+#[UniqueFor(3600)]
+class ImportOrders implements ShouldQueue, ShouldBeUnique
+{
+	public function handle(): void
+	{
+	}
+}
+```
+
+The attributes cover queued jobs, listeners, mailables and notifications (`#[Connection]`, `#[Queue]`, `#[Delay]`, `#[MaxExceptions]`, `#[FailOnTimeout]`, `#[DeleteWhenMissingModels]` and the four above), models (`#[Table]`, `#[Fillable]`, `#[Hidden]`, `#[WithoutTimestamps]`, `#[RouteKey]` and others), console commands (`#[Signature]`, `#[Description]`), form requests and API resources. A class that reads such a property itself, for example `$this->tries`, keeps it, because removing it would break the read. DressCode reports it and leaves it alone, and does the same with an abstract class:
+
+```
+Property `Illuminate\Contracts\Queue\ShouldQueue::$tries` is replaced by the attribute `#[Illuminate\Queue\Attributes\Tries]`, but the class reads it itself.
+```
+
+The data also turn on the rule that writes a local scope with the attribute `#[Scope]` of Laravel 12.4 instead of the prefix `scope` in its name. It is a risky fix, because DressCode cannot see a call of `scopePublished()` by its old name in another file, so it waits for `--fix-risky`. The model example on the page [Upgrading Laravel |upgrading-laravel#Laravel 13 Attributes] shows it.
+
+If you do not want the attributes, turn them off in the configuration:
+
+```neon
+upgrading:
+	api:
+		attributeForMember: keep
+```
+
+
+What Is Left to You
+===================
+
+For the move from Laravel 12 to 13, the data of the package contain no API that is gone without a replacement, so DressCode reports no such place. What it reports is a class that implements a contract and lacks a method Laravel 13 added to it. The upgrade guide lists `touch()` of the cache `Store`, `dispatchAfterResponse()` of the `Dispatcher`, `eventStream()` of the `ResponseFactory`, `markEmailAsUnverified()` of `MustVerifyEmail` and four methods of the `Queue` contract, such as `pendingSize()`. The decision `mistakes.unimplementedAbstractMethod` from the set `deprecations` finds them in the installed framework, with no data needed:
+
+```
+Class `ArrayStore` does not implement the abstract `Illuminate\Contracts\Cache\Store::touch()`.
+```
+
+The rest of the [upgrade guide |https://laravel.com/docs/13.x/upgrade] is about behavior and configuration, which no data capture. Read it for these changes in particular:
+
+- the packages that must move with the framework: `laravel/tinker` to `^3.0`, `phpunit/phpunit` to `^12.0`, `pestphp/pest` to `^4.0`,
+- the default cache prefixes and session cookie names, which now use hyphens; setting `CACHE_PREFIX`, `REDIS_PREFIX` and `SESSION_COOKIE` keeps the old ones,
+- the cache option `serializable_classes` and the session option `serialization`, which limit what PHP objects are unserialized,
+- `upsert()` with an empty `uniqueBy`, which now throws an exception, and `DELETE` with `JOIN` on MySQL, which now keeps `ORDER BY` and `LIMIT`,
+- the helper `array_first()` of the package `laravel/helpers`, which can clash with the function of the same name from the polyfill of PHP 8.5; DressCode leaves `array_first()` alone, because it cannot tell which of the two functions a call means, and the guide recommends `Arr::first()`.
+
+
+Step by Step
+============
+
+DressCode runs on PHP 8.4 or newer, while Laravel 13 needs PHP 8.3. If the application runs on PHP 8.4, add DressCode as a development dependency, with PHPStan, which tells it the types:
+
+```shell
+composer require --dev dresscode/upgrade-laravel phpstan/phpstan
+```
+
+If the application still has to be installed on PHP 8.2 or 8.3, install DressCode globally, as described in [Where DressCode Runs |upgrade#Where DressCode Runs].
+
+1. Start with a clean working tree. If `require.php` in `composer.json` still allows PHP 8.2, raise it to 8.3 first; [Upgrading to a newer PHP |upgrading-php] shows how.
+2. Measure how much work the upgrade takes: `dresscode upgrade estimate laravel/framework 13.0`. The line `Composer` says whether something in `composer.lock` refuses Laravel 13.
+3. Save the plan with the test command: `dresscode upgrade plan laravel/framework 13.0 --save --test-command "vendor/bin/phpunit --log-junit {junit}"`.
+4. Carry it out: `dresscode upgrade run`. The tests run after each step, and a step after which a test newly fails is undone. At the Composer step, DressCode asks whether it may raise `laravel/framework` to `^13.0`.
+5. Go through what is left for you, and run `upgrade run` again until the run ends with `UPGRADED`. Finally, read the upgrade guide for the changes in behavior and configuration.
+
+If you have already raised `laravel/framework` to `^13.0` yourself, a plain `dresscode upgrade today` is enough. [Upgrade Your Code Step by Step |upgrade] describes the whole procedure with tests, commits and manual tasks.
+
+
+Where to Go Next
+================
+
+- [Upgrading Laravel |upgrading-laravel], what the package covers from Laravel 6 on, including `casts()` and `#[Scope]`.
+- [Upgrade Your Code Step by Step |upgrade], the estimate, the plan and the run in detail.
+- [Types from PHPStan |phpstan-types], so that methods are rewritten only on the right objects.
+
+{{maintitle: Upgrade Laravel 12 to 13 Automatically}}
+{{description: Upgrade Laravel 12 to 13: what DressCode rewrites by itself, which properties it replaces with attributes like #[Tries], and what is left to you.}}

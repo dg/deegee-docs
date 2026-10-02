@@ -1,0 +1,181 @@
+Přechod na Laravel 13
+*********************
+
+.[perex]
+Na přechod z Laravelu 12 na 13 počítá oficiální [průvodce upgradem |https://laravel.com/docs/13.x/upgrade] deset minut. Laravel 13 vyšel 17. března 2026 a ve vašem PHP kódu mění hlavně jména: middleware `VerifyCsrfToken` je teď `PreventRequestForgery` a `$request->get()` je `input()`. Job ve frontě navíc může místo vlastností deklarovat `#[Tries]` a `#[Timeout]`. DressCode s balíčkem `dresscode/upgrade-laravel` udělá všech jedenáct změn API sám, atributy nabídne a řekne, co zbude na vás.
+
+
+Jak to vypadá
+=============
+
+Těchto šest řádků pochází z aplikace pro Laravel 12.0 a každý z nich používá API, které Laravel během řady 12.x označil za zastaralé nebo ve verzi 13 změnil:
+
+```php .[before]
+$middleware->validateCsrfTokens(except: ['stripe/*']);
+$coupon = $request->get('coupon');
+$single = $items->containsOneItem();
+$failed = $attempt->exceptionOccurred;
+$queue = $busy->connection;
+$this->withoutMiddleware(VerifyCsrfToken::class);
+```
+
+Když `laravel/framework` zvednete na `^13.0`, jeden běh DressCode je přepíše pro Laravel 13 a změní i import middlewaru:
+
+```php .[after]
+$middleware->preventRequestForgery(except: ['stripe/*']);
+$coupon = $request->input('coupon');
+$single = $items->hasSole();
+$failed = $attempt->exception !== null;
+$queue = $busy->connectionName;
+$this->withoutMiddleware(PreventRequestForgery::class);
+```
+
+Dva z těch řádků by na Laravelu 13 selhaly: události `JobAttempted` a `QueueBusy` už vlastnosti `$exceptionOccurred` a `$connection` nemají. Zbylé čtyři fungují dál, protože Laravel 13 stará jména ponechává, většinou jako zastaralá. Že `$request` je požadavek a `$items` kolekce, ví DressCode z typů PHPStanu, a proto `get()` přepíše jen tam, kde se volá na požadavku.
+
+
+Co se přepíše
+=============
+
+Tabulky uvádějí všechny změny mezi Laravelem 12.0 a 13 v datech balíčku `dresscode/upgrade-laravel`, každou ověřenou spuštěním DressCode. Data jsou v souboru [framework.neon |https://github.com/dg/dresscode-upgrade-laravel/blob/master/upgrading/framework.neon], v sekcích `since 12.4` až `since 13`.
+
+
+Laravel 13
+----------
+
+| staré API | nové API |
+|---|---|
+| `VerifyCsrfToken`, `ValidateCsrfToken` | `PreventRequestForgery` |
+| `$middleware->validateCsrfTokens()` | `$middleware->preventRequestForgery()` |
+| `$event->connection` události `QueueBusy` | `$event->connectionName` |
+| `$event->exceptionOccurred` události `JobAttempted` | `$event->exception !== null` |
+
+Middleware DressCode přejmenuje všude, kde kód třídu jmenuje: v importu, v `extends` i v `::class`, třeba v testu ve `withoutMiddleware()`. Průvodce upgradem řadí tuhle změnu mezi ty s vysokým dopadem a uvádí, že `VerifyCsrfToken` a `ValidateCsrfToken` zůstávají jako zastaralé aliasy.
+
+
+Zastaralé během Laravelu 12.x
+-----------------------------
+
+| staré API | nové API | zastaralé od |
+|---|---|---|
+| `$request->get('page')`, `Request::get('page')` | `$request->input('page')`, `Request::input('page')` | 12.51 |
+| `$collection->containsManyItems()` | `$collection->hasMany()` | 12.50 |
+| `$collection->containsOneItem()` | `$collection->hasSole()` | 12.49 |
+| `$this->possibleModels()` v generátorovém příkazu | `$this->findAvailableModels()` | 12.38 |
+| `PostgresGrammar::cascadeOnTrucate()` | `PostgresGrammar::cascadeOnTruncate()` | 12.5 |
+
+Dokud `composer.json` dovoluje `^12.0`, DressCode tato místa jen ohlásí, protože kód musí fungovat i na Laravelu 12.0. Přepíše je, jakmile spodní hranice dosáhne verze, která je označila za zastaralá, a po zvednutí na `^13.0` to platí pro všechna. Volání přes fasádu `Request::get()` přepíše jen tehdy, když ví, co se za fasádou skrývá, a to ví s Larastanem v projektu, viz [Upgrade Laravel |upgrading-laravel#Instalace].
+
+
+Atributy Laravelu 13
+====================
+
+Laravel 13 dovoluje třídě deklarovat atributem to, co dřív deklarovala vlastností. [Poznámky k vydání |https://laravel.com/docs/13.x/releases] jmenují atributy fronty `#[Tries]`, `#[Backoff]`, `#[Timeout]` a `#[FailOnTimeout]` a dodávají, že další přibyly v Eloquentu i jinde ve frameworku. Vlastnosti fungují dál, a proto jsou atributy nabídka, ne oprava. Data balíčku jich znají 33 a píšou je místo 33 vlastností a metody `getRouteKeyName()`. Dostanete je spolu s ostatními daty a jméno balíčku v `use` přidá jeho dvě pravidla, takže konfigurace vypadá takto:
+
+```neon
+typeAnalysis: phpstan
+
+use:
+	- perCs           # váš standard
+	- deprecations
+	- upgrade-laravel
+```
+
+Job ve frontě psaný pro Laravel 12:
+
+```php .[before]
+class ImportOrders implements ShouldQueue, ShouldBeUnique
+{
+	public $tries = 3;
+
+	public $timeout = 120;
+
+	public $backoff = [10, 60];
+
+	public $uniqueFor = 3600;
+
+
+	public function handle(): void
+	{
+	}
+}
+```
+
+Po `dresscode fix`, který přidá i čtyři importy z `Illuminate\Queue\Attributes`:
+
+```php .[after]
+#[Tries(3)]
+#[Timeout(120)]
+#[Backoff([10, 60])]
+#[UniqueFor(3600)]
+class ImportOrders implements ShouldQueue, ShouldBeUnique
+{
+	public function handle(): void
+	{
+	}
+}
+```
+
+Atributy pokrývají joby, listenery, mailables a notifikace ve frontě (`#[Connection]`, `#[Queue]`, `#[Delay]`, `#[MaxExceptions]`, `#[FailOnTimeout]`, `#[DeleteWhenMissingModels]` a čtyři výše), modely (`#[Table]`, `#[Fillable]`, `#[Hidden]`, `#[WithoutTimestamps]`, `#[RouteKey]` a další), příkazy konzole (`#[Signature]`, `#[Description]`), form requesty a API resources. Třída, která takovou vlastnost sama čte, třeba `$this->tries`, si ji nechá, protože bez ní by čtení přestalo fungovat. DressCode ji ohlásí a nechá být; stejně naloží s abstraktní třídou:
+
+```
+Property `Illuminate\Contracts\Queue\ShouldQueue::$tries` is replaced by the attribute `#[Illuminate\Queue\Attributes\Tries]`, but the class reads it itself.
+```
+
+Data zapnou i pravidlo, které místo předpony `scope` ve jménu lokálního scope píše atribut `#[Scope]` z Laravelu 12.4. Je to riziková oprava (risky fix), protože o volání `scopePublished()` starým jménem v jiném souboru DressCode neví, a proto čeká na `--fix-risky`. Na modelu ho ukazuje stránka [Upgrade Laravel |upgrading-laravel#Atributy Laravelu 13].
+
+Kdo atributy nechce, vypne je v konfiguraci:
+
+```neon
+upgrading:
+	api:
+		attributeForMember: keep
+```
+
+
+Co zůstane na vás
+=================
+
+Pro přechod z Laravelu 12 na 13 data balíčku neobsahují žádné API, které by zmizelo bez náhrady, a DressCode tedy žádné takové místo neohlásí. Ohlásí ale třídu, která implementuje kontrakt a chybí jí metoda, kterou do něj Laravel 13 přidal. Průvodce upgradem uvádí `touch()` u cache `Store`, `dispatchAfterResponse()` u `Dispatcher`, `eventStream()` u `ResponseFactory`, `markEmailAsUnverified()` u `MustVerifyEmail` a čtyři metody kontraktu `Queue`, třeba `pendingSize()`. Najde je rozhodnutí `mistakes.unimplementedAbstractMethod` ze sady `deprecations`, a to přímo v nainstalovaném frameworku, bez dat:
+
+```
+Class `ArrayStore` does not implement the abstract `Illuminate\Contracts\Cache\Store::touch()`.
+```
+
+Zbytek [průvodce upgradem |https://laravel.com/docs/13.x/upgrade] se týká chování a konfigurace, které žádná data nezachytí. Přečtěte si ho hlavně kvůli těmto změnám:
+
+- balíčky, které se musí posunout spolu s frameworkem: `laravel/tinker` na `^3.0`, `phpunit/phpunit` na `^12.0`, `pestphp/pest` na `^4.0`,
+- výchozí prefixy cache a jména session cookie, které teď používají pomlčky; nastavení `CACHE_PREFIX`, `REDIS_PREFIX` a `SESSION_COOKIE` zachová ta stará,
+- volba cache `serializable_classes` a volba session `serialization`, které omezují, jaké objekty PHP se deserializují,
+- `upsert()` s prázdným `uniqueBy`, které teď vyhodí výjimku, a `DELETE` s `JOIN` na MySQL, které teď zachová `ORDER BY` a `LIMIT`,
+- helper `array_first()` z balíčku `laravel/helpers`, který se může srazit se stejnojmennou funkcí z polyfillu PHP 8.5; DressCode `array_first()` nechává být, protože nepozná, kterou z obou funkcí volání myslí, a průvodce radí `Arr::first()`.
+
+
+Krok za krokem
+==============
+
+DressCode běží na PHP 8.4 nebo novějším, kdežto Laravelu 13 stačí PHP 8.3. Běží-li aplikace na PHP 8.4, přidejte DressCode jako vývojovou závislost spolu s PHPStanem, od kterého se dozví typy:
+
+```shell
+composer require --dev dresscode/upgrade-laravel phpstan/phpstan
+```
+
+Musí-li se aplikace ještě instalovat na PHP 8.2 nebo 8.3, nainstalujte DressCode globálně, jak popisuje [Kde DressCode běží |upgrade#Kde DressCode běží].
+
+1. Začněte s čistým pracovním stromem. Pokud `require.php` v `composer.json` ještě dovoluje PHP 8.2, zvedněte ho napřed na 8.3; jak, ukazuje [Přechod na novější PHP |upgrading-php].
+2. Změřte, kolik práce upgrade dá: `dresscode upgrade estimate laravel/framework 13.0`. Řádek `Composer` řekne, jestli Laravel 13 něco v `composer.lock` nepouští.
+3. Uložte plán i s příkazem testů: `dresscode upgrade plan laravel/framework 13.0 --save --test-command "vendor/bin/phpunit --log-junit {junit}"`.
+4. Proveďte ho: `dresscode upgrade run`. Po každém kroku se pustí testy a krok, po kterém nově spadne test, se vrátí. U kroku Composeru se DressCode zeptá, jestli smí zvednout `laravel/framework` na `^13.0`.
+5. Projděte, co zůstalo na vás, a pusťte `upgrade run` znovu, dokud běh neskončí řádkem `UPGRADED`. Nakonec si přečtěte průvodce upgradem kvůli změnám chování a konfigurace.
+
+Pokud jste `laravel/framework` na `^13.0` zvedli sami, stačí obyčejné `dresscode upgrade today`. Celý postup s testy, commity a ručními úkoly popisuje [Upgrade kódu krok za krokem |upgrade].
+
+
+Kam dál
+=======
+
+- [Upgrade Laravel |upgrading-laravel], co balíček pokrývá od Laravelu 6, včetně `casts()` a `#[Scope]`.
+- [Upgrade kódu krok za krokem |upgrade], odhad, plán a běh podrobně.
+- [Typy z PHPStanu |phpstan-types], aby se metody přepisovaly jen na správných objektech.
+
+{{maintitle: Přechod z Laravelu 12 na 13: automatický přepis kódu}}
+{{description: Upgrade z Laravelu 12 na 13: co DressCode přepíše sám, které vlastnosti nahradí atributy jako #[Tries] a co zůstane na vás.}}

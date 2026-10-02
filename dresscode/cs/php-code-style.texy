@@ -1,0 +1,149 @@
+Formátování kódu krok za krokem
+*******************************
+
+.[perex]
+Váš projekt už nějaký styl kódu má, i když ho nikdo nikdy nesepsal. DressCode mu vezme míru, zapíše ho do konfigurace a první opravu udrží na pár souborech. Šest kroků vás dovede od prvního `dresscode init` ke standardu, který za vás hlídá CI, Git hook, editor i AI agent a který zpřísníte, až budete chtít.
+
+Pokud DressCode ještě nemáte nainstalovaný nebo ho chcete nejdřív jen vyzkoušet, [Začínáme s DressCode |getting-started#Instalace] zabere pět minut. Všechny přepínače příkazů [`init` |cli#init], [`check` |cli#check], [`fix` |cli#fix] a [`baseline` |cli#baseline] najdete v referenci příkazové řádky.
+
+
+1. Změřte, co váš kód už dodržuje
+=================================
+
+Obvyklá cesta ke coding standardu je vybrat si nějaký, pustit fixer a dostat diff, který sáhne na půl projektu. Takový diff nikdo neprojde a otevřené větve s ním mají konflikty. DressCode na to jde obráceně a začíná od kódu, který už máte. V kořeni projektu proto pusťte:
+
+```shell
+dresscode init
+```
+
+`init` zkontroluje kód podle každého standardu a vezme ten, se kterým by oprava změnila nejméně souborů. Pak změří rozhodnutí, ve kterých se váš kód od tohoto standardu liší, a zapíše je s hodnotami, jaké má váš kód. Ve výpisu řekne, co našel:
+
+/--pre .[terminal]
+Standard   perCs (PER Coding Style), the nearest to your code by the files a fix changes, 13 under psr12; `--use` names another
+Measured   your code departs from it in 3 decisions over 13 files; perCs as it is, with no decision below `use`, would rewrite 13 of them
+As written indentation.unit: tab   your code, 92% of 13 files
+           blankLines.beforeDeclaration: 2   your code, all 13 places
+           braces.emptyBody.function: expanded   your code, all 26 places
+Checked    all 13 files: a fix changes 1 file, 1 of them for the indentation, the line endings or the long lines the rest of the code has
+...
+Written    `dresscode.neon`
+\--
+
+Nejbližší standard je tady `perCs`, tedy [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/]. Podívejte se na řádek `Measured`: tak, jak je, by standard přepsal všech 13 souborů. Se třemi rozhodnutími zapsanými podle vašeho kódu změní oprava podle řádku `Checked` jediný soubor. V tom je smysl celého kroku: základ dá standard, hodnoty tam, kde se od něj liší, dá váš kód, a každá hodnota říká, o co se opírá (`your code, 92% of 13 files`).
+
+I tak se může projekt od nejbližšího standardu lišit na mnoha místech, a první oprava nemá přepsat půl projektu. Proto má `init` rozpočet: oprava smí změnit nejvýš 1 % souborů, aspoň 2 a nejvýš 20, jiný počet určí přepínač `--budget`. Jen odsazení, šířku řádku a konce řádků opraví bez ohledu na rozpočet, protože na nich stojí všechno ostatní, a soubory, kterých se týkají, počítá řádek `Checked` zvlášť. Kdyby opravy dohromady změnily víc, nechá `init` některá rozhodnutí nekontrolovaná a zeptá se vás na ně i s ukázkou místa v kódu. Ptá se i na další věci, o kterých máte rozhodnout vy, třeba kterému ze dvou blízkých standardů dáváte přednost. Doporučená odpověď je vždy první a stačí na ni Enter. Nechává kód tak, jak ho máte, takže když si nejste jistí, nic nezkazíte.
+
+Bez terminálu nebo s přepínačem `--yes` se `init` neptá a vezme doporučené odpovědi; každou otázku místo toho vypíše na řádku `Your call` v podobě řádku `dresscode.neon` nebo příkazu, kterým odpovíte jinak. Chcete-li kód měřit podle standardu, který si vyberete sami, uveďte ho: `dresscode init --use nette`. Pokud projekt už používá PHP_CodeSniffer, PHP CS Fixer nebo Laravel Pint, `init` přečte i jeho konfiguraci, a jak místo toho přeložit jeho pravidla, ukazuje [Přechod na DressCode |migration]. Všechny podrobnosti najdete v popisu [příkazu `init` |generate-configuration].
+
+
+2. Projděte a upravte konfiguraci
+=================================
+
+`init` zapsal do kořene projektu `dresscode.neon`. Když pomineme vyloučené cesty a to, co našel ve jmenných prostorech, vypadá takhle:
+
+```neon
+# made to measure by `dresscode init`; run it again to see what has moved since, it writes nothing over this file
+use: perCs   # PER Coding Style, of the standards the one a fix changes the fewest files of your code under
+
+paths: [src, tests]
+
+indentation:
+	unit: tab                # your code, 92% of 13 files
+
+braces:
+	emptyBody:
+		function: expanded   # your code, all 26 places
+
+blankLines:
+	beforeDeclaration: 2     # your code, all 13 places
+```
+
+Soubor odpovídá na dvě otázky. Klíč `use` říká, jak má kód vypadat: jmenuje standard a za něj můžete přidat [sady |configuration#Standardy a sady], třeba `cleanup`, které od kódu chtějí víc než vzhled. Klíče pod ním říkají rozhodnutí po rozhodnutí, v čem váš projekt píše kód jinak. Rozhodnutí, o kterém soubor nemluví, dostane hodnotu ze standardu.
+
+Každý klíč je cesta rozhodnutí, tatáž, kterou vidíte ve výpisu u každého nálezu. Když vám cesta nic neříká, zeptejte se: `dresscode explain braces.emptyBody.function` vypíše, k čemu rozhodnutí je, jaké hodnoty přijímá, jakou má v tomto projektu a co říkají standardy. `dresscode config` vypíše všechna rozhodnutí, která nakonec platí, i s vrstvou, která je nastavila.
+
+Kteroukoli hodnotu můžete změnit, nebo řádek smazat a nechat rozhodnout standard. Než soubor změníte, vyzkoušejte hodnotu na jeden běh: `dresscode check --set literals.quotes=single --only literals.quotes --diff` ukáže, co by se změnilo, kdyby všude byly jednoduché uvozovky, a nic nezapíše. Hodnota `keep` znamená "nekontrolovat" a vypne rozhodnutí, i když ho nastavuje standard. Všechno, co soubor umí říct, popisuje stránka [Konfigurace |configuration].
+
+
+3. První oprava jako samostatný commit
+======================================
+
+Před první opravou commitněte rozdělanou práci, nebo mějte aspoň čistý pracovní strom, aby diff ukázal přesně to, co změnil DressCode. Pak se podívejte, co oprava udělá, a nechte ji to udělat:
+
+```shell
+dresscode check --diff
+dresscode fix
+```
+
+`check --diff` ukáže změny a nic nezapíše, `fix` je provede. Každý soubor, který změnil, je ve výpisu označený `rewritten`. Pod souborem zůstane, co sám opravit neumí, třeba jméno metody, které by se muselo změnit i všude, kde se metoda volá.
+
+Výsledek commitněte spolu s `dresscode.neon`, který ho vysvětluje, a bez jiných změn. Takový commit nikdo nečte řádek po řádku a ani nemusí: stačí vědět, že v něm nic jiného není. `git blame` pak u přeformátovaných řádků vede na tento commit, a ne na váš další commit se skutečnou změnou. Díky rozpočtu zůstane commit malý, takže se s ním otevřená větev jen málokdy střetne. Pokud jste rozpočet zvedli nebo zvolili hodnoty, které mění víc kódu, rozdělte úklid do několika commitů, jeden na každou sadu nebo sekci, viz [Uklidit starý kód po krocích |configuration#Uklidit starý kód po krocích].
+
+
+4. Co žádné pravidlo neopraví
+=============================
+
+Po první opravě může `check` hlásit ještě místa, na která je potřeba člověk: metodu `get_total`, která se má psát v camelCase, [rizikovou opravu (risky fix) |configuration#risky-fixes], kterou projekt nepovolil, nebo řádek, který je delší, než dovoluje `file.lineLength`, a DressCode ho za vás zalomit neumí. Z každého vedou tři cesty.
+
+Je-li jich jen pár, opravte je ručně. Nemá-li rozhodnutí na jednom místě prostě pravdu, potlačte ho tam komentářem `// dresscode:ignore naming.method` a za dvě pomlčky napište proč. A má-li rozhodnutí pravdu, ale všechno dnes opravit nestihnete, zapište zbytek do baseline:
+
+```shell
+dresscode baseline
+```
+
+/--pre .[terminal]
+Baseline with 312 violations written to `dresscode-baseline.neon`.
+\--
+
+Od té chvíle se hlásí jen nová porušení. Baseline obsahuje jen to, co oprava nechá, a proto ji zapisujte až po `fix`; kdyby oprava ještě něco změnila, `baseline` nezapíše nic a řekne vám, ať napřed pustíte `fix`. Rozdíl proti potlačení (suppression) je podstatný: potlačení říká "tady rozhodnutí nemá pravdu" a zastaví i opravu, kdežto baseline říká "tohle zatím neumíme" a opravu nezastaví nikdy. Baseline má ubývat, a když některá její položka už ničemu neodpovídá, běh vám to řekne. Všechny úrovně potlačení i baseline popisuje stránka [Potlačení a baseline |suppressions-and-baseline].
+
+
+5. Ať to tak zůstane
+====================
+
+Standard, který závisí na tom, že si někdo vzpomene ho pustit, pomalu vybledne. Ať ho hlídají nástroje, které už máte:
+
+- **Průběžná integrace (CI)** pustí `dresscode check` při každém pushi a při exit kódu 1 job selže. V GitHub Actions se každý nález objeví jako anotace přímo u svého řádku v pull requestu. Viz [Průběžná integrace |continuous-integration].
+- **Git hook** kontroluje jen soubory, které jdou do commitu, a dokud je čisto, nevypíše nic. Viz [Git hooky |git-hooks].
+- **Editor** zformátuje soubor při uložení příkazem `dresscode fix --stdin`, v PhpStormu, ve VS Code i v každém editoru, který pouští formátovač přes standardní vstup. Viz [Editory a IDE |editors].
+- **AI agent** s pluginem `php-fixer` v Claude Code nebo Codexu má každý soubor, který upraví, hned ušitý podle vaší konfigurace a dozví se, co se v něm změnilo. Viz [AI agenti |ai-agents].
+
+Všechny čtyři čtou tentýž `dresscode.neon`, takže server, hook, editor i agent drží kód podle téhož standardu. Čím začít, radí stránka [Integrace |integrations].
+
+
+6. Časem zpřísněte
+==================
+
+Konfigurace, kterou `init` zapsal, popisuje kód takový, jaký byl ten den, i s jeho kompromisy. Rozhodnutí, které odložil rozpočet, zůstává v souboru jako `keep` s komentářem `not checked: a fix would change …` a počtem souborů. Až na něj budete mít čas, nejdřív ho vyzkoušejte a pak z něj udělejte samostatný commit:
+
+```shell
+dresscode check --set literals.quotes=single --only literals.quotes --diff
+dresscode fix --set literals.quotes=single
+```
+
+První příkaz ukáže, co by rozhodnutí změnilo, a nic nezapíše. Druhý pustí celou konfiguraci a k ní to jedno rozhodnutí, takže jeho změny vyjdou rovnou zformátované podle vašeho standardu. Pak hodnotu zapište do `dresscode.neon` místo `keep` a commitněte obojí najednou, viz [Zavést nové rozhodnutí jedním commitem |configuration#Zavést nové rozhodnutí jedním commitem].
+
+Stejnou cestou může jít i hodnota, kterou `init` naměřil z vašeho kódu. Taková hodnota bývá stopou standardu, který se mezitím posunul; chcete-li jít s ním, smažte řádek z `dresscode.neon` a pusťte `fix`. Se sadami je to stejné: `dresscode check --use cleanup --diff` ukáže, co by změnila sada `cleanup`, dřív než ji přidáte do klíče `use`.
+
+Po aktualizaci DressCode nebo po nějaké době práce na projektu pusťte `dresscode init` znovu. Existující konfiguraci nepřepíše. Změří kód znovu a vypíše každé rozhodnutí, které by dnes zapsal jinak, i s tím, kolik souborů by přepsala oprava podle hodnoty v souboru. Vypíše také každé rozhodnutí, které soubor nastavuje jinak než standard, ačkoli se kód standardu už drží. Když se nic neposunulo, řekne to:
+
+/--pre .[terminal]
+Compared   the code with the standard and the decisions of `dresscode.neon`, over the files it checks
+Moved      nothing: `dresscode.neon` says what init measures
+
+`dresscode.neon` exists, so nothing is written; `dresscode check --set path=value` shows what a value would change.
+\--
+
+
+Kam dál
+=======
+
+- [Začínáme |getting-started], pokud DressCode ještě nemáte nainstalovaný.
+- [Konfigurace |configuration], všechno, co konfigurační soubor umí říct.
+- [Pravidla |decisions/@home], všechna rozhodnutí s jejich hodnotami a ukázkami.
+- [Standardy a sady |php-coding-standards], co přesně který standard a sada rozhoduje.
+- [Potlačení a baseline |suppressions-and-baseline], čtyři úrovně potlačení a baseline do detailu.
+- [Příkazová řádka |cli], všechny příkazy a přepínače včetně [`init` |generate-configuration].
+
+{{maintitle: Zavedení coding standardu v PHP krok za krokem}}
+{{description: Jak zavést coding standard do existujícího PHP projektu: DressCode změří styl vašeho kódu, první opravu udrží malou a CI pak styl hlídá.}}
