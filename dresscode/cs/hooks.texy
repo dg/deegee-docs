@@ -1,0 +1,44 @@
+Git hooky
+*********
+
+.[perex]
+Pre-commit hook, který mlčí, dokud je čisto, a kontroluje jen to, co jde do commitu. AI agenty popisuje stránka [AI agenti |agents].
+
+
+Pre-commit
+==========
+
+Hook má být rychlý a tichý: zkontrolovat jen soubory, které jdou do commitu, a když je všechno v pořádku, nevypsat nic. Přesně na to je formát `lines`, jeden řádek na nález, a přepínač `--stdin` navíc umožňuje kontrolovat obsah z indexu, ne z pracovního stromu, který se od něj může lišit:
+
+```shell
+#!/bin/sh
+status=0
+for file in $(git diff --cached --name-only --diff-filter=ACM -- '*.php'); do
+	git show ":$file" | dresscode check --stdin "$file" -f lines --skip-excluded || status=1
+done
+exit $status
+```
+
+Uložte jako `.git/hooks/pre-commit` a nastavte spustitelný bit. Když je vše v pořádku, hook nic nevypíše a commit projde; jinak vypíše každé porušení na jeden řádek s cestou, řádkem, zprávou a cestou rozhodnutí, a commit zastaví:
+
+/--pre .[terminal]
+src/Cart.php:5:5: error: The import of `Gateway` is unused. [imports.unused]
+src/Cart.php:15:21: error: A plain string must be written with single quotes. [literals.quotes]
+\--
+
+Díky `--skip-excluded` hook přeskočí soubor, který konfigurace vylučuje v `excludePaths` nebo který neleží v jejích `paths`; bez něj by se se `--stdin` zkontroloval i ten.
+
+Kdo chce hook, který rovnou opravuje, pustí `fix` nad pracovním stromem a opravené soubory přidá do indexu. Je to pohodlné, ale znamená to, že commit obsahuje změny, které vývojář neviděl. Mně je bližší první varianta: hook jen hlásí a opravu si pustím vědomě.
+
+S nástrojem `pre-commit` je to jeden záznam v konfiguraci. Nástroj předává DressCode jména souborů, a proto záznam potřebuje `--skip-excluded`, jinak by zkontroloval i soubor, který konfigurace vylučuje v `excludePaths`:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: dresscode
+        name: DressCode
+        entry: dresscode check -f lines --skip-excluded
+        language: system
+        types: [php]
+```

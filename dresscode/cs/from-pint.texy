@@ -1,0 +1,58 @@
+Přechod z Laravel Pintu
+***********************
+
+{{description: Laravel Pint a DressCode: standard laravel nese styl presetu laravel z Pintu, přechod je jeden řádek konfigurace a k formátování přibude upgrade PHP a Laravelu v témže běhu.}}
+
+.[perex]
+Laravel Pint formátuje kód presetem `laravel` a DressCode má týž styl jako standard `laravel`. Přechod je jeden řádek konfigurace, který v projektu s Pintem napíše `dresscode init` sám, a týž běh k formátování přidá upgrade na novější PHP i Laravel.
+
+
+Proč DressCode místo Pintu
+==========================
+
+Pint je vlastní příkazová řádka nad PHP CS Fixerem s vlastními presety. Výchozí z nich, `laravel`, je seznam fixerů, které pouští nad vaším kódem. DressCode ten výčet nese jako standard `laravel`, takže kód, který Pint formátoval, nechá skoro beze změny. Ověřené je to nad čtrnácti balíčky Laravelu, 1 615 soubory prohnanými Pintem 1.32: `dresscode check --use laravel` v nich našel 129 míst a každé z nich je některá z odchylek popsaných níže (říjen 2026).
+
+Co dostanete navíc:
+
+- **Upgrade v témže běhu.** Sada `modernizations` přepíše kód na konstrukce novější verze PHP, `deprecations` opraví, co PHP zavrhlo, a balíček `dresscode/upgrade-laravel` přepíše API, které Laravel mezi verzemi změnil. Viz [Přechod na novější PHP |upgrading-php] a [Laravel |upgrading-laravel].
+- **Jména tříd v phpDoc importuje v každém tagu**, i v `@template` a `@method`, kde je Pint nechává celá.
+- **Výstup pro AI agenty a editory.** Formát `agent` řekne agentovi, co se v souboru po jeho editaci změnilo, aby mu další editace neselhala. Viz [AI agenti |agents].
+
+
+Převod
+======
+
+V projektu, který vyžaduje `laravel/pint` nebo má `pint.json`, napíše [`dresscode init` |cli#init] standard presetu Pintu sám, u výchozího `laravel`:
+
+/--pre .[terminal]
+Standard   laravel, the style of Laravel Pint, which the project formats with; `--use` writes another
+\--
+
+Konfigurace napsaná ručně je jeden řádek:
+
+```neon
+use: laravel
+```
+
+Má-li váš `pint.json` v klíči `rules` pravidla navíc k presetu, přepište je do konfigurace ručně. Jména fixerů DressCode zná: `dresscode catalogue` vypíše u každého rozhodnutí fixery PHP CS Fixeru, které pokrývá, takže `no_unused_imports` najdete jako `imports.unused`. Klíč `exclude` patří do `excludePaths`, viz [Konfigurace |configuration#Cesty].
+
+| Pint | DressCode |
+|---|---|
+| `pint` | `dresscode fix` |
+| `pint --test` | `dresscode check` |
+| `pint app/Models` | `dresscode fix app/Models` |
+| `pint --preset laravel` | `dresscode fix --use laravel` |
+
+
+Kde se DressCode od Pintu liší
+==============================
+
+Nad kódem, který formátoval Pint, narazíte na tyto odchylky:
+
+- Jméno třídy v doc komentáři DressCode zkrátí a importuje v každém tagu, Pint jen v tazích, které vyjmenovává jeho `fully_qualified_strict_types`, tedy ne v `@template` ani v `@method`.
+- Dva prázdné řádky za sebou uvnitř doc komentáře sloučí v jeden. Pint ořezává jen jeho začátek a konec.
+- Import, jehož jméno stojí jen v textu komentáře, DressCode odstraní jako nepoužitý. Pint ho nechá.
+- V porovnání literálu s konstantou, `'\\' === DIRECTORY_SEPARATOR`, dá konstantu doleva. Pint obě strany nechá, jak jsou.
+- Konce řádků řídí většina v souboru (`file.lineEnding: majority`), takže projekt na Windows s CRLF zůstane u CRLF. Pint píše LF.
+
+A co Pint dělá a DressCode zatím ne: testovací metody nepřejmenuje na snake_case (`php_unit_method_casing`), neseřadí traity (`ordered_traits`) a tagy phpDoc nezarovná ani neseřadí (`phpdoc_align`, `phpdoc_order`, `phpdoc_separation`). Celý preset i s komentáři ukazuje stránka [Standardy a sady |presets-reference#laravel].

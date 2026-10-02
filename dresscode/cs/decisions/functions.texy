@@ -1,0 +1,163 @@
+Funkce
+******
+
+.[perex]
+Sekce `functions` rozhoduje o funkcích a closure (anonymních funkcích): jestli se closure, která jen vrací jeden výraz, píše jako arrow funkce, jestli closure bez `$this` dostane `static`, jestli se `true` a `false` předávají pojmenovaně, a co s `return` na konci funkce, s výchozí hodnotou parametru, ke které se nikdy nedojde, a s funkcí deklarovanou uvnitř jiné funkce.
+
+Zápis signatury a závorek patří jiným sekcím: mezera za `function` a `fn` sekci [spacing |spacing], složená závorka closure sekci [braces |braces], typy parametrů sekci [types |types].
+
+```neon
+functions:
+	arrowFunction:
+		oneExpression: required
+	trailingBareReturn: forbidden
+	unreachableParameterDefault: forbidden
+```
+
+```php .[before]
+$names = array_map(function ($user) {  // The closure returning a single expression must be written as an arrow function.
+	return $user->name;
+}, $users);
+
+function writeLog(string $message, $level = 'info', $context)  // Useless default value of `$level`, because a required parameter follows.
+{
+	echo $message;
+	return;  // Useless return, because the function ends right after it.
+}
+```
+
+```php .[after]
+$names = array_map(fn($user) => $user->name, $users);
+
+function writeLog(string $message, $level, $context)
+{
+	echo $message;
+}
+```
+
+Closure se na arrow funkci přepíše jen tam, kde je to totéž: nezachytává proměnnou referencí, nesahá na proměnnou, kterou nejmenuje, a neztratí se žádný komentář.
+
+
+functions.trailingBareReturn
+============================
+
+`return;` as the last statement.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `forbidden`, laravel `forbidden` · pokrývá `no_useless_return` .[decision-facts]
+
+
+functions.arrowFunction.oneExpression
+=====================================
+
+An arrow function written for a closure whose body is a single `return`, where that is equivalent: no variable captured by reference, none reached by a name it does not spell out, no comment lost.
+
+Not about the `static` of the arrow function, which `functions.staticClosure` decides.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` · pokrývá `use_arrow_functions`, `SlevomatCodingStandard.Functions.RequireArrowFunction` .[decision-facts]
+
+
+functions.arrowFunction.emptyBody
+=================================
+
+`fn() => null` written for a closure with an empty body, one returning `void`, `never` or by reference aside.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `required`, psr12 `keep`, nette `keep`, symfony `required`, laravel `keep` .[decision-facts]
+
+
+functions.arrowFunctionNested
+=============================
+
+Whether a closure holding another closure or arrow function becomes one too.
+
+- `yes`, nebo `no`
+
+Výchozí `no` · standardy: perCs `no`, psr12 `no`, nette `yes`, symfony `no`, laravel `no` · pokrývá `SlevomatCodingStandard.Functions.RequireArrowFunction` .[decision-facts]
+
+
+functions.namedBooleanArgument
+==============================
+
+A `true` or `false` passed by position to a parameter declared `bool`, written with the name of the parameter, `json_decode($json, associative: true)`; not where a positional argument follows it, nor in a call of a setter, `setVisible(true)`, or of a function PHP calls without a frame or optimizes.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+Pojmenovaný argument říká, co `true` nebo `false` přepíná, aniž by čtenář hledal signaturu. DressCode pojmenuje jen argumenty na konci volání, za kterými už nestojí žádný poziční, protože PHP poziční argument za pojmenovaným nepřijme. Setter jako `setVisible(true)` to říká už svým jménem, takže zůstane, jak je. Zůstanou i funkce, které PHP volá bez rámce nebo je optimalizuje kompilátor, třeba `in_array()`: pojmenovaný argument by jim optimalizaci vzal. Další funkce a metody vyjmenujete v `functions.namedBooleanArgumentExcept`.
+
+Jména parametrů funkcí PHP zná DressCode sám. U metod, `new` a funkcí vašeho projektu potřebuje [typy kódu |/types], bez nich taková volání nechá být.
+
+```neon
+functions:
+	namedBooleanArgument: required
+	namedBooleanArgumentExcept: [print_r]
+```
+
+```php .[before]
+$data = json_decode($json, true);  // The boolean argument of `json_decode()` must be named `associative`.
+$html = htmlspecialchars($text, ENT_QUOTES, 'UTF-8', false);  // The boolean argument of `htmlspecialchars()` must be named `double_encode`.
+echo print_r($data, true);
+```
+
+```php .[after]
+$data = json_decode($json, associative: true);
+$html = htmlspecialchars($text, ENT_QUOTES, 'UTF-8', double_encode: false);
+echo print_r($data, true);
+```
+
+Oprava je riziková (risky fix) u volání metody, kterou může deklarovat znovu potomek, třeba `$this->render(true)` ve třídě, která není finální, nebo volání přes rozhraní: potomek může parametr pojmenovat jinak a volání by pak skončilo chybou. Volání metody `private` nebo `final`, metody finální třídy, přes `self::` a `parent::` a `new` rizikové nejsou. Rizikové opravy se udělají, až rozhodnutí uvedete v klíči [`fixRisky` |/configuration#risky-fixes].
+
+
+functions.namedBooleanArgumentExcept
+====================================
+
+The functions and methods whose arguments stay positional, a method written with the class declaring it or the one it is called on, `Acme\Shop\Cart::add`.
+
+- seznam jmen
+
+Výchozí `[]` · standardy: perCs `[]`, psr12 `[]`, nette `[]`, symfony `[]`, laravel `[]` .[decision-facts]
+
+
+functions.innerFunction
+=======================
+
+A named function declared inside a function, a method, a closure or a property hook, which is only reported.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · pokrývá `Squiz.PHP.InnerFunctions` .[decision-facts]
+
+
+functions.staticClosure
+=======================
+
+The `static` keyword of a closure or an arrow function that does not use `$this`.
+
+- `required`: always there, `static function`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` · pokrývá `static_lambda`, `SlevomatCodingStandard.Functions.StaticClosure` .[decision-facts]
+
+Oprava je riziková (risky fix): closure se dá k objektu přivázat i jinde, přes `bindTo()` nebo `Closure::bind()`, a to z jednoho souboru vidět není. Udělá se, až rozhodnutí uvedete v klíči [`fixRisky` |/configuration#risky-fixes].
+
+
+functions.unreachableParameterDefault
+=====================================
+
+A default a required parameter after it makes unreachable.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `forbidden` · pokrývá `no_unreachable_default_argument_value`, `PEAR.Functions.ValidDefaultValue`, `SlevomatCodingStandard.Functions.UselessParameterDefaultValue` .[decision-facts]

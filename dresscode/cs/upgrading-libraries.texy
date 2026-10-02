@@ -1,0 +1,224 @@
+Jak funguje upgrade knihoven
+****************************
+
+{{description: Když knihovna přejmenuje třídu, konstantu, metodu nebo parametr, DressCode přepíše váš kód za vás. Data o tom, co se ve kterých verzích změnilo, nesou balíčky pro upgrade jednotlivých ekosystémů.}}
+
+.[perex]
+Když knihovna přejmenuje třídu, konstantu, metodu nebo parametr, DressCode přepíše váš kód za vás, a co přepsat nejde, ohlásí i s tím, co napsat místo toho. Co se ve kterých verzích knihovny změnilo, nesou data v balíčcích pro upgrade jednotlivých ekosystémů. Tahle stránka vysvětluje, odkud DressCode ví, co přepsat, a jak to zapnout v každodenní kontrole; samotný postup upgradu popisuje [Upgrade kódu |upgrade].
+
+
+Jak to vypadá
+=============
+
+Tyhle řádky presenteru jsou psané pro Nette 3.0. Projekt teď stojí na současných verzích a má nainstalovaný balíček `dresscode/upgrade-nette`:
+
+```php .[before]
+$this->invalidateControl('list');
+$form->addText('title')->addRule(Form::MAX_LENGTH, null, 100);
+$form->addUpload('photos', 'Fotky', true);
+$values = $form->getValues(true);
+$page = $this->getParameter('page', 1);
+$json = Json::encode($values, Json::PRETTY);
+```
+
+Po jednom `dresscode upgrade`:
+
+```php .[after]
+$this->redrawControl('list');
+$form->addText('title')->addRule(Form::MaxLength, null, 100);
+$form->addMultiUpload('photos', 'Fotky');
+$values = $form->getValues('array');
+$page = $this->getParameter('page') ?? 1;
+$json = Json::encode($values, pretty: true);
+```
+
+Šest změn ze tří knihoven, a žádná z nich není prosté najdi a nahraď: `addUpload()` s příznakem pro víc souborů je jiná metoda, výchozí hodnota parametru se přesunula za `??` a příznak `Json::PRETTY` je teď pojmenovaný argument. DressCode přitom pozná, že `$form` je formulář a `$this` presenter, i u metody zděděné od předka, protože se ptá na [typy z PHPStanu |types]. Stejně přepíše i anotaci `@persistent` na atribut `#[Persistent]` i s importem.
+
+
+Odkud DressCode ví, co se změnilo
+=================================
+
+Co která verze knihovny přejmenovala, přesunula nebo zrušila, je zapsané v souborech NEON, jeden na knihovnu. Nese je **balíček pro upgrade** celého ekosystému, třeba `dresscode/upgrade-nette` pro všechny knihovny Nette, a může je nést i knihovna sama. Takhle vypadá kousek souboru pro `nette/forms`:
+
+```neon
+package: nette/forms
+
+since 3.1.11:
+	replacedMembers:
+		Nette\Forms\Form::FILLED: Filled
+		Nette\Forms\Form::MAX_LENGTH: MaxLength
+
+since 3.1:
+	replacedClasses:
+		Nette\Forms\IControl: Nette\Forms\Control
+
+since 3.0:
+	replacedCalls:
+		'Nette\Forms\Container::addUpload($name, $label, true)': 'addMultiUpload($name, $label)'
+```
+
+Každá sekce `since` říká, co přinesla daná verze knihovny, a přepisuje se podle ní jen tehdy, když na ni dosáhne nejnižší verze, kterou omezení projektu v `composer.json` dovolí, ne ta zrovna nainstalovaná: kód psaný pro novější by se rozbil všude, kam omezení pustí starší. Sekce vyšší verze, kterou omezení také dovoluje, se jen ohlásí, viz [Rozhodují dolní meze |upgrade#Rozhodují dolní meze]. U knihovny, kterou projekt vyžaduje bez dolní meze, nebo nevyžaduje vůbec a dostal ji jen jako závislost něčeho jiného, se ohlásí všechno a nepřepíše nic, protože může být v jakékoli verzi. Knihovnu, kterou jiný balíček nahrazuje v klíči `replace` svou vlastní verzí, třeba `illuminate/support` v `laravel/framework`, posuzuje DressCode podle verze toho balíčku. Nenastavujete nic: soubory DressCode najde sám, ať balíček leží ve vendoru projektu, nebo vedle DressCode, protože balíček jejich adresář ohlásí ve svém `composer.json`.
+
+Kde data nejsou, pomůže samotný kód knihovny. Dobře udržovaná knihovna staré API nesmaže ze dne na den, nejdřív ho označí anotací, třeba `@deprecated use Form::Filled`. S typy z PHPStanu tohle DressCode přečte a zápis přepíše podle rozhodnutí `upgrading.declarations.deprecatedMember` a `deprecatedClass`, statické volání i do jiné třídy, třeba `Text::check($s)` na `Encoding::isValid($s)`. Anotace ale pomůže jen do chvíle, kdy knihovna staré API opravdu smaže, a projekt, který jednu hlavní verzi přeskočí, ve vendoru žádnou anotaci nenajde, jen chybějící třídu. Data v balíčku pro upgrade zůstanou i po smazání, a kde je mají, mají přednost. Anotace přitom mluví jen za nainstalovanou verzi, a tak je DressCode u knihovny nainstalované ve vyšší verzi, než omezení nejníž dovolí, nepoužije; nejnižší verze do vendoru dostane `composer update --prefer-lowest`.
+
+Data mluví o tom, jak se třída používá, ne o její implementaci, a proto kód samotné třídy nepřepisují ani nehlásí. Potomek třídy je ale uživatel jako každý jiný a upgraduje se.
+
+
+Balíčky pro ekosystémy
+======================
+
+| ekosystém | balíček | co nese |
+|---|---|---|
+| [Nette |upgrading-nette] | `dresscode/upgrade-nette` | všechny knihovny Nette, většinu od verze 3.0, přes 900 položek |
+| [Symfony |upgrading-symfony] | `dresscode/upgrade-symfony` | padesát komponent a mostů Symfony od verze 6.0, přes 650 položek |
+| [Laravel |upgrading-laravel] | `dresscode/upgrade-laravel` | framework Laravel od verze 6 a atributy Laravelu 13 |
+| [Dibi a Texy |upgrading-deegee] | `dresscode/upgrade-deegee` | Dibi od 4.1, Texy od 3.0 |
+
+Balíček nainstalujete do projektu jako vývojovou závislost, nebo ho `dresscode upgrade` [doinstaluje sám |upgrade#Chybějící data] vedle DressCode. Data jsou jen data, a tak s knihovnami, které popisují, nijak nesouvisí:
+
+```shell
+composer require --dev dresscode/upgrade-nette
+```
+
+Jak takový balíček napsat pro jiný ekosystém, popisuje stránka [Mapy náhrad |upgrading-data#Balíček pro upgrade ekosystému].
+
+
+Zapnutí v konfiguraci
+=====================
+
+Příkaz `dresscode upgrade` si všechno zapne sám. Aby staré API hlídala i každá kontrola `check` a oprava `fix`, třeba v průběžné integraci, řekne to konfigurace. Data balíčků se uplatní, až když projekt řekne `upgrading.packages: yes`, a to dělají [sady |configuration#Standardy a sady] `deprecations` i `modernizations`; projekt, který data balíčků nechce, napíše `upgrading.packages: no`. Většina přepisů potřebuje [typy z PHPStanu |types], protože bez nich nepozná, čí metodu které volání volá. Konfigurace proto uvádí i klíč `typeAnalysis`:
+
+```neon
+typeAnalysis: phpstan
+
+use:
+	- perCs           # váš standard
+	- deprecations
+	- upgrade-nette
+```
+
+Jméno balíčku v `use` pustí dovnitř jeho plugin, tedy pravidla, která balíček nese vedle dat, jako převod příznaku `Json::PRETTY` na pojmenovaný argument. Balíček vendoru `dresscode` se tu píše krátce jako vestavěné sady, `upgrade-nette` je totéž co `dresscode/upgrade-nette`. Data samotná se uplatní i bez jména v `use`.
+
+Data přicházejí do map sekce [`upgrading` |decisions/upgrading] a sada `deprecations` k nim zapne i rozhodnutí, která pracují bez dat, s kódem nainstalované verze:
+
+| rozhodnutí | co dělá | typy |
+|---|---|---|
+| `upgrading.api.replacedClasses` | přepíše třídu, rozhraní nebo výčet na jiné | ne |
+| `upgrading.api.replacedFunctions` | přepíše volání funkce na jinou funkci | ne |
+| `upgrading.api.replacedMembers` | přepíše konstantu, metodu nebo vlastnost, která se jmenuje jinak a používá se stejně | ano |
+| `upgrading.api.replacedCalls` | přepíše volání, které se píše jinak: jiný tvar argumentů, přejmenovaný parametr, getter místo vlastnosti | ano |
+| `upgrading.api.attributeForAnnotation` | nahradí anotaci atributem | ne |
+| `upgrading.api.attributeForMember` | nahradí atributem třídy vlastnost, metodu nebo rozhraní, podle kterých knihovna třídu dřív našla | ne |
+| `upgrading.api.forbiddenClasses`, `forbiddenFunctions`, `forbiddenConstants`, `forbiddenMembers` | ohlásí, co náhradu nemá nebo ji musí napsat člověk, i s tím, co dělat | jen `forbiddenMembers` |
+| `upgrading.declarations.deprecatedClass`, `deprecatedMember` | přepíše, co knihovna označila `@deprecated` a data neznají | ano |
+| `classes.overridingMethod.signature` | přizpůsobí metodu potomka signatuře, kterou jí nová verze předka předepíše | ano |
+| `mistakes.finalParent`, `mistakes.unimplementedAbstractMethod` | ohlásí potomka třídy, která se stala `final`, a abstraktní metodu, kterou nová verze přidala a potomek nemá | ano |
+
+Rozhodnutí, která typy potřebují, se bez nich tiše neuplatní, takže sadu zapnout můžete i bez PHPStanu; opraví se pak jen třídy, funkce a anotace. Data balíčků přitom zapne kterákoli ze sad `deprecations` a `modernizations`, takže s nimi přijde i nabídka nového zápisu, jako atributy Laravelu 13.
+
+Rozhodnutí pravidel, která balíček přináší, stojí v sekci pojmenované po jeho pluginu. Plugin přináší kód, který běží při každé kontrole, a tak se při `check` a `fix` načte, až projekt napíše jméno balíčku do `use`; bez toho běh jednou upozorní, že pravidla balíčku vynechal. Mapa `nette.flagsAsNamedArguments`, která nahradí příznaky spojené přes `|` pojmenovanými argumenty, dostává data stejně jako mapy jádra. Ostatní rozhodnutí pluginu zapnou soubory balíčku samy, od verze knihovny, od které je přepis správný: `nette.linkArguments` od `nette/application` 3.3 a `nette.monitorCallbacks` od `nette/component-model` 3.0 z `dresscode/upgrade-nette`, `laravel.castsMethod` od Laravelu 11 a `laravel.scopeAttribute` od 12.4 z `dresscode/upgrade-laravel`. Co dělají, popisují stránky [Nette |upgrading-nette] a [Laravel |upgrading-laravel].
+
+
+Po jedné verzi, nebo najednou
+=============================
+
+Kód převádějte po jedné hlavní verzi: zvednete dolní mez v `composer.json`, nainstalujete ji s `composer update --prefer-lowest` a pustíte `dresscode upgrade`, jak popisuje [Upgrade kódu |upgrade#Po jedné hlavní verzi]. V každém kroku se tak data potkají s kódem knihovny. Data opraví, co verze, kterou projekt nově vyžaduje, přejmenovala nebo smazala. Nové třídy a atributy, které data do kódu píšou, už ve vendoru jsou, takže DressCode s typy z PHPStanu ověří, že existují. A anotace `@deprecated` v nainstalovaném kódu prozradí, co zmizí v další verzi: rozhodnutí `upgrading.declarations.deprecatedMember` a `deprecatedClass` na to kód rovnou převedou, nebo aspoň ukážou, kde bude potřeba sáhnout.
+
+Aplikaci psanou pro hodně staré verze můžete převést i najednou: zvednete omezení rovnou na současné verze, nainstalujete je a `dresscode upgrade` pustíte jen jednou. Data smazání přežijí, takže se opraví i volání metod, které současná verze už nemá. Přijdete ale o anotace přeskočených verzí, a kde data nejsou, zůstane místo opravy chyba, kterou najde až PHPStan.
+
+Kód můžete převést i dřív, než knihovnu aktualizujete. Klíč `targets`, který jinak určuje cílovou verzi PHP, řekne i to, pro kterou verzi balíčku má být kód napsaný, a má přednost před `composer.json`:
+
+```neon
+targets:
+	nette/application: '3.2'
+	nette/forms: '3.2'
+```
+
+Kód se tak opraví na API verze 3.2, zatímco ve vendoru je pořád ta starší. Třídu nebo atribut, které starší verze ještě nemá, ale DressCode jen ohlásí, protože kód nepřepíše na třídu, kterou projekt nezná. Tyhle nálezy opraví až další `dresscode upgrade`, když omezení zvednete a novou verzi nainstalujete. Verzi pište v uvozovkách. NEON by ji jinak přečetl jako číslo, z `3.10` by bylo `3.1`, a proto DressCode takovou verzi bez uvozovek odmítne chybou <code>''The version of package `nette/forms` must be in quotes, because NEON reads a bare `3.10` as the number `3.1`.''</code>
+
+Co data pro projekt chystají, prozradí `dresscode config`. U každého balíčku, `php` mezi nimi, uvede verzi, ze které vychází, soubor dat a verze, ke kterým by data vedla po zvednutí dolní meze; verze, kterou omezení už dovoluje a jejíž změny se proto jen hlásí, nese `(reported)`:
+
+/--pre .[terminal]
+Packages   21 with upgrading data
+      nette/forms 3.2                 upgrading/forms.neon of dresscode/upgrade-nette, upgrading further to 3.2.3 (reported), 3.2.9 (reported), 3.3 (reported)
+      php 8.2                         php.neon of php, upgrading further to 8.3 (reported), 8.4 (reported), 8.5 (reported), 8.6 (reported)
+\--
+
+A u každé položky mapy uvede jako původ soubor a balíček, ze kterého pochází.
+
+
+Na co si dát pozor
+------------------
+
+DressCode počítá s tím, že starý člen už ve vendoru být nemusí. Volání poznají podle typu toho, na čem se volá, a deklaraci starého členu nepotřebují. Na dvě věci ale po aktualizaci nedosáhnou.
+
+**Potomek smazané třídy.** Když knihovna smaže třídu, ze které dědí třída vašeho projektu, PHPStan nezná předky potomka. Volání `$gone->old()` na proměnné typu smazané třídy se opraví, ale `$this->old()` uvnitř potomka ne, protože DressCode nepozná, že jde o člen smazaného předka. Projekt s takovou třídou proto převeďte s klíčem `targets` ještě před `composer update`, dokud je stará verze nainstalovaná, a zbytek dořeší `dresscode upgrade` po aktualizaci.
+
+**Změna hodnoty.** Data opravují zápis, ne význam. Když vlastnost `originalLine` dostane nové jméno `line` a místo `null` nově nese `-1`, data přepíšou jméno, ale podmínka `$token->line === null` zůstane a už nikdy neplatí. Po upgradu proto pusťte PHPStan a testy, které takové místo najdou.
+
+
+Co se opraví a co jen ohlásí
+============================
+
+Oprava podle dat není rizikovou opravou (risky fix), protože mění přesně to, co autor dat zapsal. Výjimkou je výraz, který se po přepisu vyhodnotí jinak než předtím: argument, který se nově vyhodnotí jen někdy (za `??`, `&&` nebo za `?->`), vůbec, nebo v jiném pořadí, a čtení vlastnosti, které data nahrazují jiným výrazem, nalevo od `??`, kde se PHP nejdřív ptá, jestli je vlastnost nastavená. Riziková je i oprava volání globální funkce bez kvalifikace uvnitř jmenného prostoru, protože stejnojmennou funkci by mohl deklarovat ten prostor. Takové opravy čekají na svolení v klíči `fixRisky` (`upgrading.api.replacedCalls` a další), s přepínačem `--fix-risky` nebo `--ask-risky`, a do té doby se hlásí s důvodem. Výraz, který by se po přepisu vyhodnotil dvakrát, se neopraví vůbec.
+
+Co data zakazují (`upgrading.api.forbiddenClasses`, `forbiddenMembers`, `forbiddenFunctions`, `forbiddenConstants`), se jen ohlásí, protože náhrada buď není, nebo je jiné povahy a napsat ji musí člověk. Hláška končí větou, co udělat:
+
+```
+Method `Nette\Http\Request::getReferer()` is forbidden: use `getOrigin()`, which reads the Origin header and gives only the scheme, the host and the port instead of the whole URL of the referring page.
+```
+
+A kde data opravu nabízejí, ale na tomhle místě kódu nejde provést, třeba protože by oprava zahodila výraz, na kterém se metoda volala, nebo protože komentář stojí mezi argumenty, nález se ohlásí s důvodem a kód zůstane, jak byl.
+
+
+Vlastní přejmenování v projektu
+===============================
+
+Totéž, co balíčky pro upgrade, můžete udělat s vlastním kódem. Přejmenovali jste třídu, kterou používá půl projektu, nebo jste globální funkci přesunuli do jmenného prostoru? Napište do konfigurace mapu, co čím nahradit, a DressCode přepíše každý výskyt:
+
+```neon
+upgrading:
+	api:
+		replacedClasses:
+			App\Model\Customer: App\Model\Client
+		replacedFunctions:
+			formatPrice: App\Utils\formatPrice
+```
+
+```php .[before]
+use App\Model\Customer;  // Class `App\Model\Customer` is replaced by `App\Model\Client`.
+
+
+final class OrderMailer
+{
+	public function describe(Customer $customer, float $total): string  // Class `App\Model\Customer` is replaced by `App\Model\Client`.
+	{
+		return $customer->getName() . ': ' . \formatPrice($total);  // Function `formatPrice()` is replaced by `App\Utils\formatPrice()`.
+	}
+}
+```
+
+```php .[after]
+use App\Model\Client;
+
+
+final class OrderMailer
+{
+	public function describe(Client $customer, float $total): string
+	{
+		return $customer->getName() . ': ' . \App\Utils\formatPrice($total);
+	}
+}
+```
+
+Třída se přepíše všude, kde stojí: v importu, v typu, za `new`, u statického přístupu i v atributu, i v souboru bez jmenného prostoru, jako jsou testy. Mapa, kterou napíše projekt, platí vždy, bez ohledu na sady; data balíčků pod ní leží a projekt jejich položku odvolá hodnotou `keep`. Jak se zapisují ostatní mapy, klíče s tvarem argumentů a hodnoty jako výraz PHP, popisuje stránka [Mapy náhrad |upgrading-data].
+
+
+Kam dál
+=======
+
+- [Upgrade kódu |upgrade], postup upgradu od prvního příkazu po hlídání v průběžné integraci.
+- [Knihovny Nette |upgrading-nette], [Symfony |upgrading-symfony], [Laravel |upgrading-laravel] a [Dibi a Texy |upgrading-deegee], co jejich balíčky pokrývají.
+- [Mapy náhrad |upgrading-data], jak se data píšou, pro projekt i pro autory knihoven.
+- [Typy z PHPStanu |types], bez kterých se nepřepíšou konstanty, metody a volání.
+- [Přechod na novější PHP |upgrading-php], když s knihovnami zvedáte i verzi PHP.
