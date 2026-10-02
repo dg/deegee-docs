@@ -1,0 +1,244 @@
+trailingComma
+*************
+
+.[perex]
+Víceřádkový seznam má čárku za poslední položkou podle toho, co pro jeho druh říká volba, jednořádkový ji nemá.
+
+Opravuje · v presetech `perCs`, `nette`, `symfony` · pokrývá `no_trailing_comma_in_singleline`, `trailing_comma_in_multiline`, `SlevomatCodingStandard.Arrays.TrailingArrayComma`, `SlevomatCodingStandard.Functions.RequireTrailingCommaInCall`, `SlevomatCodingStandard.Functions.RequireTrailingCommaInDeclaration` .[rule-info]
+
+
+Co pravidlo hlídá
+=================
+
+Čárka za poslední položkou víceřádkového pole má praktický důvod: přidání další položky změní v diffu jeden řádek, ne dva. PHP ji od verze 7.3 snese i v argumentech volání a od verze 8.0 v parametrech a v seznamu `use` u closure (anonymní funkce), takže tentýž zvyk platí všude, kde se seznam rozepisuje na řádky. Naopak v seznamu na jednom řádku čárka na konci nic neusnadňuje a jen vypadá jako překlep.
+
+Každý druh seznamu má vlastní volbu: pole, argumenty, parametry, větve `match`, `use` u closure, group use a `list()`. Hodnota říká, co platí pro seznam rozepsaný na řádky: `required` čárku vyžaduje, `optional` ji nechává na autorovi, `forbidden` ji zakazuje. U `required` rozhoduje zavírací závorka: když stojí na vlastním řádku, čárka tam patří, když stojí na řádku poslední položky, čárka tam být nesmí. Ze seznamu na jednom řádku pravidlo čárku odstraní při každé z těch tří hodnot; jen `keep` nechá daný druh seznamu úplně být.
+
+Rozepsaný je seznam, v němž za otevírací závorkou končí řádek, některá položka začíná nový řádek nebo jím začíná zavírací závorka. Seznam, v němž nic z toho neplatí, se bere jako jednořádkový, i kdyby některá položka sama zabírala víc řádků.
+
+PER Coding Style chce čárku v rozepsaném poli, v argumentech, parametrech, větvích `match` i v `use` u closure, proto je preset `perCs` nastavuje všechny na `required`. Presety `nette` a `symfony` z něj vycházejí a některá místa vracejí na `optional` nebo `keep`; co přesně, ukazuje [přehled presetů |/presets-reference].
+
+
+Příklad
+=======
+
+```php .[before]
+$colors = [
+	'red',
+	'green'
+];  // A multi-line array must end with a trailing comma
+
+$sizes = ['S', 'M', 'L',];  // No trailing comma in a one-line list
+
+$matrix = [
+	[1, 2],
+	[3, 4],];  // No trailing comma before a closing bracket on the line of the last item of a multi-line array
+```
+
+```php .[after]
+$colors = [
+	'red',
+	'green',
+];
+
+$sizes = ['S', 'M', 'L'];
+
+$matrix = [
+	[1, 2],
+	[3, 4]];
+```
+
+Poslední případ ukazuje, kdo rozhoduje: seznam je rozepsaný na řádky, ale jeho zavírací závorka stojí na řádku poslední položky, takže tam čárka nepatří. Přesunout závorku na vlastní řádek je práce pravidla `multilineArray`; teprve pak sem čárka přijde.
+
+
+Volby
+=====
+
+
+array .[option]
+---------------
+
+`required`, `optional`, `forbidden` nebo `keep`, výchozí `required`. Pole a destrukturace zapsaná hranatými závorkami. `required` dá čárku do rozepsaného pole, jehož zavírací závorka stojí na vlastním řádku, `optional` rozepsané pole nechá, jak je, `forbidden` z něj čárku odstraní; všechny tři ji odstraní z pole na jednom řádku, `keep` nechá i to.
+
+```neon
+rules:
+	trailingComma:
+		array: forbidden
+```
+
+```php .[before]
+$colors = [
+	'red',
+	'green',
+];  // No trailing comma in a multi-line array
+```
+
+```php .[after]
+$colors = [
+	'red',
+	'green'
+];
+```
+
+
+argument .[option]
+------------------
+
+`required`, `optional`, `forbidden` nebo `keep`, výchozí `optional`. Argumenty volání funkce, metody a `new`; hodnoty mají stejný význam jako u `array`.
+
+```neon
+rules:
+	trailingComma:
+		argument: required
+```
+
+```php .[before]
+mail(
+	$to,
+	$subject
+);  // A multi-line argument list must end with a trailing comma
+```
+
+```php .[after]
+mail(
+	$to,
+	$subject,
+);
+```
+
+
+parameter .[option]
+-------------------
+
+`required`, `optional`, `forbidden` nebo `keep`, výchozí `keep`. Parametry funkce, metody, closure a arrow funkce.
+
+```neon
+rules:
+	trailingComma:
+		parameter: required
+```
+
+```php .[before]
+function send(
+	string $to,
+	string $subject
+): void {  // A multi-line parameter list must end with a trailing comma
+}
+```
+
+```php .[after]
+function send(
+	string $to,
+	string $subject,
+): void {
+}
+```
+
+
+matchArm .[option]
+------------------
+
+`required`, `optional`, `forbidden` nebo `keep`, výchozí `keep`. Větve výrazu `match`.
+
+```neon
+rules:
+	trailingComma:
+		matchArm: required
+```
+
+```php .[before]
+$label = match ($status) {
+	'paid' => 'Zaplaceno',
+	'sent' => 'Odesláno'
+};  // A multi-line match must end with a trailing comma
+```
+
+```php .[after]
+$label = match ($status) {
+	'paid' => 'Zaplaceno',
+	'sent' => 'Odesláno',
+};
+```
+
+
+closureUse .[option]
+--------------------
+
+`required`, `optional`, `forbidden` nebo `keep`, výchozí `keep`. Proměnné v `use` u closure.
+
+```neon
+rules:
+	trailingComma:
+		closureUse: required
+```
+
+```php .[before]
+$send = function () use (
+	$mailer,
+	$template
+) {  // A multi-line closure use list must end with a trailing comma
+};
+```
+
+```php .[after]
+$send = function () use (
+	$mailer,
+	$template,
+) {
+};
+```
+
+
+import .[option]
+----------------
+
+`required`, `optional`, `forbidden` nebo `keep`, výchozí `optional`. Položky group use, tedy `use App\Model\{Order, User};`.
+
+```neon
+rules:
+	trailingComma:
+		import: required
+```
+
+```php .[before]
+use App\Model\{
+	Order,
+	User
+};  // A multi-line group use must end with a trailing comma
+```
+
+```php .[after]
+use App\Model\{
+	Order,
+	User,
+};
+```
+
+
+list .[option]
+--------------
+
+`optional` nebo `keep`, výchozí `optional`. Destrukturace zapsaná jako `list()`. Rozepsaný `list()` pravidlo nechává, jak je, a s `optional` odstraní čárku jen z toho na jednom řádku; `keep` nechá i ten.
+
+```neon
+rules:
+	trailingComma:
+		list: keep
+```
+
+```php .[before]
+list($first, $second,) = $pair;
+```
+
+
+Související pravidla
+====================
+
+- `multilineArray` rozepíše položky víceřádkového pole na samostatné řádky a zavírací závorku na vlastní řádek
+- `multilineCall` a `multilineSignature` dělají totéž s argumenty a parametry
+
+
+Zdroj
+=====
+
+Třída "TrailingCommaRule":https://github.com/dg/dresscode/blob/master/src/Rules/Arrays/TrailingCommaRule.php, fixtury "trailingComma":https://github.com/dg/dresscode/tree/master/tests/DressCode/Rules/fixtures/trailingComma.

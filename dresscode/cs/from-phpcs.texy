@@ -1,0 +1,60 @@
+Přechod z PHP_CodeSniffer a Slevomatu
+*************************************
+
+.[perex]
+Převod `phpcs.xml` na konfiguraci DressCode, příkazy `phpcs` a `phpcbf` nahrazené příkazy `check` a `fix`, jiné exit kódy a přehled toho, co odpovídá čemu.
+
+
+Než začnete
+===========
+
+Projděte si [společný postup |migration]: kód a komentáře můžete nechat, jak jsou, konfiguraci převede `import` a komentáře přepíše `migrate-suppressions`. Tahle stránka doplňuje, co je u PHP_CodeSniffer zvláštní. A jedna dobrá zpráva rovnou: `phpcs.xml` je XML, takže ho `import` přečte i tehdy, když už jsou PHP_CodeSniffer i Slevomat odinstalované.
+
+
+Převod konfigurace
+==================
+
+```shell
+dresscode import phpcs.xml > dresscode.php
+```
+
+Sady `PSR1`, `PSR2` a `PSR12` se překládají na preset `dresscode/psr12`. Jednotlivé sniffy (pravidla PHP_CodeSniffer) se překládají jménem, a kde má vlastnost z `<properties>` protějšek, tak i s ní: `Generic.Files.LineLength` je [`dresscode/lineLength` |rules/lineLength] a jeho `absoluteLineLimit` se stane klíčem [`lineLength` |configuration#Styl, verze PHP a jmenné prostory], `SlevomatCodingStandard.Namespaces.UnusedUses` je [`dresscode/unusedImports` |rules/unusedImports] a jeho vlastnost `searchAnnotations` se stane volbou `annotations`, `Squiz.WhiteSpace.OperatorSpacing` je [`dresscode/binaryOperatorSpacing` |rules/binaryOperatorSpacing]. Délka řádku je v DressCode jedna pro všechna pravidla, takže ji nastaví i `SlevomatCodingStandard.Files.LineLength` a o jedna menší než `minLineLength` také `RequireMultiLineMethodSignature` a `RequireMultiLineCondition` ze Slevomatu; když se hodnoty liší, `import` nechá nejmenší a upozorní na to.
+
+Vyloučení sniffu uvnitř sady (`<exclude name="…"/>`) `import` přenese jako vypnutí pravidla, které sniffu odpovídá. Když ale odpovídající pravidlo DressCode pokrývá i jiný sniff, `import` ho nechá zapnuté a vypíše varování; stejně tak u vyloučení jedné zprávy sniffu (`Generic.PHP.ForbiddenFunctions.Found`), protože na jednu zprávu se pravidlo zúžit nedá. Umlčení přes `<severity>0</severity>` `import` nepřenáší; takové pravidlo vypněte v klíči `rules` hodnotou `false`. Sniff bez protějšku skončí ve výpisu na chybovém výstupu; typicky jde o sniffy o dokumentačních komentářích z balíku `Squiz.Commenting` a o sniffy, které hlídají totéž co jiný sniff, jen jinými slovy.
+
+Co v `phpcs.xml` není pravidlo a přepíšete to ručně:
+
+- `<file>` a `<exclude-pattern>` do klíčů `paths` a `excludePaths`; vzory popisuje [Konfigurace |configuration#Cesty]. `<exclude-pattern>` uvnitř `<rule>` patří do [přepisu |configuration#Jiný profil pro část projektu], který pravidlu pro ty cesty dá hodnotu `false`. Na `<exclude-pattern>` `import` upozorní, na `<file>` ne.
+- `<arg name="extensions">` do klíče `fileExtensions`.
+- `<config name="php_version">` není potřeba, cílovou verzi si DressCode přečte z `composer.json`.
+- `<arg name="tab-width">` a odsazení řeší preset, nebo klíč `indent`.
+
+Slevomat: jeho sniffy, které DressCode pokrývá, se přeloží jménem jako každé jiné. Jeho pomocné třídy ani nastavení `installed_paths` tu nic nepotřebuje.
+
+
+Příkazy
+=======
+
+| PHP_CodeSniffer | DressCode |
+|---|---|
+| `phpcs src` | `dresscode check src` |
+| `phpcbf src` | `dresscode fix src` |
+| `phpcs --standard=PSR12 src` | `dresscode check --preset psr12 src` |
+| `phpcs --report=checkstyle` | `dresscode check -f checkstyle` |
+| `phpcs --report=json` | `dresscode check -f json` |
+| `phpcs --parallel=8` | `dresscode check --jobs 8` |
+| `phpcs --cache` | cache je zapnutá sama; `--no-cache` ji obejde |
+| `phpcs -p` | průběh se na terminálu ukazuje sám |
+| `.phpcs.xml.dist` | `dresscode.neon.dist` |
+
+PHP_CodeSniffer rozlišuje exit kódem, jestli jsou nalezená porušení opravitelná, a `phpcbf` má vlastní stupnici. DressCode vrací `0` pro čisto, `1` pro porušení, `2` pro selhání na některém souboru a `3` pro chybu v příkazové řádce nebo v konfiguraci; kolik porušení po opravě zbude, řekne shrnutí `check` a formát `json`. Skript, který exit kód vyhodnocuje, potřebuje jednu úpravu.
+
+
+Co je jinak
+===========
+
+- **Jeden nástroj na kontrolu i opravu.** `phpcs` a `phpcbf` byly dva příkazy, které se občas neshodly, protože oprava mohla odhalit další porušení. Tady je `fix` totéž co `check` plus zápis, a co `fix` neopraví, ohlásí stejně jako `check`.
+- **Priority sniffů neexistují**, pravidla běží opakovaně do ustálení; [proč |how-it-works#Bez priorit: pravidla běží do ustálení].
+- **Komentáře `phpcs:ignore`, `phpcs:disable`, `phpcs:enable`, `phpcs:ignoreFile` a `@phpcsSuppress` fungují dál**, a to i se jmény sniffů. Jediný rozdíl je v tom, že `phpcs:ignore` na samostatném řádku kryje celý následující příkaz, ne jen řádek, viz [společný postup |migration#1. Kód nechte, jak je]. Přepis na `dresscode:*` je jeden příkaz a je dobrovolný.
+- **Baseline je vestavěná.** U PHP_CodeSniffer se o ní léta diskutuje a řeší se doplňky třetích stran. Tady ji zapíše příkaz `dresscode baseline` a obsahuje jen to, co `fix` opravit neumí, takže opravám nepřekáží; viz [Baseline |suppressing#baseline].
+- **Vlastní sniff** se nepřenáší, ale přepisuje; nad stromem z něj obvykle zbude zlomek délky. Návod je na [samostatné stránce |porting-rules].

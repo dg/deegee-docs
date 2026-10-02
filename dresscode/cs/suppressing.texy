@@ -1,0 +1,168 @@
+Potlačení pravidel a baseline
+*****************************
+
+.[perex]
+Jak vypnout pravidlo na jednom řádku, v bloku nebo v celém souboru, proč potlačení zastaví i opravu, a jak díky baseline zapnout pravidlo, které váš kód zatím nesplňuje.
+
+
+Čtyři úrovně
+============
+
+Výjimky z pravidel osobně nemám rád a do kódu je nepíšu; když už, tak v konfiguraci pro celou cestu. Jsou ale místa, kde pravidlo prostě nemá pravdu, a tam se hodí přesný nástroj a ne kladivo. Potlačení (anglicky *suppression*) má čtyři úrovně, od nejužší po nejširší:
+
+| úroveň | jak | kde |
+|---|---|---|
+| jeden řádek nebo příkaz | `// dresscode:ignore` | v kódu |
+| blok | `dresscode:disable` a `dresscode:enable` | v kódu |
+| celý soubor | `dresscode:ignoreFile` | v kódu |
+| cesta | `excludePaths`, přepis v `overrides` | v konfiguraci |
+
+Vedle nich stojí **baseline**, která není výjimka z pravidla, ale z času: zapíše porušení, která dnes opravit neumíte, a hlásí jen ta nová.
+
+Ať zvolíte kteroukoli úroveň, platí jedna věc: **potlačené porušení se neopraví.** Pravidlo smí kód změnit jen poté, co porušení ohlásilo a hlášení prošlo, a hlídá to jádro nástroje, ne autor pravidla. Potlačení tedy není jen ticho ve výpisu, ale skutečné vypnutí. Baseline je jiný případ a opravě nebrání nikdy, jak popisuje [její oddíl |#baseline].
+
+
+Potlačení na řádku
+==================
+
+Komentář `dresscode:ignore` na konci řádku potlačí porušení na tomto řádku. Bez jména potlačí všechna pravidla, se jménem jen to jedno; víc jmen se odděluje čárkou:
+
+```php
+$isEmpty = $value == null; // dresscode:ignore strictComparison
+```
+
+Komentář na vlastním řádku platí pro to, co začíná na řádku pod ním, i když se to táhne přes několik řádků. Může to být příkaz nebo člen třídy, ale i jediná položka pole nebo argument: komentář nad první položkou pole kryje jen ji, ne celé pole. Tady kryje celý příkaz:
+
+```php
+// dresscode:ignore multilineArray, trailingComma
+$matrix = [[1, 0, 0],
+	[0, 1, 0],
+	[0, 0, 1]];
+```
+
+Proč výjimka platí, napište za dvě pomlčky. Text za nimi DressCode nečte, je pro toho, kdo kód otevře po vás, a stejně ho zapisuje ESLint i PHP_CodeSniffer:
+
+```php
+// dresscode:ignore arrayFunctionForForeach -- a loop is faster than array_any() on this hot path
+foreach ($kinds as $kind) {
+	if ($this->kind === $kind) {
+		return true;
+	}
+}
+```
+
+Funguje `//`, `#` i `/* */`. Jméno pravidla opíšete z výpisu. Vestavěné pravidlo se píše krátce, jako v ukázkách, pravidlo z pluginu celé i s vendorem, viz [Presety a vrstvy |configuration#Presety a vrstvy]. Místo jména DressCode přijme i jméno pravidla PHP CS Fixeru nebo PHP_CodeSniffer, které jeho pravidlo pokrývá. Stejně tak rozumí komentářům `phpcs:ignore`, `phpcs:disable`, `phpcs:enable`, `phpcs:ignoreFile` a anotaci `@phpcsSuppress`, takže kdo přechází z jiného nástroje, nemusí do kódu vůbec sáhnout. Přepis na jména DressCode pak udělá [dresscode migrate-suppressions |migration#3. Přepište komentáře].
+
+
+Potlačení v bloku
+=================
+
+```php
+// dresscode:disable lineLength
+$data = ['alpha' => 1, 'beta' => 2, 'gamma' => 3, 'delta' => 4, 'epsilon' => 5, 'zeta' => 6, 'eta' => 7, 'theta' => 8];
+$more = ['iota' => 9, 'kappa' => 10, 'lambda' => 11, 'mu' => 12, 'nu' => 13, 'xi' => 14, 'omicron' => 15, 'pi' => 16];
+// dresscode:enable
+```
+
+`disable` bez jména vypne všechna pravidla až po `enable`; `enable` bez jména zapne všechna, která `disable` vypnul. Bez `enable` platí `disable` do konce souboru.
+
+
+Potlačení v celém souboru
+=========================
+
+```php
+<?php // dresscode:ignoreFile
+```
+
+Tenhle komentář kdekoli v souboru vypne pro celý soubor všechna pravidla. Hodí se pro generovaný kód, který leží mezi ručně psaným. Když je takových souborů víc, je čistší vyloučit je cestou nebo podle obsahu, viz `skipWhen` v [konfiguraci |configuration#Cesty].
+
+
+Vypnutí pro cestu
+=================
+
+Výjimka, která platí pro celý adresář, patří do konfigurace, ne do stovky souborů. Pravidlo pro takovou cestu vypne přepis s hodnotou `keep`:
+
+```neon
+overrides:
+	- paths: [legacy]
+	  rules: {strictComparison: keep}
+	- paths: [tests/fixtures]
+	  rules: {lineLength: keep}
+```
+
+Zbytek pravidel takový soubor zkontroluje normálně. Celé cesty vynechá `excludePaths`; obojí popisuje stránka [Konfigurace |configuration#Cesty].
+
+Často ale pravidlo pro tu cestu nemá zmizet, jen platit s jinou hodnotou: testy mají jinou hlavičku než zdrojáky, ne žádnou. I to umí [přepis |configuration#Jiný profil pro část projektu], který dá souborům odpovídajícím cestě vlastní profil, a tedy i jiné hodnoty pravidel:
+
+```neon
+overrides:
+	- paths: [tests/**.phpt]
+	  rules: {blankLines: {afterImports: 2}}
+```
+
+
+Baseline .[#baseline]
+=====================
+
+Nový standard nasadíte jedním commitem: `dresscode fix` opraví, co opravit jde, a výsledek commitnete samostatně, jak popisuje [Začínáme |getting-started#Automatická oprava]. Po takovém commitu ale může zůstat něco, co za vás žádný nástroj neudělá. Pravidlo `typeHintRequired` chce u každého parametru typ a vy máte tři sta funkcí bez něj. U každé je potřeba rozmyslet, jaký typ tam patří, a to jsou týdny práce. Dokud pravidlo nezapnete, přibývají s každým commitem další.
+
+Právě na tohle je baseline: soupis porušení, která dnes opravit neumíte. Pravidlo díky ní zapnete hned, stará porušení počkají, až na ně dojde, a každé nové se ohlásí. Totéž platí pro rizikovou opravu (risky fix), kterou projekt zatím nepřijal, nebo pro řádek, který je delší, než pravidlo dovolí, a rozlámat ho za vás nejde.
+
+U statické analýzy je baseline samozřejmost, PHPStan ji má léta. PHP CS Fixer ani PHP_CodeSniffer ji ale nemají a žádost o ni se u obou zadrhla na téže otázce: co s ní má dělat automatická oprava? DressCode odpovídá jednoduše: **baseline obsahuje jen to, co oprava nechá.** Co opravit jde, se opraví, a baseline hlídá zbytek.
+
+Proto ji příkaz `baseline` zapisuje nad kódem, na kterém už `fix` nemá co dělat. Oba příkazy vezmou cesty z klíče `paths` v konfiguraci; můžete je také vypsat za příkaz:
+
+```shell
+dresscode fix
+dresscode baseline
+```
+
+/--pre .[terminal]
+Baseline with 312 violations written to `dresscode-baseline.neon`.
+Name it under `baseline` in the configuration to make it apply.
+\--
+
+Na pořadí záleží. Kdyby `fix` ještě něco změnil, `baseline` nic nezapíše, vyjmenuje soubory, které by se změnily, a skončí s exit kódem `1`; do baseline nepatří nic, co jde opravit:
+
+/--pre .[terminal]
+Error: The baseline is generated over code a fix leaves alone: a fix would change 3 files. Run `fix` first.
+  src/Cart.php
+  src/Order.php
+  tests/CartTest.php
+See https://dresscode.run/suppressing#baseline
+\--
+
+Rizikové opravy, které mění chování kódu a projekt je nepřijal v klíči [`fixRisky` |configuration#risky-fixes], do baseline patří, protože je nástroj bez vašeho svolení neudělá. Rizikové opravy, které by rozhodly typy nebo `nameResolution`, do ní nepatří: jsou to jen varování a zmizí, jakmile DressCode dodáte, co mu chybí. Přepínač `--only` příkaz `baseline` nemá, protože baseline vzniká z celé konfigurace, ne z několika pravidel.
+
+Soubor vznikne vedle konfigurace a ve stejném formátu (`.neon` vedle `dresscode.neon`, `.php` vedle `dresscode.php`). Platit začne ve chvíli, kdy ho konfigurace pojmenuje; jakmile to udělá, další `dresscode baseline` zapisuje do souboru, který jmenuje:
+
+```neon
+baseline: dresscode-baseline.neon
+```
+
+Uvnitř je verze formátu a pro každý soubor seznam porušení s pravidlem, zprávou a otiskem:
+
+```neon
+version: 1
+files:
+	src/Cart.php:
+		-
+			rule: dresscode/typeHintRequired
+			message: '`Traversable` property `$items` has no `@var` annotation saying what the items are'
+			fingerprint: '6520d0a7cd5d79a8'
+
+		-
+			rule: dresscode/typeHintRequired
+			message: Parameter `$id` has no type hint nor `@param` annotation
+			fingerprint: '36e4713f98c4351d'
+```
+
+Otisk se počítá z pravidla, obsahu řádku a pořadí porušení toho pravidla na řádku, ne z čísla řádku, takže baseline přežije úpravy jinde v souboru. Zpráva v něm není: v položce stojí pro lidi, aby bylo vidět, o co jde, a když ji nová verze DressCode napíše jinak, baseline porušení pozná dál. Porušení, která baseline zná, se nehlásí, a shrnutí běhu je přizná, aby nikdo nechválil císařovy nové šaty:
+
+/--pre .[terminal]
+OK  312 violations in the baseline in 214 files
+\--
+
+Baseline nikdy nebrání opravě. Komentář `dresscode:ignore` říká "tady pravidlo nemá pravdu", a proto zastaví i opravu. Baseline říká "tohle zatím neumíme", a co už umíme, není důvod nechávat. Když se porušení z baseline stane opravitelným, třeba proto, že projekt přijal rizikové opravy daného pravidla, `fix` ho opraví jako každé jiné.
+
+Když nějaké porušení z baseline zmizí, protože ho někdo opravil, nebo ho opravil `fix`, jakmile to šlo, běh upozorní, že položka už ničemu neodpovídá (<code>''1 entry of the baseline no longer matches a violation; regenerate it with `dresscode baseline`.''</code>). Pusťte `fix` a baseline vygenerujte znovu. Běh přitom upozorní jen na položky souborů, které zpracoval, a při `--only` jen na položky pravidel, která běžela, takže kontrola části projektu nehlásí jako zastaralé to, na co se neptala. Baseline se má zmenšovat, a jakmile je prázdná, smažte řádek z konfigurace a soubor s ním.

@@ -1,0 +1,264 @@
+Pravidlo do detailu
+*******************
+
+.[perex]
+Co musí každé pravidlo dodržet: opravovat až po ohlášení, být bez stavu a idempotentní, správně zvolit fázi, vyplnit atribut `RuleInfo`, popsat své volby schématem a hlásit i problémy v bílých znacích.
+
+
+Dvě podoby pravidla
+===================
+
+Základem je třída `DressCode\Rule` a existují dvě podoby, mezi kterými se vybírá podle toho, co pravidlo dělá:
+
+- **`NodeRule`** navštěvuje uzly a tokeny, které si vyžádá, a pracuje s nimi v metodách `enter()` a `leave()`. Takhle je psaná většina pravidel a je o nich celá tahle stránka.
+- **`GapRule`** nenavštěvuje nic. Jen vysloví požadavek na to, co má být v bílých znacích mezi tokeny, a vyhodnotí to za něj jádro nástroje. Píše se jinak a má [vlastní stránku |whitespace-rules].
+
+Třída je vždy jen jedno, nebo druhé. Pravidlo, které by potřebovalo obojí, jsou ve skutečnosti dvě pravidla se dvěma jmény, aby šlo každé vypnout zvlášť a aby bylo z hlášení poznat, které z nich mluví.
+
+
+Tvar pravidla
+=============
+
+Pravidlo dědí od `DressCode\NodeRule` a nese atribut `#[RuleInfo]`:
+
+```php
+#[RuleInfo(
+	'acme/noVarDump',
+	Stage::Structure,
+	description: 'Removes calls of `var_dump()`',
+	group: null,
+	modifiesComments: false,
+	requires: [],
+	typesRequired: false,
+	decision: null,
+)]
+final class NoVarDumpRule extends NodeRule
+{
+	// ...
+}
+```
+
+- **Jméno** `vendor/ruleName` v camelCase je identita pravidla: objevuje se ve výpisu, v konfiguraci, v komentářích `dresscode:ignore` i v baseline. Podle konvence je to jméno třídy bez přípony `Rule` s malým prvním písmenem; jméno v jiném tvaru než `vendor/camelCaseName` atribut odmítne. Dvě třídy se stejným jménem jsou chyba konfigurace.
+- **Fáze** (`Stage`) říká, ve které ze tří fází průchodu pravidlo běží. `Structure` je pro změny kódu (přepis výrazu, odstranění importu), `Formatting` pro bílé znaky a zalomení řádků, `Finishing` pro závěrečné začištění (odsazení, konce řádků, mezery na konci řádků, délka řádku, komentáře a phpDoc). Průchody jdou v tomhle pořadí, takže formátování už vidí kód po strukturních změnách.
+- **Popis** je jedna anglická věta v oznamovacím způsobu o tom, co pravidlo dělá, bez tečky na konci a s kódem ve zpětných apostrofech; vypisují ho `dresscode rules` a `dresscode explain`.
+- **`group`** je [skupina |configuration#Skupiny pravidel], ke které pravidlo patří, případ výčtu `RuleGroup`. Uveďte ji tehdy, když pravidlo plní některý z těch šesti záměrů; pravidlo se pak zapne každému, kdo si o skupinu řekl, aniž by o něm věděl. Nechte `null` u pravidla, které je rozhodnutím o vzhledu kódu nebo politikou se seznamem od projektu: takové vybírá standard, nebo ho uživatel zapne jménem.
+- **`modifiesComments`** nastavte na `true` jen tehdy, když pravidlo opravdu mění text komentářů. Jinak `RuleTester` hlídá, že žádný komentář nezmizel ani se nezměnil, což je nejčastější chyba oprav.
+- **`requires`** říká, co pravidlo potřebuje od projektu, a píše se jako `require` v `composer.json`: `['php' => '>=8.1']` u pravidla, které zapisuje syntaxi až od nějaké verze PHP (třeba `0o755` od PHP 8.1), `['acme/mailer' => '>=3.3']` u pravidla pro API knihovny, `['acme/mailer' => '*']`, když stačí, že knihovna v projektu je, a `['acme/mailer' => '>=3.3 <5.0']` u pravidla, které zapisuje něco, co pozdější verze zase odebrala. Samotnou verzi bez operátoru atribut odmítne, protože by pravidlo vypnula pro každé jiné vydání. Požadavek musí splnit každá verze, pro kterou je projekt psaný, tedy celý rozsah z jeho `composer.json`. Kde to pravidlo nemá, se samo vynechá a preset ani skupina to nemusí hlídat. PHP 8.0 je nejnižší podporovaná verze, takže na nic, co v 8.0 už bylo, se ptát nemusíte.
+- **`typesRequired`** nastavte na `true` u pravidla, které bez [typů kódu |types] nedává smysl, tedy bez analýzy `Analyses\Types`, kterou běh má jen s `types: phpstan`. Kde typy nejsou, se pravidlo zapnuté presetem nebo skupinou samo vynechá; projekt, který ho zapne jménem, dostane chybu konfigurace. Pravidlo, kterému typy jen pomáhají, parametr nepotřebuje a zeptá se `findAnalysis()`, viz [níže |#Typy kódu].
+- **`decision`** pojmenovává volbu u pravidla, které je jediným rozhodnutím, viz [Volby pravidla |#Volby pravidla].
+
+Riziko opravy do `RuleInfo` nepatří. Je to vždy vlastnost výskytu a pravidlo ho říká u `report()`, i když je riziková každá jeho oprava, viz [níže |#Nejdřív ohlásit, teprve pak opravit].
+
+
+Které uzly a kdy
+================
+
+```php
+public function getVisitedTypes(): array
+{
+	return [FunctionCallNode::class];
+}
+```
+
+Je to seznam tříd uzlů (nebo `Token::class`), pro které jádro zavolá `enter()` a `leave()`. Porovnává se přes `instanceof`, takže `StatementNode::class` zachytí každý příkaz a `Node::class` úplně všechno; čím užší seznam, tím rychlejší běh. Prázdný seznam znamená, že pravidlo pracuje jen v `beforePass()` a `afterPass()`, které jádro volá na začátku a na konci každého průchodu souborem; tak pracují pravidla nad celým souborem.
+
+`enter()` se volá při vstupu do uzlu, tedy před jeho dětmi, `leave()` až po nich. Když pravidlo uzel v `enter()` nahradí nebo odstraní, jádro do něj už nesestoupí a `leave()` pro něj nezavolá.
+
+
+Nejdřív ohlásit, teprve pak opravit
+===================================
+
+Tohle je nejdůležitější pravidlo celého kontraktu: **strom se smí změnit až poté, co `report()` vrátil `true`.**
+
+```php
+$statement = $node->parent;
+if (
+	$statement instanceof ExpressionStatementNode
+	&& $statement->parent instanceof NodeList
+	&& $context->report($node, 'The `var_dump()` call must not stay in the code')
+) {
+	$statement->remove();
+}
+```
+
+Ukázka odstraní celý příkaz, jehož výrazem volání je, protože `remove()` umí odstranit jen položku seznamu. Jestli to jde, zjistí dřív, než zavolá `report()`: volání uvnitř jiného výrazu a příkaz ve slotu, třeba za `if` bez složených závorek, nechá být.
+
+`report()` vrátí `false`, pokud je porušení na svém řádku potlačené komentářem, nebo pokud je oprava riziková a běh ji nedovolil; pak se nesmí nic měnit. Porušení, které zná baseline, `report()` nezamítne: nehlásí se, ale pravidlo ho opravit smí. Nespoléhá se přitom na dobrou vůli: strom počítá své změny a jádro každou změnu spáruje s hlášením ze stejného volání. Změna bez hlášení, nebo po hlášení, které vrátilo `false`, je porušený kontrakt. Za běhu je z toho varování, s přepínačem `--strict-rules` a v `RuleTester`u chyba.
+
+Oprava, která může změnit chování kódu, se hlásí s parametrem `risk` právě u toho výskytu. Jeho hodnota říká, co by výskyt rozhodlo: `Risk::TypeUnknown` typ hodnoty, který nevědí deklarace ani [typy |types], `Risk::NameUncertain` jméno funkce, které rozhodne [`nameResolution: certain` |namespaces#name-resolution], a `Risk::BehaviorChanges` úsudek člověka, kde oprava mění chování ze své podstaty nebo závisí na kódu, který běh nevidí. Parametr `because` přidá větu o tom, co se na tom místě může pokazit, když ji příčina sama neřekne; bez `risk` ho přísný běh odmítne, protože nemá co vysvětlovat. Stojí vedle zprávy, nikdy v ní: zpráva popisuje porušení a nesmí se měnit podle toho, jestli běh typy má.
+
+```php
+if ($context->report($foreach, 'The loop must be written with `array_any()`', risk: Risk::TypeUnknown,
+	because: 'the loop may go through an object, which `array_any()` does not take')) {
+	// ...
+}
+```
+
+Takové hlášení vrátí `false`, dokud projekt pravidlo neuvede v klíči `fixRisky` nebo běh nedostane `--fix-risky`; pravidlo pak kód nechá a porušení zůstane mezi tím, co `fix` neopravil, u `TypeUnknown` a `NameUncertain` jako varování, u `BehaviorChanges` jako chyba. Totéž pravidlo v témž průchodu opraví bezpečný výskyt a rizikový jen ohlásí; i pravidlo, jehož riziková je každá oprava, píše `risk` ke každému hlášení. Fixtura s `// risky` v hlavičce ukazuje, jak pravidlo opravuje, když smí, a je zároveň důkaz pro referenci, že pravidlo takové opravy má.
+
+Riziková oprava smí změnit chování kódu, nikdy ale nesmí zapsat kód, který PHP nepřeloží. Kde by o tom rozhodoval soubor, který projekt znát nemusí, třeba potomek třídy v jiném balíčku, pravidlo mlčí úplně: na svolení se tu ptát nedá.
+
+Kde bezpečnost opravy závisí na typu hodnoty, odpovídá pravidlo ve třech stavech, jak je vrací výčet `Tristate`: jistě ano, pak je oprava bezpečná; jistě ne, pak pravidlo mlčí, protože riziková oprava nesmí být rada, o které pravidlo ví, že je špatná; a nevím, pak je oprava riziková s `Risk::TypeUnknown`. Odpověď dají nejdřív deklarace na dohled, typ parametru, vlastnosti nebo návratový typ metody, a co nechají otevřené, zúží [typy |#Typy kódu].
+
+Výskyt, pro který pravidlo opravu nemá a jen ho hlásí, ohlaste s `fixable: false`. `report()` pak vrátí `false` vždy a hlášení nikdy není rizikové. Jinak by rizikové hlášení bez opravy vypadalo jako oprava, která čeká na svolení, a souhrn by radil `--fix-risky`, přestože by se nic neopravilo. Třeba `strictCall` explicitní `false` v `in_array()` jen hlásí, protože ho autor kódu napsal vědomě:
+
+```php
+$context->report($strict, 'The `in_array()` call must pass `$strict = true`', fixable: false);
+```
+
+Na zapomenutou deklaraci upozorní `RuleTester`: hlášení bez `fixable: false`, které zůstane i po posledním průchodu, jenž už nic nezměnil, je porušený kontrakt a fixtura s ním selže. Stejně selže fixtura s `// risky`, po jejímž běhu zůstane rizikové porušení, protože oprava byla povolená a přesto se neudělala.
+
+Hlášení se váže na uzel nebo na token. Problém, který leží v bílých znacích nebo v komentáři, ohlaste s příslušnou položkou trivia, jak se říká bílým znakům a komentářům kolem tokenu (`report($token, $message, trivia: $trivia)`), aby porušení dostalo řádek té trivia a `dresscode:ignore` na tom řádku ho našel; jinak spadne na řádek tokenu. Závažnost pravidlo neurčuje: každé porušení je chyba, dokud ho projekt klíčem `warnOnly` v konfiguraci nezměkčí na varování.
+
+Další dva parametry `report()` říkají, že porušení mohlo vzniknout opravou jiného porušení z téhož běhu. Pravidlo, které umisťuje řádek podle jiného řádku (tak to dělá `indentation`), předá `follows:` s tokenem, který ten druhý řádek otevírá; pravidlo, které hlásí tvar řádku, na kterém token stojí, předá `byLine: true`. Když ten řádek oprava v tomtéž běhu otevřela nebo zavřela (u `follows:` i posunula), hlášení z ní [plyne |cli#Formáty výstupu] a konzole ho vypíše pod ní. Jestli by hlášení na daném místě umlčel komentář, zjistí `$context->isSilenced()`, aniž by cokoli zaznamenal.
+
+Zpráva popisuje kód, ne čtenáře, a nikdy nerozkazuje. Má jeden ze tří tvarů: požadovaný stav (`A single space after the comma`), norma (`The opening brace must be on its own line`), nebo nález (<code>''Function `foo()` is deprecated''</code>). Konkrétní jména a hodnoty do zprávy patří, jméno pravidla ne, to doplní výpis. Co je ve zprávě kód, tedy jméno třídy, funkce či proměnné, zápis operátoru nebo hodnota, stojí ve zpětných apostrofech jako v Markdownu; konzole ho obarví a ostatní výstupy ho vypíšou, jak je. Jméno zpětný apostrof obsahovat nemůže, výraz, řetězec nebo komentář z kódu ano, a ten proto vložte přes `Violation::formatCode($code)`, které ho uzavře do delší řady apostrofů.
+
+
+Bez stavu a idempotentní
+========================
+
+Jedna instance pravidla slouží celému běhu a všem souborům. Stav vztažený k souboru patří do pole `$context->storage`, které jádro pro každý průchod souborem založí prázdné; vlastnosti třídy jsou jen na volby. Co pravidlo o souboru potřebuje vědět, dá kontext: `getFile()` vrátí jeho strom (`FileNode`), `getPath()` cestu, `getStyle()` styl (odsazení, konec řádku, šířku tabulátoru a `lineLength`) a `getPhpVersion()` cílovou verzi PHP.
+
+Pravidla se pouštějí opakovaně, dokud se strom mění, takže pravidlo musí být **idempotentní**: nad vlastním výstupem už nesmí nic změnit. A nesmí záviset na pořadí průchodu ani na tom, kolikátý průchod zrovna běží; kontext to schválně neprozradí. Dvě pravidla, která se přetahují, jádro pozná a soubor ohlásí jako selhání se jmény obou. Idempotenci ověřuje i `RuleTester`: pustí pravidlo nad jeho vlastním výstupem podruhé a selže, pokud ho pravidlo znovu změní.
+
+
+Co strom dovolí
+===============
+
+Slot uzlu se zapisuje přiřazením (`$if->condition = $expression`), uzel se nahrazuje metodou `replaceWith()` a odstraňuje metodou `remove()`, text a trivia tokenu mění jeho vlastní metody. O rodiče a o index tokenů se strom stará sám, a kde na to nemá property hook, hlídá zápis viditelnost vlastnosti; strom tedy nerozbijete ani zápisem mimo API. Podrobnosti jsou na stránce [Úpravy |phpsyntax:mutation]; pro pravidla k tomu platí navíc:
+
+- Sourozence měňte z callbacku jejich vlastníka (`FileNode`, `BlockNode`, `ClassNode`) nebo z `afterPass()`, ne z `enter()` položky, kterou právě procházíte. Jádro procházený seznam nepřepočítává.
+- Pravidlo nahrazuje uzel, který dostalo, nebo něco uvnitř něj, nikdy jeho předka.
+- Novou konstrukci nestavějte z tokenů. Naparsujte ji (`Parser::parseExpression()`, `parseStatement()`, `parseType()`, `parseName()`), nebo ji složte z uzlů, které máte po ruce, továrnou `of()` její třídy (`FunctionCallNode::of()`, `NewNode::of()` a další). Výraz zapsaný na místo jiného vložte přes `ExpressionNode::replaceWithExpression()`, které samo rozhodne o závorkách.
+- Komentář nesmí zmizet, dokud pravidlo neřekne `modifiesComments`. Před zásahem se ptejte `Token::hasComment()`, `Token::hasCommentUpTo()` nebo `Node::hasInnerComment()`; odstraňujte komentář jen přes `removeTrivia()`.
+- Konec řádku, který uzavírá řádek tokenu, patří do jeho koncových trivia, ne do úvodních trivia dalšího tokenu. Metody `ensureStartsLine()` a `setBlankLinesBefore()` to dělají správně, tak na nich stavějte.
+- Na otázky "je tenhle výraz stejný jako tamten" a "dá se bezpečně vyhodnotit dvakrát" odpovídají `Node::matches()` a `ExpressionNode::isRepeatableRead()`. Neimplementujte je znovu.
+
+
+Volby pravidla
+==============
+
+Pravidlo s volbami implementuje rozhraní `ConfigurableRule`: dodá schéma z knihovny [nette/schema |https://doc.nette.org/cs/schema] a metodu `configure()`, která dostane volby už zvalidované jako pole:
+
+```php
+#[RuleInfo('acme/noDebugCalls', Stage::Structure, description: 'Reports calls of debugging functions')]
+final class NoDebugCallsRule extends NodeRule implements ConfigurableRule
+{
+	/** @var array<string, true> */
+	private array $functions = [];
+
+
+	public static function getOptionsSchema(): Schema
+	{
+		return Expect::structure([
+			'functions' => Expect::listOf('string')->default(['var_dump', 'print_r']),
+		]);
+	}
+
+
+	public function configure(array $options): void
+	{
+		$this->functions = array_fill_keys(array_map(strtolower(...), $options['functions']), true);
+	}
+
+
+	// getVisitedTypes(), enter() ...
+}
+```
+
+Jména voleb se píší v camelCase. Mapa voleb se slévá s vrstvou pod ní po klíčích, seznam zadaný v konfiguraci nahrazuje výchozí hodnotu celou; s tím počítejte v popisu volby. Popis přes `description()` vůbec uvádějte jen tam, kde jméno, typ a výchozí hodnota neříkají všechno.
+
+Když pravidlo s danými volbami nic nedělá, třeba proto, že seznam funkcí zůstal prázdný, může na to upozornit samo schéma. V `transform()` zavolá `$context->addWarning()`:
+
+```php
+return Expect::structure([
+	'functions' => Expect::listOf('string')->default(['var_dump', 'print_r']),
+])->transform(function (mixed $options, Context $context): mixed {
+	if (((array) $options)['functions'] === []) {
+		$context->addWarning('No function is given, so nothing is reported.', 'acme.noEffect');
+	}
+
+	return $options;
+});
+```
+
+DressCode zprávu vypíše mezi varováními konfigurace jako <code>''Rule `acme/noDebugCalls`: No function is given, so nothing is reported.''</code>, a to jen jednou, i když se konfigurace řeší pro víc přepisů. Zprávu pište jako celou větu. Stejně se totiž vypíše i varování, které vydá nette/schema samo, třeba u volby označené `deprecated()`.
+
+Volba, která pojmenovává rozhodnutí (tvar, polohu, zarovnání), přijímá i `keep`: pravidlo pak tohle rozhodnutí nevynucuje a zbytek hlídá dál. Volba, která rozhodnutí není (`ignorePatterns`, seznam jmen), `keep` nemá. Pravidlo, které je jedním jediným rozhodnutím, řekne v `RuleInfo` parametrem `decision`, kterou volbu vyplní hodnota zapsaná přímo u pravidla. Vestavěné `yoda` má `decision: 'comparisons'`, takže uživatel píše `yoda: forbidden` místo `yoda: {comparisons: forbidden}`.
+
+Pravidlo, u kterého verze PHP rozhoduje o tom, co smí zapsat (ne o tom, jestli vůbec poběží), se zeptá `$context->getPhpVersion()`. Vrací řetězec ve tvaru `major.minor`, který se porovnává funkcí, ne operátory, protože `'8.10' > '8.9'` jako řetězec neplatí:
+
+```php
+if (version_compare($context->getPhpVersion(), '8.4', '>=')) {
+	// ...
+}
+```
+
+
+Analýzy
+=======
+
+Informace o souboru, kterou potřebuje víc pravidel, patří do analýzy. Je to obyčejná třída, jejíž konstruktor přijme `FileNode` (nebo nic). Pravidlo si ji vyžádá:
+
+```php
+$resolver = $context->getAnalysis(NameResolver::class);
+if ($resolver->isGlobalFunctionCall($node, 'var_dump')) {
+	// ...
+}
+```
+
+Jádro analýzu vytvoří napoprvé a drží ji, dokud se strom nezmění; po každé změně vzniká znovu, takže nikdy nečtete zastaralý stav. Výjimkou je analýza s rozhraním `Analyses\PassAnalysis`: tu jádro spočítá při první otázce v průchodu a drží ji až do jeho konce i přes změny stromu, protože počítat ji po každé změně znovu by stálo víc než trocha zastaralosti. Uzel vložený během průchodu v ní tedy odpověď nemá a pravidlo se na něj ptá přes `?->`. Vestavěné jsou `PhpSyntax\Analyses\NameResolver` (jmenný prostor, importy, překlad jmen), `PhpSyntax\Analyses\Scope` (funkce, třída, dostupnost `$this`), `DressCode\Analyses\PhpDoc` (dokumentační komentáře jako strom z parseru phpDocu), `PhpSymbols` (funkce, třídy a konstanty, které deklaruje samo PHP), `PhpSignatures` (parametry jeho funkcí) a `Types` (typy kódu z PHPStanu projektu, jediná vestavěná `PassAnalysis`). Vlastní analýza s konstruktorem nad `FileNode` se nikde neregistruje. Jen ta, kterou jádro samo nepostaví, potřebuje továrnu, která dostane strom a cestu souboru; plugin ji uvede v `analyses` svého manifestu, projekt v klíči `analyses` konfigurace.
+
+`getAnalysis()` na analýzu, kterou běh nemá, selže. Typy kódu běh má jen s `types: phpstan`, a proto se pravidlo, kterému typy jen pomáhají, ptá `$context->findAnalysis(Types::class)`, které v takovém případě vrátí `null`.
+
+`$context->findRule(SomeRule::class)` vrátí instanci jiného pravidla tak, jak je pro soubor nakonfigurovaná, nebo `null`, když na soubor neběží. Hodí se mezi pravidly téhož pluginu, kde se jedno potřebuje zeptat druhého, jak je nastavené. Metody vestavěných pravidel veřejné API nejsou; co z nich pravidla potřebují, nabízí `Rules\CodeWriter`, viz [níže |#Jména funkcí a tříd].
+
+
+Typy kódu
+---------
+
+Analýza `Types` odpovídá na otázky, na které strom sám odpověď nemá. Typy samotné, tak jak je popisuje PHPStan, zůstávají uvnitř ní; pravidlo se ptá:
+
+- `findMember($node)` vrátí `Analyses\Member`, tedy konstantu, metodu, vlastnost nebo konstruktor, na které výraz sahá, s třídou, která ho deklaruje. Rozhoduje deklarace, ne zápis, takže `$order::STATUS_PAID`, `Order::STATUS_PAID` i `self::STATUS_PAID` jsou tentýž `Member`.
+- `findMemberAccess($node)` vrátí `Analyses\MemberAccess`: přístup podle typu objektu, na kterém se volá, i k členu, který už žádná třída nedeklaruje. Tak se ptají pravidla, která opravují API odebrané knihovnou. Hodnotu ve tvaru callable (`[$order, 'paid']`) přeloží `findCallableMethodAccess()`.
+- `findDeprecation($member)` vrátí `Analyses\Deprecation`, co o členu říká jeho `@deprecated`, nebo `null`.
+- `isOfType($expression, 'array')` vrátí `Tristate`, jestli je výraz daného typu; typ se píše syntaxí phpDocu (`int|string`, `list<int>`), třídy plně kvalifikované. Ptejte se tak jen na to, co nepokrývá žádná jiná otázka.
+
+```php
+$types = $context->getAnalysis(Types::class);
+$member = $types->findMember($node);
+$deprecation = $member === null ? null : $types->findDeprecation($member);
+if ($deprecation !== null) {
+	$context->report($node, $member->describe() . ' is deprecated' . $deprecation->formatDescription(), fixable: false);
+}
+```
+
+Nad třídou `Acme\Shop\Order`, jejíž konstanta má `@deprecated use Order::StatusPaid`, ohlásí tahle ukázka u `$order::STATUS_PAID` zprávu <code>''Constant `Acme\Shop\Order::STATUS_PAID` is deprecated: use Order::StatusPaid''</code>. Pravidlo, které typy jen zpřesňují, se místo `getAnalysis()` ptá `findAnalysis()` a nejistotu doplní samo: `$context->findAnalysis(Types::class)?->isOfType($expression, 'array') ?? Tristate::Maybe`. Bez typů pak nic nerozbije, jen víc výskytů ohlásí jako rizikové nebo je nechá být.
+
+
+Jména funkcí a tříd
+-------------------
+
+`NameResolver` ví i to, co v jednom souboru vidět nejde: které funkce a konstanty projekt deklaruje ve jmenných prostorech, jak to říkají klíče `namespaces` a `nameResolution`. Nekvalifikované volání ve jmenném prostoru proto může mířit na funkci toho prostoru, a kde to projekt nevyloučil klíčem `nameResolution: certain`, stojí každá oprava takového volání na předpokladu. Obojí, kterou globální funkci volání volá a proč by to mohla být jiná, řekne `Rules\GlobalCalls`:
+
+```php
+if (!$node instanceof FunctionCallNode || GlobalCalls::findFunction($node, ['sizeof' => true], $context) === null) {
+	return;
+}
+
+$because = GlobalCalls::findUncertainty($node, $context);
+if ($context->report($node, 'The `sizeof()` call must be written `count()`', risk: $because === null ? null : Risk::NameUncertain, because: $because)) {
+	$node->name->text = CodeWriter::spellFunction('count', $node->name, $context);
+}
+```
+
+`findFunction()` dostane jména funkcí jako klíče mapy, jejíž hodnoty nečte, takže pravidlo předá rovnou mapu svých dat, a vrátí jméno volané funkce malými písmeny, nebo `null`. `findUncertainty()` vrátí důvod rizika (<code>''the namespace may declare `sizeof()`''</code>), nebo `null`, když je volání jisté. Nové jméno neskládejte z řetězce: `CodeWriter::spellFunction()` ho zapíše holé, když bylo holé i původní, nic jiné to jméno nebere a není méně jisté, jinak s úvodním lomítkem. Proč na tom záleží, popisuje stránka [Funkce a konstanty ve jmenných prostorech |namespaces].
+
+Jméno třídy zapíše `CodeWriter::writeClass($class, $node, $context)` tak, jak ho soubor dosáhne nejkratší cestou, a kde je to potřeba, přidá import v podobě, jakou chtějí pravidla o importech. Protože může měnit strom, volejte ho až po `report()`, který vrátil `true`, nikdy ne při skládání zprávy. Jméno, které nic nenahrazuje a jen se má zapsat co nejkratší, dá `NameResolver::shortenName()`.
+
+
+Testování
+=========
+
+Každé pravidlo má fixtury a `RuleTester`, který na nich ověří výstup, hlášení a všechno výše popsané: [Testování pravidel |testing-rules].

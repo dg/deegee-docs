@@ -1,0 +1,124 @@
+Testování pravidel
+******************
+
+.[perex]
+`RuleTester` a formát fixtur: soubory `.code`, `.expected` a `.violations`, volby a cílová verze PHP v hlavičce fixtury, a co všechno tester ohlídá za vás.
+
+
+Fixtury
+=======
+
+Pravidlo se testuje nad adresářem fixtur, jedním na pravidlo. Fixtura (fixture) je až trojice souborů se stejným jménem:
+
+- `basic.code` je kód před opravou;
+- `basic.expected` je kód po opravě; když soubor chybí, pravidlo nesmí kód změnit;
+- `basic.violations` jsou očekávaná hlášení, každé na svém řádku ve tvaru řádek a zpráva:
+
+```
+3: The message of an exception must end with a period
+6: The message of an exception must end with a period
+```
+
+Hlášení rizikové opravy má pod sebou odsazený řádek s tím, co by ho rozhodlo, a s důvodem, pokud ho pravidlo uvedlo, takže tester ověří i příčinu rizika:
+
+```
+4: The loop must be written with `array_any()`
+	risky TypeUnknown: the loop may go through an object, which `array_any()` does not take
+```
+
+Fixtura může v komentářích na svém začátku nést volby pravidla jako JSON, verzi PHP, pro kterou je psaná, nejdelší řádek, se kterým se měří, a slovo `risky`, které pravidlu dovolí i opravy měnící chování kódu:
+
+```php
+<?php
+// {"functions": ["dd", "dump"]}
+// php 8.4
+// lineLength 80
+// risky
+```
+
+Bez uvedené délky se měří s řádky do 120 znaků, jaké mají standardy. Bez uvedené verze se pravidlo testuje na verzi, o kterou si řeklo v `requires`, jinak na PHP 8.0; verze předaná testeru parametrem `$phpVersion` má přednost před hlavičkou. Nikdy ne na verzi interpretu, který testy spouští, protože verdikt pravidla má být na počítači nezávislý. Bez `risky` se rizikový výskyt jen ohlásí a soubor `.expected` ho musí nechat, jak byl; fixtura s `risky` je zároveň důkaz pro referenci, že pravidlo takové opravy má.
+
+Co deklarují jmenné prostory mimo fixturu, řeknou hlavičky ve tvaru položek příkazu `use`, stejně jako klíče [`namespaces` a `nameResolution` |namespaces] v konfiguraci:
+
+```php
+<?php
+// namespacedFunctions App\helper, App\Utils\{format}
+// namespacedConstants App\LIMIT
+// nameResolution certain
+```
+
+Pravidlo s `typesRequired` dostane typy kódu z PHPStanu projektu, ve kterém testy běží, spočítané nad fixturou a nad deklaracemi z podadresáře `stubs/` v adresáři fixtur. Pravidlo, kterému typy jen pomáhají, je dostane tam, kde adresář `stubs/` je, a fixtura s `// types off` v hlavičce je ani tam nedostane: tak se otestuje, co pravidlo pozná bez typů, jen z deklarací na dohled.
+
+Fixtura není ukázka do dokumentace: má být ošklivá a plná hraničních případů. Komentář uprostřed konstrukce, konstrukce na jednom řádku i přes tři, prázdné tělo, interpolovaný řetězec, alternativní syntaxe. Právě na těchhle místech se pravidla lámou.
+
+
+RuleTester
+==========
+
+```php
+use DressCode\Testing\RuleTester;
+use Tester\Assert;
+
+Assert::noError(fn() => RuleTester::run(ExceptionMessagePeriodRule::class, __DIR__ . '/fixtures/exceptionMessagePeriod'));
+```
+
+Metoda `run()` projde všechny soubory `*.code` v adresáři a vrátí jejich počet; adresář bez nich je selhání, ne prázdný úspěch. Selhání je výjimka `DressCode\Testing\TestFailure` se jménem fixtury a s diffem, takže ji srozumitelně ukáže každý testovací framework. Nette Tester chce v každém testu aspoň jednu aserci, proto je volání v ukázce zabalené do `Assert::noError()`; z PHPUnit je to jedno volání v testovací metodě.
+
+U každé fixtury tester ověří:
+
+- **výstup** se rovná souboru `.expected` (nebo vstupu, když `.expected` není);
+- **hlášení** se rovnají souboru `.violations`, řádek po řádku a ve stejném pořadí;
+- **idempotenci**: pravidlo nad vlastním výstupem už nic nezmění;
+- **komentáře**: ve výstupu jsou všechny komentáře ze vstupu, pokud pravidlo nemá `modifiesComments`;
+- **potlačení**: s komentářem `dresscode:ignoreFile` v hlavičce pravidlo nic neohlásí ani nezmění;
+- **kontrakt oprav**: žádná změna stromu bez hlášení, které prošlo, žádné hlášení bez `fixable: false`, které zůstane i po průchodu, jenž už nic nezměnil, a žádné rizikové porušení ponechané ve fixtuře s `// risky`, kde oprava byla povolená;
+- **zbytek**: co pravidlo ohlásí v posledním průchodu, je přesně to, co ohlásí nový běh nad výstupem;
+- **strom**: každý uzel má správného rodiče, což se rozbije při chybném vkládání.
+
+Pravidlo, které volby dostává jinak než z konfigurace (třeba se závislostí v konstruktoru), předáte místo třídy jako továrnu `fn(array $options): Rule`. Továrna dostane volby z hlavičky fixtury tak, jak jsou zapsané v JSONu, a bez hlavičky prázdné pole. U třídy tester volby prožene schématem pravidla, které je zvaliduje a doplní výchozí hodnoty; u továrny to neudělá. Výchozí hodnoty proto doplní továrna sama a teprve pak zavolá `configure()`, jako tady u pravidla `NoDebugCallsRule` ze stránky [Pravidlo do detailu |rule-contract#Volby pravidla]:
+
+```php
+Assert::noError(fn() => RuleTester::run(
+	function (array $options): Rule {
+		$rule = new NoDebugCallsRule;
+		$rule->configure($options + ['functions' => ['var_dump', 'print_r']]);
+		return $rule;
+	},
+	__DIR__ . '/fixtures/noDebugCalls',
+));
+```
+
+Pravidlo, které se ptá vlastní analýzy pluginu (tady `ClockRule` analýzy `Clock`, kterou jádro samo nepostaví), dostane její továrnu parametrem `analyses` ve stejném tvaru, jaký má klíč `analyses` konfigurace a manifestu pluginu:
+
+```php
+RuleTester::run(ClockRule::class, __DIR__ . '/fixtures/clock', analyses: [
+	Clock::class => fn(FileNode $file, string $path) => new Clock('noon'),
+]);
+```
+
+Pro zvláštní případy jsou tu menší nástroje: `RuleTester::runFixture()` spustí jedinou fixturu, `RuleTester::check()` ověří nakonfigurovanou instanci pravidla nad řetězcem bez souborů (hodí se na rychlou reprodukci) a `RuleTester::collectViolations()` vrátí hlášení nad fixturou přímo ve tvaru souboru `.violations` a `collectOutput()` výstup ve tvaru souboru `.expected`, takže si je můžete nechat zapsat a jen zkontrolovat diff, místo abyste je opisovali ručně. `run()`, `runFixture()` i obě `collect*()` přijmou `$phpVersion` a `analyses`. Metoda `check()` přijme navíc celý styl, kterým se kód zpracuje, místo nejdelšího řádku z hlavičky:
+
+```php
+$rule = new NoDebugCallsRule;
+$rule->configure(['functions' => ['print_r']]);
+RuleTester::check(
+	$rule,
+	"<?php\nprint_r(\$a);\n",
+	violations: ['2: The `print_r()` call must not stay in the code'],
+	style: new Style(indent: '    ', lineLength: 80),
+);
+```
+
+
+Data pro aktualizaci knihoven
+=============================
+
+Balíček, který místo pravidel nebo vedle nich dodává [data pro aktualizaci |upgrading-data], je testuje třídou `Testing\UpgradingTester`. Metoda `collectProblems($file, $root, $packageRules)` přečte soubor tak, jak by ho přečetl běh v projektu, jehož `vendor/` obsahuje knihovnu, a vrátí nalezené problémy jako věty; prázdné pole znamená, že je soubor v pořádku. Pravidla, která balíček dodává sám, jí předáte třetím parametrem. Metoda `runSample()` pak prožene vzorek kódu ve starém API zadanými pravidly a vrátí `FileResult` s opraveným kódem a nálezy. Podrobně je obojí popsané na stránce [Mapy náhrad |upgrading-data].
+
+
+Zkouška v reálném provozu
+=========================
+
+Test pravidla ověří pravidlo samotné. Jak se chová ve společnosti ostatních, ukáže až běh nad skutečným kódem. Přepínač `dresscode check --strict-rules` udělá z každého porušeného kontraktu chybu místo varování a `--jobs 1` nechá všechno běžet v jediném procesu, kde se pohodlně ladí.
+
+Než pravidlo zveřejníte, pusťte `fix` nad větším cizím kódem, třeba nad adresářem `vendor/`, a projděte si diff. Idempotenci a komentáře ohlídá tester, vkus ne.

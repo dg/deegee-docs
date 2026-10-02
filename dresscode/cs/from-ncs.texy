@@ -1,0 +1,103 @@
+Přechod z Nette Coding Standardu
+********************************
+
+.[perex]
+Nette Coding Standard 4 je preset DressCode. Sám standard se jmenuje `dresscode/nette`, balíček k němu přidává dva presety, které ho rozšiřují, a filtr souborů. Co udělá `ecs migrate` a proč první oprava přeformátuje víc souborů, než čekáte.
+
+
+Co se změnilo
+=============
+
+Nette Coding Standard byl do verze 3 tenká obálka nad PHP CS Fixerem a PHP_CodeSniffer s balíkem pravidel od Slevomatu: dva nástroje, dvě konfigurace (`ncs.php` pro fixer, `ncs.xml` pro sniffer) a příkaz `ecs`, který to celé spouštěl.
+
+Od verze 4 je standard **presetem DressCode**. Jmenuje se `dresscode/nette` a je součástí DressCode, takže ho má k dispozici každý projekt bez ohledu na to, jestli s Nette pracuje. Stojí na PER Coding Style, který upravuje podle rozvržení knihoven Nette (tabulátory, dva prázdné řádky mezi metodami a další), zapíná tři [skupiny pravidel |configuration#Skupiny pravidel] (`cleanup`, `types` a `correctness`) a k nim pravidla, která volí jménem; co přesně obsahuje, ukazuje [přehled presetů |presets-reference]. Balíček `nette/coding-standard` k němu přidává to, co potřebuje navíc projekt postavený na Nette:
+
+- presety `nette/cleanCode` a `nette/types`, které standard rozšiřují o pravidla nad rámec stylu a o doplňování nativních typů z anotací;
+- `PhpVersionFilter`, který vynechá soubory s anotací `@phpVersion` nad běžící verzí PHP, jak to potřebují testy knihoven Nette;
+- příkaz `ecs` z verze 3, aby projekt na trojce fungoval dál, než přejde.
+
+
+Instalace a konfigurace
+=======================
+
+```shell
+composer require --dev dresscode/dresscode nette/coding-standard
+```
+
+Počítejte s tím, že DressCode spolu s `nette/coding-standard` vyžaduje PHP 8.4 až 8.6, a protože jde o vývojové závislosti, musí na jedné z těchto verzí běžet i váš projekt. Verze PHP, na které nástroj běží, a verze, pro kterou je psaný váš kód, jsou přitom dvě různá čísla: cílovou verzi si DressCode přečte z `composer.json` projektu, viz [Instalace |getting-started#Instalace].
+
+Do kořene projektu přijde `dresscode.neon`, který přihlásí plugin balíčku a vybere presety:
+
+```neon
+plugins:
+	- Nette\CodingStandard\Plugin
+
+presets:
+	- dresscode/nette
+	- nette/types      # volitelně také nette/cleanCode
+
+groups:
+	- optimizedCalls   # volitelně
+
+paths:
+	- src
+	- tests
+```
+
+Plugin jen zpřístupní jména presetů z balíčku, vyloučí cesty, které vylučovala verze 3 (`expected`, `tmp`, `fixtures*`), a zapne filtr podle `@phpVersion`. Který styl se použije, říká klíč `presets`, protože to je rozhodnutí projektu, ne balíčku.
+
+Opravy, které stojí na tom, že je funkce globální, a mezi nimi i to, co dělá skupina [`optimizedCalls` |optimizations], udělá DressCode bez svolení jen tehdy, když ví, co ve vašich jmenných prostorech je. Doplňte proto do konfigurace `nameResolution: certain`, a pokud nějaké funkce nebo konstanty ve jmenných prostorech opravdu máte, i jejich seznam v klíči `namespaces`; bez toho se takové opravy jen ohlásí. Proč, vysvětluje stránka [Funkce a konstanty ve jmenných prostorech |namespaces].
+
+Kontroluje a opravuje se pak samotným DressCode:
+
+```shell
+dresscode check
+dresscode fix
+```
+
+
+Převod konfigurace
+==================
+
+Projekt s `ncs.php` nebo `ncs.xml` je převede jedním příkazem:
+
+```shell
+vendor/bin/ecs migrate
+```
+
+Přečte `ncs.php` a `ncs.xml` v aktuálním adresáři a napíše `dresscode.neon`. Jména pravidel a kódy sniffů z verze 3 projdou překladem na jména pravidel DressCode. Co žádné pravidlo nepokrývá, příkaz vypíše a vynechá, a u zkopírovaných voleb připojí poznámku, že jejich jména je potřeba zkontrolovat, protože volba fixeru a volba pravidla DressCode se mohou jmenovat jinak:
+
+/--pre .[terminal]
+dresscode.neon written; delete ncs.php and ncs.xml once it works.
+Warning: no rule for some_unknown_fixer, left out.
+Note: dresscode/binaryOperatorSpacing: the options of binary_operator_spaces are copied as they are; check their names against `dresscode rules`
+\--
+
+Existující `dresscode.neon` příkaz nepřepíše.
+
+| verze 3 | verze 4 |
+|---|---|
+| `ncs.php` s `'pravidlo' => false` | `rules: {pravidlo: false}` v `dresscode.neon`, se jménem přeloženým na pravidlo DressCode |
+| `ncs.php` s `'Nette/optimize_global_calls' => true` | skupina `optimizedCalls` v klíči `groups` |
+| `ncs.xml` s `<exclude-pattern>` | klíč `excludePaths` |
+| `ncs.xml` s `<exclude-pattern>` uvnitř `<rule>` | přepis v klíči `overrides`, který pravidlu pro ty cesty dá `false` |
+| `ncs.xml` s `<rule>` bez `<exclude-pattern>` | nic, příkaz ho jen ohlásí; vypnutí přes `<exclude name="…"/>` přepište ručně do `rules` |
+| `--config-file overrides.php` | `dresscode.neon` v kořeni projektu |
+| `--preset php81`, `--preset php` | nic, cílovou verzi PHP bere DressCode z vašeho `composer.json` |
+
+Příkaz `ecs` zůstává a přijímá starou příkazovou řádku (`ecs check`, `ecs fix`, výchozí cesty `src` a `tests`, `--preset clean-code`), takže na CI ani na editor nemusíte sáhnout hned. Verzní presety se ignorují, protože cílová verze PHP se teď čte z projektu. Je to ale věc přechodová: jakmile je `dresscode.neon` na místě, volejte rovnou `dresscode`.
+
+
+První oprava přeformátuje víc, než čekáte
+=========================================
+
+Verze 4 není řádek po řádku totéž co verze 3, a je to tak schválně. Některé rozdíly jsou opravy toho, co verze 3 nechávala být: velké písmeno na začátku komentáře `// Komentář`, komentář `/* enum */` před `case`, `declare(strict_types=1)` na řádku otevíracího tagu, nezlomitelná mezera zapsaná doslova v řetězci. Napříč balíčky Nette to bylo víc než sto souborů z necelých tří tisíc.
+
+Udělejte to jako samostatný commit: `dresscode fix`, commit bez jiných změn, hotovo. Procházet to řádek po řádku nemá cenu; cenu má vědět, že v tom commitu není nic jiného.
+
+
+Co zůstalo
+==========
+
+- Komentáře `phpcs:ignore` a spol. fungují dál; přepis na `dresscode:ignore` udělá [dresscode migrate-suppressions |migration#3. Přepište komentáře].
+- Vlastní sniffy a fixery, pokud nějaké byly, se přepisují podle [návodu |porting-rules]; přepsaný sniff bývá několikanásobně kratší.

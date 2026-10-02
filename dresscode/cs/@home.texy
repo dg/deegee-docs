@@ -1,0 +1,94 @@
+DressCode
+*********
+
+{{maintitle: DressCode: kontrola, oprava a aktualizace PHP kódu}}
+{{description: DressCode kontroluje a opravuje styl PHP kódu a přepisuje ho na novější PHP od 8.0 po 8.6 i na nové verze knihoven, všechno v jednom běhu. Stojí na bezztrátovém syntaktickém stromu a s PHPStanem zná typy kódu. PER Coding Style 3.1, PSR-12 i Nette Coding Standard.}}
+
+.[perex]
+DressCode je dress code pro váš PHP kód. Hlídá jeho styl, většinu nálezů rovnou opraví a kód umí i aktualizovat: přepíše ho na novější PHP, od PHP 8.0 až po PHP 8.6, i na nové verze knihoven. Pracuje nad bezztrátovým syntaktickým stromem, takže změní jen to, na co sáhne, a zbytek souboru zůstane bajt po bajtu stejný. Sám žádný styl nenosí, obléká kód podle presetu: [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/], PSR-12 nebo Nette Coding Standard. Preset si přitom přizpůsobíte do posledního detailu, a to klidně pro každou část projektu jinak.
+
+Léta jsem používal PHP CS Fixer i PHP_CodeSniffer a bral je jako hotovou věc. Pak jsem potřeboval jedno nové pravidlo a zjistil, kolik práce dá napsat ho, když nástroj vidí jen ploché pole tokenů a strukturu kódu si musí domýšlet. DressCode vznikl proto, aby se pravidlo dalo napsat za odpoledne a aby se dalo věřit tomu, co opraví.
+
+
+Nejen styl, ale i aktualizace kódu
+----------------------------------
+
+Nástroj, který kódu rozumí, se nemusí zastavit u mezer. Když zvednete verzi PHP v `composer.json`, pravidla skupiny `modernization` přepíšou kód na to, co nová verze přinesla, a DressCode ho v témž běhu zformátuje podle vašeho standardu:
+
+```php .[before]
+return trim(strtolower(strip_tags($title)));
+```
+
+```php .[after]
+return $title |> strip_tags(...) |> strtolower(...) |> trim(...);
+```
+
+Stejně převede kód při [aktualizaci knihoven |upgrading-libraries]: pro Nette nese balíček `dresscode/rules-nette` migrace všech dvaceti knihoven, u většiny od verze 3.0 po současnou, přejmenované třídy, konstanty, metody i parametry, a balíčky pro další ekosystémy přibývají. A když máte v projektu PHPStan, DressCode se ho ptá na typy, takže přepíše i zastaralé API podle toho, čím proměnná opravdu je. Styl i přechod na novou verzi tak obstará jeden nástroj s jednou konfigurací a jedním diffem.
+
+
+Šest skupin místo stovek pravidel
+---------------------------------
+
+**Nástroj na styl kódu má dnes stovky pravidel a DressCode není výjimka: jen vestavěných je jich přes dvě stě. Prohlížet si je jedno po druhém ale nemusíte, protože konfigurace stojí na dvou otázkách, na které umíte odpovědět rovnou.**
+
+**Jak má kód vypadat?** To je standard, jeden, a vyberete ho jménem: PER Coding Style 3.1, PSR-12, Nette nebo Symfony.
+
+**Co po kódu chcete kromě vzhledu?** To jsou [skupiny pravidel |configuration#Skupiny pravidel] a je jich právě šest: `cleanup`, `modernization`, `types`, `deprecations`, `correctness` a `optimizedCalls`. Šest jmen, která se naučíte za minutu.
+
+```neon
+presets:
+	- perCs
+
+groups:
+	- cleanup
+	- modernization
+```
+
+Skupina se ptá na záměr, ne na výčet. Místo dvaceti řádků se jmény pravidel napíšete "chci uklidit, co je v kódu pro nic", a běží každé pravidlo, které to dělá. Katalog poroste, seznam jmen ne: jména skupin jsou uzavřený výčet, který nerozšíří ani balíček s vlastními pravidly. Jeho pravidlo se do některé z těch šesti skupin zařadí samo a projektu, který ji zapnul, začne pracovat bez jediného řádku navíc.
+
+Skupina taky nikdy nerozbije konfiguraci: pravidlo, které v projektu běžet nemůže, protože cílí na novější PHP nebo chce typy, z ní tiše vypadne. Poslední slovo má přitom pořád projekt, protože cokoli ze skupiny vypnete jménem.
+
+
+Rychlost proti PHP CS Fixeru a PHP_CodeSniffer
+----------------------------------------------
+
+DressCode je dělaný k tomu, aby běžel po každé úpravě souboru, a tam rozhoduje čas jednoho souboru: je to zhruba třetina až polovina času PHP CS Fixeru, u malého souboru 118 ms proti 323 ms. Rychlejší je i nad celým projektem, když dělá stejnou práci. S pravidly, která odpovídají sadě PER Coding Style z PHP CS Fixeru, mu stačí 64 až 90 % času PHP CS Fixeru v jednom procesu a 46 až 64 % v paralelních procesech, nad kódem Laravelu, WordPressu, Symfony a Nette. Symfony s vlastní konfigurací PHP CS Fixeru, převedenou příkazem `import`, zkontroluje za 56 % jeho času (14,2 s proti 25,3 s), i když PHP CS Fixer tam navíc pouští přes sto pravidel pro phpDoc a PHPUnit, která DressCode nemá.
+
+Preset `perCs` dělá víc než zmíněná sada: navíc láme dlouhé signatury, podmínky, řetězy volání a pole na řádky a opravuje velikost písmen ve jménech. Preset proti presetu proto běží nad Laravelem 72 % času PHP CS Fixeru a nad WordPressem 118 %, protože tam mají pravidla navíc nejvíc práce.
+
+Proti PHP_CodeSniffer je rozdíl vidět při opravě: `dresscode fix` potřebuje 36 až 54 % času, který na PSR-12 spotřebuje `phpcbf`. Samotné hlášení zvládne `phpcs` rychleji, protože `dresscode check` si opravy počítá v paměti i při kontrole. A přepis na novější PHP trvá zlomek toho, co Rector, nad Symfony 3.4 1,6 s proti 128,5 s, a s [typy z PHPStanu |types] je pořád rychlejší: nad Laravelem 4,4 s proti 10,5 s s nahřátou cache PHPStanu a 9,0 s proti 195 s se studenou.
+
+Měřeno v říjnu 2026 na PHP 8.5 proti PHP CS Fixeru 3.95, PHP_CodeSniffer 4.0 a Rectoru 2.6, medián tří běhů.
+
+
+Kudy dál
+--------
+- [Začínáme s DressCode |getting-started] instalace, první kontrola a první oprava.
+- [Přechod na novější PHP |upgrading-php] jak DressCode přepíše kód od PHP 8.0 po PHP 8.6.
+- [Aktualizace knihoven |upgrading-libraries] migrace Nette a dalších knihoven v jednom běhu.
+- [Přechod na DressCode |migration] pokud dnes používáte PHP CS Fixer, PHP_CodeSniffer nebo Slevomat.
+- [Jak napsat vlastní pravidlo |custom-rule] pokud vám v katalogu něco chybí.
+
+
+Používání
+---------
+- [Jak DressCode funguje |how-it-works] strom místo tokenů, standardy a skupiny pravidel, průchody a slovníček pojmů.
+- [Typy z PHPStanu |types] co DressCode dokáže, když se může ptát PHPStanu na typy vašeho kódu.
+- [Konfigurace |configuration] soubor v NEONu nebo v PHP, standard, skupiny pravidel, volby, cesty a pro každou část projektu klidně jiný profil.
+- [Funkce a konstanty ve jmenných prostorech |namespaces] proč je `strlen()` ve jmenném prostoru dvojznačné a jak tu nejistotu DressCode odstraní.
+- [Optimalizace funkcí a konstant |optimizations] jaké zkratky PHP u volání funkcí a u konstant bere, co je vypne a jak kód zapsat, aby platily.
+- [Potlačení pravidel a baseline |suppressing] výjimky na řádku, v souboru a pro cestu, a baseline pro pravidla, která kód zatím nesplňuje.
+- [Příkazová řádka |cli] příkazy, přepínače, formáty výstupu, exit kódy.
+
+
+Reference
+---------
+- [Přehled pravidel |rules/@home] všechna vestavěná pravidla s příklady a volbami.
+- [Presety |presets-reference] co přesně zapíná PER Coding Style, PSR-12, Nette a Symfony a které skupiny pravidel nesou.
+
+
+Rozšíření a integrace
+---------------------
+- [Rozšiřování DressCode |extending], [pravidlo do detailu |rule-contract], [pravidla pro bílé znaky |whitespace-rules], [testování pravidel |testing-rules].
+- [Průběžná integrace |continuous-integration], [Git hooky a agenti |hooks].
+- [PhpSyntax |phpsyntax:] bezztrátový syntaktický strom, na kterém DressCode stojí, jako samostatná knihovna.

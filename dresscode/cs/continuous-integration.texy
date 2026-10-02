@@ -1,0 +1,82 @@
+Průběžná integrace: GitHub Actions a GitLab
+*******************************************
+
+.[perex]
+Kontrola stylu v CI: formát výstupu, který se zvolí sám, anotace přímo v pull requestu, cache mezi běhy a exit kódy, na které se dá spolehnout.
+
+
+Co v CI spouštět
+================
+
+`check`, ne `fix`. CI má říct, jestli je kód v pořádku, a exit kód `1` u porušení job shodí; opravu dělá vývojář lokálně, kde ji vidí. Kdo chce, aby CI opravu i nabídlo, pustí `fix` a za ním `git diff --exit-code`. Diff ve výpisu jobu je pak přesně to, co má vývojář commitnout.
+
+Exit kódy jsou pevně dané: `0` znamená čisto, `1` porušení, soubor, který nejde parsovat, nebo víc varování, než dovoluje `--max-warnings`, `2` soubor, který selhal (výjimka v pravidle, zacyklená pravidla), a `3` chybu na příkazové řádce nebo v konfiguraci. Na `2` a `3` má job selhat hlasitěji než na `1`: `3` znamená, že se nezkontrolovalo nic, a `2`, že některý soubor zkontrolovaný není.
+
+
+GitHub Actions
+==============
+
+```yaml
+name: Code style
+
+on: [push, pull_request]
+
+jobs:
+  dresscode:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+      - run: composer create-project dresscode/dresscode temp/dresscode --no-progress
+      - run: temp/dresscode/bin/dresscode check
+```
+
+Nic dalšího potřeba není: DressCode pozná, že běží jako krok GitHub Actions, a přepne výstup na formát `github`, ve kterém je každé porušení anotace. V pull requestu se pak ukáže přímo u řádku, kterého se týká, se zprávou i jménem pravidla. Ve výpisu jobu zůstane shrnutí.
+
+Barvy se vypnou samy, protože výstup nejde do terminálu, takže `--no-color` psát nemusíte. A pozor na verzi PHP v běžci: samotný DressCode potřebuje PHP 8.4 až 8.6, i když kontroluje projekt psaný pro starší verzi.
+
+
+GitLab, Jenkins a ostatní
+=========================
+
+Kde nativní formát není, poslouží `checkstyle`, kterému rozumí Jenkins, nástroj `cs2pr` i většina převodníků do formátu Code Quality v GitLabu, a [`json` |cli#Výstup pro nástroje: json] pro vlastní zpracování:
+
+```yaml
+dresscode:
+  script:
+    - composer create-project dresscode/dresscode temp/dresscode --no-progress
+    - temp/dresscode/bin/dresscode check -f checkstyle > dresscode.xml
+  artifacts:
+    when: always
+    paths: [dresscode.xml]
+```
+
+Tvar obou formátů se v minoritních verzích nemění; dokument `json` navíc nese verzi svého formátu v klíči `version` a exit kód běhu v `summary.exitCode`. Formáty `console` a `github` jsou naopak pro lidi a měnit se mohou.
+
+
+Cache mezi běhy
+===============
+
+DressCode si pamatuje otisky souborů, které prošly čistě, v systémovém dočasném adresáři. V CI, kde každý běh začíná načisto, z toho nic nemá. Když ale cache nasměrujete do projektu a ten adresář necháte CI uchovat, zkontroluje druhý běh jen změněné soubory:
+
+```neon
+cacheDir: temp/dresscode-cache
+```
+
+```yaml
+      - uses: actions/cache@v4
+        with:
+          path: temp/dresscode-cache
+          key: dresscode-${{ github.sha }}
+          restore-keys: dresscode-
+```
+
+Cache s klíčem, který už existuje, `actions/cache` na konci jobu znovu neuloží, takže s pevným klíčem by zůstala ve stavu z prvního běhu. Proto má klíč v sobě commit: každý běh uloží novou cache a `restore-keys` na začátku dalšího obnoví tu nejnovější. DressCode má navíc vlastní klíč cache, jehož součástí je otisk konfigurace, verzí nainstalovaných balíčků a času změny souborů s vlastními pravidly a presety projektu, takže po změně konfigurace, po aktualizaci nástroje nebo po úpravě vlastního pravidla se soubory zkontrolují znovu samy od sebe.
+
+
+Paralelní běh a verze
+=====================
+
+Počet pracovních procesů se řídí počtem procesorů běžce, takže na dvoujádrovém běžci není co ladit; na stroji s mnoha jádry pomůže `--jobs 8`. Verzi DressCode si přibijte, ať už přes `composer.lock`, nebo číslem u `create-project`: nové pravidlo v minoritní verzi může začít hlásit něco, co dosud procházelo, a to se má stát při vědomé aktualizaci, ne v cizím pull requestu.

@@ -1,0 +1,59 @@
+Git hooky a agenti
+******************
+
+.[perex]
+Pre-commit hook, který mlčí, dokud je čisto, a formát `bare` pro nástroje a AI agenty, kteří potřebují vědět, které soubory se pod nimi přepsaly.
+
+
+Pre-commit
+==========
+
+Hook má být rychlý a tichý: zkontrolovat jen soubory, které jdou do commitu, a když je všechno v pořádku, nevypsat nic. Přesně na to je formát `bare`, a přepínač `--stdin` navíc umožňuje kontrolovat obsah z indexu, ne z pracovního stromu, který se od něj může lišit:
+
+```shell
+#!/bin/sh
+status=0
+for file in $(git diff --cached --name-only --diff-filter=ACM -- '*.php'); do
+	git show ":$file" | dresscode check --stdin "$file" -f bare || status=1
+done
+exit $status
+```
+
+Uložte jako `.git/hooks/pre-commit` a nastavte spustitelný bit. Když je vše v pořádku, hook nic nevypíše a commit projde; jinak vypíše soubor a pod ním porušení s řádkem, zprávou a jménem pravidla, a commit zastaví.
+
+Se `--stdin` se klíč `excludePaths` nevyhodnocuje, takže hook zkontroluje i soubory, které konfigurace vylučuje. Pokud v projektu takové jsou, vyřaďte je už ve výběru souborů: za `'*.php'` v příkazu `git diff` přidejte třeba `':!tests/fixtures'`.
+
+Kdo chce hook, který rovnou opravuje, pustí `fix` nad pracovním stromem a opravené soubory přidá do indexu. Je to pohodlné, ale znamená to, že commit obsahuje změny, které vývojář neviděl. Mně je bližší první varianta: hook jen hlásí a opravu si pustím vědomě.
+
+S nástrojem `pre-commit` je to jeden záznam v konfiguraci. Nástroj předává DressCode jména souborů, a proto záznam potřebuje `--skip-excluded`, jinak by zkontroloval i soubor, který konfigurace vylučuje v `excludePaths`:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: dresscode
+        name: DressCode
+        entry: dresscode check -f bare --skip-excluded
+        language: system
+        types: [php]
+```
+
+
+Agenti
+======
+
+Kdo nechává kód psát AI agenta, potřebuje dvě věci: aby se soubor po každém zápisu srovnal podle standardu, a aby se agent dozvěděl, že se soubor pod ním změnil. Bez toho nastane známá smyčka: agent zapíše `use`, hook ho jako nepoužitý smaže, agent přidá kód, který ten import potřeboval, a diví se, kde se stala chyba.
+
+Formát `bare` na to odpovídá jedním řádkem:
+
+```shell
+dresscode fix src/Cart.php -f bare --skip-excluded
+```
+
+/--pre .[terminal]
+src/Cart.php  rewritten
+\--
+
+Řádek `rewritten` říká agentovi, že si má soubor přečíst znovu, než na něj zase sáhne. Porušení, která zůstala neopravená, dostane ve stejném výpisu a může je opravit sám. Čistý soubor nevypíše nic, takže hook nezahlcuje kontext. Díky `--skip-excluded` hook nesáhne na soubor, který konfigurace vylučuje v `excludePaths`, třeba na fixturu testu, do které agent zapsal. Stejný tvar funguje pro jakýkoli nástroj, který umí spustit příkaz po zápisu souboru, například pro hooky v Claude Code.
+
+Rizikové opravy hook neudělá, jen je ohlásí. Aby jich zbývalo co nejméně, patří do `dresscode.neon` i klíč [`nameResolution: certain` |namespaces#name-resolution]: s ním přestanou být rizikové opravy, které stojí na tom, že je funkce globální, a hook je udělá sám. Totéž udělají [typy |types#enable] s opravami, které stojí na typu hodnoty.
