@@ -77,8 +77,7 @@ Ke standardu se přidávají **skupiny pravidel**. Nejsou to presety a nemají v
 Projekt si tedy vezme jeden standard, přidá skupiny, které chce, a jednotlivá pravidla zapne nebo nastaví v konfiguraci:
 
 ```neon
-presets:
-	- perCs
+presets: perCs
 
 groups:
 	- cleanup
@@ -92,6 +91,27 @@ Standard `nette` je ze všeho toho složený: PER Coding Style s tabulátory a r
 Kde se pravidlo se specifikací rozchází, dostane volbu, ne výjimku schovanou v presetu. Tytéž volby má tedy k dispozici i váš vlastní preset.
 
 Presety se skládají jako vrstvy: potomek přebírá rodiče a mění jen to, co sám říká, vaše konfigurace je vrstva nad nimi a přepis pro část projektu další vrstva nad konfigurací. Preset, konfigurace i přepis přitom mají stejný tvar, profil, takže preset jde zapnout i jen pro část projektu. Podrobně to popisuje stránka [Konfigurace |configuration#Presety a vrstvy].
+
+
+PER Coding Style a PSR-12 proti PHP CS Fixeru a PHP_CodeSniffer
+===============================================================
+
+Napsat, že nástroj umí standard, je snadné. Ověřit se to dá tak, že výsledek zkontroluje ten druhý: Laravel a Symfony 3.4 opravil `dresscode fix` s presetem `perCs`, pak je dostal PHP CS Fixer se svou sadou pro PER Coding Style, a potom totéž obráceně.
+
+| | Laravel, 1 696 souborů | Symfony 3.4, 4 097 souborů |
+|---|---|---|
+| PHP CS Fixer po DressCode ještě změní | 9 míst v 7 souborech | 29 míst v 16 souborech |
+| DressCode po PHP CS Fixeru ještě najde | 1 201 míst | 7 497 míst |
+
+Těch pár míst, která PHP CS Fixer ještě změní, jsou vědomá rozhodnutí DressCode, nebo zvyky PHP CS Fixeru. DressCode nechává `=` přiřazení na konci řádku a operátor, za kterým následuje komentář, tam, kde stojí, kdežto PHP CS Fixer obojí přesune. U přiřazení se přitom PHP CS Fixer drží doslovného znění oddílu 6.4 a DressCode volí jinak. Zbytek jde za PHP CS Fixerem: láme řádek uvnitř výrazu v závorkách a přeodsazuje komentář nad `} elseif`.
+
+Co DressCode najde navíc, to po kódu chce PER Coding Style: signatura, volání, podmínka, řetěz volání nebo pole rozložené na víc řádků má na každém řádku jednu položku, heredoc drží odsazení okolního kódu a víceřádkový seznam končí čárkou. PHP CS Fixer přitom implementuje PER Coding Style 3.0, DressCode verzi 3.1.
+
+Stejná zkouška s PSR-12 a PHP_CodeSniffer: po `dresscode fix --preset psr12` najde PHP_CodeSniffer nad celým Laravelem 83 problémů. Nepočítá se do nich řádek delší než 120 znaků, u kterého PSR-12 chce, aby nástroj jen varoval; DressCode ho ohlásí, jakmile projekt zapne pravidlo [lineLength |rules/lineLength]. Obráceně najde DressCode po `phpcbf` ještě 772 míst, mezi nimi chybějící viditelnost konstant, kterou PSR-12 vyžaduje a `phpcbf` ohlásí, ale doplnit neumí.
+
+Presety `perCs` a `psr12` jsou psané podle textu specifikací, oddíl po oddílu: každá skupina pravidel v nich stojí pod číslem oddílu, ze kterého vychází, jak ukazují zdrojové kódy "PerCs.php":https://github.com/dg/dresscode/blob/master/src/Presets/PerCs.php a "Psr12.php":https://github.com/dg/dresscode/blob/master/src/Presets/Psr12.php. Kde specifikace nechává prostor pro výklad, rozhoduje její text, ne chování jiného nástroje. Co přesně který preset zapíná, najdete v [přehledu presetů |presets-reference].
+
+Měřeno v říjnu 2026 proti PHP CS Fixeru 3.95 se sadou `@PER-CS3x0` a PHP_CodeSniffer 4.0 se standardem `PSR12`.
 
 
 Bez priorit: pravidla běží do ustálení

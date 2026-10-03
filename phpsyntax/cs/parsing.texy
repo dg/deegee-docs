@@ -2,7 +2,7 @@ Parsování a tisk
 ****************
 
 .[perex]
-Jak zdrojový kód naparsovat, co dělat se syntaktickou chybou, jak se novější syntaxe PHP čte i na starším běhu, jak naparsovat samotný fragment kódu, jak strom vytisknout zpátky a co o kódu řekne nástroj pro příkazovou řádku.
+Jak zdrojový kód naparsovat, co dělat se syntaktickou chybou, jak se novější syntaxe PHP čte i na starším běhu, kdo přečte samotný fragment kódu, jak strom vytisknout zpátky a co o kódu řekne nástroj pro příkazovou řádku.
 
 
 Parsování souboru
@@ -77,30 +77,18 @@ Hodí se to pro všechno, co má změnu jen ukázat, ne provést: náhled opravy
 Fragmenty
 =========
 
-Když do stromu potřebujete vložit nový uzel, nestavíte ho z tokenů ručně. Napíšete ho jako kód a necháte parser, ať z něj udělá uzel:
+`Parser` čte jen celý soubor. Kód, který celým souborem není, tedy výraz, příkaz, typ, jméno nebo třeba jeden parametr, přečte `Builder`, a to do odpojeného uzlu připraveného k vložení do stromu:
 
 ```php
-$expr = $parser->parseExpression('$this->items[] = $item');
-$stmt = $parser->parseStatement('return null;');
-$type = $parser->parseType('?array');
-$name = $parser->parseName('Nette\Utils\Strings');
+use PhpSyntax\Builder;
+use PhpSyntax\Nodes\ParameterNode;
+
+$builder = new Builder;
+$expr = $builder->expression('$this->items[] = $item');
+$param = $builder->fragment(ParameterNode::class, 'int $x = 1');
 ```
 
-Tyhle čtyři metody jsou zkratky s přesným návratovým typem. Cokoli dalšího, co ve zdrojáku nestojí samo o sobě, naparsujete tak, že řeknete, jaký uzel chcete: knihovna zná obal, do kterého ho musí zasadit, aby dával smysl.
-
-```php
-use PhpSyntax\Nodes\{ArrayItemNode, MatchArmNode, ParameterNode};
-
-$param = $parser->parseFragment(ParameterNode::class, 'int $x = 1');
-$arm = $parser->parseFragment(MatchArmNode::class, '1, 2 => true');
-$item = $parser->parseFragment(ArrayItemNode::class, "'key' => \$value");
-```
-
-Funguje to pro parametr, argument, člen třídy, položku pole, import, větev matche, skupinu atributů, `catch`, `elseif`, položku `use` closure, statickou proměnnou, položku konstanty a hook; třída odvozená od některé z nich se parsuje ve stejném obalu.
-
-Fragment je odpojený uzel bez rodiče a bez původních pozic, s prázdnými trivia na okrajích, takže se dá rovnou vložit; kam a jak, říká stránka [Úpravy stromu |mutation]. Vstup, ze kterého by něco přebývalo, parser odmítne a řekne proč: `$a, $b` zadané jako jeden parametr skončí `ParseException` s hláškou `The code is not a single parameter.` Třídu, pro kterou žádný obal neexistuje, třeba `FileNode`, odmítne výjimkou `InvalidArgumentException`.
-
-Konstruktory uzlů jsou `@internal`, protože jejich parametry kopírují sloty gramatiky a do těch může další verze PHP přidávat. Co se skládá z uzlů, které už v ruce máte, a do řetězce se tedy nevejde, postaví tovární metody `of()`, viz [Nový uzel |mutation#Nový uzel].
+Chyba ve fragmentu je `ParseException` jako u souboru, jen pozice se počítá ve fragmentu. Co všechno builder umí, včetně šablon, do kterých dosadíte uzly, jež už držíte, popisuje stránka [Nové uzly |builder].
 
 
 Tisk

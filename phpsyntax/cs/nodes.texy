@@ -39,17 +39,31 @@ Node of the concrete syntax tree; every token of the source is reachable through
 - `removeTrivia(Trivia $trivia): void` – Removes one trivia of the node, wherever among its tokens it stands, tidying the whitespace around it the way `Token::removeTrivia()` does.
 - `replaceDocComment(Trivia $docComment): void` – Replaces the doc comment of the node (see `getDocComment()`) with the trivia given.
 - `removeDocComment(): void` – Removes the doc comment of the node (see `getDocComment()`) together with the line it stands on.
-- `findAncestor(class-string<T> $class): (T&Node)|null`
+- `findAncestor(class-string<T> $class): (T&Node)|null` – The innermost node of the class above this one, its parent first.
 - `findFirst(class-string<T> $class, ?callable $predicate = null): (T&Node)|null` – The first descendant of the class the predicate accepts, in pre-order; null when there is none.
 - `find(class-string<T> $class, ?callable $predicate = null): list<T&Node>` – Descendant nodes of the class the predicate accepts, in pre-order, as a snapshot safe to iterate while mutating the tree.
+- `getNextSibling(): ?Node` – The next item of the list the node is an item of; null for the last one.
+- `getPreviousSibling(): ?Node` – The previous item of the list the node is an item of; null for the first one.
 - `matches(Node $other): bool` – Whether the tokens of both nodes carry the same texts, whatever the whitespace between them.
 - `hasInnerComment(): bool` – Whether a comment sits anywhere between the first and the last token of the node; the trivia on its outer edges do not count.
 - `getInnerComments(): list<Trivia>` – The comments inside the node, in source order; those on its outer edges are not among them, the same way `hasInnerComment()` does not count them.
+- `hasLeadingComment(): bool` – Whether a comment sits on the leading edge of the node, among the trivia before its first token.
+- `hasTrailingComment(): bool` – Whether a comment sits on the trailing edge of the node, among the trivia after its last token.
+- `getLeadingComments(): list<Trivia>` – The comments on the leading edge of the node, before its first token.
+- `getTrailingComments(): list<Trivia>` – The comments on the trailing edge of the node, after its last token up to the end of its line.
 - `setEdgeTrivia(?list<Trivia> $leading = null, ?list<Trivia> $trailing = null): static` – Writes the trivia on the outer edges of the node: before its first token and after its last one. A `null` leaves that edge alone, `[]` clears it, and a node without tokens takes neither.
 - `withoutEdgeTrivia(): static` – A deep copy without a parent and without the trivia on its outer edges, which belong to the place it was copied from.
 - `replaceWith(Node $node): void` – Replaces this node in its parent; the trivia around the old node stay in place around the new one, or with the tokens on either side when the new one has no tokens, an empty list, and where the new one then stands right against a token it would be read together with, `.` against `1` or `return` against `FOO`, a space keeps the two apart.
-- `remove(CommentPolicy $comments = CommentPolicy::MoveToNextToken): void` – Removes this node from its list, together with the separator that goes with it. A node alone on its lines takes the lines with it (indentation and line ending), otherwise the whitespace around stays; its comments, those on its edges included, go where the policy says, each with its indentation and the line ending after it.
+- `remove(CommentPolicy $comments = CommentPolicy::MoveToNextToken, bool $mergeBlankLines = false): void` – Removes this node from its list, together with the separator that goes with it. A node alone on its lines takes the lines with it (indentation and line ending), otherwise the whitespace around stays; its comments, those on its edges included, go where the policy says, each with its indentation and the line ending after it. With `$mergeBlankLines`, where the node and the token after it stand at the start of a line, the two gaps of blank lines the node stood between become the narrower of them, or the one toward the edge where the node was the first or the last item of its list, counted above the comments the node leaves behind.
 - `__toString(): string` – The node printed back to source, the trivia on its outer edges included; `$text` leaves them out.
+
+
+AnonymousFunctionNode
+---------------------
+
+Function written as an expression, without a name: closure, arrow function; an interface, because the two share no base class but the expression. Rozšiřuje `FunctionLikeNode`, `AttributeAwareNode`.
+
+- `$staticKeyword: ?Token`
 
 
 AttributeAwareNode
@@ -63,7 +77,7 @@ Declaration that may carry attributes, its list empty where none is written: a c
 ClassLikeNode
 -------------
 
-Declaration with members: class, interface, trait, enum, anonymous class; an interface, because an anonymous class stands inside a `new` expression and the rest are statements.
+Declaration with members: class, interface, trait, enum, anonymous class; an interface, because an anonymous class stands inside a `new` expression and the rest are statements. Rozšiřuje `AttributeAwareNode`.
 
 - `$name: ?IdentifierNode`
 - `$members: PlainNodeList<MemberNode>`
@@ -72,27 +86,32 @@ Declaration with members: class, interface, trait, enum, anonymous class; an int
 ExpressionNode
 --------------
 
-Expression, which stands for a value; a destructuring stands where a target is written and is a ListNode, not one of these. Rozšiřuje `Node`.
+Expression, which stands for a value; a destructuring stands where a target is written and is a DestructuringNode, not one of these. Rozšiřuje `Node`.
 
 - `getDereferenceKind(): ?DereferenceKind` – How the parent reaches into this expression, null where it does not: `$this->x`, `$this->y()` and `$this[0]` fetch from it, `$this()` calls it, `$this::y()` takes it for the name of a class.
 - `isDereferenced(): bool` – Whether the parent reads a member, an element or a static member of this expression, or calls it: `$this->x`, `$this[0]`, `$this::y()`, `$this()`. Such an expression needs parentheses unless the grammar makes it a primary one.
 - `isDereferenceable(DereferenceKind $by = DereferenceKind::Fetch): bool` – Whether what is written after the expression may reach into it with no parentheses around it. A call takes a name or a member written before it for its own, which calls another thing entirely, and `::` takes the name of a class, which a name written there would become.
+- `canStandInString(): bool` – Whether the expression may be written inside a double-quoted string, a heredoc or a shell command in braces, `{$...}`: what the grammar reads as a variable there, which is a variable, an element, a property, a static property or a call of a function, a method or a static method, starting with the dollar of a variable.
 - `isWritable(): bool` – Whether the expression may stand where a place is assigned to: a variable, an element, a property, reached through a chain PHP writes through. A `?->` anywhere along it rules the write out, a call in the chain included, and so does a chain starting at a value of its own, a literal, a constant, `new` or `clone`, which has no place to write to. It says nothing about reading; that is `isRepeatableRead()`, and the two answer for the two sides of `=`.
 - `isWritten(): bool` – Whether something writes the expression or an element of it, a variable, a property or an element alike: it is assigned, stepped, unset, bound, or taken by reference, either side of `=&` among them, the right one becoming a reference a write may later go through.
 - `isRepeatableRead(): bool` – Whether reading the expression again gives the same value with no side effects: variables, property, constant and offset fetches, literals, arrays of such items and what parentheses or a unary operator make of them, nothing that runs code of its own; an unpacked item may run a generator and one by reference creates the variable, so neither is repeatable. The answer is syntactic, so what the language runs behind such a read is out of sight and does not count: a magic getter or a property hook behind a fetch, an `ArrayAccess` behind an offset, a `__toString()` behind a string that interpolates. Whoever cannot assume that much has to know the types, which a syntax tree does not.
-- `isBoolean(): bool` – Whether the expression yields a boolean whatever its operands: a comparison, a logical operation, a negation, `instanceof`, `isset()`, `empty()`, a bool cast or a boolean literal.
+- `evaluatesToBoolean(): bool` – Whether the expression yields a boolean whatever its operands: a comparison, a logical operation, a negation, `instanceof`, `isset()`, `empty()`, a bool cast or a boolean literal.
 - `toValue(): mixed` – The value the expression is written as: a scalar, `null`, `true`, `false`, or an array of them. A name standing for a constant is not one, its value being a matter of what the code around it defines. Throws `LogicException` where the expression is written as no value; `hasValue()` tells beforehand.
 - `hasValue(): bool` – Whether the expression is written as a value, which is what `toValue()` gives.
-- `replaceWithExpression(ExpressionNode $expression): void` – Replaces this node by the expression the way `replaceWith()` does, in parentheses where the expression binds looser than the place asks or is reached into there: what `ParenthesizedNode::isRedundant()` does not call needless stays. A place typed narrower, which takes no parentheses, gets the expression bare.
+- `replaceWithExpression(ExpressionNode $expression): void` – Replaces this node by the expression the way `replaceWith()` does, in parentheses where the expression binds looser than the place asks or is reached into there: what `ParenthesizedNode::isRedundant()` does not call needless stays. A place typed narrower, which takes no parentheses, gets the expression bare. The name of a member or of a variable written as a bare variable (`$o->$m`, `A::$m`, `$$m`) takes a variable bare and anything else in braces (`$o->{$a . 'b'}`), which is what the grammar reads there. Inside a string, a heredoc or a shell command the grammar of interpolation decides. What begins the expression of `{$...}` takes only an expression that `canStandInString()`, written as it is, and so does a part standing bare among the parts of the string, in braces where the bare form would read it otherwise; a place inside a bare part keeps the bare form for a plain variable and turns the part into `{$...}` for anything else. The name of `${name}` is refused, an expression there naming a variable variable, and so are braces that would follow a dollar of the text and read as `${`. The trivia the expression brings are marked as standing in the string, and outside a string they lose such a mark, but for those inside a string the expression holds. Throws `InvalidArgumentException` for an expression the place cannot hold, before anything moves, as `checkReplaceWithExpression()` tells beforehand.
+- `checkReplaceWithExpression(ExpressionNode $expression): void` – The dry run of `replaceWithExpression()`: throws what the write would refuse the expression with, and moves nothing. A slot that does not take it is refused, a place in a string it cannot stand in, braces after a dollar of the text and the name of `${name}`. Throws `InvalidArgumentException` for an expression the place cannot hold. Throws `LogicException` for a node without a parent and an expression the write cannot take from where it stands.
 
 
 FunctionLikeNode
 ----------------
 
-Declaration with parameters and a body: function, method, closure, arrow function, property hook; an interface, because a closure and an arrow function are expressions and the rest are not.
+Declaration with parameters and a body: function, method, closure, arrow function, property hook; an interface, because a closure and an arrow function are expressions and the rest are not. Rozšiřuje `AttributeAwareNode`.
 
+- `$openParen: ?Token` – The parenthesis opening the parameters; null for a property hook written without parentheses.
 - `$parameters: ?SeparatedNodeList<ParameterNode>` – Null for a property hook written without parentheses.
+- `$closeParen: ?Token` – The parenthesis closing the parameters; null for a property hook written without parentheses.
 - `$returnType: ?TypeNode` – The return type declared; null where none is, a property hook having none to declare.
+- `setReturnType(?TypeNode $type): static` – Writes the return type together with its colon, or removes both, their comments staying after the closing parenthesis; the gap before the body stays where it was, and a type standing in a tree comes as a copy without the trivia on its edges. Throws `LogicException` for a property hook, which has no return type.
 
 
 MemberNode
@@ -109,7 +128,9 @@ Sequence of nodes, plain or separated by tokens. It has no slots and reads its i
 - `getItems(): list<T>`
 - `isEmpty(): bool`
 - `append(T $item): void`
-- `insert(int $index, T $item): void`
+- `insert(int $index, T $item): void` – Inserts an item at the index.
+- `insertAfter(Node $item, T $new): void` – Inserts the new item right after the item, as `insert()` does.
+- `insertBefore(Node $item, T $new): void` – Inserts the new item right before the item, as `insert()` does.
 - `removeItem(Node $item): void` – Takes the item out with its trivia and tidies nothing; `Node::remove()` takes the lines with it.
 - `indexOf(Node $item): int`
 - `count(): int`
@@ -118,6 +139,7 @@ Sequence of nodes, plain or separated by tokens. It has no slots and reads its i
 - `offsetGet(mixed $offset): T`
 - `offsetSet(mixed $offset, mixed $value): never`
 - `offsetUnset(mixed $offset): never`
+- `getFirstToken(): ?Token` – Null only for an empty list.
 
 
 OperatorNode
@@ -125,8 +147,8 @@ OperatorNode
 
 Expression written with an operator, which is what decides whether parentheses around it are needed. Those whose right operand reaches as far as the code lets it, an arrow function among them, are a RightExtendingNode.
 
-- `getPrecedence(): int` – How tightly the operator binds, the higher the tighter, in the order the precedence declarations of the grammar put the operators; only the order of the numbers is meant, not their values.
-- `getAssociativity(): Associativity` – Which side the operator leans to, where an operand of the same precedence may stand.
+- `$precedence: int` – How tightly the operator binds, the higher the tighter, in the order the precedence declarations of the grammar put the operators; only the order of the numbers is meant, not their values.
+- `$associativity: Associativity` – Which side the operator leans to, where an operand of the same precedence may stand.
 
 
 RightExtendingNode
@@ -146,6 +168,7 @@ StatementNode
 
 Statement: what a file, a block and the body of a control structure consist of. Rozšiřuje `Node`.
 
+- `remove(CommentPolicy $comments = CommentPolicy::MoveToNextToken, bool $mergeBlankLines = false): void` – Removes the statement as `Node::remove()` does. A statement ended by a close tag leaves the tag behind as an empty statement, so that the text after it stays text. A statement that opens its code too, as `<?=` does, goes whole, and so does the empty statement of a close tag, whose removal is for the caller to decide.
 - `interruptsFlow(): bool` – Whether the code does not go on after the statement: `return`, `break`, `continue`, `goto`, `throw` or `exit`. It reads the statement itself, so an `if` whose every branch returns is no such statement; that is control flow.
 
 
@@ -169,7 +192,7 @@ Type written in a declaration: a name, a nullable, a union or an intersection. R
 Společné uzly
 =============
 
-Kořen souboru, jména, seznamy, parametry, argumenty, atributy a části řídicích struktur; leží přímo v `PhpSyntax\Nodes`.
+Kořen souboru, jména, seznamy, parametry, argumenty, atributy, části řídicích struktur a destrukturace; leží přímo v `PhpSyntax\Nodes`. `DestructuringNode` výrazem není, protože stojí jen tam, kam se přiřazuje, a hodnotu nemá.
 
 
 NameNode
@@ -213,7 +236,6 @@ Parenthesized arguments of a call, instantiation, attribute or `exit`. Rozšiřu
 - `items`: `SeparatedNodeList<ArgumentNode|VariadicPlaceholderNode|ArgumentPlaceholderNode>`
 - `closeParen`: `Token`
 
-- `static of(ExpressionNode ...$values): ArgumentListNode` – A one-line list of positional arguments with the values, which lose the trivia on their edges.
 - `isPartialApplication(): bool` – Whether the list leaves parameters unbound with `?` or `...`, which makes a closure of the call instead of calling it.
 - `findArgument(?string $name, ?int $position): ?ArgumentNode` – The argument the parameter of the name and the position gets: the one written with the name, else the one standing at the position, so that `get_class(object: $o)` reads as the call `get_class($o)` is. Null where the parameter gets none, and where the call does not say which it gets: a `?` placeholder holds a place without being an argument, and an unpacked array stands for as many arguments as it holds, so it takes the answer from a position after it, never from a name, which stands for itself. Whoever knows only one of the two asks with null for the other: the position alone finds no argument written with a name, the name alone none that is not.
 
@@ -265,7 +287,9 @@ Parameter of a function, method, closure, arrow function or hook; with modifiers
 - `hooks`: `?PlainNodeList<Member\PropertyHookNode>`
 - `closeBrace`: `?Token`
 
-- `isPromoted(): bool` – Whether the parameter declares a property of the class, which its modifiers make it do.
+- `$promoted: bool` – Whether the parameter declares a property of the class, which its modifiers make it do.
+- `setType(?TypeNode $type): static` – Writes the type before the variable with one space after it, or removes it with its space, its comments staying; a type standing in a tree comes as a copy without the trivia on its edges.
+- `getDocComment(): ?Trivia` – Doc comment of the parameter: the one after it, before the separator or before the token after it where the last parameter has none, which PHP reads first, and else the one before it as for any node.
 
 
 AttributeGroupNode
@@ -292,15 +316,17 @@ ModifiersNode
 
 Modifier keywords in source order (`public`, `static`, `readonly`, `abstract`, `final`, `var`, `public(set)`...); may be empty. Rozšiřuje `Node`. Implementuje `Countable`, `IteratorAggregate`.
 
-- `$visibility: ?Visibility` – The visibility the modifiers declare, null when they declare none, which leaves a member public, a promoted parameter too.
-- `$writeVisibility: ?Visibility` – The visibility for writing, which asymmetric visibility declares apart: `public(set)` and its kin.
-- `isStatic(): bool`
-- `isAbstract(): bool`
-- `isFinal(): bool`
-- `isReadonly(): bool`
+- `$visibility: Visibility` – The visibility of the member, `Public` where the modifiers write none; `getVisibilityToken()` tells whether one is written.
+- `$writeVisibility: Visibility` – The visibility for writing as PHP takes it: the one asymmetric visibility declares apart (`public(set)` and its kin), `Protected` for a public `readonly`, which PHP writes as `protected(set)`, the `$visibility` otherwise. It reads the modifiers alone, like `$readonly`, so a property of a readonly class is not taken for readonly.
+- `$static: bool`
+- `$abstract: bool`
+- `$final: bool`
+- `$readonly: bool`
+- `getTokens(): list<Token>`
 - `findToken(int $kind): ?Token` – The modifier token of the kind, null when the modifiers do not have it.
 - `isEmpty(): bool`
 - `has(int $kind): bool`
+- `getVisibilityToken(): ?Token` – The `public`, `protected`, `private` or `var` token, null when no visibility is written.
 - `append(Token $token): void` – Appends a modifier. The first one opens the declaration, so it takes over the leading trivia of the token it now stands before, the open tag and the doc comment among them; one without trailing trivia is kept apart from what follows by a space.
 - `removeToken(Token $token): void` – Removes a modifier. Its leading trivia go to the token after it, which may now open the declaration, and a comment after it stays: after the modifier before it, or on a line of its own above the token after it. A line the modifier ended after another token ends with that token now, which takes the line ending.
 - `count(): int`
@@ -312,15 +338,26 @@ PlainNodeList
 
 Sequence of nodes without separators: statements, members, attribute groups. Rozšiřuje `NodeList`. Implementuje `ArrayAccess`, `IteratorAggregate`, `Countable`. Typ položek `T` je podtyp `Node`.
 
+- `append(T $item): void` – Appends an item, which takes the place in the lines of the list its neighbor has.
+- `insert(int $index, T $item): void` – Inserts an item at the index. In a list standing in a file, an item that carries no trivia of its own takes the indentation of its neighbor and ends its line the same way.
+- `insertAfter(Node $item, Node $new): void` – Inserts the new item right after the item, as `insert()` does.
+- `insertBefore(Node $item, Node $new): void` – Inserts the new item right before the item, as `insert()` does.
+
 
 SeparatedNodeList
 -----------------
 
 Sequence of nodes with separator tokens between them and an optional trailing separator: parameters, arguments, array items, imports. An item may be an empty node standing for nothing between two separators (`[, $b] = $x`). Rozšiřuje `NodeList`. Implementuje `ArrayAccess`, `IteratorAggregate`, `Countable`. Typ položek `T` je podtyp `Node`.
 
-- `getSeparators(): list<Token>`
-- `hasTrailingSeparator(): bool`
-- `setTrailingSeparator(?Token $separator): static`
+- `getSeparators(): list<Token>` – The separators in source order, the trailing one included.
+- `hasTrailingSeparator(): bool` – Whether a separator follows the last item.
+- `append(T $item, ?Token $separator = null): void` – Appends an item; the separator before it is derived from the existing ones unless given.
+- `insert(int $index, T $item, ?Token $separator = null): void` – Inserts an item at the index. A missing separator is modeled on the existing ones, or on `, ` in a one-line list, and then the item also takes the indentation and the line ending of its neighbor in a multi-line list; a separator given is inserted as it is. The separator is the one that goes with the item: the one after it, and for the last item the one before it, so what the separators already there carry stays with the items they follow.
+- `insertAfter(Node $item, Node $new, ?Token $separator = null): void` – Inserts the new item right after the item, as `insert()` does.
+- `insertBefore(Node $item, Node $new, ?Token $separator = null): void` – Inserts the new item right before the item, as `insert()` does.
+- `getTrailingSeparator(): ?Token` – The separator after the last item; null where there is none.
+- `setTrailingSeparator(?Token $separator): static` – Writes the separator after the last item, or removes it with null. The separator stands where the item ended: one without trivia of its own takes over the trailing trivia of the last item, or the trivia of the separator it replaces, and one removed leaves its comments and the end of its line to the last item; a separator with trivia keeps them, followed by the comments and the line ending of the one it replaces, and one in a list standing nowhere, as the parser builds it, is written as it is.
+- `removeItem(Node $item): void` – Takes the item out with its trivia, together with the separator that goes with it, the one after it and for the last item the one before it, and tidies nothing; `Node::remove()` takes the lines with it.
 
 
 FileNode
@@ -332,13 +369,14 @@ Root of the tree: the statements of a file and the end-of-file token carrying th
 - `endOfFile`: `Token`
 
 - `$revision: int` – Version of the tree: every write to a slot, a list, or the text or trivia of a token that changes it increments it.
+- `getTokens(): array` – The tokens of the file in source order, kept by the index rather than collected anew.
 - `findNode(int $start, int $end, class-string<T> $class = 'PhpSyntax\\Node'): ?T` – The outermost node of the class whose text stands exactly at the byte offsets of the current text, the end exclusive; the way a position of another tool (a parser of its own, an editor) is brought to the tree.
 
 
 AnonymousClassNode
 ------------------
 
-Anonymous class in a `new` expression: `new class(...) extends A implements B { ... }`. Rozšiřuje `Node`. Implementuje `AttributeAwareNode`, `ClassLikeNode`.
+Anonymous class in a `new` expression: `new class(...) extends A implements B { ... }`. Rozšiřuje `Node`. Implementuje `ClassLikeNode`, `AttributeAwareNode`.
 
 - `attributes`: `PlainNodeList<AttributeGroupNode>`
 - `modifiers`: `ModifiersNode`
@@ -352,8 +390,6 @@ Anonymous class in a `new` expression: `new class(...) extends A implements B { 
 - `members`: `PlainNodeList<MemberNode>`
 - `closeBrace`: `Token`
 
-- `$name: ?IdentifierNode`
-
 
 ArrayItemNode
 -------------
@@ -364,11 +400,11 @@ Item of an array literal or a destructuring list: value with optional key, by re
 - `doubleArrow`: `?Token`
 - `ampersand`: `?Token`
 - `ellipsis`: `?Token`
-- `value`: `ExpressionNode|ListNode`
+- `value`: `ExpressionNode|DestructuringNode`
 
 
-EmptyArrayItemNode
-------------------
+SkippedArrayItemNode
+--------------------
 
 Skipped item of a destructuring list (`[, $b] = $x`); has no tokens. Rozšiřuje `Node`.
 
@@ -380,19 +416,19 @@ Arm of a `match` expression: the values compared with the subject, or `default`,
 
 - `values`: `?SeparatedNodeList<ExpressionNode>`
 - `defaultKeyword`: `?Token`
-- `defaultComma`: `?Token`
+- `comma`: `?Token`
 - `doubleArrow`: `Token`
 - `result`: `ExpressionNode`
 
 
-ClosureUsesNode
----------------
+ClosureUseListNode
+------------------
 
 The `use (...)` clause of a closure. Rozšiřuje `Node`.
 
 - `useKeyword`: `Token`
 - `openParen`: `Token`
-- `variables`: `SeparatedNodeList<ClosureUseNode>`
+- `items`: `SeparatedNodeList<ClosureUseNode>`
 - `closeParen`: `Token`
 
 
@@ -495,6 +531,7 @@ Imported name with an optional alias; the type (`function`, `const`) appears onl
 
 - `$symbolKind: SymbolKind` – What the item imports: its own type where a group use writes one per item, else what the statement imports.
 - `$fullName: string` – The name the item imports, without a leading backslash: what is written here, and in a group use the prefix of the statement before it.
+- `remove(CommentPolicy $comments = CommentPolicy::MoveToNextToken, bool $mergeBlankLines = false): void` – Removes the item as `Node::remove()` does, and the whole statement where the item is the only one it imports, which `StatementNode::remove()` takes with its line.
 - `getStatement(): ?Statement\UseNode` – The import the item belongs to; null for an item that is not in one.
 
 
@@ -508,14 +545,14 @@ Constant of a `const` statement or a class constant declaration. Rozšiřuje `No
 - `value`: `ExpressionNode`
 
 
-ListNode
---------
+DestructuringNode
+-----------------
 
 Destructuring, written `list(...)` or `[...]`; the keyword is null for the short form. A short array is a literal until it stands where a place is assigned to, which is where it becomes one of these. It is no expression: it never carries a value. Rozšiřuje `Node`.
 
 - `listKeyword`: `?Token`
 - `openDelimiter`: `Token`
-- `items`: `SeparatedNodeList<ArrayItemNode|EmptyArrayItemNode>`
+- `items`: `SeparatedNodeList<ArrayItemNode|SkippedArrayItemNode>`
 - `closeDelimiter`: `Token`
 
 
@@ -546,7 +583,7 @@ UseNode
 - `useKeyword`: `Token`
 - `kindKeyword`: `?Token`
 - `prefix`: `?NameNode`
-- `namespaceSeparator`: `?Token`
+- `backslash`: `?Token`
 - `openBrace`: `?Token`
 - `items`: `SeparatedNodeList<UseItemNode>`
 - `closeBrace`: `?Token`
@@ -615,6 +652,9 @@ Statements in braces. Rozšiřuje `StatementNode`.
 - `openBrace`: `Token`
 - `statements`: `PlainNodeList<StatementNode>`
 - `closeBrace`: `Token`
+
+- `interruptsFlow(): bool` – Whether the code does not go on after the last statement of the block, the empty statement a close tag leaves behind it aside; false for an empty block.
+- `unwrap(): void` – Moves the statements of the block into the list the block stands in, in its place, and removes the braces the way `remove()` removes a node: a comment on the opening brace goes before the first statement, one on the closing brace after the last one, before what follows the block, both on lines of their own where the brace stood on one. The statements keep their trivia, the indentation included, which `Indentation::shift()` moves a level up. Throws `LogicException` for a block whose braces stand next to a close tag or inline HTML, where the whitespace is output of the script, before anything moves.
 
 
 IfNode
@@ -697,7 +737,7 @@ ForeachNode
 - `key`: `?ExpressionNode`
 - `doubleArrow`: `?Token`
 - `ampersand`: `?Token`
-- `value`: `ExpressionNode|ListNode`
+- `value`: `ExpressionNode|DestructuringNode`
 - `closeParen`: `Token`
 - `body`: `?StatementNode`
 - `colon`: `?Token`
@@ -730,7 +770,7 @@ BreakNode
 `break` with an optional level. Rozšiřuje `StatementNode`.
 
 - `breakKeyword`: `Token`
-- `expression`: `?ExpressionNode`
+- `level`: `?ExpressionNode`
 - `semicolon`: `Token`
 
 
@@ -740,7 +780,7 @@ ContinueNode
 `continue` with an optional level. Rozšiřuje `StatementNode`.
 
 - `continueKeyword`: `Token`
-- `expression`: `?ExpressionNode`
+- `level`: `?ExpressionNode`
 - `semicolon`: `Token`
 
 
@@ -760,7 +800,7 @@ GlobalNode
 `global` statement. Rozšiřuje `StatementNode`.
 
 - `globalKeyword`: `Token`
-- `variables`: `SeparatedNodeList<ExpressionNode>`
+- `variables`: `SeparatedNodeList<Expression\VariableNode>`
 - `semicolon`: `Token`
 
 
@@ -845,7 +885,7 @@ Label for `goto`. Rozšiřuje `StatementNode`.
 FunctionNode
 ------------
 
-Function declaration. Rozšiřuje `StatementNode`. Implementuje `AttributeAwareNode`, `FunctionLikeNode`.
+Function declaration. Rozšiřuje `StatementNode`. Implementuje `FunctionLikeNode`, `AttributeAwareNode`.
 
 - `attributes`: `PlainNodeList<AttributeGroupNode>`
 - `functionKeyword`: `Token`
@@ -858,11 +898,13 @@ Function declaration. Rozšiřuje `StatementNode`. Implementuje `AttributeAwareN
 - `returnType`: `?TypeNode`
 - `body`: `Statement\BlockNode`
 
+- `setReturnType(?TypeNode $type): static` – Writes the return type with its colon, or removes both, as `FunctionLikeNode::setReturnType()` says.
+
 
 ClassNode
 ---------
 
-Class declaration. Rozšiřuje `StatementNode`. Implementuje `AttributeAwareNode`, `ClassLikeNode`.
+Class declaration. Rozšiřuje `StatementNode`. Implementuje `ClassLikeNode`, `AttributeAwareNode`.
 
 - `attributes`: `PlainNodeList<AttributeGroupNode>`
 - `modifiers`: `ModifiersNode`
@@ -880,7 +922,7 @@ Class declaration. Rozšiřuje `StatementNode`. Implementuje `AttributeAwareNode
 InterfaceNode
 -------------
 
-Interface declaration. Rozšiřuje `StatementNode`. Implementuje `AttributeAwareNode`, `ClassLikeNode`.
+Interface declaration. Rozšiřuje `StatementNode`. Implementuje `ClassLikeNode`, `AttributeAwareNode`.
 
 - `attributes`: `PlainNodeList<AttributeGroupNode>`
 - `interfaceKeyword`: `Token`
@@ -895,7 +937,7 @@ Interface declaration. Rozšiřuje `StatementNode`. Implementuje `AttributeAware
 TraitNode
 ---------
 
-Trait declaration. Rozšiřuje `StatementNode`. Implementuje `AttributeAwareNode`, `ClassLikeNode`.
+Trait declaration. Rozšiřuje `StatementNode`. Implementuje `ClassLikeNode`, `AttributeAwareNode`.
 
 - `attributes`: `PlainNodeList<AttributeGroupNode>`
 - `traitKeyword`: `Token`
@@ -908,7 +950,7 @@ Trait declaration. Rozšiřuje `StatementNode`. Implementuje `AttributeAwareNode
 EnumNode
 --------
 
-Enum declaration, optionally backed by a scalar type. Rozšiřuje `StatementNode`. Implementuje `AttributeAwareNode`, `ClassLikeNode`.
+Enum declaration, optionally backed by a scalar type. Rozšiřuje `StatementNode`. Implementuje `ClassLikeNode`, `AttributeAwareNode`.
 
 - `attributes`: `PlainNodeList<AttributeGroupNode>`
 - `enumKeyword`: `Token`
@@ -925,7 +967,7 @@ Enum declaration, optionally backed by a scalar type. Rozšiřuje `StatementNode
 Výrazy
 ======
 
-Výrazy v `PhpSyntax\Nodes\Expression`: operátory, volání, přístupy, přiřazení, closure a arrow funkce. Literály mají vlastní sekci [Skaláry |#Skaláry]; destrukturace `ListNode` leží tady, ale výrazem není, protože stojí jen tam, kam se přiřazuje, a hodnotu nemá.
+Výrazy v `PhpSyntax\Nodes\Expression`: operátory, volání, přístupy, přiřazení, closure a arrow funkce. Literály mají vlastní sekci [Skaláry |#Skaláry], destrukturace sekci [Společné uzly |#Společné uzly].
 
 
 VariableNode
@@ -965,7 +1007,7 @@ Property access with `->` or `?->`; the name may be an identifier, a variable or
 - `closeBrace`: `?Token`
 
 - `$plainName: ?string` – The name of the property; null where the name is a variable or an expression (`$a->$b`, `$a->{expr}`).
-- `isNullsafe(): bool` – Whether the fetch is written with `?->`, which skips it when the object is null.
+- `$nullsafe: bool` – Whether the fetch is written with `?->`, which skips it when the object is null.
 - `isOfThis(): bool` – Whether the property is one of `$this`, with either operator.
 
 
@@ -995,6 +1037,8 @@ Class constant access: `A::B`, `A::class`, `A::{expr}`. Rozšiřuje `ExpressionN
 - `name`: `IdentifierNode|ExpressionNode`
 - `closeBrace`: `?Token`
 
+- `$plainName: ?string` – The name of the constant; null where the name is an expression (`A::{expr}`).
+
 
 ConstantFetchNode
 -----------------
@@ -1012,8 +1056,6 @@ Function call by name or on an expression. Rozšiřuje `ExpressionNode`.
 - `name`: `NameNode|ExpressionNode`
 - `arguments`: `ArgumentListNode`
 
-- `static of(NameNode|ExpressionNode|string $name, ?ArgumentListNode $arguments = null): Expression\FunctionCallNode` – A call of the name, written as a node or as text, or of the expression, in parentheses where the call would take it for something else.
-
 
 MethodCallNode
 --------------
@@ -1027,8 +1069,9 @@ Method call with `->` or `?->`. Rozšiřuje `ExpressionNode`.
 - `closeBrace`: `?Token`
 - `arguments`: `ArgumentListNode`
 
-- `static of(ExpressionNode $object, string $name, ?ArgumentListNode $arguments = null, bool $nullsafe = false): Expression\MethodCallNode` – A call of the method on the object, in parentheses where it could not be reached into bare.
-- `isNullsafe(): bool` – Whether the call is written with `?->`, which skips it when the object is null.
+- `$plainName: ?string` – The name of the method; null where the name is a variable or an expression (`$a->$b()`, `$a->{expr}()`).
+- `$nullsafe: bool` – Whether the call is written with `?->`, which skips it when the object is null.
+- `isOfThis(): bool` – Whether the method is one of `$this`, with either operator.
 
 
 StaticMethodCallNode
@@ -1043,7 +1086,7 @@ Static method call: `A::b()`, `$a::b()`, `A::{expr}()`. Rozšiřuje `ExpressionN
 - `closeBrace`: `?Token`
 - `arguments`: `ArgumentListNode`
 
-- `static of(NameNode|ExpressionNode $class, string $name, ?ArgumentListNode $arguments = null): Expression\StaticMethodCallNode` – A call of the static method of the class, an expression in parentheses where `::` could not follow it bare.
+- `$plainName: ?string` – The name of the method; null where the name is an expression (`A::{expr}()`).
 
 
 NewNode
@@ -1055,17 +1098,15 @@ Instantiation of a named, dynamic or anonymous class. Rozšiřuje `ExpressionNod
 - `class`: `NameNode|ExpressionNode|AnonymousClassNode`
 - `arguments`: `?ArgumentListNode`
 
-- `static of(NameNode|ExpressionNode $class, ?ArgumentListNode $arguments = null): Expression\NewNode` – An instantiation of the class, an expression in parentheses where it could not name one bare; no list is written where none is given.
-
 
 ArrayNode
 ---------
 
-Array literal in either syntax: `[...]` or `array(...)`. A short array standing where a place is assigned to destructures instead, and is a ListNode. Rozšiřuje `ExpressionNode`.
+Array literal in either syntax: `[...]` or `array(...)`. A short array standing where a place is assigned to destructures instead, and is a DestructuringNode. Rozšiřuje `ExpressionNode`.
 
 - `arrayKeyword`: `?Token`
 - `openDelimiter`: `Token`
-- `items`: `SeparatedNodeList<ArrayItemNode|EmptyArrayItemNode>`
+- `items`: `SeparatedNodeList<ArrayItemNode|SkippedArrayItemNode>`
 - `closeDelimiter`: `Token`
 
 
@@ -1074,11 +1115,9 @@ AssignmentNode
 
 Assignment `$a = $b`. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
 
-- `target`: `ExpressionNode|ListNode`
+- `target`: `ExpressionNode|DestructuringNode`
 - `equals`: `Token`
 - `expression`: `ExpressionNode`
-
-- `static of(ExpressionNode|ListNode $target, ExpressionNode $expression): Expression\AssignmentNode` – The assignment of the expression to the target, a short array written as the target destructuring as it does in the code, and the expression in parentheses where it binds looser than the assignment takes. Throws `InvalidArgumentException` for a target nothing can be assigned to.
 
 
 CombinedAssignmentNode
@@ -1090,7 +1129,6 @@ Combined assignment `$a += $b`, whose operator token tells which operation is ba
 - `operator`: `Token`
 - `expression`: `ExpressionNode`
 
-- `static of(ExpressionNode $target, string $operator, ExpressionNode $expression): Expression\CombinedAssignmentNode` – The combined assignment of the expression to the target, the expression in parentheses where it binds looser than the assignment takes. Throws `InvalidArgumentException` for what is no combined assignment operator, and for a target nothing can be assigned to.
 - `replaceOperator(string $operator): void` – Replaces the operator by another combined assignment one, the trivia around it staying; every one binds alike, so no parentheses change. Throws `InvalidArgumentException` for what is no combined assignment operator.
 
 
@@ -1114,7 +1152,6 @@ Binary operation; the operator token tells which (arithmetic, comparison, logica
 - `operator`: `Token`
 - `right`: `ExpressionNode`
 
-- `static of(ExpressionNode $left, string $operator, ExpressionNode $right): Expression\BinaryOpNode` – The operation on the two operands, each in parentheses where it binds looser than its side of the operator takes. Throws `InvalidArgumentException` for what is no binary operator.
 - `replaceOperator(string $operator): void` – Replaces the operator by another binary one, the trivia around it staying, and puts the operands and the operation itself in parentheses where the new precedence asks, taking away those it makes needless. Throws `InvalidArgumentException` for what is no binary operator.
 - `isLogical(): bool` – Whether the operator is `&&`, `||`, `and`, `or` or `xor`, the operators the parts of a condition are chained with.
 
@@ -1156,7 +1193,7 @@ Type cast; the cast token keeps its spelling including inner whitespace: ( int )
 - `operator`: `Token`
 - `expression`: `ExpressionNode`
 
-- `$type: string` – The type the cast converts to, in the name PHP knows it by: (integer) is int, (double) and (real) are float.
+- `$typeName: string` – The type the cast converts to, in the name PHP knows it by: (integer) is int, (double) and (real) are float.
 - `replaceOperator(string $operator): void` – Replaces the cast by another one, `(int)` by `(string)` for instance, the trivia around it staying; every cast binds alike, so no parentheses change. Another spelling of the same cast is `setText()` of the operator. Throws `InvalidArgumentException` for what is no cast.
 
 
@@ -1191,7 +1228,6 @@ Expression in parentheses. Rozšiřuje `ExpressionNode`.
 - `expression`: `ExpressionNode`
 - `closeParen`: `Token`
 
-- `static of(ExpressionNode $expression): Expression\ParenthesizedNode` – The expression in parentheses, without the trivia on its edges.
 - `isRedundant(): bool` – Whether the parentheses may go without the code coming to mean anything else: what stands in them binds at least as tightly as the place they stand in asks, and what reaches into them could reach into it bare. Where the answer is not certain it is no.
 
 
@@ -1310,7 +1346,7 @@ MatchNode
 ClosureNode
 -----------
 
-Anonymous function, optionally `static`, with captured variables. Rozšiřuje `ExpressionNode`. Implementuje `AttributeAwareNode`, `FunctionLikeNode`.
+Anonymous function, optionally `static`, with captured variables. Rozšiřuje `ExpressionNode`. Implementuje `AnonymousFunctionNode`, `AttributeAwareNode`, `FunctionLikeNode`.
 
 - `attributes`: `PlainNodeList<AttributeGroupNode>`
 - `staticKeyword`: `?Token`
@@ -1319,18 +1355,19 @@ Anonymous function, optionally `static`, with captured variables. Rozšiřuje `E
 - `openParen`: `Token`
 - `parameters`: `SeparatedNodeList<ParameterNode>`
 - `closeParen`: `Token`
-- `uses`: `?ClosureUsesNode`
+- `uses`: `?ClosureUseListNode`
 - `colon`: `?Token`
 - `returnType`: `?TypeNode`
 - `body`: `Statement\BlockNode`
 
-- `getCapturedVariableNames(): list<string>` – Names of the variables the closure captures with `use (...)`, with the dollar sign.
+- `setReturnType(?TypeNode $type): static` – Writes the return type with its colon, or removes both, as `FunctionLikeNode::setReturnType()` says.
+- `getCapturedVariableNames(): list<string>` – Names of the variables the closure captures with `use (...)`, without the dollar sign.
 
 
 ArrowFunctionNode
 -----------------
 
-Arrow function `fn(...) => expr`, optionally `static`. Rozšiřuje `ExpressionNode`. Implementuje `AttributeAwareNode`, `FunctionLikeNode`, `RightExtendingNode`, `OperatorNode`.
+Arrow function `fn(...) => expr`, optionally `static`. Rozšiřuje `ExpressionNode`. Implementuje `AnonymousFunctionNode`, `RightExtendingNode`, `AttributeAwareNode`, `FunctionLikeNode`, `OperatorNode`.
 
 - `attributes`: `PlainNodeList<AttributeGroupNode>`
 - `staticKeyword`: `?Token`
@@ -1343,6 +1380,8 @@ Arrow function `fn(...) => expr`, optionally `static`. Rozšiřuje `ExpressionNo
 - `returnType`: `?TypeNode`
 - `doubleArrow`: `Token`
 - `expression`: `ExpressionNode`
+
+- `setReturnType(?TypeNode $type): static` – Writes the return type with its colon, or removes both, as `FunctionLikeNode::setReturnType()` says.
 
 
 ShellExecNode
@@ -1375,13 +1414,15 @@ Property declaration; one or more properties, optionally with hooks. Rozšiřuje
 - `hooks`: `?PlainNodeList<Member\PropertyHookNode>`
 - `closeBrace`: `?Token`
 
+- `setType(?TypeNode $type): static` – Writes the type before the items with one space after it, or removes it with its space, its comments staying; a type standing in a tree comes as a copy without the trivia on its edges.
+
 
 PropertyItemNode
 ----------------
 
 One property of a declaration with an optional default. Rozšiřuje `Node`.
 
-- `variable`: `Token`
+- `name`: `Token`
 - `equals`: `?Token`
 - `default`: `?ExpressionNode`
 
@@ -1391,7 +1432,7 @@ One property of a declaration with an optional default. Rozšiřuje `Node`.
 PropertyHookNode
 ----------------
 
-Property hook (get, set) with a block body, an arrow body or none. Rozšiřuje `Node`. Implementuje `AttributeAwareNode`, `FunctionLikeNode`.
+Property hook (get, set) with a block body, an arrow body or none. Rozšiřuje `Node`. Implementuje `FunctionLikeNode`, `AttributeAwareNode`.
 
 - `attributes`: `PlainNodeList<AttributeGroupNode>`
 - `modifiers`: `ModifiersNode`
@@ -1405,7 +1446,7 @@ Property hook (get, set) with a block body, an arrow body or none. Rozšiřuje `
 - `expression`: `?ExpressionNode`
 - `semicolon`: `?Token`
 
-- `$returnType: ?TypeNode`
+- `setReturnType(?TypeNode $type): static` – Throws `LogicException` always, a property hook has no return type.
 
 
 ClassConstNode
@@ -1424,7 +1465,7 @@ Class constant declaration, optionally typed. Rozšiřuje `MemberNode`. Implemen
 MethodNode
 ----------
 
-Method declaration; abstract and interface methods end with a semicolon instead of a body. Rozšiřuje `MemberNode`. Implementuje `AttributeAwareNode`, `FunctionLikeNode`.
+Method declaration; abstract and interface methods end with a semicolon instead of a body. Rozšiřuje `MemberNode`. Implementuje `FunctionLikeNode`, `AttributeAwareNode`.
 
 - `attributes`: `PlainNodeList<AttributeGroupNode>`
 - `modifiers`: `ModifiersNode`
@@ -1439,6 +1480,7 @@ Method declaration; abstract and interface methods end with a semicolon instead 
 - `body`: `?Statement\BlockNode`
 - `semicolon`: `?Token`
 
+- `setReturnType(?TypeNode $type): static` – Writes the return type with its colon, or removes both, as `FunctionLikeNode::setReturnType()` says.
 - `isConstructor(): bool` – Whether the method is the constructor, whose name PHP compares without regard to letter case.
 
 
@@ -1637,7 +1679,7 @@ NullableTypeNode
 Nullable type: ?T. Rozšiřuje `TypeNode`.
 
 - `question`: `Token`
-- `type`: `TypeNode`
+- `type`: `Type\NamedTypeNode`
 
 
 UnionTypeNode
@@ -1645,7 +1687,7 @@ UnionTypeNode
 
 Union type A|B; a member may be a parenthesized intersection (DNF). Rozšiřuje `TypeNode`.
 
-- `types`: `SeparatedNodeList<TypeNode>`
+- `types`: `SeparatedNodeList<Type\NamedTypeNode|Type\IntersectionTypeNode>`
 
 
 IntersectionTypeNode
@@ -1654,5 +1696,5 @@ IntersectionTypeNode
 Intersection type A&B, parenthesized inside a union. Rozšiřuje `TypeNode`.
 
 - `openParen`: `?Token`
-- `types`: `SeparatedNodeList<TypeNode>`
+- `types`: `SeparatedNodeList<Type\NamedTypeNode>`
 - `closeParen`: `?Token`

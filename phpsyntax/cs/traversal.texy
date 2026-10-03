@@ -69,11 +69,16 @@ Nahoru a do stran
 Každý uzel i token zná svého rodiče (`$node->parent`) a od něj se dá jít výš:
 
 ```php
-$method = $call->findAncestor(MethodNode::class);   // nejbližší předek dané třídy, nebo null
-$class = $call->findAncestor(ClassLikeNode::class);
+$method = $call->findAncestor(MethodNode::class);         // nejbližší předek dané třídy, nebo null
+$function = $call->findAncestor(FunctionLikeNode::class); // funkce, metoda, closure, arrow funkce nebo hook, ve které kód stojí
+$class = $token->findAncestor(ClassLikeNode::class);      // třída, rozhraní, trait, výčet nebo anonymní třída, i od tokenu
 ```
 
-Po tokenech se chodí do stran: `$token->getNext()` a `getPrevious()` je následující a předchozí token v souboru bez ohledu na strukturu. `$node->getFirstToken()` a `getLastToken()` jsou okraje uzlu, takže "token před uzlem" je `$node->getFirstToken()->getPrevious()`.
+`findAncestor()` má i token a začíná u svého rodiče, takže funkci a třídu, ve které kód stojí, najdete od uzlu i od tokenu stejně. Filtrem smí být i rozhraní a výsledek je pořád uzel, ve kterém se dá dál hledat.
+
+Po tokenech se chodí do stran: `$token->getNext()` a `getPrevious()` je následující a předchozí token v souboru bez ohledu na strukturu. `$node->getFirstToken()` a `getLastToken()` jsou okraje uzlu, takže "token před uzlem" je `$node->getFirstToken()->getPrevious()`. U uzlu, který token mít musí, tedy u výrazu, příkazu, členu třídy a většiny dalších, vracejí `Token`, nikdy `null`. Prázdný může být jen seznam, `ModifiersNode`, `SkippedArrayItemNode` a uzly, jejichž tokeny všechny stojí v seznamu, který úprava může vyprázdnit: `PropertyNode`, `UnionTypeNode` a `IntersectionTypeNode`, a proto i `MemberNode` a `TypeNode` nad nimi. Token odpoví na `getFirstToken()` i `getLastToken()` sám sebou, takže s hodnotou typu `Node|Token` se zachází jedním voláním.
+
+Po položkách seznamu se chodí metodami `getNextSibling()` a `getPreviousSibling()`, viz [Seznamy |tree#Seznamy].
 
 Text uzlu je vlastnost `$node->text`: všechno od prvního tokenu po poslední, bez trivia na okrajích. Hodí se do hlášek i při ladění a je to totéž, co `$token->text`, jen o patro výš.
 
@@ -121,6 +126,8 @@ $expr->isDereferenced();     // táž otázka bez druhu: sahá na něj rodič v�
 $expr->isDereferenceable();  // a naopak: šlo by na jeho člen sáhnout i bez závorek?
 $expr->canNameClass();       // smí stát tam, kde se jmenuje třída?
 $expr->isWritable();         // smí stát tam, kam se přiřazuje?
+$expr->canStandInString();   // smí stát v řetězci ve tvaru {$...}?
+$expr->evaluatesToBoolean(); // je výsledek vždycky bool, ať jsou operandy jakékoli?
 $paren->isRedundant();       // můžou tyhle závorky pryč?
 $expr->hasValue();           // je to zapsaná hodnota, ne výpočet?
 $expr->toValue();            // a jaká
@@ -130,7 +137,7 @@ $expr->toValue();            // a jaká
 
 Texty, podle kterých `matches()` porovnává, dostanete i samostatně jako `getTokenTexts()`. Je to tvar, kterým se kód klíčuje do mapy nebo porovnávají dvě jeho verze, protože na vysázení v něm nezáleží. Měřit se z něj ale nedá: délku kódu čtěte z `$node->text`, který drží zápis i s mezerami tak, jak v souboru stojí.
 
-`isRedundant()` na uzlu `ParenthesizedNode` je z těch otázek nejpracnější a odpovídá se na ni nejčastěji špatně: záleží na prioritě a asociativitě operátoru uvnitř i vně závorek, na tom, jestli se na výsledek přistupuje jako na objekt nebo pole, a na několika zvláštních případech. Každý uzel zapsaný operátorem proto implementuje rozhraní `OperatorNode` s metodou `getPrecedence()`, která vrátí sílu vazby a stranu, ke které se operátor kloní; `isRedundant()` z toho složí odpověď. Kde si jistá není, odpoví `false`.
+`isRedundant()` na uzlu `ParenthesizedNode` je z těch otázek nejpracnější a odpovídá se na ni nejčastěji špatně: záleží na prioritě a asociativitě operátoru uvnitř i vně závorek, na tom, jestli se na výsledek přistupuje jako na objekt nebo pole, a na několika zvláštních případech. Každý uzel zapsaný operátorem proto implementuje rozhraní `OperatorNode` s vlastnostmi `$precedence` a `$associativity`, které řeknou, jak silně operátor váže a ke které straně se kloní; `isRedundant()` z toho složí odpověď. Kde si jistá není, odpoví `false`.
 
 Vedle priority nese uzel ještě jednu vlastnost. Operátor, který nemá levý operand a jehož pravý sahá, kam mu kód dovolí, se hlásí rozhraním `RightExtendingNode`: šipková funkce, `throw`, `print`, `yield`, `yield from` a `include`. Před sebou nemůže pohltit nic, takže všude, kde za závorkami už nic nestojí, jsou zbytečné bez ohledu na to, jak volně ten výraz váže. `$f = (fn() => 1)` je tedy totéž co `$f = fn() => 1`, kdežto `(fn() => 1) + 2` závorky potřebuje, protože bez nich by tělo funkce pohltilo i tu dvojku.
 
@@ -142,7 +149,7 @@ Právě proto se `isDereferenceable()` ptá, **co** za tím výrazem stojí, a b
 
 Tentýž `DereferenceKind` vrací `getDereferenceKind()`, jen z opačné strany: řekne, kterým z těch tří způsobů na výraz sahá jeho rodič, a `null`, když na něj nesahá vůbec. `isDereferenced()` je táž otázka položená bez druhu.
 
-`isWritable()` je otázka z druhé strany: smí ten výraz stát nalevo od `=`? Proměnná, prvek pole, statická vlastnost a vlastnost přes `->` ano, přes `?->` **ne**, protože ta se jen čte. A nejde jen o poslední krok: stačí jediné `?->` kdekoli v řetězci, kterým zápis prochází, a odpověď je `false`, protože i `$o?->p->q = 1` je pro PHP chyba. Počítá se i volání metody v řetězci, takže `$o?->m()->p` zapisovatelné není, a stejně dopadne řetězec, který začíná hodnotou bez místa pro zápis: literálem, konstantou, `new` nebo `clone`. `(new Foo)->bar` tedy zapisovatelné není, `foo()->bar` a `Foo::create()->bar` ano. Co stojí vedle toho řetězce, třeba `$a[$b?->c]`, se jen čte a na zapisovatelnost vliv nemá. Destrukturace se na to neptá vůbec: `ListNode` není výraz, protože stojí jedině tam, kam se přiřazuje, a hodnotu vlastní nemá. Sloty, které cíl přiřazení drží, to říkají typem `ExpressionNode|ListNode`, takže kdo se nad nimi ptá na výraz, musí si typ nejdřív zúžit.
+`isWritable()` je otázka z druhé strany: smí ten výraz stát nalevo od `=`? Proměnná, prvek pole, statická vlastnost a vlastnost přes `->` ano, přes `?->` **ne**, protože ta se jen čte. A nejde jen o poslední krok: stačí jediné `?->` kdekoli v řetězci, kterým zápis prochází, a odpověď je `false`, protože i `$o?->p->q = 1` je pro PHP chyba. Počítá se i volání metody v řetězci, takže `$o?->m()->p` zapisovatelné není, a stejně dopadne řetězec, který začíná hodnotou bez místa pro zápis: literálem, konstantou, `new` nebo `clone`. `(new Foo)->bar` tedy zapisovatelné není, `foo()->bar` a `Foo::create()->bar` ano. Co stojí vedle toho řetězce, třeba `$a[$b?->c]`, se jen čte a na zapisovatelnost vliv nemá. Destrukturace se na to neptá vůbec: `DestructuringNode` není výraz, protože stojí jedině tam, kam se přiřazuje, a hodnotu vlastní nemá. Sloty, které cíl přiřazení drží, to říkají typem `ExpressionNode|DestructuringNode`, takže kdo se nad nimi ptá na výraz, musí si typ nejdřív zúžit.
 
 ```php
 $paren = $expr->findFirst(ParenthesizedNode::class);
@@ -154,3 +161,5 @@ if ($paren->isRedundant()) {
 Z druhé strany se na tutéž otázku ptá [`replaceWithExpression()` |mutation#Výraz místo výrazu]: kdo vkládá výraz místo výrazu, dostane závorky doplněné přesně tam, kde by je `isRedundant()` za zbytečné neprohlásil, a prioritami se zabývat nemusí.
 
 `hasValue()` a `toValue()` odpovídají na "co je tu napsáno za hodnotu": skaláry, `null`, `true`, `false`, pole i s vnořením a rozbalením, unární plus a minus u čísla, závorky a heredoc bez interpolace. Jméno konstanty hodnota **není**, ani `PHP_INT_MAX`, ani `self::FOO`: co znamená, závisí na kódu okolo, a to už syntaxe neví. `toValue()` nad výrazem, který hodnotu nemá, vyhodí `LogicException`, protože `null` je platná hodnota a musí jít odlišit od "žádná".
+
+`evaluatesToBoolean()` odpoví `true` pro výraz, který dá `bool`, ať jsou jeho operandy jakékoli: porovnání, logickou operaci, negaci, `instanceof`, `isset()`, `empty()`, přetypování na `bool` a booleovský literál. `canStandInString()` řekne, jestli se výraz smí napsat do řetězce, heredocu nebo příkazu v obrácených apostrofech ve tvaru `{$...}`. Gramatika tam čte jen proměnnou, prvek pole, vlastnost, statickou vlastnost a volání funkce, metody nebo statické metody, a to jedině tehdy, když začínají dolarem proměnné. Ptá se na to [`replaceWithExpression()` |mutation#Výraz v řetězci], když vkládá výraz do řetězce.

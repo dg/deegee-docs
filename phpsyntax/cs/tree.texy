@@ -18,7 +18,7 @@ $if->ifKeyword;   // Token 'if'
 $if->condition;   // ExpressionNode, třeba PropertyFetchNode
 $if->body;        // StatementNode, u složených závorek BlockNode
 
-$if->condition = $parser->parseExpression('$order->isPaid()');
+$if->condition = $builder->expression('$order->isPaid()');
 ```
 
 Za přiřazením není žádná magie, ale property hook: uzel si novou hodnotu adoptuje, starou pustí a ohlásí to indexu tokenů. Co to znamená pro trivia kolem nahrazeného uzlu, říká stránka [Úpravy stromu |mutation].
@@ -42,7 +42,7 @@ foreach ($class->getChildren() as $child) {
 Dvě pravidla, která šetří překvapení:
 
 - **Tělo řídicí struktury je `StatementNode`**, ne nutně blok: `if ($a) return;` má v `body` přímo `ReturnNode`. Se složenými závorkami je to `BlockNode` se seznamem `statements`.
-- **`else if` je `ElseNode`, jehož tělo je `IfNode`**; `elseif` je `ElseifNode`. Třídy, rozhraní, traity a výčty jsou různé uzly (`ClassNode`, `InterfaceNode`, `TraitNode`, `EnumNode`), ale všechny i s anonymní třídou implementují `ClassLikeNode`, které slibuje `$name` (u anonymní třídy `null`) a `$members`. Podobně `FunctionLikeNode` slibuje `$parameters` (u hooku bez závorek `null`) a `$returnType` u funkce, metody, closure, arrow funkce i hooku. Obě rozhraní se dají použít jako filtr v `find()`. Totéž dělá `AttributeAwareNode`: slibuje `$attributes` všem deklaracím, které smějí nést atributy, tedy třídám i funkcím, členům, konstantám, případům výčtu a parametrům. Seznam je prázdný, když žádný atribut napsaný není.
+- **`else if` je `ElseNode`, jehož tělo je `IfNode`**; `elseif` je `ElseifNode`. Třídy, rozhraní, traity a výčty jsou různé uzly (`ClassNode`, `InterfaceNode`, `TraitNode`, `EnumNode`), ale všechny i s anonymní třídou implementují `ClassLikeNode`, které slibuje `$name` (u anonymní třídy `null`) a `$members`. Podobně `FunctionLikeNode` slibuje `$openParen`, `$parameters`, `$closeParen` a `$returnType` u funkce, metody, closure, arrow funkce i hooku; u hooku, který je nemá, jsou `null`. Closure a arrow funkce, tedy funkce zapsané jako výraz, mají navíc společné `AnonymousFunctionNode` se slotem `$staticKeyword`. Všechna tahle rozhraní se dají použít jako filtr v `find()`. Totéž dělá `AttributeAwareNode`: slibuje `$attributes` všem deklaracím, které smějí nést atributy, tedy členům, konstantám, případům výčtu a parametrům, a protože z něj `ClassLikeNode` i `FunctionLikeNode` dědí, i všem třídám a funkcím. Seznam je prázdný, když žádný atribut napsaný není.
 
 Uzly, seznamy a rozhraní uzlů patří knihovně. Vlastní třída, která uzel nebo seznam dědí nebo rozhraní uzlu implementuje, se nepodporuje, a rozhraní uzlů může v nové verzi získat další člen.
 
@@ -62,6 +62,15 @@ Hodnoty druhů se mezi verzemi PHP liší, proto druh vždycky porovnávejte s k
 
 `is()` s textem porovná text kteréhokoli tokenu, obsah řetězce nevyjímaje: v řetězci `"{$a},{$b}"` je čárka mezi oběma interpolacemi samostatný token obsahu řetězce s textem `,`. Když procházíte všechny tokeny souboru, ptejte se proto podle druhu, `is(ord(','))`, jinak se trefíte i do řetězců, inline HTML a těla heredocu. U slotu, o kterém víte, co v něm stojí, třeba u operátoru binární operace, se text čte lépe a znamená totéž. Text tokenu je přesně to, co stálo ve zdrojáku, i tam, kde PHP počítá do tokenu mezery: přetypování `( int )`, inline HTML, obsah heredocu.
 
+<div class=note>
+**Proč zrovna `PhpToken`.** `Token` i `Trivia` jsou potomky nativní třídy `PhpToken`, což zní samozřejmě: vždyť to jsou tokeny PHP. Kdybychom ale navrhovali API na zelené louce, dědění bychom se vyhnuli, protože s rodičem přišly i dvě věci, které bychom pojmenovali a ohlídali jinak. Vyhrála rychlost. `PhpToken::tokenize()` vyrábí v C rovnou instance třídy `Token`, takže lexer nemusí ke každému tokenu PHP stavět ještě jeden objekt. Vlastní třída v měření zpomalila parsování o 5 %, a to nám čistší API nestálo, ale možná jsme moc puntičkářští. Je to jako zařízený byt: nastěhujete se hned a levně, jen nábytek už někdo rozestavil po svém. Za ten nábytek se omlouváme dvakrát:
+
+- **`$line` a `$pos` jsou původní pozice**, ne aktuální. Správně by se jmenovaly `originalLine` a `originalOffset`, jenže jména jim dal `PhpToken` a potomek je změnit nemůže. Předponu proto dostaly aktuální pozice, `currentLine`, `currentColumn` a `currentOffset`, a holé jméno tak znamená "jak to bylo". Token nebo trivia, které ve zdrojáku nestály, mají v obou `-1`, ne `null`.
+- **`$text` jazyk nehlídá.** PHP sice potomkovi dovolí zavěsit na zděděnou vlastnost hook, jenže nativní kód `PhpToken` o hooku neví a čte i píše kolem něj: objekt by pak měl dva texty a `__toString()` by vracel jiný než `$token->text`. Ochranu proto zastupuje dohoda: text tokenu měňte jen metodou `setText()`, která o změně řekne indexu pozic, a místo změny trivia si metodou `withText()` vezměte její kopii.
+
+Ze zděděných metod se hodí `is()` a `getTokenName()`. Pozor jen na zděděné `Token::tokenize()`: vrací surové tokeny PHP, mezery a komentáře jako samostatné kusy, kdežto tokeny knihovny s trivia dává `Lexer::tokenize()`.
+</div>
+
 
 Seznamy
 =======
@@ -74,6 +83,7 @@ $args[0];                       // první argument; index mimo seznam je OutOfRa
 $args->getItems();              // list<ArgumentNode|VariadicPlaceholderNode|ArgumentPlaceholderNode>, když potřebujete pole
 $args->getSeparators();         // list<Token>, čárky
 $args->hasTrailingSeparator();  // koncová čárka
+$args->getTrailingSeparator();  // a její token, nebo null
 count($args);
 $args->isEmpty();
 $args->indexOf($item);
@@ -83,7 +93,19 @@ foreach ($args as $arg) {
 }
 ```
 
-Položky seznamu jsou jeho vlastní úložiště, takže se mění jen jeho vlastními metodami (`append()`, `insert()`, `removeItem()`) a zápis `$args[0] = …` vyhodí výjimku; díky tomu seznam vždycky ví, co v něm je. Mezera mezi dvěma čárkami destrukturace (`[, $b] = …`) je `EmptyArrayItemNode`, aby seznam měl na každém místě položku; modifikátory (`public static readonly`) drží `ModifiersNode` v pořadí zdrojáku.
+Položky seznamu jsou jeho vlastní úložiště, takže se mění jen jeho vlastními metodami (`append()`, `insert()`, `insertAfter()`, `insertBefore()`, `removeItem()`) a zápis `$args[0] = …` vyhodí výjimku; díky tomu seznam vždycky ví, co v něm je. Sousedy položky v seznamu vrátí `$node->getNextSibling()` a `getPreviousSibling()`, na koncích seznamu `null`; uzel, který položkou seznamu není, odmítnou výjimkou. Mezera mezi dvěma čárkami destrukturace (`[, $b] = …`) je `SkippedArrayItemNode`, aby seznam měl na každém místě položku. Destrukturace sama, ať je zapsaná jako `list(…)` nebo `[…]`, je `DestructuringNode`.
+
+Modifikátory (`public static readonly`) drží `ModifiersNode` jako tokeny v pořadí zdrojáku. Na to, co znamenají, se ptá vlastnostmi a metodou:
+
+```php
+$modifiers = $method->modifiers;
+$modifiers->visibility;           // Visibility::Public, Protected nebo Private
+$modifiers->writeVisibility;      // viditelnost pro zápis, kterou zvlášť určuje public(set) a spol.
+$modifiers->getVisibilityToken(); // token public, protected, private nebo var, null když žádný napsaný není
+$modifiers->static;               // a podobně $abstract, $final, $readonly
+```
+
+`$visibility` je viditelnost, kterou člen opravdu má, takže `null` nikdy není: kde žádná napsaná není, je to `Public`, a `var` je také veřejné. Jestli a jak je viditelnost zapsaná, řekne `getVisibilityToken()`. `$writeVisibility` je viditelnost pro zápis tak, jak ji bere PHP: ta z `public(set)`, `protected(set)` nebo `private(set)`, u veřejného `readonly` `Protected`, protože PHP ho čte jako `protected(set)`, a jinak stejná jako `$visibility`. `$writeVisibility` čte stejně jako `$readonly` jen samotné modifikátory, takže u vlastnosti třídy deklarované jako `readonly class` s `readonly` nepočítá. Jestli parametr konstruktoru deklaruje vlastnost, se proto neptejte na viditelnost, ale na `ParameterNode::$promoted`: vlastnost deklaruje i parametr se samotným `readonly` nebo `private(set)`.
 
 Slot, ve kterém seznam sedí, se jmenuje podle toho, co drží: `statements`, `members`, `parameters`, a tam, kde by jméno jen zopakovalo jméno uzlu, prostě `items`. Argumenty volání jsou tedy `$call->arguments->items`, ne `$call->arguments->arguments`.
 
@@ -112,6 +134,8 @@ Role se odvozuje z místa ve stromu: totéž `Foo` je třída za `new`, v typu, 
 Role ale říká jen to, do které tabulky jmen zápis patří, ne jestli na nějaký symbol vůbec odkazuje. Na to je `isReference()` a odpoví `false` ve třech případech: jméno symbol zavádí (`use`, `namespace`), pojmenovává vestavěný typ tam, kde se píše typ (`int`, `array`), nebo je to `self`, `static` či `parent` na místě třídy, protože ta zastupují konkrétní třídu jen tam, kde jsou napsaná. Klíčové slovo na místě jména naopak reference je: `readonly(...)` volá funkci toho jména. Právě na tohle se ptejte, než jméno pošlete resolveru, viz [Analýzy |analyses#NameResolver].
 
 `IdentifierNode` je jméno členu, návěští, hooku nebo aliasu (`->name`, `::CONST`, `as Alias`), také jeden token, i když je to rezervované slovo. Slot, který drží jméno, se jmenuje `name`, takže text typu se čte `$type->name->text`. Porovnat ho se jménem jde přes `equals()`, který podle místa ve stromu ví, jestli PHP velikost písmen ignoruje: u metody, funkce a třídy ano, u vlastnosti, konstanty a návěští ne.
+
+Jméno se dá zapsat i výrazem (`$a->$b()`, `A::{$name}`), a proto má uzel, který jméno drží, vlastnost `$plainName`: jméno jako řetězec, nebo `null`, když je jméno výraz. Mají ji proměnná, přístup k vlastnosti a ke statické vlastnosti, volání metody a statické metody a konstanta třídy; u proměnné a statické vlastnosti je to jméno bez dolaru. Jestli jde o vlastnost nebo metodu `$this`, řekne u přístupu k vlastnosti i u volání metody `isOfThis()`, ať je zapsaná s `->`, nebo s `?->`.
 
 Role jména i to, jestli `equals()` ignoruje velikost písmen, se čtou z místa, kde uzel stojí. Vyjmutý ze stromu na to zapomene: odpojené jméno je vždy třída. Přečtěte si tedy, co potřebujete vědět, dřív než uzel přesunete. Stejně je to u položky `use`, která druh importu (třída, funkce, konstanta) i prefix skupiny zná jen z příkazu, ve kterém stojí; import do skupiny proto nepřenášíte uzlem, ale píšete znovu přes `UseNode::addImport()`.
 
@@ -147,7 +171,7 @@ U heredocu se nejdřív zeptejte `hasInterpolation()`, teprve pak se dá číst 
 Importy
 =======
 
-Příkaz `use` má jedinou třídu `UseNode`, ať je zapsaný jakkoli. Skupinový zápis (`use App\{A, B};`) je jen zápisová varianta téhož příkazu, ne jiný uzel, takže má navíc vyplněné sloty `prefix`, `namespaceSeparator`, `openBrace` a `closeBrace` a odpoví na `isGroup()`. Každá položka umí říct, co doopravdy importuje a jakého druhu to je, i když prefix a klíčové slovo `function` stojí o patro výš:
+Příkaz `use` má jedinou třídu `UseNode`, ať je zapsaný jakkoli. Skupinový zápis (`use App\{A, B};`) je jen zápisová varianta téhož příkazu, ne jiný uzel, takže má navíc vyplněné sloty `prefix`, `backslash`, `openBrace` a `closeBrace` a odpoví na `isGroup()`. Každá položka umí říct, co doopravdy importuje a jakého druhu to je, i když prefix a klíčové slovo `function` stojí o patro výš:
 
 ```php
 $use->symbolKind;           // SymbolKind::ClassLike, Function nebo Constant
@@ -170,9 +194,11 @@ $use->addImport('App\Model\Cart', 'Basket');   // use App\Model\Item, App\Model\
 $group->addImport('App\Model\Order');          // use App\Model\{Item, Order};
 ```
 
-Nový samostatný příkaz `use` se vyrobí jako každý jiný příkaz, `parseStatement()`, a vloží se do seznamu příkazů, viz [Úpravy stromu |mutation#Seznamy].
+Nový samostatný příkaz `use` se vyrobí jako každý jiný příkaz, `$builder->statement()`, a vloží se do seznamu příkazů, viz [Úpravy stromu |mutation#Seznamy].
 
 Jméno, které pod prefix skupiny nespadá, metoda odmítne výjimkou, místo aby zapsala import, který znamená něco jiného. Bez třetího parametru jde nová položka na konec seznamu.
+
+Opačným směrem vede `$item->remove()`. Položku odebere jako každý jiný uzel, a když je v příkazu jediná, odebere celý příkaz i s jeho řádkem, protože `use`, který nic neimportuje, není kód.
 
 
 Kořen

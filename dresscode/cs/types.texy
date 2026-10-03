@@ -32,10 +32,29 @@ A konfigurace řekne, odkud se typy berou:
 types: phpstan
 ```
 
-To je všechno. Klíč `types` je rozhodnutí projektu, stejně jako verze PHP, a preset ho nastavit nemůže. Když ho uvedete a PHPStan v projektu chybí, DressCode skončí hned při startu:
+To je všechno. Klíč `types` je rozhodnutí projektu, stejně jako verze PHP, a preset ho nastavit nemůže.
+
+DressCode se ptá PHPStanu nainstalovaného vedle sebe, tedy ve stejném adresáři `vendor`. Když jsou oba v projektu, jako výše, je to PHPStan projektu. Druhá možnost je mít oba globálně:
+
+```shell
+composer global require dresscode/dresscode phpstan/phpstan
+```
+
+I globální PHPStan zná třídy vašeho projektu a jeho knihoven. Nepotřebuje je načítat, přečte si je ze zdrojových souborů podle `composer.json` a `vendor/composer/installed.json` projektu. Verze PHPStanu ale bude ta globální, ne ta, se kterou počítá projekt. Rozšíření PHPStanu musí být nainstalovaná globálně také, přes `phpstan/extension-installer`. Globální PHPStan nenačte kód z adresáře `vendor` projektu, a tak rozšíření, které `phpstan.neon` includuje cestou do `vendor`, nenajde své třídy, pokud není nainstalované i globálně. Rozšíření, které potřebuje běžící projekt, třeba Larastan spouštějící aplikaci, globálně fungovat nebude vůbec.
+
+Instalace přes `composer create-project` přinese PHPStan také, protože instaluje i vývojové závislosti DressCode. Aktualizuje se pak příkazem `composer update` v adresáři, kam jste DressCode nainstalovali, ne v projektu.
+
+Když klíč uvedete a vedle DressCode žádný PHPStan není, třeba u globální instalace bez globálního PHPStanu, DressCode na to upozorní a běh pokračuje bez typů, jako by klíč chyběl:
 
 /--pre .[terminal]
-Error: The configuration sets `types: phpstan`, but `phpstan/phpstan` is not installed in the project.
+Warning: The configuration sets `types: phpstan`, but `phpstan/phpstan` is not installed beside DressCode, so the run goes without the types of the code.
+See https://dresscode.run/types#enable
+\--
+
+Pravidlo, které typy potřebuje a které zapnete jménem, je v takovém běhu chybou konfigurace, stejně jako [bez klíče `types` |#Bez PHPStanu]:
+
+/--pre .[terminal]
+Error: Rule `dresscode/noDeprecatedMembers` needs the types of the code, but `phpstan/phpstan` is not installed beside DressCode.
 See https://dresscode.run/types#enable
 \--
 
@@ -43,7 +62,18 @@ See https://dresscode.run/types#enable
 Co tím získáte
 ==============
 
-Takhle vypadá presenter, který používá zastaralé API Nette a několik starších zvyklostí. Zpráva každého nálezu stojí v komentáři na jeho řádku:
+Takhle vypadá presenter, který používá zastaralé API Nette a několik starších zvyklostí, zkontrolovaný s touto konfigurací:
+
+```neon
+presets: nette
+groups: deprecations
+types: phpstan
+
+rules:
+	overrideAttributeRequired: true
+```
+
+Zpráva každého nálezu stojí v komentáři na jeho řádku:
 
 ```php .[before]
 final class SignPresenter extends Presenter
@@ -117,7 +147,7 @@ final class SignPresenter extends Presenter
 Každý z pěti nálezů potřeboval vědět něco, co v souboru není. Šestý, který `dresscode check` vypíše navíc, je jen důsledkem prvního: preset `nette` píše v souboru bez jmenného prostoru globální jména bez úvodního lomítka, a tak z `#[\Override]` udělá `#[Override]`.
 
 - **Zastaralé API** přepisuje `noDeprecatedMembers` podle anotace `@deprecated` v kódu knihovny. Rozhoduje přitom třída, která konstantu nebo metodu deklaruje, ne zápis, takže se `$form::FILLED` přepíše stejně jako `Form::FILLED` a hláška u `setAttribute()` jmenuje třídu `BaseControl`, i když se metoda volá na textovém poli. Zastaralé třídy stejně přepisuje `noDeprecatedClasses`. Typy potřebují i pravidla, která přepisují kód podle dat balíčků pravidel (`replacedMembers`, `replacedCalls`, `nette/namedArgumentsForFlags`, `forbiddenMembers`), a `replacedClasses` se s nimi navíc ujistí, že třída, kterou zapíše, v projektu existuje. Jak to funguje u celých knihoven, popisuje [Aktualizace knihoven |upgrading-libraries].
-- **`#[\Override]`** z PHP 8.3 doplní `overrideAttributeRequired` k metodě, která přepisuje metodu rodiče nebo rozhraní. PHP pak samo ohlásí chybu, kdyby rodič metodu přejmenoval a vaše metoda by potichu přestala cokoli přepisovat.
+- **`#[\Override]`** z PHP 8.3 doplní `overrideAttributeRequired`, když ho uvedete jménem, k metodě, která přepisuje metodu rodiče. PHP pak samo ohlásí chybu, kdyby rodič metodu přejmenoval a vaše metoda by potichu přestala cokoli přepisovat. Implementaci abstraktní metody nebo metody rozhraní pravidlo vynechá, tu PHP pohlídá i bez atributu.
 - **Jméno třídy v řetězci** přepíše `classNameReferenceForString` na `::class` jen tehdy, když třída toho jména v projektu opravdu existuje. Editor pak jméno najde, až budete třídu přejmenovávat. Pravidlo `class_keyword` PHP CS Fixeru podle vlastní dokumentace tohle poznat nemůže, protože nad tokeny neví, jaké třídy projekt má.
 - **Test prázdného řetězce** `strlen($name) === 0` přepíše `noManualEmptyStringTests` na `$name === ''` jen tam, kde je `$name` určitě řetězec. U jiné hodnoty by se oba zápisy chovaly jinak.
 
@@ -132,8 +162,7 @@ Pravidla, která se bez typů neobejdou, zvlášť jedno po druhém zapínat nem
 ```neon
 types: phpstan
 
-presets:
-	- nette
+presets: nette
 
 groups:
 	- deprecations
@@ -145,8 +174,7 @@ S jiným standardem k němu skupiny přidáte:
 ```neon
 types: phpstan
 
-presets:
-	- perCs
+presets: perCs
 
 groups:
 	- cleanup
@@ -161,6 +189,8 @@ Jak to spolu funguje
 DressCode kvůli typům neopouští svůj strom. Vytiskne ho, nechá PHPStan zparsovat vytištěný text a spočítat typy, a každou odpověď připíše ke správnému uzlu podle její pozice v souboru. Pravidla se pak ptají přímo: co je tohle volání zač, kterou metodu ten přístup volá, co o ní říká její deklarace. PHPStan přitom nic nepřepisuje a nic nehlásí, jen odpovídá. Přepisuje dál DressCode, se všemi mezerami a komentáři na svém místě.
 
 Stojí to čas: každý soubor projde dvěma parsery a PHPStan pro něj počítá typy, takže běh s `types: phpstan` je znatelně pomalejší než bez nich. Cache výsledků ale platí dál, a tak to pocítíte hlavně při prvním běhu a po změně konfigurace.
+
+Cache přitom zná jen obsah souboru, ne to, odkud se typy vzaly. Když metoda ve vaší třídě dostane `@deprecated`, soubory, které ji volají, se nezměnily a cache je přeskočí, dokud se nezmění samy. Stejně tak nepozná změnu `phpstan.neon`. Aktualizaci knihoven, PHPStanu a jeho rozšíření pozná, protože jejich verze do otisku cache patří. Po změně, kterou cache nevidí, spusťte běh s `--no-cache`, a kontrolu v CI, která rozhoduje, s typy pouštějte bez cache.
 
 
 Bez PHPStanu
@@ -179,7 +209,7 @@ Not running
 Když ale takové pravidlo zapnete jménem, je to chyba konfigurace. Chtěli jste něco, co běh dát nemůže, a běh bez pravidla by vám lhal, že je kód v pořádku:
 
 /--pre .[terminal]
-Error: Rule `dresscode/noDeprecatedMembers` needs the types of the code; set `types: phpstan` in the configuration and install `phpstan/phpstan` in the project.
+Error: Rule `dresscode/noDeprecatedMembers` needs the types of the code; set `types: phpstan` in the configuration and install `phpstan/phpstan` beside DressCode.
 See https://dresscode.run/types#enable
 \--
 

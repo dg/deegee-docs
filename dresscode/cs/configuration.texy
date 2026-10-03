@@ -11,8 +11,7 @@ Konfigurační soubor
 Oba formáty umějí přesně totéž: každý klíč NEONu je pojmenovaný argument konstruktoru třídy `DressCode\Config`. Kde PHP předává objekt nebo callback, napíše se v NEONu [entita |#Objekty a callbacky]. Následující dva soubory dělají totéž:
 
 ```neon
-presets:
-	- perCs
+presets: perCs
 
 lineLength: 100
 
@@ -70,6 +69,7 @@ Nejdůležitější věc, kterou o konfiguraci DressCode potřebujete vědět: t
 | `nameResolution` | jestli jsou ty seznamy úplné |
 | `fixRisky` | u kterých pravidel přijímáte rizikové opravy |
 | `warnOnly` | která pravidla jen varují |
+| `suppressionComments` | které komentáře projektu [vypínají pravidla |suppressing#Potlačení na řádku] na svém řádku |
 
 Profil má celý projekt: to jsou klíče nejvyšší úrovně vašeho souboru. Vlastní profil může mít [každá část projektu |#Jiný profil pro část projektu], třeba testy nebo jeden adresář. A [preset |presets-and-extensions] není nic jiného než profil pod jménem. Co umíte napsat pro celý projekt, umíte tedy napsat i pro testy nebo do presetu, který sdílíte mezi projekty, a naopak: preset, který jinde zapínáte pro celý projekt, můžete zapnout jen pro jeho část.
 
@@ -77,7 +77,7 @@ Profil má celý projekt: to jsou klíče nejvyšší úrovně vašeho souboru. 
 
 | klíče | konfigurace | přepis | preset | plugin |
 |---|---|---|---|---|
-| `presets`, `groups`, `rules`, `indent`, `lineEnding`, `lineLength`, `namespaces` | ano | ano | ano | ne |
+| `presets`, `groups`, `rules`, `indent`, `lineEnding`, `lineLength`, `namespaces`, `suppressionComments` | ano | ano | ano | ne |
 | `nameResolution`, `fixRisky`, `warnOnly` | ano | ano | ne | ne |
 | `targets` | ano | jen `php` | ne | ne |
 | `types`, `overrides`, `paths`, `fileExtensions`, `baseline`, `cacheDir` | ano | ne | ne | ne |
@@ -90,9 +90,10 @@ Presety a vrstvy
 Preset je pojmenovaný profil. Vestavěné presety jsou čtyři a všechny jsou **standardy**: rozhodují o všem, od odsazení po importy, a projekt si jeden z nich vezme za základ. Jsou to `psr12`, `perCs` podle [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/], který na PSR-12 navazuje, `nette`, tedy Nette Coding Standard, který k PER Coding Style přidává tabulátory, rozvržení kódu knihoven Nette a skupiny pravidel pro hygienu kódu, a `symfony`, který také vychází z PER Coding Style. Co přesně každý z nich zapíná, ukazuje [přehled presetů |presets-reference].
 
 ```neon
-presets:
-	- perCs
+presets: perCs
 ```
+
+Víc presetů se píše jako seznam (`presets: [psr12, acme/house]`). Jediný preset, stejně jako jedinou [skupinu |#Skupiny pravidel], napíšete i bez něj.
 
 Vestavěné presety a pravidla se píšou krátce, jako `perCs` v ukázce, a to v konfiguraci, na příkazové řádce i v komentářích `dresscode:ignore`. Plné jméno má tvar `vendor/jméno` a vendor vestavěných je `dresscode`, takže `perCs` je zkratka za `dresscode/perCs`; v plném tvaru jména vypisují třeba `dresscode config` a `dresscode explain`. Vendor odlišuje jména z různých balíčků, a proto zkratka platí jen pro vestavěná: preset nebo pravidlo z [pluginu |#Pluginy] nebo z balíčku pravidel se píše vždycky celé. Nenechte se splést jménem, které začíná jako vestavěný preset: `nette/namedArgumentsForFlags` není pravidlo presetu `nette`, ale pravidlo balíčku `dresscode/rules-nette`, který svým pravidlům dává vendor `nette`.
 
@@ -107,6 +108,7 @@ Preset, který už leží níž, se podruhé nepokládá. Vyšší vrstva mění
 
 - **Hodnota** (`indent`, `lineEnding`, `lineLength`, `nameResolution` a každá položka `targets`) platí z nejvyšší vrstvy, která ji uvádí. Styl tedy může nastavit kterýkoli preset a pozdější vrstva ho přebije stejně jako volbu pravidla.
 - **Seznam** (`groups`, `namespaces`, `fixRisky`, `warnOnly`) se přes vrstvy sčítá. Přepis pro testy tak k seznamu projektu přidává a nic z něj neubere.
+- **Mapa vzorů komentářů** (`suppressionComments`) se slévá po vzorech: vzor, který uvede vyšší vrstva, přebije pravidla téhož vzoru z nižší vrstvy.
 - **Volby pravidla** se slévají. **Mapa voleb se slévá po klíčích**: když preset nastaví pravidlu `bracesPosition` tři volby a vy uvedete jednu, platí ta vaše a zbylé dvě zůstanou, jak je nastavil preset. **Skalár a seznam naopak nahrazují celou hodnotu**: `sets: [internal]` u `noAliasFunctions` znamená jen tuhle sadu, ať preset říkal cokoli, takže kdo chce přidávat, opíše i zděděné položky. A **`keep` na úrovni pravidla maže všechno**, co o něm vrstvy pod ním řekly, kromě dat ze souborů `upgrading.neon`, ať je přinesly nainstalované balíčky, nebo projekt sám; mapa uvedená v další vrstvě pak začíná znovu od výchozích hodnot pravidla a od těch dat.
 
 Odkud každá hodnota přišla a co přebila, vypíše [`dresscode config` |cli#Co konfigurace znamená: config].
@@ -118,8 +120,7 @@ Skupiny pravidel
 **Katalog má přes dvě stě pravidel a skládat si z nich konfiguraci položku po položce je práce, kterou za vás udělají skupiny. Konfigurace pak stojí na dvou otázkách: jak má kód vypadat, na to odpovídá jeden standard, a co po něm chcete kromě vzhledu, na to odpovídá šest skupin.** Skupina je jméno záměru, ne výčet: napíšete `cleanup` a s výchozími volbami běží každé pravidlo, které odklízí kód, co je v souboru pro nic.
 
 ```neon
-presets:
-	- perCs
+presets: perCs
 
 groups:
 	- cleanup
@@ -267,8 +268,7 @@ Jiný profil pro část projektu
 Projekt málokdy vypadá všude stejně. Knihovní kód chcete co nejrychlejší, testy mají vlastní hlavičku a vlastní pomocné funkce, šablony generátoru jiné odsazení. Většina nástrojů na to má jen jedno: pravidlo pro některé cesty vypnout. DressCode dá každé části projektu **celý vlastní profil**. Přepis v klíči `overrides` platí pro soubory, které odpovídají jeho `paths`, a smí v něm stát cokoli, co smí stát v profilu projektu, presety počínaje:
 
 ```neon
-presets:
-	- nette
+presets: nette
 
 nameResolution: certain
 

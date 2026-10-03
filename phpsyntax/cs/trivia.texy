@@ -39,18 +39,24 @@ $token->startsLine();             // začíná řádek
 $token->getIndentation();         // odsazení řádku, který token začíná, jinak ''
 $token->getLineIndentation();     // odsazení řádku, na kterém token stojí, ať ho začíná, nebo ne
 $token->countBlankLinesBefore();  // prázdné řádky nad tokenem, nad komentářem, který k němu patří
-$token->hasComment();             // komentář v jeho trivia
+$token->hasComment();             // komentář v jeho trivia, před ním nebo za ním
 $token->getComments();            // ty komentáře jako pole Trivia
 $token->hasCommentUpTo($other);   // komentář kdekoli mezi dvěma tokeny téhož souboru, $token první
 $node->hasInnerComment();         // komentář uvnitř uzlu, kromě jeho okrajů
 $node->getInnerComments();
-$node->getDocComment();           // dokumentační komentář nad uzlem, jako Trivia
+$node->hasLeadingComment();       // komentář před uzlem, v úvodních trivia jeho prvního tokenu
+$node->getLeadingComments();
+$node->hasTrailingComment();      // komentář za uzlem, do konce jeho řádku
+$node->getTrailingComments();
+$node->getDocComment();           // dokumentační komentář uzlu jako Trivia, u parametru nejdřív ten za ním
 $node->leadingTrivia;             // trivia na vnějším okraji uzlu, tedy úvodní trivia jeho prvního tokenu
 $node->trailingTrivia;            // a koncová trivia posledního; uzel bez tokenů má obě prázdná
 Indentation::measureLineWidth($token, $style); // šířka fyzického řádku tak, jak ji vidíte, tabulátor podle stylu
 ```
 
-Dotazy na komentáře chodí po vlastních tokenech uzlu, takže odpovídají stejně nad odpojeným podstromem, klonem i fragmentem. Výjimky jsou dvě a obě potřebují soubor, protože sahají za uzel: `hasCommentUpTo()`, které překlenuje dva tokeny, a `getDocComment()` u dokumentačního komentáře, který stojí na řádku předchozí deklarace, a visí proto na jejím tokenu. `hasCommentUpTo()` si hlídá, na co se ptá: tokeny z různých souborů nebo druhý token před prvním skončí výjimkou `InvalidArgumentException`, token bez souboru výjimkou `LogicException`. Odpověď "žádný komentář" na otázku, kterou nešlo položit, by totiž nástroj, který komentáře chrání, přivedla k jejich smazání. Stejný token dvakrát je prázdný interval.
+Komentář je tedy uvnitř uzlu, před ním, nebo za ním, a kdo chce všechny tři, složí si tři dotazy. Token má `hasLeadingComment()`, `hasTrailingComment()` a odpovídající `get*Comments()` také; `hasComment()` a `getComments()` se na tokenu ptají na obě strany naráz.
+
+Dotazy na komentáře chodí po vlastních tokenech uzlu, takže odpovídají stejně nad odpojeným podstromem, klonem i fragmentem. Výjimky jsou tři a všechny potřebují soubor, protože sahají za uzel: `hasCommentUpTo()`, které překlenuje dva tokeny, `getDocComment()` u dokumentačního komentáře, který visí na sousedním tokenu, a `removeTrivia()`, `replaceTrivia()` a `removeDocComment()` uzlu, které takový komentář hledají tamtéž. Na sousedním tokenu visí dokumentační komentář, který stojí na řádku předchozí deklarace za jejím posledním tokenem, a u parametru ten, který stojí za ním na vlastním řádku před čárkou nebo uzavírací závorkou. Parametr totiž čte nejdřív dokumentační komentář za sebou, protože tam dokumentaci parametru čte PHP 8.6, a teprve když tam žádný není, vezme ten před sebou. `hasCommentUpTo()` si hlídá, na co se ptá: tokeny z různých souborů nebo druhý token před prvním skončí výjimkou `InvalidArgumentException`, token bez souboru výjimkou `LogicException`. Odpověď "žádný komentář" na otázku, kterou nešlo položit, by totiž nástroj, který komentáře chrání, přivedla k jejich smazání. Stejný token dvakrát je prázdný interval.
 
 Tabulátor se do šířky řádku počítá na zarážku stylu kdekoli na řádku, nejen v odsazení, a stejně počítá i `getVisualColumn()`; ostatní znak se počítá za jeden, i široký nebo kombinační. Řádek je fyzický, takže končí u každého konce řádku, i uvnitř víceřádkového řetězce nebo komentáře, a token, který takový řetězec začíná, se měří na řádku, na kterém začíná.
 
@@ -62,7 +68,7 @@ $trivia->text;
 $trivia->line;                // řádek v přečteném souboru, nikdy se nemění
 $trivia->inInterpolation;
 $trivia->isWhitespace();      // mezery i konec řádku
-$trivia->isLineEnding();       // konec řádku, nebo <?php, jehož text jím končí
+$trivia->isLineEnding();      // konec řádku, nebo <?php, jehož text jím končí
 $trivia->isComment();         // jakýkoli komentář, dokumentační včetně
 $comment->isLineComment();    // // nebo #
 $comment->isDocComment();     // /** */
@@ -84,7 +90,7 @@ $token->setIndentation("\t\t");       // odsazení řádku tokenu; token musí �
 $token->removeTrailingWhitespace();   // mezery na konci řádku, který token končí; komentář a konec řádku zůstanou
 $token->removeTrivia($comment);       // jedna trivia, obvykle komentář, i s mezerou nebo řádkem, které by po ní zbyly
 $token->replaceTrivia($old, $new);    // výměna na místě
-$node->removeTrivia($comment);        // totéž z uzlu: hledá mezi jeho tokeny i nad ním
+$node->removeTrivia($comment);        // totéž z uzlu: hledá mezi jeho tokeny i v tokenech před ním a za ním
 $node->replaceTrivia($old, $new);
 $node->setEdgeTrivia(leading: []);    // trivia na vnějších okrajích uzlu; uzel bez tokenů je nevezme
 $node->replaceDocComment($trivia);    // dokumentační komentář uzlu
@@ -97,7 +103,7 @@ Tyhle metody, `Indentation::set()` včetně odsazení komentářů a vůbec vše
 
 Dvojice metod na uzlu je tam proto, že komentář najdete přes `$node->getInnerComments()` a odstranit ho pak chcete zase přes uzel, ne dohledávat, kterému tokenu vlastně patří. Metody `removeDocComment()` a `replaceDocComment()` jsou jejich zvláštní případ.
 
-Jednou vyrobená `Trivia` se už nemění, a víc tokenů ji proto smí sdílet. Metoda, která nějakou trivia jmenuje, ji mezi ostatními hledá podle identity objektu; kdo chce jinou, vyrobí novou a vymění ji. Nový komentář je `new Trivia(Trivia::Comment, '// fixed')`, upravený text stávajícího dá `$comment->withText('// fixed')`, kopie, která si ponechá druh i místo, kde komentář stál: `$token->replaceTrivia($comment, $comment->withText('// fixed'))`.
+Jednou vyrobená `Trivia` se už nemění, a víc tokenů ji proto smí sdílet. Metoda, která nějakou trivia jmenuje, ji mezi ostatními hledá podle identity objektu; kdo chce jinou, vyrobí novou a vymění ji. Nový komentář vyrobí `Trivia::fromText('// fixed')`; druh trivia pozná z textu (mezeru v řádku, konec řádku, komentář, dokumentační komentář i `<?php`) a cokoli jiného odmítne. Upravený text stávajícího dá `$comment->withText('// fixed')`, kopie, která si ponechá druh i místo, kde komentář stál: `$token->replaceTrivia($comment, $comment->withText('// fixed'))`.
 
 Jedno pravidlo je za tím vším: **konec řádku, který uzavírá řádek tokenu, patří do jeho koncových trivia, nikdy do úvodních trivia dalšího tokenu.** Kdo ho dá jinam, rozbije `getTrailingSpace()` a všechno, co na něm stojí; kdo staví na `ensureStartsLine()` a `setBlankLinesBefore()`, má to za sebe vyřešené.
 

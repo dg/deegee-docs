@@ -118,7 +118,7 @@ Zpráva popisuje kód, ne čtenáře, a nikdy nerozkazuje. Má jeden ze tří tv
 Bez stavu a idempotentní
 ========================
 
-Jedna instance pravidla slouží celému běhu a všem souborům. Stav vztažený k souboru patří do pole `$context->storage`, které jádro pro každý průchod souborem založí prázdné; vlastnosti třídy jsou jen na volby. Co pravidlo o souboru potřebuje vědět, dá kontext: `getFile()` vrátí jeho strom (`FileNode`), `getPath()` cestu, `getStyle()` styl (odsazení, konec řádku, šířku tabulátoru a `lineLength`) a `getPhpVersion()` cílovou verzi PHP.
+Jedna instance pravidla slouží celému běhu a všem souborům. Stav vztažený k souboru patří do pole `$context->storage`, které jádro pro každý průchod souborem založí prázdné; vlastnosti třídy jsou jen na volby. Co pravidlo o souboru potřebuje vědět, najde ve vlastnostech kontextu: `$context->file` je jeho strom (`FileNode`), `$context->path` cesta, `$context->style` styl (odsazení, konec řádku, šířka tabulátoru a `lineLength`) a `$context->phpVersion` cílová verze PHP.
 
 Pravidla se pouštějí opakovaně, dokud se strom mění, takže pravidlo musí být **idempotentní**: nad vlastním výstupem už nesmí nic změnit. A nesmí záviset na pořadí průchodu ani na tom, kolikátý průchod zrovna běží; kontext to schválně neprozradí. Dvě pravidla, která se přetahují, jádro pozná a soubor ohlásí jako selhání se jmény obou. Idempotenci ověřuje i `RuleTester`: pustí pravidlo nad jeho vlastním výstupem podruhé a selže, pokud ho pravidlo znovu změní.
 
@@ -187,10 +187,10 @@ DressCode zprávu vypíše mezi varováními konfigurace jako <code>''Rule `acme
 
 Volba, která pojmenovává rozhodnutí (tvar, polohu, zarovnání), přijímá i `keep`: pravidlo pak tohle rozhodnutí nevynucuje a zbytek hlídá dál. Volba, která rozhodnutí není (`ignorePatterns`, seznam jmen), `keep` nemá. Pravidlo, které je jedním jediným rozhodnutím, řekne v `RuleInfo` parametrem `decision`, kterou volbu vyplní hodnota zapsaná přímo u pravidla. Vestavěné `yoda` má `decision: 'comparisons'`, takže uživatel píše `yoda: forbidden` místo `yoda: {comparisons: forbidden}`.
 
-Pravidlo, u kterého verze PHP rozhoduje o tom, co smí zapsat (ne o tom, jestli vůbec poběží), se zeptá `$context->getPhpVersion()`. Vrací řetězec ve tvaru `major.minor`, který se porovnává funkcí, ne operátory, protože `'8.10' > '8.9'` jako řetězec neplatí:
+Pravidlo, u kterého verze PHP rozhoduje o tom, co smí zapsat (ne o tom, jestli vůbec poběží), si ji přečte z `$context->phpVersion`. Je to řetězec ve tvaru `major.minor`, který se porovnává funkcí, ne operátory, protože `'8.10' > '8.9'` jako řetězec neplatí:
 
 ```php
-if (version_compare($context->getPhpVersion(), '8.4', '>=')) {
+if (version_compare($context->phpVersion, '8.4', '>=')) {
 	// ...
 }
 ```
