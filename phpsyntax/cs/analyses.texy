@@ -2,20 +2,20 @@ Analýzy: NameResolver a Scope
 *****************************
 
 .[perex]
-Dvě vestavěné analýzy odpovídají na otázky, které si klade každý nástroj pracující s kódem: co dané jméno doopravdy znamená a v jaké funkci a třídě kód stojí.
+Dvě vestavěné analýzy odpovídají na otázky, které si klade každý nástroj pracující s kódem: co dané jméno doopravdy znamená a jestli je v místě kódu k dispozici `$this`.
 
 
 Co je analýza
 =============
 
-Strom říká, jak kód vypadá. Analýza je informace odvozená z celého souboru, kterou strom sám nenese: co znamená jméno `Order` v tomhle souboru, jestli je `$this` k dispozici, které proměnné closure zachycuje. Je to obyčejná třída postavená nad `FileNode`; nic se neregistruje a žádné rozhraní se neimplementuje.
+Strom říká, jak kód vypadá. Analýza je informace odvozená z celého souboru, kterou strom sám nenese: co znamená jméno `Order` v tomhle souboru nebo jestli je `$this` k dispozici. Je to obyčejná třída postavená nad `FileNode`; nic se neregistruje a žádné rozhraní se neimplementuje.
 
 ```php
 $resolver = new PhpSyntax\Analyses\NameResolver($file);
 $scope = new PhpSyntax\Analyses\Scope;
 ```
 
-Analýza, která si odvozené informace pamatuje, čte strom tak, jak vypadal, když vznikla; po změně stromu si ji postavte znovu, a že se strom změnil, poznáte podle `FileNode::$revision`. Týká se to `NameResolveru`. `Scope` si nepamatuje nic a nebere ani soubor: každou otázku zodpoví procházkou po rodičích uzlu, který dostal, takže ho žádná úprava nezastará.
+Analýza, která si odvozené informace pamatuje, čte strom tak, jak vypadal, když vznikla; po změně stromu si ji postavte znovu, a že se strom změnil, poznáte podle `FileNode::$revision`. Týká se to `NameResolveru`. `Scope` si nepamatuje nic a nebere ani soubor: odpověď najde procházkou po rodičích uzlu, který dostal, takže ho žádná úprava nezastará.
 
 
 NameResolver
@@ -44,36 +44,39 @@ $resolver->getImports(PhpSyntax\SymbolKind::ClassLike, $node);   // alias => pln
 $resolver->getImports(PhpSyntax\SymbolKind::Function, $node);
 $resolver->getImports(PhpSyntax\SymbolKind::Constant, $node);
 
-$resolver->resolveClass($name);         // 'App\Model\Order' z NameNode
+$resolver->resolve($name);              // 'App\Model\Order' z NameNode, třída, funkce nebo konstanta podle místa jména
+$resolver->resolveClass($name);         // totéž s druhem symbolu zvoleným předem
 $resolver->resolveFunction($name);
 $resolver->resolveConstant($name);
 
-$resolver->isGlobalFunctionCall($node, 'sizeof');   // volání globální funkce, případně té jedné
-$resolver->getUnqualifiedResolution('count', PhpSyntax\SymbolKind::Function, $node); // Global, Namespaced, nebo Uncertain, když pád do globálního stojí jen na odhadu
+$resolver->isGlobalFunctionCall($node, 'sizeof');            // volání globální funkce, případně té jedné
+$resolver->findGlobalFunction($call, ['count', 'sizeof']);   // kterou z těch globálních funkcí volání volá, nebo null
+$resolver->getUnqualifiedResolution($call->name);            // Global, Namespaced, nebo Uncertain, když pád do globálního stojí jen na odhadu
+$resolver->getUnqualifiedResolution('count', PhpSyntax\SymbolKind::Function, $node); // totéž pro jméno zadané textem
 ```
 
-Klíčem pole importů je alias tak, jak ho PHP porovnává: u tříd a funkcí, kde na velikosti písmen nezáleží, malými písmeny (`'strings' => 'Nette\Utils\Strings'`), u konstant tak, jak je zapsaný. Odpověď `getUnqualifiedResolution()` je výčet `PhpSyntax\UnqualifiedResolution`.
+Klíčem pole importů je alias tak, jak ho PHP porovnává: u tříd a funkcí, kde na velikosti písmen nezáleží, malými písmeny (`'strings' => 'Nette\Utils\Strings'`), u konstant tak, jak je zapsaný. Odpověď `getUnqualifiedResolution()` je výčet `PhpSyntax\UnqualifiedResolution`. Jméno zadané jako `NameNode` si s sebou nese druh symbolu i místo, kde stojí; jméno zadané textem potřebuje obojí jako další dva argumenty.
 
-`resolveClass()`, `resolveFunction()` i `resolveConstant()` chtějí jméno, které na nějaký symbol opravdu odkazuje, a ne každé `NameNode` takové je: `int` v typu pojmenovává vestavěný typ, `Foo` v `use Foo;` symbol teprve zavádí a `self` zastupuje třídu jen tam, kde je napsané. Na takové jméno resolver vyhodí `InvalidArgumentException`, místo aby ho tiše přečetl jako třídu jmenného prostoru a vrátil nesmysl `App\int`. Kdo prochází všechna jména v souboru, ptá se proto napřed [isReference() |tree#Jména]:
+`resolve()` vybere mezi `resolveClass()`, `resolveFunction()` a `resolveConstant()` podle vlastnosti `$symbolKind` jména, tedy podle toho, kde jméno stojí; odpojené jméno čte jako třídu. Všechny čtyři chtějí jméno, které na nějaký symbol opravdu odkazuje, a ne každé `NameNode` takové je: `int` v typu pojmenovává vestavěný typ, `Foo` v `use Foo;` symbol teprve zavádí a `self` zastupuje třídu jen tam, kde je napsané. Na takové jméno resolver vyhodí `InvalidArgumentException`, místo aby ho tiše přečetl jako třídu jmenného prostoru a vrátil nesmysl `App\int`. Kdo prochází všechna jména v souboru, ptá se proto napřed [isReference() |tree#Jména]:
 
 ```php
 foreach ($file->find(NameNode::class) as $name) {
-	if ($name->isReference() && $name->symbolKind === PhpSyntax\SymbolKind::ClassLike) {
-		echo $resolver->resolveClass($name);
+	if ($name->isReference()) {
+		echo $resolver->resolve($name);
 	}
 }
 ```
 
 Jedna odchylka tu je: `resolveClass()` na `self`, `static` a `parent` nespadne, ale vrátí je tak, jak jsou zapsané.
 
-`isGlobalFunctionCall()` je otázka, kterou si dřív každý nástroj řešil sám a většinou hůř: uzel musí být volání funkce se jménem (ne `$f()` ani `$obj->f()`), jméno nesmí být klíčové slovo a po překladu musí být globální. Tak se pozná, že `count($a)` uvnitř `namespace App` volá `count`, a ne `App\count`, pokud taková funkce není importovaná, deklarovaná v souboru ani uvedená v `NamespacedSymbols`. Bez úplného `NamespacedSymbols` je to ale odhad: `App\count()` může deklarovat jiný soubor projektu, který resolver nevidí, a PHP by pak zavolalo ji.
+`isGlobalFunctionCall()` je otázka, kterou si dřív každý nástroj řešil sám a většinou hůř: uzel musí být volání funkce se jménem (ne `$f()` ani `$obj->f()`), jméno nesmí být klíčové slovo a po překladu musí být globální. Tak se pozná, že `count($a)` uvnitř `namespace App` volá `count`, a ne `App\count`, pokud taková funkce není importovaná, deklarovaná v souboru ani uvedená v `NamespacedSymbols`. Bez úplného `NamespacedSymbols` je to ale odhad: `App\count()` může deklarovat jiný soubor projektu, který resolver nevidí, a PHP by pak zavolalo ji. Když vás zajímá několik funkcí naráz, `findGlobalFunction()` vrátí tu z nich, kterou volání volá, a to tak, jak je napsaná v seznamu, bez ohledu na velikost písmen v kódu; za globální počítá volání stejně jako `isGlobalFunctionCall()`.
 
 Nástroj, který podle odpovědi mění kód, se proto má zeptat i na `getUnqualifiedResolution()`. Takhle rozhoduje [DressCode |dresscode:namespaces], jestli je oprava riziková: s odpovědí `Uncertain` ano, s `Global` nebo `Namespaced` ne. Metoda přijímá jen nekvalifikované jméno, protože jméno s lomítkem do globálního prostoru nepadá, a na jiné vyhodí `InvalidArgumentException`. Odpověď `Global` přitom říká, že jméno míří do globálního prostoru, ne nutně na symbol toho jména: import s aliasem ho může přesměrovat jinam.
 
 Jméno, které jste právě naparsovali a ve stromu ještě nestojí, samo neví, kde bude; kde ho chcete přeložit, řekne druhý argument:
 
 ```php
-$name = $parser->parseName('Strings');
+$name = $builder->name('Strings');
 $resolver->resolveClass($name, $at);    // přeloží se tak, jak by platilo v místě $at
 ```
 
@@ -92,29 +95,39 @@ $resolver->isAliasFree('Strings', $kind, $at);                // false, ten alia
 
 `shortenName()` vezme v úvahu aliasy, prefixové importy i jmenný prostor a vrátí nejkratší zápis, který na tom místě znamená totéž. To "znamená totéž" je tvrdá podmínka: kde je jméno obsazené importem, vrátí radši delší zápis. S `use function X\count;` v souboru tak globální `count` dostane `'\count'`, protože holé `count` by na tom místě znamenalo `X\count`. Ze stejného důvodu dostane globální funkce nebo konstanta ve jmenném prostoru holé jméno jen tehdy, když resolver dostal `NamespacedSymbols` s příznakem `complete`; bez té znalosti by holé `count` mohlo znamenat `App\count` z jiného souboru. Přečtením zpátky přes `resolveFunction()` a spol. se tedy vždycky vrátíte k symbolu, na který jste se ptali. `isAliasFree()` odpoví na otázku, kterou si klade každý, kdo chce import doplnit: je tohle jméno tady ještě volné?
 
-A ještě jedna dvojice, tentokrát o deklaracích v souboru:
+A ještě tři metody, tentokrát o deklaracích v souboru:
 
 ```php
-$resolver->getDeclaredName($class);          // 'App\Cart' z uzlu deklarace
-$resolver->findDeclaration('App\Cart', $kind); // ClassLikeNode, nebo null
+$resolver->getDeclaredName($class);              // 'App\Cart' z uzlu deklarace
+$resolver->findDeclaration('App\Cart', $kind);   // ClassLikeNode, nebo null
+$resolver->findNamespacedDeclarations($file);    // funkce a konstanty, které uzel deklaruje do jmenného prostoru
 ```
 
 `findDeclaration()` hledá mezi symboly jednoho druhu, protože PHP drží třídu, funkci a konstantu stejného jména odděleně: `SymbolKind::ClassLike` najde třídu, rozhraní, trait nebo výčet, `Function` funkci a `Constant` položku příkazu `const`. Velikost písmen bere tak jako PHP, tedy u konstanty ji rozlišuje jen v jejím vlastním jméně, a úvodní backslash mu nevadí. Počítají se i deklarace vnořené v podmínce nebo v těle funkce, a když soubor totéž jméno deklaruje víckrát, třeba pod `if (!function_exists(...))`, dostanete tu první. `getDeclaredName()` vrátí jméno i pro takovou konstantu; konstanta třídy do jmenného prostoru nic nezavádí, a proto dostane `null`.
+
+`findNamespacedDeclarations()` vrátí funkce a konstanty, které uzel deklaruje do jmenného prostoru, jako seznam objektů `Declaration` s druhem symbolu (`$kind`), plným jménem (`$name`) a uzlem, který ho pojmenovává (`$node`), v pořadí, v jakém jsou napsané. Počítá i deklarace v podmínce nebo v těle funkce a konstanty, které `define()` pojmenuje řetězcem; co se deklaruje do globálního prostoru, mezi nimi není. Je to přesně to, co patří do `NamespacedSymbols`: projdete jím soubory projektu a z výsledku sestavíte úplný seznam pro resolver každého z nich.
 
 
 Scope
 =====
 
-Kde ve struktuře kód stojí:
+`Scope` odpoví, jestli je v místě uzlu nebo tokenu k dispozici `$this`:
 
 ```php
-$scope->findFunction($node);          // FunctionLikeNode: funkce, metoda, closure, arrow funkce nebo hook, nebo null
-$scope->findClass($node);             // ClassLikeNode nebo null
-$scope->hasThis($node);               // je tu $this: v nestatické metodě nebo hooku a v closure uvnitř nich
-$closure->getCapturedVariableNames(); // proměnné z use (...) i s dolarem: ['$a', '$b']
+$scope->hasThis($node);   // v nestatické metodě nebo hooku a v closure uvnitř nich
 ```
 
 `hasThis()` bere v úvahu i to, že closure i arrow funkce `$this` od okolí převezmou samy, bez `use`, kdežto `static function` a `static fn` ne. Property hook ho má vždy, protože patří k objektu.
+
+Funkce a třída, ve které kód stojí, žádnou analýzu nepotřebují, stačí jít po rodičích:
+
+```php
+$node->findAncestor(FunctionLikeNode::class);   // funkce, metoda, closure, arrow funkce nebo hook, nebo null
+$node->findAncestor(ClassLikeNode::class);      // třída, rozhraní, trait, výčet nebo anonymní třída, nebo null
+$closure->getCapturedVariableNames();           // proměnné z use (...), bez dolaru: ['a', 'b']
+```
+
+Totéž funguje i od tokenu, viz [Nahoru a do stran |traversal#Nahoru a do stran].
 
 
 Vlastní analýza

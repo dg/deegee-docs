@@ -14,16 +14,22 @@ Instalace
 composer require --dev dresscode/rules-symfony
 ```
 
-A do konfigurace typy a skupinu `deprecations`, jak popisuje [Aktualizace knihoven |upgrading-libraries#Zapnutí]:
+A do konfigurace typy a sadu `deprecations`, jak popisuje [Aktualizace knihoven |upgrading-libraries#Zapnutí]:
 
 ```neon
-types: phpstan
+typeAnalysis: phpstan
 
-groups:
+use:
+	- symfony         # váš standard
 	- deprecations
+	- dresscode/rules-symfony
+
+symfony:
+	isGrantedAttribute: adopted
+	valueResolver: adopted
 ```
 
-Balíček žádné pravidlo nezapne sám. Data každé komponenty se uplatní jen tehdy, když ji projekt má, a jen ty verze, na které projekt dosáhne. Projekt, který vyžaduje celé `symfony/symfony`, má ve své verzi všechny komponenty, které ten balíček nahrazuje.
+Balíček nic nezapne sám: jeho jméno v `use` pustí dovnitř plugin s pravidly sekce `symfony`, data ve svých souborech zapne sada `deprecations` a dvě rozhodnutí v sekci `symfony`, která data nemají, napíšete sami. Data každé komponenty se uplatní jen tehdy, když ji projekt má, a jen ty verze, na které projekt dosáhne. Projekt, který vyžaduje celé `symfony/symfony`, má ve své verzi všechny komponenty, které ten balíček nahrazuje.
 
 
 Co se opraví
@@ -34,14 +40,14 @@ Tohle je příkaz a controller psaný pro Symfony 5.4, v projektu na současnýc
 ```php .[before]
 class ReportCommand extends Command
 {
-	protected static $defaultName = 'app:report';  // Property `Symfony\Component\Console\Command\Command::$defaultName` is replaced by the attribute `#[Symfony\Component\Console\Attribute\AsCommand]`
-	protected static $defaultDescription = 'Sends the daily report';  // Property `Symfony\Component\Console\Command\Command::$defaultDescription` is replaced by the attribute `#[Symfony\Component\Console\Attribute\AsCommand]`
+	protected static $defaultName = 'app:report';  // Property `Symfony\Component\Console\Command\Command::$defaultName` is replaced by the attribute `#[Symfony\Component\Console\Attribute\AsCommand]`.
+	protected static $defaultDescription = 'Sends the daily report';  // Property `Symfony\Component\Console\Command\Command::$defaultDescription` is replaced by the attribute `#[Symfony\Component\Console\Attribute\AsCommand]`.
 
 
 	protected function execute(InputInterface $input, OutputInterface $output): int
 	{
-		$request = $this->requestStack->getMasterRequest();  // Method `Symfony\Component\HttpFoundation\RequestStack::getMasterRequest()` is replaced by `RequestStack::getMainRequest()`
-		$output->writeln($request->get('day'));  // Method `Symfony\Component\HttpFoundation\Request::get()` is forbidden: read the bag the value comes from, the `attributes`, `query` or `request` property, such as `query->get()`
+		$request = $this->requestStack->getMasterRequest();  // Method `Symfony\Component\HttpFoundation\RequestStack::getMasterRequest()` is replaced by `RequestStack::getMainRequest()`.
+		$output->writeln($request->get('day'));  // Method `Symfony\Component\HttpFoundation\Request::get()` is forbidden: read the bag the value comes from, the `attributes`, `query` or `request` property, such as `query->get()`.
 		return Command::SUCCESS;
 	}
 }
@@ -49,10 +55,10 @@ class ReportCommand extends Command
 
 class ReportController extends AbstractController
 {
-	/** @Security("is_granted('ROLE_ADMIN')") */  // Annotation `@Security` is replaced by the attribute `#[Symfony\Component\Security\Http\Attribute\IsGranted]`
+	/** @Security("is_granted('ROLE_ADMIN')") */  // Annotation `@Security` is replaced by the attribute `#[Symfony\Component\Security\Http\Attribute\IsGranted]`.
 	public function show(): Response
 	{
-		return new Response($this->getUser()->getUsername());  // Method `Symfony\Component\Security\Core\User\UserInterface::getUsername()` is replaced by `getUserIdentifier()`
+		return new Response($this->getUser()->getUsername());  // Method `Symfony\Component\Security\Core\User\UserInterface::getUsername()` is replaced by `getUserIdentifier()`.
 	}
 }
 ```
@@ -92,9 +98,9 @@ Co všechno balíček opravuje:
 - **anotace SensioFrameworkExtraBundle** na atributy frameworku: `@Route`, `@Cache`, `@IsGranted` a `@Template`, a `@Security`, jehož výraz jen volá `is_granted()`, na `#[IsGranted]`; anotace routingu a serializeru z jmenného prostoru `Annotation` na atributy z `Attribute`, anotace constraintů validátoru a `@UniqueEntity` na stejnojmenné atributy, kromě `@ExpressionLanguageSyntax`, ze které je `#[ExpressionSyntax]`, a `@required` na `#[Required]`,
 - **člen třídy na atribut**: `$defaultName` a `$defaultDescription` příkazu, i přepsané `getDefaultName()`, na `#[AsCommand]`, a rozhraní `MessageHandlerInterface` na `#[AsMessageHandler]`,
 - **resolver argumentů controlleru** psaný proti `ArgumentValueResolverInterface` na `ValueResolverInterface`: jeho `supports()` se stane podmínkou na začátku `resolve()`,
-- **signatury** potomků tříd frameworku, návratové typy a parametry, které komponenta doplnila (`execute(): int` příkazu); ty píše pravidlo `overrideSignature` z deklarací nainstalované verze, bez dat. Dopsání návratového typu je riziková oprava (risky fix), protože tělo metody může vracet něco jiného, a udělá se jen s `--fix-risky` nebo s pravidlem v klíči [`fixRisky` |configuration#risky-fixes].
+- **signatury** potomků tříd frameworku, návratové typy a parametry, které komponenta doplnila (`execute(): int` příkazu); ty píše rozhodnutí `classes.overriding.signature` z deklarací nainstalované verze, bez dat. Dopsání návratového typu je riziková oprava (risky fix), protože tělo metody může vracet něco jiného, a udělá se jen s `--fix-risky` nebo s rozhodnutím v klíči [`fixRisky` |configuration#risky-fixes].
 
-Anotaci `@Security`, i v podobě atributu `#[Security]` téhož bundlu, a resolver převádějí pravidla `symfony/isGrantedForSecurityAnnotation` a `symfony/valueResolverForArgumentResolver`, která balíček přináší a zapne je táž skupina. Zbytek dělají pravidla jádra DressCode, podle dat, a signatury i bez nich.
+Anotaci `@Security`, i v podobě atributu `#[Security]` téhož bundlu, a resolver převádějí rozhodnutí `symfony.isGrantedAttribute` a `symfony.valueResolver`, jejichž pravidla balíček přináší. Zbytek dělají pravidla jádra DressCode, podle dat, a signatury i bez nich.
 
 
 Co zůstane na vás
@@ -103,11 +109,11 @@ Co zůstane na vás
 Kde náhrada není, nebo se používá jinak, DressCode místo ohlásí a řekne, co napsat. Třeba služby, které controller dřív bral z kontejneru, nebo rozhraní, místo kterého patří atributy na jednotlivé metody:
 
 ```
-Method `Symfony\Bundle\FrameworkBundle\Controller\AbstractController::getDoctrine()` is forbidden: use a constructor or action argument typed with `Doctrine\Persistence\ManagerRegistry`
-Class `Symfony\Component\Messenger\Handler\MessageSubscriberInterface` is forbidden: write the attribute `AsMessageHandler` on each method that handles a message, with what `getHandledMessages()` yields for it as its arguments
+Method `Symfony\Bundle\FrameworkBundle\Controller\AbstractController::getDoctrine()` is forbidden: use a constructor or action argument typed with `Doctrine\Persistence\ManagerRegistry`.
+Class `Symfony\Component\Messenger\Handler\MessageSubscriberInterface` is forbidden: write the attribute `AsMessageHandler` on each method that handles a message, with what `getHandledMessages()` yields for it as its arguments.
 ```
 
-Co komponenta jen tiše označila jako zastaralé, v datech není; s typy to ohlásí, a kde anotace náhradu řekne, i přepíše `noDeprecatedMembers`. Změny chování, konfigurace v YAML a šablony Twig data nezachytí vůbec, ty najdete v průvodcích `UPGRADE-*.md` repozitáře Symfony.
+Co komponenta jen tiše označila jako zastaralé, v datech není; s typy to ohlásí, a kde anotace náhradu řekne, i přepíše podle `upgrading.declarations.deprecatedMember`. Změny chování, konfigurace v YAML a šablony Twig data nezachytí vůbec, ty najdete v průvodcích `UPGRADE-*.md` repozitáře Symfony.
 
 
 Co balíček pokrývá

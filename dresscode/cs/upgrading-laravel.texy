@@ -14,16 +14,17 @@ Instalace
 composer require --dev dresscode/rules-laravel
 ```
 
-A do konfigurace typy a skupinu `deprecations`, jak popisuje [Aktualizace knihoven |upgrading-libraries#Zapnutí]:
+A do konfigurace typy a sadu `deprecations`, jak popisuje [Aktualizace knihoven |upgrading-libraries#Zapnutí]:
 
 ```neon
-types: phpstan
+typeAnalysis: phpstan
 
-groups:
+use:
+	- perCs           # váš standard
 	- deprecations
 ```
 
-Balíček žádné pravidlo nezapne sám. Data se uplatní jen tehdy, když projekt má `laravel/framework`, a jen ty verze, na které projekt dosáhne.
+Balíček nic nezapne sám. Data se uplatní jen tehdy, když projekt má `laravel/framework`, a jen ty verze, na které projekt dosáhne.
 
 Larastan v projektu nevadí, naopak: ať ho máte v `phpstan.neon`, nebo ho zaregistroval `phpstan/extension-installer`, DressCode spustí aplikaci stejně jako PHPStan a fasádu `Request::get()` čte jako metodu třídy, která za ní stojí. Selže-li při tom `bootstrap/app.php`, vypíše Larastan sám hlášku "Application bootstrap failed" i s výjimkou, na které start aplikace selhal, a celý běh ukončí. Pozor v CI: běh skončí nenulovým exit kódem, a když běží v jednom procesu, je to 1, stejně jako když DressCode v kódu něco najde. Alias z `config/app.php` psaný bez jmenného prostoru, `\Request::get()`, nezná žádná statická analýza, a ten zůstane nepovšimnutý.
 
@@ -34,9 +35,9 @@ Co se opraví
 Tohle je middleware, provider a controller psaný pro Laravel 10, v projektu na Laravelu 13:
 
 ```php .[before]
-use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken as Middleware;  // Class `Illuminate\Foundation\Http\Middleware\VerifyCsrfToken` is replaced by `Illuminate\Foundation\Http\Middleware\PreventRequestForgery`
+use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken as Middleware;  // Class `Illuminate\Foundation\Http\Middleware\VerifyCsrfToken` is replaced by `Illuminate\Foundation\Http\Middleware\PreventRequestForgery`.
 
-class VerifyCsrfToken extends Middleware  // Class `Illuminate\Foundation\Http\Middleware\VerifyCsrfToken` is replaced by `Illuminate\Foundation\Http\Middleware\PreventRequestForgery`
+class VerifyCsrfToken extends Middleware  // Class `Illuminate\Foundation\Http\Middleware\VerifyCsrfToken` is replaced by `Illuminate\Foundation\Http\Middleware\PreventRequestForgery`.
 {
 	protected $except = ['stripe/*'];
 }
@@ -46,8 +47,8 @@ class AppServiceProvider extends ServiceProvider
 {
 	public function boot(): void
 	{
-		Schema::useNativeSchemaOperationsIfPossible();  // Static method `Illuminate\Support\Facades\Schema::useNativeSchemaOperationsIfPossible()` is forbidden: there is no replacement, the schema is always changed natively; drop the call
-		URL::forceRootUrl(config('app.url'));  // Static method `Illuminate\Support\Facades\URL::forceRootUrl()` is replaced by `URL::useOrigin()`
+		Schema::useNativeSchemaOperationsIfPossible();  // Static method `Illuminate\Support\Facades\Schema::useNativeSchemaOperationsIfPossible()` is forbidden: there is no replacement, the schema is always changed natively; drop the call.
+		URL::forceRootUrl(config('app.url'));  // Static method `Illuminate\Support\Facades\URL::forceRootUrl()` is replaced by `URL::useOrigin()`.
 	}
 }
 
@@ -57,9 +58,9 @@ class ReportController
 	public function show(Request $request): array
 	{
 		$limit = Limit::perMinute(60);
-		$limit->decayMinutes = 5;  // Property `Illuminate\Cache\RateLimiting\Limit::$decayMinutes` is replaced by `$this->decaySeconds = $value * 60`
-		return [$request->get('day'), Schema::getAllTables()];  // Method `Illuminate\Http\Request::get()` is replaced by `Request::input()`
-		                                                        // Static method `Illuminate\Support\Facades\Schema::getAllTables()` is forbidden: call `getTables()`, which returns arrays with the name and schema of each table, not rows of the database
+		$limit->decayMinutes = 5;  // Property `Illuminate\Cache\RateLimiting\Limit::$decayMinutes` is replaced by `$this->decaySeconds = $value * 60`.
+		return [$request->get('day'), Schema::getAllTables()];  // Method `Illuminate\Http\Request::get()` is replaced by `Request::input()`.
+		                                                        // Static method `Illuminate\Support\Facades\Schema::getAllTables()` is forbidden: call `getTables()`, which returns arrays with the name and schema of each table, not rows of the database.
 	}
 }
 ```
@@ -111,7 +112,7 @@ Helper volaný bez zpětného lomítka uvnitř jmenného prostoru, jak je to v a
 
 `Request::get()` a `input()` nejsou úplně totéž: `get()` čte napřed atributy routy, pak query a nakonec tělo požadavku, `input()` atributy nečte, tělo má před query a klíč s tečkou bere jako cestu do pole. Laravel sám u zastaralého `get()` radí `input()` a DressCode ho píše také; hodnotu, kterou nastavuje middleware jako atribut routy, čtěte přes `$request->attributes->get()`.
 
-Co framework změnil v signaturách, metodu, kterou přidal kontrakt, a návratový typ, který musí deklarovat potomek, data nepotřebuje: ohlásí a zapíše to `noUnimplementedAbstractMethods` a `overrideSignature` z téže skupiny, z deklarací nainstalované verze. Dopsání návratového typu je riziková oprava (risky fix): tělo metody může vracet něco jiného, a proto se udělá jen s `--fix-risky` nebo s pravidlem v klíči [`fixRisky` |configuration#risky-fixes].
+Co framework změnil v signaturách, metodu, kterou přidal kontrakt, a návratový typ, který musí deklarovat potomek, data nepotřebuje: ohlásí a zapíše to `correctness.unimplementedAbstractMethods` a `classes.overriding.signature` z téže sady, z deklarací nainstalované verze. Dopsání návratového typu je riziková oprava (risky fix): tělo metody může vracet něco jiného, a proto se udělá jen s `--fix-risky` nebo s rozhodnutím v klíči [`fixRisky` |configuration#risky-fixes].
 
 
 Co zůstane na vás
@@ -120,8 +121,8 @@ Co zůstane na vás
 Kde náhrada není, vrací něco jiného, nebo se liší podle databáze, DressCode místo ohlásí a řekne, co napsat. Třeba Doctrine DBAL, se kterým Laravel 11 skončil, nebo prostorové sloupce migrací:
 
 ```
-Method `Illuminate\Database\Connection::getDoctrineSchemaManager()` is forbidden: read the schema by the schema builder, such as `Schema::getTables()`, `getColumns()` or `getIndexes()`
-Method `Illuminate\Database\Schema\Blueprint::point()` is forbidden: call `geometry()` or `geography()` with the subtype, such as `geography($column, 'point')`, whose type differs by the database
+Method `Illuminate\Database\Connection::getDoctrineSchemaManager()` is forbidden: read the schema by the schema builder, such as `Schema::getTables()`, `getColumns()` or `getIndexes()`.
+Method `Illuminate\Database\Schema\Blueprint::point()` is forbidden: call `geometry()` or `geography()` with the subtype, such as `geography($column, 'point')`, whose type differs by the database.
 ```
 
 Stejně se ohlásí i další místa, například tato:
@@ -134,32 +135,39 @@ Stejně se ohlásí i další místa, například tato:
 
 Úplný výčet i s tím, co napsat místo toho, je opět v datech balíčku.
 
-Co framework jen označil jako zastaralé a náhradu k tomu napsal, v datech často není; s typy to ohlásí, a kde anotace náhradu řekne, i přepíše `noDeprecatedMembers`. Změny chování a konfigurace data nezachytí vůbec, ty najdete v průvodci upgradem Laravelu.
+Co framework jen označil jako zastaralé a náhradu k tomu napsal, v datech často není; s typy to ohlásí, a kde anotace náhradu řekne, i přepíše podle `upgrading.declarations.deprecatedMember`. Změny chování a konfigurace data nezachytí vůbec, ty najdete v průvodci upgradem Laravelu.
 
 
 Atributy Laravelu 13
 ====================
 
-Laravel 13 čte z atributů třídy to, co dřív četl z vlastností: `#[Table('posts')]` místo `protected $table = 'posts'`, `#[Tries(3)]` místo `public $tries = 3`. Vlastnosti fungují dál, a proto je tahle část nabídka, ne oprava, v samostatné skupině `modernization`:
+Laravel 13 čte z atributů třídy to, co dřív četl z vlastností: `#[Table('posts')]` místo `protected $table = 'posts'`, `#[Tries(3)]` místo `public $tries = 3`. Vlastnosti fungují dál, a proto je tahle část nabídka, ne oprava. Data k ní se uplatní s ostatními daty balíčku, jakmile konfigurace používá sadu `deprecations` nebo `modernizations`. Rozhodnutí sekce `laravel` napíšete sami a jménem balíčku v `use` pustíte dovnitř jeho plugin, který je hlídá:
 
 ```neon
-groups:
-	- modernization
+use:
+	- perCs           # váš standard
+	- deprecations
+	- modernizations
+	- dresscode/rules-laravel
+
+laravel:
+	castsMethod: adopted
+	scopeAttribute: adopted
 ```
 
 ```php .[before]
 class Post extends Model
 {
-	protected $table = 'blog_posts';  // Property `Illuminate\Database\Eloquent\Model::$table` is replaced by the attribute `#[Illuminate\Database\Eloquent\Attributes\Table]`
+	protected $table = 'blog_posts';  // Property `Illuminate\Database\Eloquent\Model::$table` is replaced by the attribute `#[Illuminate\Database\Eloquent\Attributes\Table]`.
 
-	public $timestamps = false;  // Property `Illuminate\Database\Eloquent\Model::$timestamps` is replaced by the attribute `#[Illuminate\Database\Eloquent\Attributes\WithoutTimestamps]`
+	public $timestamps = false;  // Property `Illuminate\Database\Eloquent\Model::$timestamps` is replaced by the attribute `#[Illuminate\Database\Eloquent\Attributes\WithoutTimestamps]`.
 
-	protected $fillable = ['title', 'body'];  // Property `Illuminate\Database\Eloquent\Model::$fillable` is replaced by the attribute `#[Illuminate\Database\Eloquent\Attributes\Fillable]`
+	protected $fillable = ['title', 'body'];  // Property `Illuminate\Database\Eloquent\Model::$fillable` is replaced by the attribute `#[Illuminate\Database\Eloquent\Attributes\Fillable]`.
 
-	protected $casts = ['published_at' => 'datetime'];  // Property `Illuminate\Database\Eloquent\Model::$casts` is replaced by the method `casts()`
+	protected $casts = ['published_at' => 'datetime'];  // Property `Illuminate\Database\Eloquent\Model::$casts` is replaced by the method `casts()`.
 
 
-	public function scopePublished(Builder $query): void  // Method `scopePublished()` is replaced by the method `published()` with the attribute `#[Illuminate\Database\Eloquent\Attributes\Scope]`
+	public function scopePublished(Builder $query): void  // Method `scopePublished()` is replaced by the method `published()` with the attribute `#[Illuminate\Database\Eloquent\Attributes\Scope]`.
 	{
 		$query->whereNotNull('published_at');
 	}
@@ -188,7 +196,7 @@ class Post extends Model
 }
 ```
 
-Atributy přinášejí data pravidla `attributeForMember` pro modely, příkazy, form requesty, API resources a joby, listenery, mailables a notifikace ve frontě; vlastnosti téže třídy atributu, `$table`, `$primaryKey` a `$keyType`, se spojí do jednoho `#[Table]`. Třídu, která vlastnost sama čte, abstraktní třídu a metodu `getRouteKeyName()` s logikou pravidlo ohlásí a nechá. Metodu `casts()` píše `laravel/castsMethodForCastsProperty` a scope s atributem `laravel/scopeAttributeForScopePrefix`. Ta druhá oprava je riziková: volání `scopePublished()` starým jménem v jiném souboru nevidí, a proto se udělá jen s `--fix-risky`. Metodu píše chráněnou, protože statické volání `Post::published()` k ní jinak nedojde.
+Atributy přinášejí data mapy `upgrading.libraries.attributeForMember` pro modely, příkazy, form requesty, API resources a joby, listenery, mailables a notifikace ve frontě; vlastnosti téže třídy atributu, `$table`, `$primaryKey` a `$keyType`, se spojí do jednoho `#[Table]`. Třídu, která vlastnost sama čte, abstraktní třídu a metodu `getRouteKeyName()` s logikou pravidlo ohlásí a nechá. Metodu `casts()` píše rozhodnutí `laravel.castsMethod` a scope s atributem `laravel.scopeAttribute`, obě ze sekce balíčku, kterou napíšete sami. Ta druhá oprava je riziková: volání `scopePublished()` starým jménem v jiném souboru nevidí, a proto se udělá jen s `--fix-risky`. Metodu píše chráněnou, protože statické volání `Post::published()` k ní jinak nedojde.
 
 
 Co balíček pokrývá
