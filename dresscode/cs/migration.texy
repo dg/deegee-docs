@@ -21,12 +21,12 @@ Postup má tři kroky a každý z nich se dá vrátit.
 Komentáře `// phpcs:ignore`, `phpcs:disable`, `phpcs:enable`, `phpcs:ignoreFile` i anotace `@phpcsSuppress` fungují dál. DressCode je přečte, cizí jméno pravidla si přeloží na své, a potlačení platí. Do kódu tedy zatím vůbec nemusíte sahat a první kontrolu můžete pustit hned:
 
 ```shell
-dresscode check src tests --preset perCs
+dresscode check src tests --use perCs
 ```
 
 Jeden rozdíl je potřeba znát: `phpcs:ignore` na samostatném řádku potlačoval v PHP_CodeSniffer jen následující řádek. DressCode ho čte stejně jako svůj `dresscode:ignore`, a ten na samostatném řádku platí pro celý následující příkaz, i když zabírá víc řádků. Potlačení tak může krýt víc, než kryl dřív.
 
-Konfiguraci zatím nemáte, a proto standard určuje přepínač `--preset`, protože bez konfigurace DressCode nic nekontroluje. `perCs` znamená [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/]. Kdo dosud používal `@PER-CS` nebo `PSR12`, uvidí zhruba to, co čekal. Kdo měl doladěno nad rámec standardu, uvidí rozdíly, které vyřeší další krok.
+Konfiguraci zatím nemáte, a proto standard určuje přepínač `--use`, protože bez konfigurace DressCode nic nekontroluje. `perCs` znamená [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/]. Kdo dosud používal `@PER-CS` nebo `PSR12`, uvidí zhruba to, co čekal. Kdo měl doladěno nad rámec standardu, uvidí rozdíly, které vyřeší další krok.
 
 
 2. Přeložte konfiguraci .[#import]
@@ -49,7 +49,7 @@ Na standardní výstup jde hotová konfigurace, na chybový výstup to, co se p�
 use DressCode\Config;
 
 return new Config(
-	presets: ['psr12'],
+	use: ['psr12'],
 	rules: [
 		'lineLength' => true,
 		'unusedImports' => ['annotations' => false],
@@ -89,7 +89,7 @@ Z toho výpisu máte seznam potlačení, která nic nepotlačují, protože prav
 První oprava
 ============
 
-Až konfigurace sedí, pusťte `dresscode fix` a výsledek commitněte samostatně, bez jiných změn. I u pravidla, které je "stejné", může oprava vyjít o mezeru jinak než u starého nástroje, a procházet to řádek po řádku nemá smysl. Smysl má vědět, že v tom commitu není nic jiného. U velkého projektu, kde by byl jeden commit nepřehledný, opravujte po pravidlech, `dresscode fix --only <pravidlo>`, a každé z nich commitněte zvlášť; příští úplný `fix` pak změní zbytek, viz [--only |cli#Jedno pravidlo najednou: --only]. Co `fix` opravit neumí, zůstane ve výpisu, a když je toho víc, než chcete řešit hned, příkaz `dresscode baseline` to zapíše do [baseline |suppressing#baseline] a hlásit se budou jen nová porušení.
+Až konfigurace sedí, pusťte `dresscode fix` a výsledek commitněte samostatně, bez jiných změn. I u pravidla, které je "stejné", může oprava vyjít o mezeru jinak než u starého nástroje, a procházet to řádek po řádku nemá smysl. Smysl má vědět, že v tom commitu není nic jiného. U velkého projektu, kde by byl jeden commit nepřehledný, opravujte po skupinách nebo po pravidlech, `dresscode fix --only cleanup` nebo `dresscode fix --only <pravidlo>`, a každý krok commitněte zvlášť; poslední úplný `fix` pak změní zbytek, viz [Uklidit starý kód po krocích |cli#Uklidit starý kód po krocích]. Co `fix` opravit neumí, zůstane ve výpisu, a když je toho víc, než chcete řešit hned, příkaz `dresscode baseline` to zapíše do [baseline |suppressing#baseline] a hlásit se budou jen nová porušení.
 
 
 Co bude jinak
@@ -102,7 +102,8 @@ Návod, který slibuje bezešvý přechod, ztratí důvěru u prvního rozdílu,
 - **Rizikové (risky) pravidlo tu rizikové být nemusí.** Co PHP CS Fixer zapínal jen na výslovnou žádost, protože nad tokeny nerozeznal bezpečný případ od nebezpečného, rozhoduje tady strom, a pravidlo opraví jen ty bezpečné. Oprava, která chování měnit může, se ohlásí jako riziková oprava (risky fix) a udělá se až u pravidla uvedeného v seznamu `fixRisky` v konfiguraci, nebo s `--fix-risky`. A pravidlo, které mění chování programu ze své podstaty (`strictComparison` dělá z `==` `===`), zůstává vaším rozhodnutím, ať ho zapnete kdekoli.
 - **Exit kódy jsou jiné**: `0` čisto, `1` porušení, `2` selhání na některém souboru, `3` chyba v příkazové řádce nebo v konfiguraci. PHP_CodeSniffer i PHP CS Fixer mají vlastní stupnice, takže skript, který je vyhodnocuje, potřebuje jednu úpravu.
 - **Jeden nástroj místo dvou.** Kdo kombinoval CodeSniffer a Fixer, měl dvě konfigurace a dva kroky v CI. Teď je jedna a jeden.
-- **Místo výčtu pravidel se ptáte na záměr.** Konfigurace stojí na dvou otázkách: standard řekne, jak má kód vypadat, a [skupina pravidel |configuration#Skupiny pravidel] to, co po něm chcete kromě vzhledu. Skupin je šest a jejich jména jsou uzavřený výčet, takže se z řádku `groups: [cleanup]` nemá jak stát dvacet řádků se jmény pravidel, ani když katalog povyroste.
+- **Pravidlo vyzkoušíte, aniž byste přišli o konfiguraci.** `dresscode check --only <pravidlo> --diff` pustí jen to pravidlo, i když ho konfigurace vypíná, a `dresscode fix --use <pravidlo>` ho přidá ke zbytku konfigurace, takže jeho změny vyjdou rovnou zformátované podle vašeho standardu. Kde se běh od konfigurace odchýlí, řekne to varováním, viz [Příkazová řádka |cli#Jedno pravidlo nebo skupina na jeden běh: --only].
+- **Místo výčtu pravidel se ptáte na záměr.** Konfigurace stojí na dvou otázkách: standard řekne, jak má kód vypadat, a [skupina pravidel |configuration#Skupiny pravidel] to, co po něm chcete kromě vzhledu. Skupin je šest a jejich jména jsou uzavřený výčet, takže se z položky `cleanup` v klíči `use` nemá jak stát dvacet řádků se jmény pravidel, ani když katalog povyroste.
 - **Aktualizace kódu je v témže nástroji.** DressCode přepíše kód i na novější PHP a na nové API knihoven a v témž běhu ho zformátuje podle standardu, který jste právě převedli. Na přechod na novou verzi tedy nepotřebujete další nástroj s vlastní konfigurací, viz [Přechod na novější PHP |upgrading-php] a [Aktualizace knihoven |upgrading-libraries].
 
 Podrobnosti pro konkrétní nástroj: [PHP CS Fixer |from-php-cs-fixer], [PHP_CodeSniffer a Slevomat |from-phpcs], [Nette Coding Standard |from-ncs].

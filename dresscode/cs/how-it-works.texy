@@ -74,12 +74,11 @@ Ke standardu se přidávají **skupiny pravidel**. Nejsou to presety a nemají v
 | `correctness` | to, co je nejspíš omyl |
 | `optimizedCalls` | volání ve tvaru, který PHP optimalizuje už při kompilaci |
 
-Projekt si tedy vezme jeden standard, přidá skupiny, které chce, a jednotlivá pravidla zapne nebo nastaví v konfiguraci:
+Projekt si tedy vezme jeden standard, přidá za něj do klíče `use` skupiny, které chce, a jednotlivá pravidla zapne nebo nastaví v konfiguraci:
 
 ```neon
-presets: perCs
-
-groups:
+use:
+	- perCs
 	- cleanup
 	- modernization
 ```
@@ -90,7 +89,7 @@ Standard `nette` je ze všeho toho složený: PER Coding Style s tabulátory a r
 
 Kde se pravidlo se specifikací rozchází, dostane volbu, ne výjimku schovanou v presetu. Tytéž volby má tedy k dispozici i váš vlastní preset.
 
-Presety se skládají jako vrstvy: potomek přebírá rodiče a mění jen to, co sám říká, vaše konfigurace je vrstva nad nimi a přepis pro část projektu další vrstva nad konfigurací. Preset, konfigurace i přepis přitom mají stejný tvar, profil, takže preset jde zapnout i jen pro část projektu. Podrobně to popisuje stránka [Konfigurace |configuration#Presety a vrstvy].
+Presety a skupiny se skládají jako vrstvy v pořadí, v jakém je klíč `use` jmenuje: potomek přebírá rodiče a mění jen to, co sám říká, pozdější položka má poslední slovo, vaše konfigurace je vrstva nad nimi a přepis pro část projektu další vrstva nad konfigurací. Preset, konfigurace i přepis přitom mají stejný tvar, profil, takže preset jde zapnout i jen pro část projektu. Podrobně to popisuje stránka [Konfigurace |configuration#Presety a vrstvy].
 
 
 PER Coding Style a PSR-12 proti PHP CS Fixeru a PHP_CodeSniffer
@@ -107,7 +106,7 @@ Těch pár míst, která PHP CS Fixer ještě změní, jsou vědomá rozhodnutí
 
 Co DressCode najde navíc, to po kódu chce PER Coding Style: signatura, volání, podmínka, řetěz volání nebo pole rozložené na víc řádků má na každém řádku jednu položku, heredoc drží odsazení okolního kódu a víceřádkový seznam končí čárkou. PHP CS Fixer přitom implementuje PER Coding Style 3.0, DressCode verzi 3.1.
 
-Stejná zkouška s PSR-12 a PHP_CodeSniffer: po `dresscode fix --preset psr12` najde PHP_CodeSniffer nad celým Laravelem 83 problémů. Nepočítá se do nich řádek delší než 120 znaků, u kterého PSR-12 chce, aby nástroj jen varoval; DressCode ho ohlásí, jakmile projekt zapne pravidlo [lineLength |rules/lineLength]. Obráceně najde DressCode po `phpcbf` ještě 772 míst, mezi nimi chybějící viditelnost konstant, kterou PSR-12 vyžaduje a `phpcbf` ohlásí, ale doplnit neumí.
+Stejná zkouška s PSR-12 a PHP_CodeSniffer: po `dresscode fix --use psr12` najde PHP_CodeSniffer nad celým Laravelem 83 problémů. Nepočítá se do nich řádek delší než 120 znaků, u kterého PSR-12 chce, aby nástroj jen varoval; DressCode ho ohlásí, jakmile projekt zapne pravidlo [lineLength |rules/lineLength]. Obráceně najde DressCode po `phpcbf` ještě 772 míst, mezi nimi chybějící viditelnost konstant, kterou PSR-12 vyžaduje a `phpcbf` ohlásí, ale doplnit neumí.
 
 Presety `perCs` a `psr12` jsou psané podle textu specifikací, oddíl po oddílu: každá skupina pravidel v nich stojí pod číslem oddílu, ze kterého vychází, jak ukazují zdrojové kódy "PerCs.php":https://github.com/dg/dresscode/blob/master/src/Presets/PerCs.php a "Psr12.php":https://github.com/dg/dresscode/blob/master/src/Presets/Psr12.php. Kde specifikace nechává prostor pro výklad, rozhoduje její text, ne chování jiného nástroje. Co přesně který preset zapíná, najdete v [přehledu presetů |presets-reference].
 
@@ -182,11 +181,11 @@ Pojmy, které se v dokumentaci opakují a stojí za to je mít v ruce. Anglický
 | porušení | violation | jeden nález pravidla: soubor, řádek, sloupec a zpráva |
 | preset | preset | pojmenovaný profil: sada pravidel s volbami a případně stylem; nejčastěji standard |
 | standard | standard | preset, který rozhoduje o celém stylu kódu a který si projekt vezme za základ: `perCs`, `psr12`, `nette`, `symfony` |
-| skupina pravidel | rule group | jméno záměru, které zapne každé pravidlo toho záměru s výchozími volbami; je jich šest a píšou se do klíče `groups` |
+| skupina pravidel | rule group | jméno záměru, které zapne každé pravidlo toho záměru s výchozími volbami; je jich šest a píšou se do klíče `use` vedle presetů |
 | typy | types | co o výrazech, třídách a metodách ví PHPStan projektu; DressCode se na ně ptá, když konfigurace řekne `types: phpstan` |
 | profil | profile | to, co rozhoduje o zpracování souboru: presety, skupiny, pravidla, styl, cílové verze PHP a knihoven, jmenné prostory, rizikové opravy a pravidla, která jen varují; má ho projekt, přepis i preset |
 | přepis | override | profil pro část projektu, který platí pro soubory odpovídající jeho cestám |
-| plugin | plugin | třída implementující `Plugin`, kterou projekt uvede v klíči `plugins` nebo kterou balíček ohlásí ve svém `composer.json`; přinese jen pravidla a presety pod jmény, další pluginy, analýzy, vyloučené cesty, filtr souborů a adresu stránek svých pravidel, o stylu nerozhoduje |
+| plugin | plugin | třída implementující `Plugin`, kterou projekt uvede v klíči `use` nebo kterou balíček ohlásí ve svém `composer.json`; přinese jen pravidla a presety pod jmény, další pluginy, analýzy, vyloučené cesty, filtr souborů a adresu stránek svých pravidel, o stylu nerozhoduje |
 | riziková oprava | risky fix | oprava, která může změnit chování kódu; udělá se jen u pravidla uvedeného v klíči `fixRisky` nebo s `--fix-risky`, jinak se ohlásí, jako varování tam, kde by ji rozhodly typy nebo `nameResolution`, jinak jako chyba |
 | potlačení | suppression | vypnutí pravidla na jednom řádku, v bloku nebo v celém souboru komentářem `dresscode:ignore` |
 | baseline | baseline | soupis porušení, která zatím opravit nejde a nemají se hlásit; díky ní zapnete pravidlo, které kód ještě nesplňuje |

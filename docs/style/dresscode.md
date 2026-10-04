@@ -61,7 +61,7 @@ An example meant to win the reader over (the home page, the readme, the opening 
 - **nikic/PHP-Parser** is written exactly like this, with a link to GitHub at its first mention on a page.
 - **Installation** is offered in three ways: globally, with `create-project`, and as a development dependency. The last one is the way to get the types from the PHPStan of the project, so a page about types installs both into the project; its cost, the PHP version the tool requires forced on the project, is mentioned together with it. The PHP version of the tool and the target PHP version of the checked project are two different numbers.
 - **Updating code** is said on every page where a reader decides whether to use the tool (home, getting started, how it works, migration): DressCode formats and upgrades code in one run, to newer PHP and to new versions of libraries.
-- **A preset is chosen** in the configuration file or with `--preset` on the command line; never write as if only one of them existed.
+- **A preset is chosen** in the key `use` of the configuration file or with `--use` on the command line; never write as if only one of them existed.
 - **Czech terms.** At the first mention on a page, the English term follows the Czech one in parentheses ("potlačení (suppression)"). A term that is also the name of a class or a configuration key keeps its English form. The glossary for readers at the end of `how-it-works` must agree with this table.
 
 | English | Czech | note |
@@ -70,13 +70,13 @@ An example meant to win the reader over (the home page, the readme, the opening 
 | violation | porušení | "nález" for a single report of it, never "chyba" |
 | fix / check | oprava / kontrola | the commands stay `fix` and `check` |
 | preset, standard | preset, standard | |
-| rule group | skupina pravidel | the name of an intent that turns on every rule carrying it, with its default options; the six names (`cleanup`, `modernization`, `types`, `deprecations`, `correctness`, `optimizedCalls`) are written bare, without a vendor, and go in the key `groups` |
+| rule group | skupina pravidel | the name of an intent that turns on every rule carrying it, with its default options; the six names (`cleanup`, `modernization`, `types`, `deprecations`, `correctness`, `optimizedCalls`) are written bare, without a vendor, and go in the key `use` beside the presets |
 | types | typy | what the PHPStan of the project knows about the code; the key is `types: phpstan` |
 | deprecated | zastaralé | as in the Nette documentation; the annotation stays `@deprecated` |
 | promoted property | vlastnost deklarovaná v konstruktoru | English in parentheses at the first mention |
 | profile | profil | |
 | override | přepis | |
-| plugin | plugin | a class implementing `Plugin`; `plugins` is the configuration key |
+| plugin | plugin | a class implementing `Plugin`; the configuration names it in the key `use` |
 | engine | jádro | the word "engine" is not used in Czech text |
 | suppression | potlačení | |
 | baseline | baseline | as in PHPStan |

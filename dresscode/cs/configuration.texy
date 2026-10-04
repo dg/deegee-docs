@@ -11,7 +11,7 @@ Konfigurační soubor
 Oba formáty umějí přesně totéž: každý klíč NEONu je pojmenovaný argument konstruktoru třídy `DressCode\Config`. Kde PHP předává objekt nebo callback, napíše se v NEONu [entita |#Objekty a callbacky]. Následující dva soubory dělají totéž:
 
 ```neon
-presets: perCs
+use: perCs
 
 lineLength: 100
 
@@ -34,7 +34,7 @@ excludePaths:
 use DressCode\Config;
 
 return new Config(
-	presets: ['perCs'],
+	use: ['perCs'],
 	lineLength: 100,
 	rules: [
 		'orderedImports' => true,
@@ -50,7 +50,7 @@ Dál na téhle stránce píšeme NEON, protože se čte lépe. Převod do PHP je
 
 Soubor se hledá od aktuálního adresáře směrem nahoru a kořenem projektu se stane adresář, ve kterém se našel. Všechny cesty v konfiguraci jsou relativní k němu. Vedle něj může ležet šablona `dresscode.neon.dist` (nebo `.php.dist`), kterou commitujete; soubor bez `.dist` ji pak celou nahradí a hodí se pro místní odchylku, kterou commitovat nechcete. Mít vedle sebe NEON i PHP je chyba, ne přednost jednoho z nich. Jiný soubor vnutíte přepínačem `--config`.
 
-Překlep v klíči je chyba při načtení, ne tiše přeskočený řádek, a hláška nabídne klíč, který jste nejspíš mysleli (`Unexpected item 'path', did you mean 'paths'?`). Stejně dopadne překlep ve jménu pravidla nebo presetu (<code>''Unknown rule `strictComparsion`. Did you mean `strictComparison`?''</code>) a chybná hodnota volby řekne, která vrstva ji nastavila. Hodnota, kterou klíč přijmout nemůže, třeba `lineEnding: lf`, je chyba se jménem souboru, ať ji napíšete do NEONu, nebo do PHP. Bez konfiguračního souboru DressCode odmítne běžet a doporučí [`dresscode init` |cli#init], protože vlastní styl nemá. Poběží jen tehdy, když mu preset nebo skupinu dáte přepínačem `--preset` nebo `--group` a cesty vyjmenujete na příkazové řádce.
+Překlep v klíči je chyba při načtení, ne tiše přeskočený řádek, a hláška nabídne klíč, který jste nejspíš mysleli (`Unexpected item 'path', did you mean 'paths'?`). Stejně dopadne překlep ve jménu pravidla nebo presetu (<code>''Unknown rule `strictComparsion`. Did you mean `strictComparison`?''</code>) a chybná hodnota volby řekne, která vrstva ji nastavila. Hodnota, kterou klíč přijmout nemůže, třeba `lineEnding: lf`, je chyba se jménem souboru, ať ji napíšete do NEONu, nebo do PHP. Bez konfiguračního souboru DressCode odmítne běžet a doporučí [`dresscode init` |cli#init], protože vlastní styl nemá. Poběží jen tehdy, když mu standard dáte přepínačem `--use` a cesty vyjmenujete na příkazové řádce: `dresscode check src --use perCs`.
 
 
 Jeden tvar pro projekt, jeho části i presety
@@ -60,8 +60,7 @@ Nejdůležitější věc, kterou o konfiguraci DressCode potřebujete vědět: t
 
 | klíč | co říká |
 |---|---|
-| `presets` | ze kterých presetů se vychází |
-| `groups` | které skupiny pravidel běží |
+| `use` | ze kterých presetů se vychází a které skupiny pravidel běží |
 | `rules` | která pravidla běží a s jakými volbami |
 | `indent`, `lineEnding`, `lineLength` | odsazení, konec řádku a nejdelší řádek |
 | `targets` | pro jakou verzi PHP a jakých balíčků je kód psaný |
@@ -77,11 +76,11 @@ Profil má celý projekt: to jsou klíče nejvyšší úrovně vašeho souboru. 
 
 | klíče | konfigurace | přepis | preset | plugin |
 |---|---|---|---|---|
-| `presets`, `groups`, `rules`, `indent`, `lineEnding`, `lineLength`, `namespaces`, `suppressionComments` | ano | ano | ano | ne |
+| `use`, `rules`, `indent`, `lineEnding`, `lineLength`, `namespaces`, `suppressionComments` | ano | ano | ano | ne |
 | `nameResolution`, `fixRisky`, `warnOnly` | ano | ano | ne | ne |
 | `targets` | ano | jen `php` | ne | ne |
 | `types`, `overrides`, `paths`, `fileExtensions`, `baseline`, `cacheDir` | ano | ne | ne | ne |
-| `plugins`, `excludePaths`, `skipWhen`, `analyses`, `ruleUrl` | ano | ne | ne | ano |
+| pluginy v `use`, `excludePaths`, `skipWhen`, `analyses`, `ruleUrl` | ano | ne | ne | ano |
 
 
 Presety a vrstvy
@@ -89,25 +88,55 @@ Presety a vrstvy
 
 Preset je pojmenovaný profil. Vestavěné presety jsou čtyři a všechny jsou **standardy**: rozhodují o všem, od odsazení po importy, a projekt si jeden z nich vezme za základ. Jsou to `psr12`, `perCs` podle [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/], který na PSR-12 navazuje, `nette`, tedy Nette Coding Standard, který k PER Coding Style přidává tabulátory, rozvržení kódu knihoven Nette a skupiny pravidel pro hygienu kódu, a `symfony`, který také vychází z PER Coding Style. Co přesně každý z nich zapíná, ukazuje [přehled presetů |presets-reference].
 
+Preset se zapíná klíčem `use`. Do téhož klíče patří i [skupiny pravidel |#Skupiny pravidel] a [pluginy |#Pluginy], takže co konfigurace používá, přečtete na jednom místě. Jedinou položku napíšete i bez seznamu:
+
 ```neon
-presets: perCs
+use: perCs
 ```
 
-Víc presetů se píše jako seznam (`presets: [psr12, acme/house]`). Jediný preset, stejně jako jedinou [skupinu |#Skupiny pravidel], napíšete i bez něj.
+Víc položek je seznam a čte se shora dolů:
+
+```neon
+use:
+	- perCs
+	- cleanup
+	- modernization
+```
 
 Vestavěné presety a pravidla se píšou krátce, jako `perCs` v ukázce, a to v konfiguraci, na příkazové řádce i v komentářích `dresscode:ignore`. Plné jméno má tvar `vendor/jméno` a vendor vestavěných je `dresscode`, takže `perCs` je zkratka za `dresscode/perCs`; v plném tvaru jména vypisují třeba `dresscode config` a `dresscode explain`. Vendor odlišuje jména z různých balíčků, a proto zkratka platí jen pro vestavěná: preset nebo pravidlo z [pluginu |#Pluginy] nebo z balíčku pravidel se píše vždycky celé. Nenechte se splést jménem, které začíná jako vestavěný preset: `nette/namedArgumentsForFlags` není pravidlo presetu `nette`, ale pravidlo balíčku `dresscode/rules-nette`, který svým pravidlům dává vendor `nette`.
 
+Pravidlo do `use` nepatří; zapíná se jménem v klíči [`rules` |#Pravidla a jejich volby]. Pravidlo, preset a skupina nikdy nemají stejné jméno, takže nikde není sporu, co které jméno znamená.
+
 Pro každý soubor se profily skládají do vrstev, od nejnižší po nejvyšší:
 
-1. presety vaší konfigurace, každý nad presety, ze kterých vychází,
-2. klíče vaší konfigurace, přičemž [skupiny |#Skupiny pravidel] leží pod pravidly téhož profilu,
-3. [přepisy |#Jiný profil pro část projektu], kterým soubor odpovídá, v pořadí zápisu, každý opět nad svými presety,
-4. příkazová řádka (`--preset`, `--group`, `--rule`).
+1. položky klíče `use` vaší konfigurace v pořadí zápisu, každý preset nad tím, co sám používá,
+2. ostatní klíče vaší konfigurace, hlavně `rules`,
+3. [přepisy |#Jiný profil pro část projektu], kterým soubor odpovídá, v pořadí zápisu, každý opět nad tím, co jmenuje ve svém `use`,
+4. příkazová řádka (`--use`).
 
-Preset, který už leží níž, se podruhé nepokládá. Vyšší vrstva mění jen to, co sama říká, a jak to změní, záleží na druhu hodnoty:
+Pozdější položka `use` tedy leží nad dřívější a má poslední slovo. Skupina zapsaná za presetem, který ji sám nenese, zapne i pravidlo, které preset vypnul, a preset zapsaný za skupinou naopak vypne pravidlo, které skupina zapnula. Preset si přitom nejdřív položí, co sám používá: `nette` stojí na `perCs`, ten na `psr12`, a `nette` k tomu přináší skupiny `cleanup`, `types` a `correctness`. Klíč `rules` leží nad celým seznamem, takže pravidlo, které v něm jmenujete, platí, ať seznam říká cokoli.
+
+Každý preset a každá skupina se pokládá jednou, tam, kde je něco jmenuje poprvé. Když položku uvedete znovu, nic nezmění, a běh vám to řekne. Typicky jde o skupinu, kterou už přinesl standard: `nette` zapíná skupinu `types` bez pravidel `typeHintRequired` a `stringableRequired`, a tak `use: [nette, types]` ta dvě pravidla nezapne a běh vypíše:
+
+/--pre .[terminal]
+Warning: The configuration uses group `types`, which preset `dresscode/nette` already brings with `stringableRequired`, `typeHintRequired` turned off; the entry does nothing.
+\--
+
+Chcete-li pravidlo, které standard vypnul, zapněte ho jménem v `rules`:
+
+```neon
+use: nette
+
+rules:
+	typeHintRequired: true
+```
+
+Co si opakují presety mezi sebou, se nehlásí: to je věc jejich autorů, ne vašeho projektu.
+
+Vyšší vrstva mění jen to, co sama říká, a jak to změní, záleží na druhu hodnoty:
 
 - **Hodnota** (`indent`, `lineEnding`, `lineLength`, `nameResolution` a každá položka `targets`) platí z nejvyšší vrstvy, která ji uvádí. Styl tedy může nastavit kterýkoli preset a pozdější vrstva ho přebije stejně jako volbu pravidla.
-- **Seznam** (`groups`, `namespaces`, `fixRisky`, `warnOnly`) se přes vrstvy sčítá. Přepis pro testy tak k seznamu projektu přidává a nic z něj neubere.
+- **Seznam** (`namespaces`, `fixRisky`, `warnOnly`) se přes vrstvy sčítá. Přepis pro testy tak k seznamu projektu přidává a nic z něj neubere.
 - **Mapa vzorů komentářů** (`suppressionComments`) se slévá po vzorech: vzor, který uvede vyšší vrstva, přebije pravidla téhož vzoru z nižší vrstvy.
 - **Volby pravidla** se slévají. **Mapa voleb se slévá po klíčích**: když preset nastaví pravidlu `bracesPosition` tři volby a vy uvedete jednu, platí ta vaše a zbylé dvě zůstanou, jak je nastavil preset. **Skalár a seznam naopak nahrazují celou hodnotu**: `sets: [internal]` u `noAliasFunctions` znamená jen tuhle sadu, ať preset říkal cokoli, takže kdo chce přidávat, opíše i zděděné položky. A **`keep` na úrovni pravidla maže všechno**, co o něm vrstvy pod ním řekly, kromě dat ze souborů `upgrading.neon`, ať je přinesly nainstalované balíčky, nebo projekt sám; mapa uvedená v další vrstvě pak začíná znovu od výchozích hodnot pravidla a od těch dat.
 
@@ -120,9 +149,8 @@ Skupiny pravidel
 **Katalog má přes dvě stě pravidel a skládat si z nich konfiguraci položku po položce je práce, kterou za vás udělají skupiny. Konfigurace pak stojí na dvou otázkách: jak má kód vypadat, na to odpovídá jeden standard, a co po něm chcete kromě vzhledu, na to odpovídá šest skupin.** Skupina je jméno záměru, ne výčet: napíšete `cleanup` a s výchozími volbami běží každé pravidlo, které odklízí kód, co je v souboru pro nic.
 
 ```neon
-presets: perCs
-
-groups:
+use:
+	- perCs
 	- cleanup
 	- types
 ```
@@ -138,7 +166,7 @@ Skupin je právě šest a jiné jméno je chyba, která vypíše seznam platnýc
 | `correctness` | to, co je nejspíš omyl | `noDuplicateAssignments`, `noUnreachableCatches` |
 | `optimizedCalls` | volání ve tvaru, který PHP optimalizuje už při kompilaci | `optimizedCallNotation`, `noIsNull` |
 
-Který standard které skupiny nese a co je v nich za pravidla, najdete v [přehledu presetů |presets-reference] a v [přehledu pravidel |rules/@home]; každá stránka pravidla má svou skupinu v řádku faktů pod perexem. Standard `nette` zapíná `cleanup`, `types` a `correctness`, ostatní standardy žádnou; skupinu si k nim přidáte sami. Skupiny `modernization` a `deprecations` nenese žádný standard, protože co nová verze píše líp a co zrušila, je věc aktualizace, kterou si pustíte, až ji budete chtít.
+Který standard které skupiny nese a co je v nich za pravidla, najdete v [přehledu presetů |presets-reference] a v [přehledu pravidel |rules/@home]; každá stránka pravidla má svou skupinu v řádku faktů pod perexem. Standard `nette` zapíná `cleanup`, `types` a `correctness`, ostatní standardy žádnou; skupinu si k nim přidáte sami. Skupinu, kterou standard už přinesl, podruhé nepíšete, nic by nezměnila, viz [Presety a vrstvy |#Presety a vrstvy]. Skupiny `modernization` a `deprecations` nenese žádný standard, protože co nová verze píše líp a co zrušila, je věc aktualizace, kterou si pustíte, až ji budete chtít.
 
 Šest jmen je celý seznam, který se musíte naučit, a nepovyroste: jména jsou uzavřený výčet, takže je nerozšíří ani balíček s vlastními pravidly. Jeho pravidlo se přihlásí do jedné z těch šesti skupin a projektu, který ji zapnul, začne pracovat bez jediného řádku navíc. Katalog roste, seznam jmen ne. Pravidla s mapou náhrad, jako `replacedClasses`, vlastní skupinu nemají: záměr říká každý [soubor dat |upgrading-data#Soubor upgrading.neon], takže `deprecations` je zapne s tím, co knihovny zavrhly, a `modernization` s novějším zápisem, který starý neruší.
 
@@ -149,7 +177,8 @@ Tři věci, které skupina záměrně nedělá:
 - **Skupina žádné pravidlo nejmenuje.** Pravidlo, které v projektu běžet nemůže, protože cílí na novější PHP, chce typy nebo knihovnu, kterou projekt nemá, ze skupiny tiše vypadne. Konfigurace kvůli tomu nespadne a nemusíte ji upravovat, když projekt zvedne verzi PHP nebo zapne typy: pravidlo prostě začne běžet.
 
 ```neon
-groups:
+use:
+	- perCs
 	- cleanup
 
 rules:
@@ -158,7 +187,7 @@ rules:
 		annotations: false
 ```
 
-Na jeden běh přidá skupinu přepínač `--group cleanup` (i opakovaně) a `--only cleanup` běh na její pravidla naopak zúží, což se hodí, když chcete velkou opravu rozdělit do samostatných commitů. Které skupiny nakonec platí, vypíše `dresscode config` na řádku `Groups` a u každého pravidla ze skupiny stojí vrstva `group cleanup`.
+Na jeden běh přidá skupinu přepínač `--use cleanup` (i opakovaně) a `--only cleanup` běh na její pravidla naopak zúží, což se hodí, když chcete velkou opravu [rozdělit do samostatných commitů |cli#Uklidit starý kód po krocích]. Které skupiny nakonec platí, i s těmi, které přinesly presety, vypíše `dresscode config` na řádku `Use` a u každého pravidla ze skupiny stojí vrstva `group cleanup`.
 
 
 Styl, verze PHP a jmenné prostory
@@ -250,7 +279,7 @@ Dvě věci, na kterých se dá zakopnout:
 - **Seznam ve volbě nahrazuje výchozí seznam, neslučuje se s ním.** `noAliasFunctions: {sets: [internal, mysqli]}` přidá aliasy funkcí `mysqli` a zároveň přestane nahrazovat aliasy `imap` a `pg`, které jsou ve výchozím seznamu. Chcete-li přidávat, opište i zděděné hodnoty. Mapa se naopak slévá, takže u ní stačí uvést jen klíč, který měníte.
 - **Jméno pravidla z jiného nástroje není platný klíč.** `no_unused_imports` ani `SlevomatCodingStandard.Namespaces.UnusedUses` sem nepatří. DressCode je zná a v chybové hlášce vám řekne, které jeho pravidlo jim odpovídá, ale do konfigurace patří jméno jeho. Celý cizí konfigurační soubor převede příkaz [`dresscode import` |migration#import].
 
-Místo jména lze všude použít název třídy. Tak se zapíná [vlastní pravidlo |custom-rule] projektu, které pak nemusíte nikde registrovat: jakmile ho konfigurace jmenuje třídou, zná DressCode i jeho jméno, takže ho jménem potlačíte v komentáři `dresscode:ignore`, uvedete v `fixRisky` nebo zapnete na jeden běh přes `--rule`:
+Místo jména lze všude použít název třídy. Tak se zapíná [vlastní pravidlo |custom-rule] projektu, které pak nemusíte nikde registrovat: jakmile ho konfigurace jmenuje třídou, zná DressCode i jeho jméno, takže ho jménem potlačíte v komentáři `dresscode:ignore`, uvedete v `fixRisky` nebo zapnete na jeden běh přes `--use`:
 
 ```neon
 rules:
@@ -259,7 +288,7 @@ rules:
 
 Když má projekt svá pravidla popsaná třeba na wiki, klíč `ruleUrl` řekne adresu jejich stránek a `{slug}` v ní zastupuje jméno pravidla bez vendora: `ruleUrl: 'https://wiki.acme.dev/rules/{slug}'`. Uvozovky jsou nutné, protože NEON by složené závorky jinak četl jako svou syntaxi. Adresu vypíše `dresscode explain` a v terminálu na ni odkazuje jméno pravidla u porušení.
 
-Na jeden běh se pravidlo zapíná a vypíná z [příkazové řádky |#Příkazová řádka]: `--rule lineLength=false`.
+Na jeden běh se pravidlo zapíná a vypíná z [příkazové řádky |#Příkazová řádka]: `--use lineLength=false`.
 
 
 Jiný profil pro část projektu
@@ -268,14 +297,14 @@ Jiný profil pro část projektu
 Projekt málokdy vypadá všude stejně. Knihovní kód chcete co nejrychlejší, testy mají vlastní hlavičku a vlastní pomocné funkce, šablony generátoru jiné odsazení. Většina nástrojů na to má jen jedno: pravidlo pro některé cesty vypnout. DressCode dá každé části projektu **celý vlastní profil**. Přepis v klíči `overrides` platí pro soubory, které odpovídají jeho `paths`, a smí v něm stát cokoli, co smí stát v profilu projektu, presety počínaje:
 
 ```neon
-presets: nette
+use: nette
 
 nameResolution: certain
 
 overrides:
 	# knihovna píše volání tak, jak je PHP umí optimalizovat
 	- paths: [src]
-	  groups: [optimizedCalls]
+	  use: [optimizedCalls]
 
 	# testy si ve svém jmenném prostoru deklarují pomocné funkce
 	- paths: [tests]
@@ -395,20 +424,18 @@ Callback dostane obsah souboru a jeho cestu a vrátí `true`, když se má soubo
 Pluginy
 =======
 
-Klíč `plugins` vyjmenuje pluginy, tedy třídy s rozhraním `DressCode\Plugin`, kterými balíček něco přináší projektu: pravidla a presety pod jmény, analýzy, vyloučené cesty a filtr souborů. Takhle se zapojí balíček s pravidly a presetem firmy Acme:
+Plugin je třída s rozhraním `DressCode\Plugin`, kterou balíček něco přináší projektu: pravidla a presety pod jmény, analýzy, vyloučené cesty a filtr souborů. Uvádí se názvem třídy v klíči `use`, vedle presetů a skupin. Takhle se zapojí balíček s pravidly a presetem firmy Acme:
 
 ```neon
-plugins:
+use:
 	- Acme\CodeStyle\Plugin
-
-presets:
 	- perCs
 	- acme/house
 ```
 
-Plugin o tom, jak se kód píše, nerozhoduje: nezapne preset ani pravidlo a nenastaví styl. To je vždycky rozhodnutí projektu, a proto ho vždycky přečtete v jeho vlastním souboru. Plugin jen zpřístupní jména, takže `acme/house` v ukázce si vybral projekt. Do klíče `plugins` patří jen pluginy; vlastní pravidlo projekt jmenuje třídou v `rules` a vlastní preset třídou v `presets`. Jak plugin napsat, popisuje [Vlastní preset a plugin |presets-and-extensions#Plugin].
+Plugin o tom, jak se kód píše, nerozhoduje: nezapne preset ani pravidlo a nenastaví styl. To je vždycky rozhodnutí projektu, a proto ho vždycky přečtete v jeho vlastním souboru. Plugin jen zpřístupní jména, takže `acme/house` v ukázce si vybral projekt. Vrstvu proto netvoří a nezáleží na tom, kde v seznamu stojí: jména zná DressCode dřív, než začne vrstvy skládat. Plugin patří celému projektu, a tak ho uvádí jen konfigurace, přepis ani preset ne. Vlastní pravidlo projekt jmenuje třídou v `rules` a vlastní preset třídou v `use`. Jak plugin napsat, popisuje [Vlastní preset a plugin |presets-and-extensions#Plugin].
 
-Balíček může svůj plugin ohlásit i sám, ve svém `composer.json` pod klíčem `extra.dresscode.plugin`. DressCode ho pak po instalaci najde v `vendor/composer/installed.json` a do `plugins` ho psát nemusíte. Stejně najde soubory `upgrading.neon`, které balíček uvede pod `extra.dresscode.upgrading` a ve kterých stojí, co verze knihoven přejmenovaly nebo zrušily, viz [Aktualizace knihoven |upgrading-libraries]. Oba klíče čte i z `composer.json` projektu samotného; jiný klíč pod `extra.dresscode` ohlásí jako varování a přeskočí ho. Ani jedno přitom samo žádné pravidlo nezapne: pravidla z balíčku jen dostanou svá jména. Data se uplatní, až když projekt zapne skupinu, ke které se soubor dat hlásí klíčem `group` (`deprecations`, nebo `modernization`). Pravidlo, které jmenuje konfigurace nebo preset, dostane data ze všech souborů. Po instalaci balíčku `dresscode/rules-nette` tak ví `replacedClasses`, že se z `Nette\Forms\IControl` stalo `Nette\Forms\Control`, a vy jste neudělali nic než to pravidlo zapnuli.
+Balíček může svůj plugin ohlásit i sám, ve svém `composer.json` pod klíčem `extra.dresscode.plugin`. DressCode ho pak po instalaci najde v `vendor/composer/installed.json` a do `use` ho psát nemusíte. Plugin v klíči `use` tak potřebujete hlavně tehdy, když žije přímo v projektu. Stejně najde soubory `upgrading.neon`, které balíček uvede pod `extra.dresscode.upgrading` a ve kterých stojí, co verze knihoven přejmenovaly nebo zrušily, viz [Aktualizace knihoven |upgrading-libraries]. Oba klíče čte i z `composer.json` projektu samotného; jiný klíč pod `extra.dresscode` ohlásí jako varování a přeskočí ho. Ani jedno přitom samo žádné pravidlo nezapne: pravidla z balíčku jen dostanou svá jména. Data se uplatní, až když projekt zapne skupinu, ke které se soubor dat hlásí klíčem `group` (`deprecations`, nebo `modernization`). Pravidlo, které jmenuje konfigurace nebo preset, dostane data ze všech souborů. Po instalaci balíčku `dresscode/rules-nette` tak ví `replacedClasses`, že se z `Nette\Forms\IControl` stalo `Nette\Forms\Control`, a vy jste neudělali nic než to pravidlo zapnuli.
 
 
 Objekty a callbacky
@@ -424,7 +451,7 @@ Kde zápis v PHP předává objekt nebo callback, napíše se v NEONu entita. Vy
 Argumentem může být i další entita. Entitu přijímají čtyři klíče, `rules` včetně pravidel v přepisech:
 
 ```neon
-plugins:
+use:
 	- App\CodeStyle\Plugin(strict: true)
 
 skipWhen: App\CodeStyle\GeneratedFilter::isGenerated(...)
@@ -441,7 +468,7 @@ V PHP je to totéž, jen napsané jako kód:
 
 ```php
 return new Config(
-	plugins: [new App\CodeStyle\Plugin(strict: true)],
+	use: [new App\CodeStyle\Plugin(strict: true)],
 	rules: [
 		App\CodeStyle\CacheKeyRule::class => fn() => new App\CodeStyle\CacheKeyRule(App\CodeStyle\Keys::load()),
 	],
@@ -459,7 +486,7 @@ Plugin, `skipWhen` a továrna analýzy se vyhodnotí hned při načtení konfigu
 Příkazová řádka
 ===============
 
-Přepínače `--preset`, `--group` a `--rule` jsou nejvyšší vrstva: leží nad konfigurací i nad všemi přepisy, takže `--rule lineLength=false` vypne pravidlo pro jeden běh opravdu všude. Hodnota za rovnítkem je NEON, stejně jako v klíči `rules`: `--rule yoda=required` nastaví rozhodnutí, `--rule 'bracesPosition={class: nextLine}'` volby a samotné `--rule strictComparison` pravidlo zapne. Přepínač `--only` běh zúží na jmenovaná pravidla, presety a skupiny a `--fix-risky` dovolí všechny rizikové opravy. Klíči konfiguračního souboru nejsou: jsou to rozhodnutí jednoho běhu, ne projektu. Všechny přepínače popisuje stránka [Příkazová řádka |cli].
+Přepínač `--use` je nejvyšší vrstva: leží nad konfigurací i nad všemi přepisy. Bere totéž co klíč `use`, tedy preset nebo skupinu, a navíc pravidlo, kterému dá hodnotu za rovnítkem jako klíč `rules`, takže `--use lineLength=false` vypne pravidlo pro jeden běh opravdu všude. Hodnota je NEON: `--use yoda=required` nastaví rozhodnutí, `--use 'bracesPosition={class: nextLine}'` volby a samotné `--use strictComparison` pravidlo zapne. Přepínač `--only` pustí jen jmenovaná pravidla, presety a skupiny a `--fix-risky` dovolí rizikové opravy. Klíči konfiguračního souboru nejsou: jsou to rozhodnutí jednoho běhu, ne projektu. Jak s nimi vyzkoušet pravidlo, zavést ho jedním commitem nebo uklidit kód po krocích, popisuje stránka [Příkazová řádka |cli#Jedno pravidlo nebo skupina na jeden běh: --only].
 
 
 Další klíče
