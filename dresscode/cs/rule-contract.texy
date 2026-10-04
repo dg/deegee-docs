@@ -75,7 +75,7 @@ $statement = $node->parent;
 if (
 	$statement instanceof ExpressionStatementNode
 	&& $statement->parent instanceof NodeList
-	&& $context->report($node, 'The `var_dump()` call must not stay in the code')
+	&& $context->report($node, 'The `var_dump()` call must not stay in the code.')
 ) {
 	$statement->remove();
 }
@@ -88,7 +88,7 @@ Ukázka odstraní celý příkaz, jehož výrazem volání je, protože `remove(
 Oprava, která může změnit chování kódu, se hlásí s parametrem `risk` právě u toho výskytu. Jeho hodnota říká, co by výskyt rozhodlo: `Risk::TypeUnknown` typ hodnoty, který nevědí deklarace ani [typy |types], `Risk::NameUncertain` jméno funkce, které rozhodne [`nameResolution: certain` |namespaces#name-resolution], a `Risk::BehaviorChanges` úsudek člověka, kde oprava mění chování ze své podstaty nebo závisí na kódu, který běh nevidí. Parametr `because` přidá větu o tom, co se na tom místě může pokazit, když ji příčina sama neřekne; bez `risk` ho přísný běh odmítne, protože nemá co vysvětlovat. Stojí vedle zprávy, nikdy v ní: zpráva popisuje porušení a nesmí se měnit podle toho, jestli běh typy má.
 
 ```php
-if ($context->report($foreach, 'The loop must be written with `array_any()`', risk: Risk::TypeUnknown,
+if ($context->report($foreach, 'The loop must be written with `array_any()`.', risk: Risk::TypeUnknown,
 	because: 'the loop may go through an object, which `array_any()` does not take')) {
 	// ...
 }
@@ -103,7 +103,7 @@ Kde bezpečnost opravy závisí na typu hodnoty, odpovídá pravidlo ve třech s
 Výskyt, pro který pravidlo opravu nemá a jen ho hlásí, ohlaste s `fixable: false`. `report()` pak vrátí `false` vždy a hlášení nikdy není rizikové. Jinak by rizikové hlášení bez opravy vypadalo jako oprava, která čeká na svolení, a souhrn by radil `--fix-risky`, přestože by se nic neopravilo. Třeba `strictCall` explicitní `false` v `in_array()` jen hlásí, protože ho autor kódu napsal vědomě:
 
 ```php
-$context->report($strict, 'The `in_array()` call must pass `$strict = true`', fixable: false);
+$context->report($strict, 'The `in_array()` call must pass `$strict = true`.', fixable: false);
 ```
 
 Na zapomenutou deklaraci upozorní `RuleTester`: hlášení bez `fixable: false`, které zůstane i po posledním průchodu, jenž už nic nezměnil, je porušený kontrakt a fixtura s ním selže. Stejně selže fixtura s `// risky`, po jejímž běhu zůstane rizikové porušení, protože oprava byla povolená a přesto se neudělala.
@@ -112,7 +112,7 @@ Hlášení se váže na uzel nebo na token. Problém, který leží v bílých z
 
 Další dva parametry `report()` říkají, že porušení mohlo vzniknout opravou jiného porušení z téhož běhu. Pravidlo, které umisťuje řádek podle jiného řádku (tak to dělá `indentation`), předá `follows:` s tokenem, který ten druhý řádek otevírá; pravidlo, které hlásí tvar řádku, na kterém token stojí, předá `byLine: true`. Když ten řádek oprava v tomtéž běhu otevřela nebo zavřela (u `follows:` i posunula), hlášení z ní [plyne |cli#Formáty výstupu] a konzole ho vypíše pod ní. Jestli by hlášení na daném místě umlčel komentář, zjistí `$context->isSilenced()`, aniž by cokoli zaznamenal.
 
-Zpráva popisuje kód, ne čtenáře, a nikdy nerozkazuje. Má jeden ze tří tvarů: požadovaný stav (`A single space after the comma`), norma (`The opening brace must be on its own line`), nebo nález (<code>''Function `foo()` is deprecated''</code>). Konkrétní jména a hodnoty do zprávy patří, jméno pravidla ne, to doplní výpis. Co je ve zprávě kód, tedy jméno třídy, funkce či proměnné, zápis operátoru nebo hodnota, stojí ve zpětných apostrofech jako v Markdownu; konzole ho obarví a ostatní výstupy ho vypíšou, jak je. Jméno zpětný apostrof obsahovat nemůže, výraz, řetězec nebo komentář z kódu ano, a ten proto vložte přes `Violation::formatCode($code)`, které ho uzavře do delší řady apostrofů.
+Zpráva popisuje kód, ne čtenáře, a nikdy nerozkazuje. Je to věta a končí tečkou. Má jeden ze tří tvarů: požadovaný stav (`A single space after the comma.`), norma (`The opening brace must be on its own line.`), nebo nález (<code>''Function `foo()` is deprecated.''</code>). Konkrétní jména a hodnoty do zprávy patří, jméno pravidla ne, to doplní výpis. Co je ve zprávě kód, tedy jméno třídy, funkce či proměnné, zápis operátoru nebo hodnota, stojí ve zpětných apostrofech jako v Markdownu; konzole ho obarví a ostatní výstupy ho vypíšou, jak je. Jméno zpětný apostrof obsahovat nemůže, výraz, řetězec nebo komentář z kódu ano, a ten proto vložte přes `Violation::formatCode($code)`, které ho uzavře do delší řady apostrofů.
 
 
 Bez stavu a idempotentní
@@ -230,11 +230,11 @@ $types = $context->getAnalysis(Types::class);
 $member = $types->findMember($node);
 $deprecation = $member === null ? null : $types->findDeprecation($member);
 if ($deprecation !== null) {
-	$context->report($node, $member->describe() . ' is deprecated' . $deprecation->formatDescription(), fixable: false);
+	$context->report($node, $member->describe() . ' is deprecated' . $deprecation->formatDescription() . '.', fixable: false);
 }
 ```
 
-Nad třídou `Acme\Shop\Order`, jejíž konstanta má `@deprecated use Order::StatusPaid`, ohlásí tahle ukázka u `$order::STATUS_PAID` zprávu <code>''Constant `Acme\Shop\Order::STATUS_PAID` is deprecated: use Order::StatusPaid''</code>. Pravidlo, které typy jen zpřesňují, se místo `getAnalysis()` ptá `findAnalysis()` a nejistotu doplní samo: `$context->findAnalysis(Types::class)?->isOfType($expression, 'array') ?? Tristate::Maybe`. Bez typů pak nic nerozbije, jen víc výskytů ohlásí jako rizikové nebo je nechá být.
+Nad třídou `Acme\Shop\Order`, jejíž konstanta má `@deprecated use Order::StatusPaid`, ohlásí tahle ukázka u `$order::STATUS_PAID` zprávu <code>''Constant `Acme\Shop\Order::STATUS_PAID` is deprecated: use Order::StatusPaid.''</code>. Pravidlo, které typy jen zpřesňují, se místo `getAnalysis()` ptá `findAnalysis()` a nejistotu doplní samo: `$context->findAnalysis(Types::class)?->isOfType($expression, 'array') ?? Tristate::Maybe`. Bez typů pak nic nerozbije, jen víc výskytů ohlásí jako rizikové nebo je nechá být.
 
 
 Jména funkcí a tříd
@@ -248,7 +248,7 @@ if (!$node instanceof FunctionCallNode || GlobalCalls::findFunction($node, ['siz
 }
 
 $because = GlobalCalls::findUncertainty($node, $context);
-if ($context->report($node, 'The `sizeof()` call must be written `count()`', risk: $because === null ? null : Risk::NameUncertain, because: $because)) {
+if ($context->report($node, 'The `sizeof()` call must be written `count()`.', risk: $because === null ? null : Risk::NameUncertain, because: $because)) {
 	$node->name->text = CodeWriter::spellFunction('count', $node->name, $context);
 }
 ```
