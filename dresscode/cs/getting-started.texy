@@ -68,6 +68,28 @@ Každý řádek říká, kde problém je (řádek a sloupec), co je špatně (zp
 
 Hlavička nahoře odpovídá na dvě otázky, které jinak stojí za polovinou nedorozumění: podle čeho se kontroluje (konfigurační soubor a presety) a pro jakou verzi PHP. Shrnutí dole navíc prozradí, kolik porušení by nechal automatický `fix`.
 
+Zpráva je celá věta o konkrétním místě. Kde pravidlo něco měří, řekne, co čekalo a co našlo, a kde požadavek plyne z něčeho jiného, řekne i proč. Tady je metoda, jejíž signatura narostla na 131 znaků a tělo cyklu je odsazené o dvě mezery méně:
+
+/--pre .[terminal]
+src/Cart.php
+  error   7:27  Expected a line break before the parameter, because the line is 131 characters long.  multilineSignature
+                Then also: A multi-line parameter list must end with a trailing comma.                trailingComma
+  error    8:5  Expected no line break before the opening brace.                                      bracesPosition
+  error     10  Expected the statement indented by 12 spaces, 10 spaces found.                        indentation
+\--
+
+Složená závorka z řádku 8 patří k rozdělené signatuře: posune se za `): float`. Řádek `Then also` je porušení, které přinese teprve sama oprava: jakmile bude každý parametr na svém řádku, chce PER Coding Style čárku i za posledním. Dozvíte se to hned, ne až při dalším běhu.
+
+Oprava, která může změnit chování kódu, má pod zprávou ještě řádek s důvodem:
+
+/--pre .[terminal]
+src/Url.php
+  risky  7:12  The `strpos()` comparison must be written with `str_starts_with()`.  noManualSubstringTests
+               Risky because the namespace may declare `strpos()`.
+\--
+
+Ve jmenném prostoru `App` totiž PHP zavolá `App\strpos()`, pokud taková funkce existuje, a z jednoho souboru se to poznat nedá. Jak to DressCode říct, popisuje stránka [Funkce a konstanty ve jmenných prostorech |namespaces].
+
 Exit kódy jsou čtyři a stojí za zapamatování, protože na nich stojí kontrola v [průběžné integraci |continuous-integration]:
 
 | kód | význam |
