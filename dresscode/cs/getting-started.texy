@@ -68,27 +68,27 @@ Každý řádek říká, kde problém je (řádek a sloupec), co je špatně (zp
 
 Hlavička nahoře odpovídá na dvě otázky, které jinak stojí za polovinou nedorozumění: podle čeho se kontroluje (konfigurační soubor a presety) a pro jakou verzi PHP. Shrnutí dole navíc prozradí, kolik porušení by nechal automatický `fix`.
 
-Zpráva je celá věta o konkrétním místě. Kde pravidlo něco měří, řekne, co čekalo a co našlo, a kde požadavek plyne z něčeho jiného, řekne i proč. Tady je metoda, jejíž signatura narostla na 131 znaků a tělo cyklu je odsazené o dvě mezery méně:
+Zpráva je celá věta o konkrétním místě. Kde pravidlo něco měří, řekne, co čekalo a co našlo (`Expected the statement indented by 12 spaces, 10 spaces found.`), a porušení, které přinese teprve sama oprava, vypíše hned pod tím porušením, které ho způsobilo, jako `Then also`.
+
+Nejvíc se to hodí tam, kde nejde jen o vzhled kódu. Tady jsou dva malé soubory zkontrolované se skupinami `deprecations` a `correctness` a s [typy z PHPStanu |types]:
 
 /--pre .[terminal]
-src/Cart.php
-  error   7:27  Expected a line break before the parameter, because the line is 131 characters long, more than 120.  multilineSignature
-                Then also: A multi-line parameter list must end with a trailing comma.                               trailingComma
-  error    8:5  Expected no line break before the opening brace.                                                     bracesPosition
-  error     10  Expected the statement indented by 12 spaces, 10 spaces found.                                       indentation
+src/Settings.php
+  risky  7:37  Parameter `$name` of `offsetGet()` must be named `$key`, as in `ArrayObject::offsetGet()`.  overrideSignature
+               Risky because a call naming the argument `name:` stops working.
+
+src/Users.php
+  error  12:16  The `in_array()` call must pass `$strict = true`.                    strictCall
+  risky  17:16  The `in_array()` call must pass `$strict = true`.                    strictCall
+                Risky because a strict search no longer finds a value of another type.
+  error  22:18  Method `Acme\Mail\Mailer::sendMessage()` is deprecated: use send().  noDeprecatedMembers
 \--
 
-Složená závorka z řádku 8 patří k rozdělené signatuře: posune se za `): float`. Řádek `Then also` je porušení, které přinese teprve sama oprava: jakmile bude každý parametr na svém řádku, chce PER Coding Style čárku i za posledním. Dozvíte se to hned, ne až při dalším běhu.
+Třída `Settings` přepisuje metodu `offsetGet()` z `ArrayObject` a parametr pojmenovala `$name`. PHP to přijme, jenže volání `$settings->offsetGet(key: 'theme')`, které funguje s každým `ArrayObject`, skončí chybou `Unknown named parameter $key`. Přejmenováním by se ale rozbila volání, která už píšou `name:`, takže jde o rizikovou opravu (risky fix), tedy takovou, která může změnit chování kódu. Nález u ní říká, co přesně se může rozbít.
 
-Oprava, která může změnit chování kódu, má pod zprávou ještě řádek s důvodem:
+Obě volání `in_array()` mají stejnou zprávu, ale oprava s nimi naloží různě. Na řádku 12 typy říkají, že se hledá `int` v `list<int>`, a tam striktní hledání najde totéž, takže `fix` doplní `true` sám. Na řádku 17 je hledaná hodnota `mixed`: tahle oprava počká, až ji [povolíte |configuration#risky-fixes], a do té doby říká, co by změnila.
 
-/--pre .[terminal]
-src/Url.php
-  risky  7:12  The `strpos()` comparison must be written with `str_starts_with()`.  noManualSubstringTests
-               Risky because the namespace may declare `strpos()`.
-\--
-
-Ve jmenném prostoru `App` totiž PHP zavolá `App\strpos()`, pokud taková funkce existuje, a z jednoho souboru se to poznat nedá. Jak to DressCode říct, popisuje stránka [Funkce a konstanty ve jmenných prostorech |namespaces].
+Metodu `sendMessage()` knihovna označila anotací `@deprecated use send()`. Nález tu radu cituje a `fix` napíše `send()`.
 
 Exit kódy jsou čtyři a stojí za zapamatování, protože na nich stojí kontrola v [průběžné integraci |continuous-integration]:
 
