@@ -322,6 +322,16 @@ Riziková oprava je taková, která může změnit, co kód dělá, a je to vžd
 - **Jméno funkce.** Nekvalifikované `is_null()` ve jmenném prostoru může být vaše funkce `App\is_null()`. To rozhodne řádek [`nameResolution: certain` |namespaces#name-resolution].
 - **Váš úsudek.** `strictTypesRequired` zapne přísné typy, a tím mění chování kódu ze své podstaty; `staticClosure` nevidí, jestli closure někde jinde nepřivážete k objektu. Tady žádná informace nepomůže, rozhodujete vy.
 
+Ve výpisu má rizikové místo, které běh neopravil, stav `risky` a pod zprávou větu o tom, co se na tom místě může pokazit, pokud ji pravidlo zná:
+
+/--pre .[terminal]
+src/Order.php
+  risky  40:3  The loop must be written with `array_any()`  arrayFunctionForForeach
+               Risky because the loop may go through an object, which `array_any()` does not take.
+  risky  57:9  A closure not using `$this` must be static   staticClosure
+               Risky because a closure bound to an object elsewhere is not seen.
+\--
+
 Ve formátu `json` nese každé takové porušení v poli `risk` jméno příčiny (`TypeUnknown`, `NameUncertain`, `BehaviorChanges`), v poli `refused` to, jestli běh opravu odmítl, a v poli `because` větu o tom, co se na tom místě může pokazit, pokud ji pravidlo zná.
 
 Zapnout pravidlo, ať jménem, nebo presetem, ještě neznamená souhlasit s jeho rizikovými opravami. Souhlas dává projekt klíčem `fixRisky`, seznamem pravidel, jejichž rizikové opravy přijímá; `fix` pak udělá jen ty a ostatní ohlásí. Místo pravidla může stát i preset nebo skupina, které platí za všechna svá pravidla, stejně jako u `--only`. Preset tenhle souhlas dát nemůže a DressCode preset, který by se o to pokusil, odmítne. Git hook nebo editor proto nepotřebují žádný přepínač: opraví, co projekt přijal, a zbytek ohlásí. Přepínač `--fix-risky` dovolí rizikové opravy všech pravidel na jeden běh, `--fix-risky=strictCall` jen jmenovaného pravidla, presetu nebo skupiny:
