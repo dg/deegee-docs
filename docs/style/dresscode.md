@@ -13,9 +13,9 @@ The voice depends on the kind of text:
 | text | voice |
 |---|---|
 | guide pages (getting started, how it works, configuration, CLI, extending, editors, continuous integration, hooks, migration, upgrading PHP, upgrading libraries, types) | the author, addressing the reader |
-| rule page, section "Co pravidlo hlídá" | the same voice, used sparingly: only where there is something to say (why a fix is safe, why a standard wants the brace on the next line) |
-| rule page, examples, options and the line of facts | nobody; facts and literal messages |
-| generated pages (the rule index, the presets reference) | nobody |
+| page of a section, its introduction and the text under a decision | the same voice, used sparingly: only where there is something to say (why a fix is risky, why a standard wants the brace on the next line) |
+| page of a section, the generated block of a decision, examples | nobody; facts and literal messages |
+| generated pages (the presets reference) | nobody |
 
 - **The author speaks.** The first person is used only where it is true of the author: years of using PHP CS Fixer and PHP_CodeSniffer, not liking exceptions in code, watching for something in code review. The text never claims someone else wrote the tool and never plays an enthusiastic discoverer of it.
 - **The voice is graded.** It is strongest on the home page, in getting started, in the custom rule tutorial, on the page about porting rules, on the migration pages and on the pages about upgrading code. Elsewhere it carries at most one personal sentence per section, and the configuration, the CLI and the reference pages stay calm.
@@ -32,8 +32,8 @@ Before a page is done, count and check: how many comparisons with other tools, h
 
 The pages lean gently on the metaphor the name offers: a dress code, clothes, a tailor, made to measure. Gently means a touch where it fits by itself, never a voice running through the whole page, and **never at the cost of clarity**: the word a reader looks for (check, fix, violation, preset, baseline) stays, and the metaphor gets only the sentence around it.
 
-- **Where it belongs:** the perexes and the opening sentences ("Sám žádný styl nenosí, obléká kód podle presetu"), and at most once on a calm page such as the CLI (`init` "ušije `dresscode.neon` na míru").
-- **Where not:** the headings, which serve navigation and search, the facts of a rule page, and anything the reader has to act on.
+- **Where it belongs:** the perexes and the opening sentences ("Sám žádný styl nenosí, obléká kód podle standardu"), and at most once on a calm page such as the CLI (`init` "ušije `dresscode.neon` na míru").
+- **Where not:** the headings, which serve navigation and search, the facts of a decision, and anything the reader has to act on.
 - **It works best where it also says what really happens.** `init` really measures the code, and a run without a configuration really has no dress code. Where the image is only decoration, leave it out.
 - **The texts of the tool speak the same way**, and a page quoting them quotes them as they are: the summary of a clean run (`OK  120 files, all up to the dress code`), the end of `init` (`dresscode.neon written, made to measure.`) and the refusal without a configuration (`so there is no dress code to check against`).
 - **Terms are not renamed** for the metaphor.
@@ -46,9 +46,10 @@ An example meant to win the reader over (the home page, the readme, the opening 
 ## Writing about other tools
 
 - **Criticize the foundation, never the author.** The tools built on `token_get_all()` stand on a flat array of tokens, and that is what the text talks about. PHP CS Fixer, PHP_CodeSniffer and Slevomat are good tools made by smart people who did the most that foundation allows.
-- **Show code instead of characterizing it.** An excerpt of a fixer says more than a sentence calling it complicated, and the reader judges alone.
+- **Show code instead of characterizing it.** An excerpt of a fixer or of a configuration says more than a sentence calling it complicated, and the reader judges alone.
 - **Never write that something is bad.** Write what it stands on and let the consequence follow. Kindness is not softening: "PHP CS Fixer is great, but…" softens; "PHP CS Fixer does the most a flat array of tokens allows" is kind and still clear.
 - **Acknowledge what is admirable and admit where the other tool is better.** One honest admission buys trust for every other claim.
+- **Compare the same behaviour, set up as completely.** A configuration of another tool shown beside one of DressCode is valid, does on the same file what the DressCode one does, and was run to prove it; where the other tool cannot do something, the page says so with a source.
 - **At most one or two comparisons per chapter**, and that is a ceiling, not a norm. Every comparison is true of the current version of the other tool and has a source that can be checked again before publication; a comparison without a source is left out.
 - **No comparison tables with check marks.** Between tools whose authors read each other, such a table reads as an attack.
 - **Easy Coding Standard is not mentioned.** `ecs` appears only as the command of Nette Coding Standard.
@@ -56,27 +57,33 @@ An example meant to win the reader over (the home page, the readme, the opening 
 ## Names and terms
 
 - **PER Coding Style 3.1** is written in full, with a link to php-fig at its first mention on a page, and as PER Coding Style everywhere after it, the way php-fig writes it, never a bare "PER"; the preset is `perCs`.
-- **Names are camelCase**, as everything in the configuration is: rules, presets, groups, options and their values (`bracesPosition`, `perCs`, `optimizedCalls`, `promotedProperty: keep`). Only the options of the command line (`--fix-risky`) and the names of Composer packages (`dresscode/rules-nette`) keep their own spelling.
-- **Built-in presets and rules are named short**, without the vendor: `perCs`, `nette`, `lineLength`, in the configuration, on the command line, in `dresscode:ignore` and in prose. That is how people write them, and the tool accepts it everywhere. The full name `dresscode/…` is kept only where it carries information: in quoted output the tool prints in that form (`config`, `explain`, messages), on the pages about moving from other tools, where names of several tools meet, on the pages about writing rules and presets, where the name `vendor/slug` is the subject, and next to names of other vendors, where `nette` and `nette/…` would otherwise read as one thing. Names of plugins and rule packages are always written in full. What the vendor means is explained once, in `configuration` under Presety a vrstvy; other pages link there.
+- **Names are camelCase**, as everything in the configuration is: the keys of the decisions, presets, sets and values (`blankLines.betweenMethods`, `perCs`, `optimizedCalls`, `nextLine`). Only the options of the command line (`--fix-risky`) and the names of Composer packages (`dresscode/rules-nette`) keep their own spelling.
+- **A decision is always written by its whole path**, `braces.class`, never by its last word alone, because that is what the reader sees in the output, writes into the configuration and into `dresscode:ignore`. Inside the configuration snippet of its own section the key stands under its section, as it does in the file.
+- **Built-in presets are named short**, without the vendor: `perCs`, `nette`, `cleanup`, in the configuration, on the command line and in prose. That is how people write them, and the tool accepts it everywhere. The full name `dresscode/…` is kept only where it carries information: in quoted output the tool prints in that form (`config`, `explain`, messages), on the pages about moving from other tools, where names of several tools meet, on the pages about writing rules and presets, where the name `vendor/slug` is the subject, and next to names of other vendors. Names of plugins and rule packages are always written in full. What the vendor means is explained once, in `configuration` under Standardy a sady; other pages link there.
+- **A rule has no name** the reader would use. It is the implementation of decisions and appears only on the pages about writing rules, by its class.
 - **nikic/PHP-Parser** is written exactly like this, with a link to GitHub at its first mention on a page.
 - **Installation** is offered in three ways: globally, with `create-project`, and as a development dependency. The last one is the way to get the types from the PHPStan of the project, so a page about types installs both into the project; its cost, the PHP version the tool requires forced on the project, is mentioned together with it. The PHP version of the tool and the target PHP version of the checked project are two different numbers.
 - **Updating code** is said on every page where a reader decides whether to use the tool (home, getting started, how it works, migration): DressCode formats and upgrades code in one run, to newer PHP and to new versions of libraries.
-- **A preset is chosen** in the key `use` of the configuration file or with `--use` on the command line; never write as if only one of them existed.
+- **A preset is chosen** in the key `extends` of the configuration file or with `--use` on the command line; never write as if only one of them existed.
 - **Czech terms.** At the first mention on a page, the English term follows the Czech one in parentheses ("potlačení (suppression)"). A term that is also the name of a class or a configuration key keeps its English form. The glossary for readers at the end of `how-it-works` must agree with this table.
 
 | English | Czech | note |
 |---|---|---|
-| rule | pravidlo | |
+| decision | rozhodnutí | a key of the configuration with its path, its values and its description; what the reader writes, reads in a finding and suppresses |
+| section | sekce | the first part of a path, `spacing`; a plugin has one named after it, the rules of a project `project` |
+| requirement | požadavek | a decision that turns its checking on wherever it is not `keep` |
+| parameter | parametr | a decision that only refines a requirement and turns nothing on; it has a default instead of `keep` |
+| rule | pravidlo | the implementation of decisions; named only on the pages about writing rules |
 | violation | porušení | "nález" for a single report of it, never "chyba" |
 | fix / check | oprava / kontrola | the commands stay `fix` and `check` |
-| preset, standard | preset, standard | |
-| rule group | skupina pravidel | the name of an intent that turns on every rule carrying it, with its default options; the six names (`cleanup`, `modernization`, `types`, `deprecations`, `correctness`, `optimizedCalls`) are written bare, without a vendor, and go in the key `use` beside the presets |
-| types | typy | what the PHPStan of the project knows about the code; the key is `types: phpstan` |
+| preset, standard | preset, standard | a standard is a preset deciding how the code looks: `perCs`, `psr12`, `nette`, `symfony` |
+| set | sada | a preset of one intent, deciding nothing about the looks: `modernization`, `deprecations`, `cleanup`, `correctness`, `types`, `optimizedCalls`; extended beside the standard |
+| types | typy | what the PHPStan of the project knows about the code; the key is `typeAnalysis: phpstan` |
 | deprecated | zastaralé | as in the Nette documentation; the annotation stays `@deprecated` |
 | promoted property | vlastnost deklarovaná v konstruktoru | English in parentheses at the first mention |
 | profile | profil | |
 | override | přepis | |
-| plugin | plugin | a class implementing `Plugin`; the configuration names it in the key `use` |
+| plugin | plugin | a class implementing `Plugin`; a package announces it in its `composer.json`, a project names one of its own in the key `plugins` |
 | engine | jádro | the word "engine" is not used in Czech text |
 | suppression | potlačení | |
 | baseline | baseline | as in PHPStan |
@@ -86,11 +93,11 @@ An example meant to win the reader over (the home page, the readme, the opening 
 | node | uzel | |
 | trivia | trivia | always explained as "bílé znaky a komentáře" |
 | gap | mezera mezi tokeny | the type `Gap` stays; a page using it defines it first |
-| claim | požadavek | |
+| claim | nárok | what a rule for whitespace asks of a gap; "požadavek" belongs to the decisions |
 | fixture | fixtura | at first mention explained as a pair of files before and after |
 | sniff / fixer | sniff / fixer | at first mention "pravidlo PHP_CodeSniffer" / "pravidlo PHP CS Fixeru" |
 | risky fix | riziková oprava | English in parentheses, because that is the word in the output of PHP CS Fixer |
-| CLI options | přepínače | "volby" is reserved for the options of a rule |
+| CLI options | přepínače | "volby" is not used for the configuration, whose keys are decisions |
 | round trip | round trip | always with "vytištěný strom dá původní soubor bajt po bajtu" |
 | property hook | property hook | never a bare "hook", which is confused with Git hooks |
 | closure | closure | at first mention "(anonymní funkce)" |
@@ -100,77 +107,46 @@ An example meant to win the reader over (the home page, the readme, the opening 
 
 A page may describe a command, an option or an integration that does not exist yet, to specify how it will behave. Such a thing is written with its exact name and the exact shape of its output; where the shape is not decided, it stays off the page. Before the pages are published, each of them either exists or its text is gone.
 
-## The page of a rule
+## The page of a section
+
+The structure of the configuration is a page per section of the catalogue, `dresscode/cs/decisions/<section>.texy`, and an overview `decisions/@home`. A page of a section has two parts:
+
+- **The header is written by hand:** the title, a perex of one or two sentences saying what the section decides, an introduction (what the section is about, what to watch for, how it relates to other sections) and usually a configuration snippet with one before/after pair showing several of its decisions at once.
+- **Below it, a block for every decision of the section, generated** by `_tools/generate-dresscode.php` from `dresscode catalogue --format json`, in the order of the catalogue, which is the order `dresscode config` prints: the path as the heading, the description and the notes of the catalogue (in English, as `explain` prints them), the values with their meanings, and a paragraph with the class `decision-facts` (requirement or parameter with its default, the PHP version, whether it needs the types, the values of the four standards, the names of other tools it covers). The generated block is never edited by hand.
+- **Text under a block is written by hand and stays with its decision:** a sentence where the description leaves a question, and a before/after pair where the decision is not obvious. A decision whose description says everything has no text.
 
 ````texy
-unusedImports
-*************
+blankLines.betweenMethods
+=========================
 
-.[perex]
-Import, který kód nikde nepoužije, se odstraní.
+(generated block, ending with the paragraph .[decision-facts])
 
-Opravuje · ve skupině `cleanup` · v presetech `nette`, `symfony` · pokrývá `no_unused_imports` .[rule-info]
-
-
-Co pravidlo hlídá
-=================
-
-One to three paragraphs.
-
-
-Příklad
-=======
+```neon
+blankLines:
+	betweenMethods: 1
+```
 
 ```php .[before]
-use App\Model\Order;  // The import of `Order` is unused
+class Cart
+{
+	public function add(Item $item): void
+	{
+	}
+
+
+	public function total(): int  // Expected 1 blank line before the method, 2 found.
+	{
+	}
+}
 ```
 
 ```php .[after]
+…
 ```
-
-
-Volby
-=====
-
-
-annotations .[option]
----------------------
-
-`bool`, výchozí `true`. One sentence of meaning.
-
-```neon
-rules:
-	unusedImports:
-		annotations: false
-```
-
-(a before and after pair)
-
-
-Související pravidla
-====================
-
-- `orderedImports` řadí importy abecedně
-
-
-Zdroj
-=====
-
-Třída "UnusedImportsRule":https://github.com/dg/dresscode/blob/master/src/Rules/Namespaces/UnusedImportsRule.php, fixtury "unusedImports":https://github.com/dg/dresscode/tree/master/tests/DressCode/Rules/fixtures/unusedImports.
 ````
 
-- **The perex is one Czech sentence** in the indicative, describing the state the rule enforces. It is also the line of the rule in the index.
-- **The line of facts under the perex is generated** (fixes or only reports, the PHP version the rule needs, the presets that turn it on, the names of other tools it covers) and is never edited by hand.
-- **"Co pravidlo hlídá" is the only place for the voice**: what is a violation, what counts, why it makes sense, where to be careful.
-- **Examples are a pair of blocks `.[before]` and `.[after]`.** The message is quoted literally in a comment at the end of the line it is reported on, so that whoever pastes the message from the console into a search finds the page; several messages on one line are separated by another ` // `. A violation in blank lines, a doc comment or an attribute is reported on the line of that whitespace or comment, and the comment with the message stands on the line of the construct.
-- **The block `.[after]` is exactly what this rule alone makes of the block `.[before]`**, with the options of the NEON block above the pair, or with the default options when there is none. The text around says "after the fix by this rule", not "the result of `fix`", because other rules could format it further. A rule that only reports has no `.[after]`.
-- **Examples are written, not copied from fixtures.** A fixture is ugly on purpose; an example is the smallest code showing the violation, without `<?php` unless the example is about the tag. A short sentence after the pair may say why a line stayed as it was.
-- **Every example is verified against the rule**, so an example that stopped being true fails before it is published.
-- **Every option has a subheading with `.[option]`.** Its first sentence gives the type and the default value, the next one its meaning, and at least one example follows. For a list option, say that a list given replaces the default instead of merging with it. The Czech descriptions of options are written by hand.
-- **Two blank lines precede every section heading.**
-- **"Související pravidla"** names related rules as code with a few words of what each does.
-- **"Zdroj"** links the class of the rule and the directory of its fixtures on GitHub.
-- **Not on the page:** how to turn the rule on (that is the configuration page), how to suppress it (the suppressing page), its history, the version it appeared in.
-- **The length follows the options.** A rule without options fits in a screen; a rule with many options may have over a hundred lines.
-
-The rule index `rules/@home` is generated, one section per area of rules, each with a Czech heading and a sentence; a rule without a page is listed with its English description. There is one index only; a second one by kind of problem is not added.
+- **Every example has its configuration in a NEON block above it**, in the same section of the page, and the block `.[after]` is exactly what DressCode makes of the block `.[before]` with that configuration alone. Where another section must take part for the result to be readable (the indentation of lines a fix opened), the snippet names it and the text says why.
+- **The messages are quoted literally** in a comment at the end of the line they are reported on, several on one line separated by another ` // `. A violation in blank lines, a doc comment or an attribute is reported on the line of that whitespace or comment, and the comment with the message stands on the line of the construct.
+- **Examples are written, not copied from fixtures.** A fixture is ugly on purpose; an example is the smallest code showing the violation, without `<?php` unless the example is about the tag.
+- **Every example is verified** by `_tools/verify-dresscode.php`, which runs `dresscode check` and `fix` with the configuration of the NEON block, and every NEON block that is a configuration must pass `dresscode config`; so an example that stopped being true fails before it is published.
+- **Not on the page:** how a configuration is composed (that is the configuration page), how to suppress (the suppressing page), the history of a decision, the version it appeared in.
