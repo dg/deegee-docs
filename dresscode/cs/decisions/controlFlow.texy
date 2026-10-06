@@ -1,0 +1,165 @@
+Řídicí struktury
+****************
+
+.[perex]
+Sekce `controlFlow` rozhoduje o řídicích strukturách: `elseif` jedním slovem, `else` po větvi, která vždy odejde, `if` vracející `true` a `false`, časný návrat místo `if` na konci funkce, komentář u propadnutí `case` a příkaz `global`.
+
+Tři rozhodnutí zplošťují kód. `elseAfterExit` a `elseifAfterExit` odstraní `else` a `elseif`, před kterými každá větev odejde přes `return`, `throw`, `break` nebo `continue`; `trailingIf` otočí `if`, který obaluje konec funkce nebo cyklu, na časný návrat, od tolika příkazů v těle, kolik říká parametr `trailingIfMinStatements`. Odsazení řádků, které tím vystoupí o úroveň, srovná sekce [indentation |indentation], proto ji ukázka nastavuje taky:
+
+```neon
+controlFlow:
+	elseif: oneWord
+	elseAfterExit: forbidden
+	elseifAfterExit: forbidden
+	ifReturningBoolean: forbidden
+indentation:
+	unit: tab
+```
+
+```php .[before]
+function discount(int $count): float
+{
+	if ($count > 10) {
+		return 0.1;
+	} else if ($count > 5) {  // Useless elseif, because the branches before it always leave. // An `else if` must be written `elseif`.
+		return 0.05;
+	} else {  // Useless else, because the branches before it always leave.
+		return 0.0;  // Expected the statement indented by 1 tab, 2 tabs found.
+	}
+}
+
+function isBig(int $count): bool
+{
+	if ($count > 100) {  // Useless `if`, because its condition itself is the result.
+		return true;
+	}
+	return false;
+}
+```
+
+```php .[after]
+function discount(int $count): float
+{
+	if ($count > 10) {
+		return 0.1;
+	}
+	if ($count > 5) {
+		return 0.05;
+	}
+	return 0.0;
+}
+
+function isBig(int $count): bool
+{
+	return $count > 100;
+}
+```
+
+
+controlFlow.trailingIf
+======================
+
+An `if` ending a function or a loop body becomes a guard that leaves early, and an `else` that leaves becomes the first branch.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` · pokrývá `SlevomatCodingStandard.ControlStructures.EarlyExit` .[decision-facts]
+
+
+controlFlow.trailingIfMinStatements
+===================================
+
+The statements the body of a trailing `if` has at least for it to become a guard.
+
+- počet od 1
+
+Parametr, výchozí `2` · standardy: perCs `2`, psr12 `2`, nette `2`, symfony `2` · pokrývá `SlevomatCodingStandard.ControlStructures.EarlyExit` .[decision-facts]
+
+
+controlFlow.elseif
+==================
+
+The keyword of a branch that follows `if`.
+
+- `oneWord` nebo 'elseif': `elseif` in one word, never `else if`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `oneWord`, psr12 `oneWord`, nette `oneWord`, symfony `oneWord` · pokrývá `elseif`, `PSR2.ControlStructures.ElseIfDeclaration` .[decision-facts]
+
+
+controlFlow.switchFallThrough
+=============================
+
+The text of the line comment a non-empty `case` falling through to the next one carries, without the `//`, matched case-insensitively; a case that cannot fall through loses it.
+
+- text
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `no break`, psr12 `no break`, nette `break omitted`, symfony `no break` · pokrývá `no_break_comment`, `PSR2.ControlStructures.SwitchDeclaration` .[decision-facts]
+
+
+controlFlow.ifReturningBoolean
+==============================
+
+`if ($a > 1) { return true; } return false;` is `return $a > 1;`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `SlevomatCodingStandard.ControlStructures.UselessIfConditionWithReturn` .[decision-facts]
+
+
+controlFlow.switchCaseTerminator
+================================
+
+What ends `case` and `default`.
+
+- `colon` nebo ':': a colon, never a semicolon
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `colon`, psr12 `colon`, nette `colon`, symfony `colon` · pokrývá `switch_case_semicolon_to_colon`, `PSR2.ControlStructures.SwitchDeclaration` .[decision-facts]
+
+
+controlFlow.ifReturningOneOfTwoValues
+=====================================
+
+`if ($c) { return 1; } else { return 2; }` is `return $c ? 1 : 2;`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` · pokrývá `SlevomatCodingStandard.ControlStructures.RequireTernaryOperator` .[decision-facts]
+
+
+controlFlow.elseAfterExit
+=========================
+
+An `else` after branches that always leave, by `return`, `throw`, `break`, `continue`, `exit` or `goto`, whose statements then follow the `if`, and an empty `else`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `forbidden` · pokrývá `no_useless_else`, `SlevomatCodingStandard.ControlStructures.EarlyExit` .[decision-facts]
+
+
+controlFlow.elseifAfterExit
+===========================
+
+An `elseif` after an `if` that always leaves, which becomes an `if` of its own with the later branches.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` · pokrývá `no_superfluous_elseif`, `no_useless_else`, `SlevomatCodingStandard.ControlStructures.EarlyExit` .[decision-facts]
+
+
+controlFlow.globalStatement
+===========================
+
+Reports the `global` statement.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `Squiz.PHP.GlobalKeyword` .[decision-facts]

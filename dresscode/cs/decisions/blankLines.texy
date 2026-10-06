@@ -1,0 +1,945 @@
+Prázdné řádky
+*************
+
+.[perex]
+Sekce `blankLines` rozhoduje, kolik prázdných řádků stojí na každém místě, kde na tom záleží: v hlavičce souboru kolem `namespace` a importů, ve třídě mezi metodami a členy, za otevírací a před zavírací závorkou bloku a kolem příkazů jako `return`.
+
+Prázdné řádky dělají soubor čitelným na první pohled: hlavička oddělená od kódu, metody od sebe výrazně, vlastnosti a konstanty pohromadě, komentář přilepený k tomu, co popisuje. Každé takové místo má vlastní klíč a hodnotou je počet řádků, rozsah nebo `keep`, které místo nechá, jak je. Rozsah se hodí tam, kde snesete dvojí zápis: `betweenMembers: [0, 1]` dovolí psát vlastnosti těsně pod sebe i oddělené jedním řádkem, ale dva už ne. Počet, který do rozsahu nespadá, se posune k nejbližší povolené hodnotě.
+
+```neon
+blankLines:
+	afterImports: 1
+	beforeFirstMember: 0
+	betweenMethods: 2
+	betweenMembers: [0, 1]
+	afterBlockOpeningBrace: 0
+	beforeStatement:
+		return: 1
+```
+
+Prázdné řádky se počítají nad komentářem, který stojí na vlastních řádcích nad kódem, protože komentář patří k tomu, co je pod ním. Kam se lámou řádky u složených závorek, rozhoduje sekce [braces |braces]; tahle sekce rozhoduje jen o prázdných řádcích kolem nich.
+
+```php .[before]
+class Cart
+{
+
+	private array $items = [];  // Expected no blank line before the property, 1 found.
+	public function add(Item $item): void  // Expected 2 blank lines before the method, 0 found.
+	{
+		$this->items[] = $item;
+	}
+
+	public function total(): int  // Expected 2 blank lines before the method, 1 found.
+	{
+		return array_sum($this->items);
+	}
+}
+```
+
+```php .[after]
+class Cart
+{
+	private array $items = [];
+
+
+	public function add(Item $item): void
+	{
+		$this->items[] = $item;
+	}
+
+
+	public function total(): int
+	{
+		return array_sum($this->items);
+	}
+}
+```
+
+
+blankLines.afterOpeningTag
+==========================
+
+After the line of `<?php`, which then carries no code; a file with markup outside PHP keeps its tag.
+
+- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `1`, psr12 `1`, nette `keep`, symfony `1` · pokrývá `blank_line_after_opening_tag`, `no_blank_lines_after_class_opening`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Files.FileHeader`, `PSR12.Files.OpenTag`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Classes.ConstantSpacing` .[decision-facts]
+
+```neon
+blankLines:
+	afterOpeningTag: 1
+```
+
+```php .[before]
+<?php  // Expected 1 blank line before the declare, 0 found.
+declare(strict_types=1);
+```
+
+```php .[after]
+<?php
+
+declare(strict_types=1);
+```
+
+Styl, který píše `declare(strict_types=1)` na řádek otevíracího tagu, nastaví `keep`; tak to dělá standard `nette`.
+
+
+blankLines.beforeNamespace
+==========================
+
+Before the namespace declaration and, where a doc comment of the file stands above it, also between the two.
+
+- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `1`, psr12 `1`, nette `1`, symfony `1` · pokrývá `blank_lines_before_namespace`, `no_blank_lines_after_class_opening`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Files.FileHeader`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Classes.ConstantSpacing` .[decision-facts]
+
+```neon
+blankLines:
+	beforeNamespace: 1
+```
+
+```php .[before]
+<?php
+
+declare(strict_types=1);
+namespace App;  // Expected 1 blank line before the namespace, 0 found.
+```
+
+```php .[after]
+<?php
+
+declare(strict_types=1);
+
+namespace App;
+```
+
+
+blankLines.afterNamespace
+=========================
+
+After an unbraced namespace declaration.
+
+- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `1`, psr12 `1`, nette `1`, symfony `1` · pokrývá `blank_line_after_namespace`, `no_blank_lines_after_class_opening`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Files.FileHeader`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Classes.ConstantSpacing` .[decision-facts]
+
+```neon
+blankLines:
+	afterNamespace: 1
+```
+
+```php .[before]
+<?php
+
+namespace App;
+use App\Model\User;  // Expected 1 blank line before the import, 0 found.
+```
+
+```php .[after]
+<?php
+
+namespace App;
+
+use App\Model\User;
+```
+
+
+blankLines.afterImports
+=======================
+
+After the last import, before the rest of the code.
+
+- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `1`, psr12 `1`, nette `1`, symfony `1` · pokrývá `no_blank_lines_after_class_opening`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Files.FileHeader`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Classes.ConstantSpacing` .[decision-facts]
+
+```neon
+blankLines:
+	afterImports: 1
+```
+
+```php .[before]
+<?php
+
+namespace App;
+
+use App\Model\User;
+$user = new User;  // Expected 1 blank line before the statement, 0 found.
+```
+
+```php .[after]
+<?php
+
+namespace App;
+
+use App\Model\User;
+
+$user = new User;
+```
+
+
+blankLines.betweenImportKinds
+=============================
+
+Between the imports of classes, functions and constants; imports of one kind never have a blank line between them.
+
+- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `1`, psr12 `1`, nette `0`, symfony `1` · pokrývá `blank_line_between_import_groups`, `no_blank_lines_after_class_opening`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Files.FileHeader`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Classes.ConstantSpacing` .[decision-facts]
+
+```neon
+blankLines:
+	betweenImportKinds: 1
+```
+
+```php .[before]
+<?php
+
+namespace App;
+
+use App\Model\User;
+use function App\format;  // Expected 1 blank line before the import, 0 found.
+```
+
+```php .[after]
+<?php
+
+namespace App;
+
+use App\Model\User;
+
+use function App\format;
+```
+
+
+blankLines.beforeDeclaration
+============================
+
+Before a class, interface, trait, enum or function that follows the namespace or the imports, in place of `afterNamespace` and `afterImports`.
+
+- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `2`, symfony `keep` · pokrývá `no_blank_lines_after_class_opening`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Files.FileHeader`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Classes.ConstantSpacing` .[decision-facts]
+
+Nette Coding Standard tu chce dva řádky, aby deklarace od hlavičky odstoupila víc než kód. Kde je klíč `keep`, řídí se deklarace klíči `afterNamespace` a `afterImports` stejně jako ostatní kód.
+
+```neon
+blankLines:
+	beforeDeclaration: 2
+```
+
+```php .[before]
+<?php
+
+namespace App;
+
+use App\Model\User;
+
+class Cart  // Expected 2 blank lines before the class, 1 found.
+{
+}
+```
+
+```php .[after]
+<?php
+
+namespace App;
+
+use App\Model\User;
+
+
+class Cart
+{
+}
+```
+
+
+blankLines.betweenDeclarations
+==============================
+
+Before and after a class, interface, trait, enum or function declared among statements, where the header above it does not decide.
+
+- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `[1, 2]`, symfony `[0, 1]` · pokrývá `no_blank_lines_after_class_opening`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Files.FileHeader`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Classes.ConstantSpacing`, `Squiz.WhiteSpace.FunctionSpacing` .[decision-facts]
+
+Patří sem i deklarace uvnitř podmínky. Standard `nette` dovoluje jeden nebo dva řádky, `symfony` žádný nebo jeden.
+
+```neon
+blankLines:
+	betweenDeclarations: 2
+```
+
+```php .[before]
+function format(string $s): string
+{
+	return trim($s);
+}
+class Cart  // Expected 2 blank lines before the class, 0 found.
+{
+}
+echo format('x');  // Expected 2 blank lines after the class, 0 found.
+```
+
+```php .[after]
+function format(string $s): string
+{
+	return trim($s);
+}
+
+
+class Cart
+{
+}
+
+
+echo format('x');
+```
+
+
+blankLines.betweenMethods
+=========================
+
+Before and after a method; the first and the last method of a class take `beforeFirstMethod` and `afterLastMethod`.
+
+- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `2`, symfony `1` · pokrývá `no_blank_lines_after_class_opening`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Files.FileHeader`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Classes.ConstantSpacing`, `Squiz.WhiteSpace.FunctionSpacing` .[decision-facts]
+
+```neon
+blankLines:
+	betweenMethods: 1
+```
+
+```php .[before]
+class Cart
+{
+	public function add(Item $item): void
+	{
+	}
+
+
+	public function total(): int  // Expected 1 blank line before the method, 2 found.
+	{
+	}
+}
+```
+
+```php .[after]
+class Cart
+{
+	public function add(Item $item): void
+	{
+	}
+
+	public function total(): int
+	{
+	}
+}
+```
+
+
+blankLines.betweenInterfaceMethods
+==================================
+
+In place of `betweenMethods` among the methods of an interface.
+
+- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `1`, symfony `1` · pokrývá `no_blank_lines_after_class_opening`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Files.FileHeader`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Classes.ConstantSpacing` .[decision-facts]
+
+Metody rozhraní nemají tělo, a stačí jim proto menší odstup než metodám třídy.
+
+```neon
+blankLines:
+	betweenInterfaceMethods: 0
+```
+
+```php .[before]
+interface Storage
+{
+	public function read(string $key): mixed;
+
+	public function write(string $key, mixed $value): void;  // Expected no blank line before the method, 1 found.
+}
+```
+
+```php .[after]
+interface Storage
+{
+	public function read(string $key): mixed;
+	public function write(string $key, mixed $value): void;
+}
+```
+
+
+blankLines.beforeFirstMethod
+============================
+
+Before a method that is the first member of its class.
+
+- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `0`, psr12 `0`, nette `0`, symfony `0` · pokrývá `no_blank_lines_after_class_opening`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Classes.OpeningBraceSpace`, `PSR12.Files.FileHeader`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Classes.ConstantSpacing`, `Squiz.WhiteSpace.FunctionSpacing` .[decision-facts]
+
+```neon
+blankLines:
+	beforeFirstMethod: 1
+```
+
+```php .[before]
+class Cart
+{
+	public function add(Item $item): void  // Expected 1 blank line before the method, 0 found.
+	{
+	}
+}
+```
+
+```php .[after]
+class Cart
+{
+
+	public function add(Item $item): void
+	{
+	}
+}
+```
+
+
+blankLines.afterLastMethod
+==========================
+
+After a method that is the last member of its class.
+
+- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `0`, psr12 `0`, nette `0`, symfony `0` · pokrývá `no_blank_lines_after_class_opening`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Files.FileHeader`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Classes.ConstantSpacing`, `Squiz.WhiteSpace.FunctionSpacing` .[decision-facts]
+
+```neon
+blankLines:
+	afterLastMethod: 1
+```
+
+```php .[before]
+class Cart
+{
+	public function add(Item $item): void
+	{
+	}
+}  // Expected 1 blank line after the method, 0 found.
+```
+
+```php .[after]
+class Cart
+{
+	public function add(Item $item): void
+	{
+	}
+
+}
+```
+
+
+blankLines.beforeFirstMember
+============================
+
+Before the first member, unless it is a method, which takes `beforeFirstMethod`.
+
+- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `0`, psr12 `0`, nette `0`, symfony `0` · pokrývá `no_blank_lines_after_class_opening`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Classes.OpeningBraceSpace`, `PSR12.Files.FileHeader`, `PSR12.Traits.UseDeclaration`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Classes.ConstantSpacing`, `SlevomatCodingStandard.Classes.EmptyLinesAroundClassBraces` .[decision-facts]
+
+```neon
+blankLines:
+	beforeFirstMember: 1
+```
+
+```php .[before]
+class Cart
+{
+	private array $items = [];  // Expected 1 blank line before the property, 0 found.
+}
+```
+
+```php .[after]
+class Cart
+{
+
+	private array $items = [];
+}
+```
+
+
+blankLines.afterLastMember
+==========================
+
+After the last member, unless it is a method, which takes `afterLastMethod`.
+
+- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `0`, psr12 `0`, nette `0`, symfony `0` · pokrývá `no_blank_lines_after_class_opening`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Files.FileHeader`, `PSR12.Traits.UseDeclaration`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Classes.ConstantSpacing`, `SlevomatCodingStandard.Classes.EmptyLinesAroundClassBraces` .[decision-facts]
+
+```neon
+blankLines:
+	afterLastMember: 1
+```
+
+```php .[before]
+class Cart
+{
+	private array $items = [];
+}  // Expected 1 blank line before the closing brace, 0 found.
+```
+
+```php .[after]
+class Cart
+{
+	private array $items = [];
+
+}
+```
+
+
+blankLines.betweenTraitUses
+===========================
+
+Between the trait uses of a class.
+
+- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `0`, psr12 `0`, nette `0`, symfony `keep` · pokrývá `no_blank_lines_after_class_opening`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Files.FileHeader`, `PSR12.Traits.UseDeclaration`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Classes.ConstantSpacing`, `SlevomatCodingStandard.Classes.TraitUseSpacing` .[decision-facts]
+
+```neon
+blankLines:
+	betweenTraitUses: 0
+```
+
+```php .[before]
+class Cart
+{
+	use Countable;
+
+	use Serializable;  // Expected no blank line before the trait use, 1 found.
+}
+```
+
+```php .[after]
+class Cart
+{
+	use Countable;
+	use Serializable;
+}
+```
+
+
+blankLines.afterTraitUses
+=========================
+
+Before the first member after the trait uses, a method included.
+
+- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `1`, psr12 `1`, nette `1`, symfony `keep` · pokrývá `no_blank_lines_after_class_opening`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Files.FileHeader`, `PSR12.Traits.UseDeclaration`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Classes.ConstantSpacing`, `SlevomatCodingStandard.Classes.TraitUseSpacing` .[decision-facts]
+
+```neon
+blankLines:
+	afterTraitUses: 1
+```
+
+```php .[before]
+class Cart
+{
+	use Countable;
+	private array $items = [];  // Expected 1 blank line before the property, 0 found.
+}
+```
+
+```php .[after]
+class Cart
+{
+	use Countable;
+
+	private array $items = [];
+}
+```
+
+
+blankLines.betweenMembers
+=========================
+
+Between properties, constants and enum cases without a doc comment or an attribute.
+
+- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `[0, 1]`, symfony `keep` · pokrývá `no_blank_lines_after_class_opening`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Files.FileHeader`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Classes.ConstantSpacing`, `SlevomatCodingStandard.Classes.PropertySpacing` .[decision-facts]
+
+Rozsah dovolí členy psát těsně pod sebe i oddělené jedním řádkem:
+
+```neon
+blankLines:
+	betweenMembers: [0, 1]
+```
+
+```php .[before]
+class Cart
+{
+	private array $items = [];
+	private int $count = 0;
+
+
+	private ?Customer $customer = null;  // Expected at most 1 blank line before the property, 2 found.
+}
+```
+
+```php .[after]
+class Cart
+{
+	private array $items = [];
+	private int $count = 0;
+
+	private ?Customer $customer = null;
+}
+```
+
+S pevným počtem musí být odstup všude stejný:
+
+```neon
+blankLines:
+	betweenMembers: 1
+```
+
+```php .[before]
+class Cart
+{
+	private array $items = [];
+	private int $count = 0;  // Expected 1 blank line before the property, 0 found.
+}
+```
+
+```php .[after]
+class Cart
+{
+	private array $items = [];
+
+	private int $count = 0;
+}
+```
+
+
+blankLines.beforeDocumentedMember
+=================================
+
+Before a property, constant or enum case with a doc comment or an attribute.
+
+- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `1`, symfony `keep` · pokrývá `no_blank_lines_after_class_opening`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Files.FileHeader`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Classes.ConstantSpacing`, `SlevomatCodingStandard.Classes.PropertySpacing` .[decision-facts]
+
+Dokumentační komentář potřebuje odstup od předchozího člena, aby bylo vidět, ke kterému patří.
+
+```neon
+blankLines:
+	beforeDocumentedMember: 1
+```
+
+```php .[before]
+class Cart
+{
+	private array $items = [];
+	/** @var int<0, max> */
+	private int $count = 0;  // Expected 1 blank line before the property, 0 found.
+}
+```
+
+```php .[after]
+class Cart
+{
+	private array $items = [];
+
+	/** @var int<0, max> */
+	private int $count = 0;
+}
+```
+
+
+blankLines.afterPhpdoc
+======================
+
+Between a doc comment or an attribute and the declaration it belongs to.
+
+- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `0`, symfony `0` · pokrývá `no_blank_lines_after_class_opening`, `no_blank_lines_after_phpdoc`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Files.FileHeader`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Attributes.AttributeAndTargetSpacing`, `SlevomatCodingStandard.Classes.ConstantSpacing` .[decision-facts]
+
+Dokumentační komentář hned za `<?php` na začátku souboru patří souboru, takže se ho klíč netýká.
+
+```neon
+blankLines:
+	afterPhpdoc: 0
+```
+
+```php .[before]
+class Cart
+{
+	/**
+	 * Adds an item.
+	 */
+
+	public function add(Item $item): void  // Expected no blank line after the doc comment, 1 found.
+	{
+	}
+}
+```
+
+```php .[after]
+class Cart
+{
+	/**
+	 * Adds an item.
+	 */
+	public function add(Item $item): void
+	{
+	}
+}
+```
+
+
+blankLines.afterBlockOpeningBrace
+=================================
+
+After the opening brace of a block.
+
+- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `0`, symfony `keep` · pokrývá `no_blank_lines_after_class_opening`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Files.FileHeader`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Classes.ConstantSpacing`, `Squiz.WhiteSpace.FunctionOpeningBraceSpace` .[decision-facts]
+
+```neon
+blankLines:
+	afterBlockOpeningBrace: 0
+```
+
+```php .[before]
+function add(Item $item): void
+{
+
+	$this->items[] = $item;  // Expected no blank line after the opening brace, 1 found.
+}
+```
+
+```php .[after]
+function add(Item $item): void
+{
+	$this->items[] = $item;
+}
+```
+
+
+blankLines.beforeBlockClosingBrace
+==================================
+
+Before the closing brace of a block.
+
+- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `[0, 1]`, symfony `keep` · pokrývá `no_blank_lines_after_class_opening`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Files.FileHeader`, `PSR2.Methods.FunctionClosingBrace`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Classes.ConstantSpacing`, `Squiz.WhiteSpace.ControlStructureSpacing` .[decision-facts]
+
+Prázdný řádek před `}` bývá záměrný oddělovač větví v řetězu `} catch` nebo `} else`; o něm rozhoduje `betweenBranches`.
+
+```neon
+blankLines:
+	beforeBlockClosingBrace: 0
+```
+
+```php .[before]
+function add(Item $item): void
+{
+	$this->items[] = $item;
+
+}  // Expected no blank line before the closing brace, 1 found.
+```
+
+```php .[after]
+function add(Item $item): void
+{
+	$this->items[] = $item;
+}
+```
+
+
+blankLines.betweenBranches
+==========================
+
+Before the closing brace of a branch of `if` or `try` that `else`, `elseif`, `catch` or `finally` follows, in place of `beforeBlockClosingBrace`.
+
+- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `lastStatementSetApart`: one where the last statement of the branch stands apart, which would otherwise read as belonging to the next one, the others kept
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `lastStatementSetApart`, symfony `keep` · pokrývá `no_blank_lines_after_class_opening`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Files.FileHeader`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Classes.ConstantSpacing` .[decision-facts]
+
+Hodnota `lastStatementSetApart` dá prázdný řádek za větev, jejíž poslední příkaz je od předchozích oddělený prázdným řádkem; bez něj by se takový příkaz opticky přilepil k `} else` pod sebou. Ostatní větve téhož řetězu nechá, jak jsou. Tuto hodnotu volí `nette`.
+
+```neon
+blankLines:
+	betweenBranches: lastStatementSetApart
+```
+
+```php .[before]
+if ($order->isPaid()) {
+	$this->ship($order);
+
+	return;
+} elseif ($order->isExpired()) {  // Expected 1 blank line before the closing brace, 0 found.
+	$this->cancel($order);
+} else {
+	$this->remind($order);
+}
+```
+
+```php .[after]
+if ($order->isPaid()) {
+	$this->ship($order);
+
+	return;
+
+} elseif ($order->isExpired()) {
+	$this->cancel($order);
+} else {
+	$this->remind($order);
+}
+```
+
+
+blankLines.betweenCases
+=======================
+
+Before a `case` or `default` of a `switch` that follows a case with statements, below a comment right under those statements.
+
+- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `lastStatementSetApart`: one where the last statement of the branch stands apart, which would otherwise read as belonging to the next one, the others kept
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `lastStatementSetApart`, symfony `keep` · pokrývá `no_blank_lines_after_class_opening`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Files.FileHeader`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Classes.ConstantSpacing` .[decision-facts]
+
+Skupina `case 1:` `case 2:` bez příkazů zůstává pohromadě. Komentář hned pod příkazy, třeba `// no break`, patří k případu nad ním, takže prázdný řádek jde pod něj; komentář oddělený prázdným řádkem patří k `case` pod ním.
+
+```neon
+blankLines:
+	betweenCases: lastStatementSetApart
+```
+
+```php .[before]
+switch ($status) {
+	case Status::New:
+		$this->validate($order);
+
+		break;
+	case Status::Paid:  // Expected 1 blank line before the case, 0 found.
+		$this->ship($order);
+		break;
+}
+```
+
+```php .[after]
+switch ($status) {
+	case Status::New:
+		$this->validate($order);
+
+		break;
+
+	case Status::Paid:
+		$this->ship($order);
+		break;
+}
+```
+
+
+blankLines.beforeStatement
+==========================
+
+Before a statement of the kind, `yield` meaning a statement made of a `yield` expression.
+
+- mapa `break`, `continue`, `do`, `for`, `foreach`, `if`, `return`, `switch`, `throw`, `try`, `while`, `yield` na hodnotu z následujících, položka se odvolá hodnotou `keep`:
+	- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `{return: [1, null]}` · pokrývá `blank_line_before_statement`, `no_blank_lines_after_class_opening`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Files.FileHeader`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Classes.ConstantSpacing`, `SlevomatCodingStandard.ControlStructures.BlockControlStructureSpacing`, `SlevomatCodingStandard.ControlStructures.JumpStatementsSpacing` .[decision-facts]
+
+Klíč se neuplatní, když je sousedním příkazem deklarace třídy nebo funkce, `use`, `namespace`, `declare` nebo HTML mimo PHP tagy; odstup od nich řídí klíče hlavičky a `betweenDeclarations`. Příkaz, který je v bloku první, se řídí `afterBlockOpeningBrace`.
+
+```neon
+blankLines:
+	beforeStatement:
+		return: 1+
+```
+
+```php .[before]
+function total(array $items): int
+{
+	$sum = array_sum($items);
+	return $sum;  // Expected at least 1 blank line before the return, 0 found.
+}
+```
+
+```php .[after]
+function total(array $items): int
+{
+	$sum = array_sum($items);
+
+	return $sum;
+}
+```
+
+
+blankLines.afterStatement
+=========================
+
+After a statement of the kind, before the next statement.
+
+- mapa `break`, `continue`, `do`, `for`, `foreach`, `if`, `return`, `switch`, `throw`, `try`, `while`, `yield` na hodnotu z následujících, položka se odvolá hodnotou `keep`:
+	- počet od 0, rozsah `[1, 2]` nebo otevřený `[1, null]`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` · pokrývá `no_blank_lines_after_class_opening`, `no_extra_blank_lines`, `single_line_after_imports`, `PSR12.Files.FileHeader`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Classes.ConstantSpacing`, `SlevomatCodingStandard.ControlStructures.BlockControlStructureSpacing`, `SlevomatCodingStandard.ControlStructures.JumpStatementsSpacing` .[decision-facts]
+
+```neon
+blankLines:
+	afterStatement:
+		if: 1
+```
+
+```php .[before]
+if ($item->isFree()) {
+	return;
+}
+$this->items[] = $item;  // Expected 1 blank line after the if, 0 found.
+```
+
+```php .[after]
+if ($item->isFree()) {
+	return;
+}
+
+$this->items[] = $item;
+```

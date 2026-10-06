@@ -1,0 +1,105 @@
+Funkce
+******
+
+.[perex]
+Sekce `functions` rozhoduje o funkcích a closure (anonymních funkcích): jestli se closure, která jen vrací jeden výraz, píše jako arrow funkce, jestli closure bez `$this` dostane `static`, a co s `return` na konci funkce, s výchozí hodnotou parametru, ke které se nikdy nedojde, a s funkcí deklarovanou uvnitř jiné funkce.
+
+Zápis signatury a závorek patří jiným sekcím: mezera za `function` a `fn` sekci [spacing |spacing], složená závorka closure sekci [braces |braces], typy parametrů sekci [types |types].
+
+```neon
+functions:
+	closureReturningOneExpression: forbidden
+	trailingBareReturn: forbidden
+	unreachableParameterDefault: forbidden
+```
+
+```php .[before]
+$names = array_map(function ($user) {  // The closure returning a single expression must be written as an arrow function.
+	return $user->name;
+}, $users);
+
+function log(string $message, $level = 'info', $context)  // Useless default value of `$level`, because a required parameter follows.
+{
+	echo $message;
+	return;  // Useless return at the end of the function.
+}
+```
+
+```php .[after]
+$names = array_map(fn($user) => $user->name, $users);
+
+function log(string $message, $level, $context)
+{
+	echo $message;
+}
+```
+
+Closure se na arrow funkci přepíše jen tam, kde je to totéž: nezachytává proměnnou referencí, nesahá na proměnnou, kterou nejmenuje, a neztratí se žádný komentář.
+
+
+functions.trailingBareReturn
+============================
+
+`return;` as the last statement.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `forbidden` · pokrývá `no_useless_return` .[decision-facts]
+
+
+functions.closureReturningOneExpression
+=======================================
+
+A closure whose body is a single `return`, which is an arrow function where that is equivalent: no variable captured by reference, none reached by a name it does not spell out, no comment lost.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `SlevomatCodingStandard.Functions.RequireArrowFunction` .[decision-facts]
+
+
+functions.closureReturningOneExpressionNested
+=============================================
+
+Such a closure holding another closure or arrow function.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `SlevomatCodingStandard.Functions.RequireArrowFunction` .[decision-facts]
+
+
+functions.innerFunctions
+========================
+
+No function declared inside a function.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `Squiz.PHP.InnerFunctions` .[decision-facts]
+
+
+functions.closureWithoutThis
+============================
+
+Declares a closure that does not use `$this` as `static`.
+
+- `static`: declares a closure that does not use `$this` as `static`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` · pokrývá `static_lambda`, `SlevomatCodingStandard.Functions.StaticClosure` .[decision-facts]
+
+Oprava je riziková (risky fix): closure se dá k objektu přivázat i jinde, přes `bindTo()` nebo `Closure::bind()`, a to z jednoho souboru vidět není. Udělá se, až rozhodnutí uvedete v klíči [`fixRisky` |/configuration#risky-fixes].
+
+
+functions.unreachableParameterDefault
+=====================================
+
+A default a required parameter after it makes unreachable.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `no_unreachable_default_argument_value`, `PEAR.Functions.ValidDefaultValue`, `SlevomatCodingStandard.Functions.UselessParameterDefaultValue` .[decision-facts]

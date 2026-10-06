@@ -1,0 +1,449 @@
+Víceřádkové konstrukce
+**********************
+
+.[perex]
+Sekce `multiline` rozhoduje o konstrukcích rozepsaných na víc řádků: signatuře, volání, poli, podmínce, řetězu volání a ternárním operátoru, o tom, kam se při zalomení řádku dává operátor, a o čárce za poslední položkou víceřádkového seznamu.
+
+Konstrukce je rozepsaná, když se v ní láme řádek, ať ji tak napsal autor, nebo ji zlomila délka řádku. Hodnota `perLine` pak dá každé položce vlastní řádek a závorkám taky; PER Coding Style to chce u signatury, volání, podmínky, řetězu i pole. Signaturu delší než [`file.maxLineLength` |file#file.maxLineLength] zlomí `signatureOverMaxLength`, podmínku na příliš širokém řádku `condition`. A každé místo, kde stojí seznam, má vlastní klíč pro čárku na konci: pole, argumenty, parametry, větve `match`, `use` u closure, skupinový import a `list()`.
+
+```neon
+multiline:
+	signature: perLine
+	call: perLine
+	array: perLine
+	condition: perLine
+	operatorPosition:
+		condition: lineStart
+	trailingComma:
+		parameter: required
+		argument: required
+		array: required
+```
+
+```php .[before]
+class Cart
+{
+	public function __construct(private Clock $clock,  // Expected a line break before the parameter, because the signature spans several lines.
+		private Logger $logger, private Tax $tax)  // A multi-line parameter list must end with a trailing comma.
+	{
+	}
+
+	public function add(string $name, int $count): void
+	{
+		$this->logger->log('added', [
+			'name' => $name, 'count' => $count,  // Expected a line break before the array item, because the array spans several lines.
+			'time' => $this->clock->now()]);  // A multi-line array must end with a trailing comma.
+		if ($count > 10 &&  // Expected a line break before the expression, because the condition is not in the `perLine` shape.
+			$name !== '') {
+			$this->tax->apply($name,  // Expected a line break before the argument, because the arguments span several lines.
+				$count);  // A multi-line argument list must end with a trailing comma.
+		}
+	}
+}
+```
+
+```php .[after]
+class Cart
+{
+	public function __construct(
+		private Clock $clock,
+		private Logger $logger,
+		private Tax $tax,
+	)
+	{
+	}
+
+	public function add(string $name, int $count): void
+	{
+		$this->logger->log('added', [
+			'name' => $name,
+			'count' => $count,
+			'time' => $this->clock->now(),
+		]);
+		if (
+			$count > 10
+			&& $name !== ''
+		) {
+			$this->tax->apply(
+				$name,
+				$count,
+			);
+		}
+	}
+}
+```
+
+Ukázka nastavuje jen sekci `multiline`, a proto `{` konstruktoru zůstala, kde byla; kam patří, rozhoduje [`braces.afterMultilineSignature` |braces#braces.afterMultilineSignature]. Řádky, které rozepsáním vzniknou, odsadí sekce [indentation |indentation].
+
+
+Čárka na konci seznamu
+======================
+
+Čárka za poslední položkou víceřádkového seznamu má praktický důvod: přidání další položky změní v diffu jeden řádek, ne dva. U `required` rozhoduje zavírací závorka: když stojí na vlastním řádku, čárka tam patří, když stojí na řádku poslední položky, čárka tam být nesmí. `optional` ji nechá na autorovi, `forbidden` ji odstraní. Ze seznamu na jednom řádku se čárka odstraní při každé z těch tří hodnot, jen `keep` nechá daný druh seznamu úplně být.
+
+```neon
+multiline:
+	trailingComma:
+		array: required
+```
+
+```php .[before]
+$colors = [
+	'red',
+	'green'
+];  // A multi-line array must end with a trailing comma.
+
+$sizes = ['S', 'M', 'L',];  // A one-line list must not end with a trailing comma.
+
+$matrix = [
+	[1, 2],
+	[3, 4],];  // A trailing comma must not precede a closing bracket on the line of the last item.
+```
+
+```php .[after]
+$colors = [
+	'red',
+	'green',
+];
+
+$sizes = ['S', 'M', 'L'];
+
+$matrix = [
+	[1, 2],
+	[3, 4]];
+```
+
+Poslední případ ukazuje, kdo rozhoduje: pole je rozepsané na řádky, ale jeho zavírací závorka stojí na řádku poslední položky, takže tam čárka nepatří. Přesunout závorku na vlastní řádek je práce klíče `multiline.array`; teprve pak sem čárka přijde.
+
+
+multiline.array
+===============
+
+The items of an array spread over lines, by its author or for its width, the opening bracket staying on the line of the code before it.
+
+- `perLine`: every item on a line of its own and the closing bracket on a line of its own
+- `asWritten`: the items stand as their author spread them, the opening bracket staying on the line before and each comma with its item
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `perLine`, psr12 `keep`, nette `asWritten`, symfony `keep` .[decision-facts]
+
+
+multiline.arrayOverWidth
+========================
+
+The width from bracket to bracket over which an array of several items written on one line is spread over lines, more than five items filling its lines where `array` is `asWritten`.
+
+- počet od 1
+- `none`: never spread for its width
+
+Parametr, výchozí `none` · standardy: perCs `none`, psr12 `none`, nette `130`, symfony `none` .[decision-facts]
+
+
+multiline.trailingComma.array
+=============================
+
+The trailing comma of a multi-line array, a destructuring written with `[...]` included, which a list on one line never has.
+
+- `required`: there where the closing bracket stands on its own line, never where it follows the last item
+- `forbidden`: never there
+- `optional`: as the author wrote it
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `required`, psr12 `keep`, nette `required`, symfony `required` · pokrývá `no_trailing_comma_in_singleline`, `trailing_comma_in_multiline`, `SlevomatCodingStandard.Arrays.TrailingArrayComma` .[decision-facts]
+
+
+multiline.trailingComma.argument
+================================
+
+The trailing comma of the multi-line arguments of a call and the variables of `isset()` and `unset()`, which a list on one line never has.
+
+- `required`: there where the closing bracket stands on its own line, never where it follows the last item
+- `forbidden`: never there
+- `optional`: as the author wrote it
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `required`, psr12 `keep`, nette `required`, symfony `optional` · pokrývá `no_trailing_comma_in_singleline`, `SlevomatCodingStandard.Functions.RequireTrailingCommaInCall` .[decision-facts]
+
+```neon
+multiline:
+	trailingComma:
+		argument: required
+```
+
+```php .[before]
+mail(
+	$to,
+	$subject
+);  // A multi-line argument list must end with a trailing comma.
+```
+
+```php .[after]
+mail(
+	$to,
+	$subject,
+);
+```
+
+
+multiline.trailingComma.parameter
+=================================
+
+The trailing comma of a multi-line list of parameters, which a list on one line never has.
+
+- `required`: there where the closing bracket stands on its own line, never where it follows the last item
+- `forbidden`: never there
+- `optional`: as the author wrote it
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `required`, psr12 `keep`, nette `required`, symfony `required` · pokrývá `SlevomatCodingStandard.Functions.RequireTrailingCommaInDeclaration` .[decision-facts]
+
+
+multiline.trailingComma.matchArm
+================================
+
+The trailing comma of the arms of a multi-line `match`, which a list on one line never has.
+
+- `required`: there where the closing bracket stands on its own line, never where it follows the last item
+- `forbidden`: never there
+- `optional`: as the author wrote it
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `required`, psr12 `keep`, nette `keep`, symfony `required` .[decision-facts]
+
+
+multiline.trailingComma.closureUse
+==================================
+
+The trailing comma of a multi-line `use` of a closure, which a list on one line never has.
+
+- `required`: there where the closing bracket stands on its own line, never where it follows the last item
+- `forbidden`: never there
+- `optional`: as the author wrote it
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `required`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+multiline.trailingComma.import
+==============================
+
+The trailing comma of the names of a multi-line group use, which a list on one line never has.
+
+- `required`: there where the closing bracket stands on its own line, never where it follows the last item
+- `forbidden`: never there
+- `optional`: as the author wrote it
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `optional`, psr12 `keep`, nette `optional`, symfony `optional` · pokrývá `no_trailing_comma_in_singleline` .[decision-facts]
+
+
+multiline.trailingComma.list
+============================
+
+The trailing comma of a multi-line `list()`, which a list on one line never has.
+
+- `optional`: as the author wrote it
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `optional`, psr12 `keep`, nette `optional`, symfony `optional` · pokrývá `no_trailing_comma_in_singleline` .[decision-facts]
+
+
+multiline.condition
+===================
+
+The shape of a condition of `if`, `elseif`, `while` and `do-while` joined by boolean operators that stands on several lines or on one too wide, the closing parenthesis on a line of its own; one in no shape that passes is written again in the first, a line per part beginning with its operator.
+
+- `perLine`: begins on the line after the opening parenthesis
+- `compact`: begins on the line of the opening parenthesis
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `perLine`, psr12 `perLine`, nette `[perLine, compact]`, symfony `keep` · pokrývá `PSR12.ControlStructures.BooleanOperatorPlacement`, `PSR12.ControlStructures.ControlStructureSpacing`, `SlevomatCodingStandard.ControlStructures.RequireMultiLineCondition` .[decision-facts]
+
+Nette Coding Standard připouští oba tvary, podmínku začínající na dalším řádku i tu, která začíná hned za závorkou:
+
+```neon
+multiline:
+	condition: [perLine, compact]
+```
+
+```php .[before]
+if ($order->isPaid()
+	&& $order->isShipped()
+) {
+	archive($order);
+}
+
+if (
+	$order->isPaid()
+	&& $order->isShipped()
+) {
+	archive($order);
+}
+```
+
+
+multiline.operatorPosition.condition
+====================================
+
+Where a boolean operator chaining a condition of `if`, `elseif`, `while` and `do-while` stands at a line break.
+
+- `lineStart`: one ending a line opens the next, unless a comment follows it
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `lineStart`, psr12 `lineStart`, nette `lineStart`, symfony `keep` · pokrývá `PSR12.ControlStructures.BooleanOperatorPlacement`, `PSR12.ControlStructures.ControlStructureSpacing` .[decision-facts]
+
+
+multiline.operatorPosition.binary
+=================================
+
+Where a binary operator other than `.` stands at a line break, a boolean operator chaining a condition apart: a comparison, a bitwise operator or a shift moves only where the line joined after it would be too wide.
+
+- `lineStart`: one ending a line opens the next, unless a comment follows it
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `lineStart`, psr12 `lineStart`, nette `lineStart`, symfony `keep` · pokrývá `PSR12.Operators.OperatorSpacing`, `Squiz.ControlStructures.ForEachLoopDeclaration`, `Squiz.WhiteSpace.LogicalOperatorSpacing`, `Squiz.WhiteSpace.OperatorSpacing` .[decision-facts]
+
+
+multiline.operatorPosition.concatenation
+========================================
+
+Where the concatenation operator stands at a line break.
+
+- `lineStart`: one ending a line opens the next, unless a comment follows it
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `lineStart`, psr12 `keep`, nette `lineStart`, symfony `keep` .[decision-facts]
+
+
+multiline.chain
+===============
+
+The links of a chain of method calls and property accesses spread over lines.
+
+- `perLine`: every link on a line of its own
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `perLine`, psr12 `keep`, nette `perLine`, symfony `keep` .[decision-facts]
+
+
+multiline.chainFirstLinks
+=========================
+
+Where the links stand that come before the first one beginning a line.
+
+- `ownLine`: the first link begins a line too
+- `startLine`: the links before the first one beginning a line stay on the line the chain starts on
+
+Parametr, výchozí `ownLine` · standardy: perCs `ownLine`, psr12 `ownLine`, nette `startLine`, symfony `ownLine` .[decision-facts]
+
+
+multiline.ternary
+=================
+
+A ternary spread over lines.
+
+- `perLine`: `?` and `:` each opening a line of its own
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `perLine`, psr12 `keep`, nette `perLine`, symfony `keep` .[decision-facts]
+
+
+multiline.operatorPosition.ternary
+==================================
+
+Where `?`, `:` and `?:` of a ternary stand at a line break.
+
+- `lineStart`: one ending a line opens the next, unless a comment follows it
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `lineStart`, psr12 `keep`, nette `lineStart`, symfony `keep` · pokrývá `ternary_operator_spaces`, `PSR12.Operators.OperatorSpacing` .[decision-facts]
+
+
+multiline.call
+==============
+
+The arguments of a call spread over lines, which is one where an argument or the closing parenthesis begins a line, the closing parenthesis then standing on a line of its own and each comma on the line of its argument.
+
+- `perLine`: every argument on a line of its own
+- `frame`: only the parentheses on lines of their own
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `perLine`, psr12 `perLine`, nette `perLine`, symfony `keep` · pokrývá `method_argument_space`, `PSR2.Methods.FunctionCallSignature` .[decision-facts]
+
+
+multiline.signatureOverMaxLength
+================================
+
+A signature on a line longer than the maximum is spread over lines.
+
+- `split`: every parameter on a line of its own
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `split`, psr12 `split`, nette `split`, symfony `keep` · pokrývá `SlevomatCodingStandard.Classes.RequireMultiLineMethodSignature` .[decision-facts]
+
+
+multiline.constructorWithPromotedProperties
+===========================================
+
+A signature declaring a promoted property.
+
+- `split`: spread over lines whatever its length
+- `asSignature`: spread only when its line is too long, as any signature
+
+Parametr, výchozí `split` · standardy: perCs `asSignature`, psr12 `asSignature`, nette `split`, symfony `asSignature` · pokrývá `multiline_promoted_properties`, `SlevomatCodingStandard.Classes.RequireMultiLineMethodSignature` .[decision-facts]
+
+
+multiline.signature
+===================
+
+The parameters of a signature spread over lines, or with a parameter whose hooks span lines, each comma on the line of its parameter and the closing parenthesis on the next.
+
+- `perLine`: every parameter on a line of its own
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `perLine`, psr12 `perLine`, nette `perLine`, symfony `keep` · pokrývá `SlevomatCodingStandard.Classes.RequireMultiLineMethodSignature` .[decision-facts]
+
+
+multiline.attributes
+====================
+
+The attributes of a class, a function, a method, a property, a constant or a case of an enum stand right above it, no blank line between the groups; those of a closure or an anonymous class may share its line.
+
+- `ownLines`: every group on a line of its own above the declaration
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `ownLines`, psr12 `keep`, nette `ownLines`, symfony `ownLines` · pokrývá `SlevomatCodingStandard.Attributes.DisallowMultipleAttributesPerLine` .[decision-facts]
+
+
+multiline.parameterAttributes
+=============================
+
+Where the attributes of a parameter stand.
+
+- `ownLines`: every group on a line of its own in a list of parameters spread over lines, on the line of the parameter in a list on one line
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `ownLines`, psr12 `keep`, nette `ownLines`, symfony `keep` · pokrývá `SlevomatCodingStandard.Attributes.DisallowMultipleAttributesPerLine` .[decision-facts]
+
+
+multiline.expressionBelowReturn
+===============================
+
+An expression spanning several lines begins on the line of `return`, `throw`, `yield`, `print` or `echo`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `function_declaration`, `single_space_around_construct`, `Generic.WhiteSpace.LanguageConstructSpacing`, `PSR12.Traits.UseDeclaration`, `PSR2.ControlStructures.SwitchDeclaration`, `SlevomatCodingStandard.Functions.ArrowFunctionDeclaration`, `Squiz.ControlStructures.ForEachLoopDeclaration`, `Squiz.Functions.FunctionDeclaration` .[decision-facts]
+
+
+multiline.semicolonOnOwnLine
+============================
+
+A semicolon standing on a line of its own below a statement spanning several lines, instead of closing its last line.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `no_singleline_whitespace_before_semicolons`, `space_after_semicolon`, `PSR12.Traits.UseDeclaration`, `Squiz.ControlStructures.ForLoopDeclaration`, `Squiz.Functions.FunctionDeclaration`, `Squiz.WhiteSpace.SemicolonSpacing` .[decision-facts]

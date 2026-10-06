@@ -1,0 +1,206 @@
+Správnost
+*********
+
+.[perex]
+Sekce `correctness` rozhoduje o tom, co je nejspíš chyba, ať je styl jakýkoli: `$this` ve statické metodě, `catch`, ke kterému se nikdy nedojde, volné hledání v `in_array()`, operátor `@`, neviditelný znak v kódu, dva dokumentační komentáře nad sebou, z nichž reflexe vidí jen jeden.
+
+Většinu těchhle nálezů opravit nejde, protože co měl autor na mysli, z kódu vidět není: DressCode je ohlásí a nechá na vás. Kde oprava jde, bývá riziková (risky fix). Doplnit do `in_array()` argument `true` je bezpečné, jen když se hledají hodnoty jednoho typu; s [typy z PHPStanu |/types] to DressCode pozná a opraví sám, jinde čeká na váš souhlas.
+
+```neon
+correctness:
+	thisOutsideObject: forbidden
+	unreachableCatch: forbidden
+	strictCalls: required
+	errorSuppression: forbidden
+```
+
+```php .[before]
+class Mailer
+{
+	public static function create(): static
+	{
+		$this->connect();  // `$this` is not available in a static context.
+		return new static;
+	}
+
+	public function send(array $to): void
+	{
+		try {
+			$this->transport->send($to);
+		} catch (\Throwable $e) {
+			throw $e;
+		} catch (\RuntimeException $e) {  // Unreachable catch block, because a previous one catches `Throwable`.
+			$this->log($e);
+		}
+		$found = in_array('admin', $to);  // The `in_array()` call must pass `$strict = true`.
+		$data = @file_get_contents($this->path);  // The `@` operator must not be used.
+	}
+}
+```
+
+Projekt, který operátor `@` u některých volání používá záměrně, to může říct komentářem a klíčem [`suppressionComments` |/suppressing#Potlačení na řádku]; standard `nette` takový vzor nese.
+
+
+correctness.finalParent
+=======================
+
+A class extending a final one.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · jen s typy · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+correctness.__debugInfo
+=======================
+
+Returns `[]` where it returned `null`.
+
+- `array`: returns an empty array from `__debugInfo()` where it returns `null`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `array`, symfony `keep` .[decision-facts]
+
+
+correctness.thisOutsideObject
+=============================
+
+`$this` in a static method or a static closure.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `Squiz.Scope.StaticThisUsage` .[decision-facts]
+
+
+correctness.unimplementedAbstractMethods
+========================================
+
+A non-abstract class implements what it inherits.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · jen s typy · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+correctness.__serialize
+=======================
+
+And `__unserialize()`, beside `Serializable`.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+correctness.__set_state
+=======================
+
+As PHP calls it.
+
+- `static`: declares `__set_state()` static, which is how PHP calls it
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `static`, symfony `keep` .[decision-facts]
+
+
+correctness.continueInSwitch
+============================
+
+A `continue` that only leaves a `switch` is `break`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `forbidden` · pokrývá `switch_continue_to_break`, `SlevomatCodingStandard.ControlStructures.DisallowContinueWithoutIntegerOperandInSwitch` .[decision-facts]
+
+
+correctness.unreachableCatch
+============================
+
+A `catch` after one catching `Throwable`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `SlevomatCodingStandard.Exceptions.DeadCatch` .[decision-facts]
+
+
+correctness.exceptionWhereThrowableBelongs
+==========================================
+
+`catch (Exception)` and `@throws Exception` where `Throwable` is meant.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `SlevomatCodingStandard.Exceptions.ReferenceThrowableOnly` .[decision-facts]
+
+
+correctness.errorSuppression
+============================
+
+`@`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` .[decision-facts]
+
+
+correctness.invisibleCharacters
+===============================
+
+Non-breaking, zero-width and bidi characters, escaped in comments and strings, which changes their text, and reported in names.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `non_printable_character` .[decision-facts]
+
+
+correctness.strictCalls
+=======================
+
+`in_array()`, `array_search()`, `array_keys()`, `base64_decode()`, `mb_detect_encoding()` pass `strict: true`; an explicit `false` is reported.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep` · pokrývá `strict_param`, `SlevomatCodingStandard.Functions.StrictCall` .[decision-facts]
+
+
+correctness.trailingWhitespaceInStrings
+=======================================
+
+At the end of the lines of a multi-line string or inline HTML, which changes their value.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `no_trailing_whitespace_in_string` .[decision-facts]
+
+
+correctness.consecutivePhpdocs
+==============================
+
+A doc comment followed by another one, the first lost to reflection.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` .[decision-facts]
+
+
+correctness.repeatedAssignment
+==============================
+
+`$a = $a = 1` in one expression.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `SlevomatCodingStandard.Variables.DuplicateAssignmentToVariable` .[decision-facts]

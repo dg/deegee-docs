@@ -1,0 +1,218 @@
+Soubor
+******
+
+.[perex]
+Sekce `file` rozhoduje o souboru jako o textu: otevírací a zavírací tag, kódování, konec řádku, poslední řádek, mezery na koncích řádků, nejdelší řádek a deklarace `strict_types`.
+
+Většina klíčů sekce je pro všechny čtyři standardy stejná a projekt je přebírá, jak jsou. Dva si zaslouží pozornost. `lineEnding` říká, jakým koncem řádku končí každý řádek, a jeho hodnota `majority`, kterou mají všechny standardy, sjednotí každý soubor na konec řádku, který v něm převládá; projekt na Windows, kde konce řádků převádí Git, tak s Gitem nebojuje. A `maxLineLength` je nejdelší řádek, podle kterého se lámou dlouhé signatury, podmínky a skupinové importy v sekci [multiline |multiline]. Ohlásit řádek, který zlomit nejde, je samostatné rozhodnutí `longLines`.
+
+```neon
+file:
+	lineEnding: majority
+	maxLineLength: 120
+	longLines: forbidden
+	strictTypes: required
+	strictTypesPlacement: openingTagLine
+```
+
+Šířka řádku se počítá tak, jak ho vidíte: tabulátor do další zarážky podle [`indentation.tabWidth` |indentation#indentation.tabWidth], ne za jeden znak. Neměří se řádky, které jsou obsahem a zalomením by změnily význam: vnitřek heredocu, víceřádkový řetězec a HTML mimo PHP tagy.
+
+
+file.emptyStatements
+====================
+
+The second `;` of `foo();;`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `forbidden`, psr12 `forbidden`, nette `forbidden`, symfony `forbidden` · pokrývá `no_empty_statement`, `SlevomatCodingStandard.PHP.UselessSemicolon` .[decision-facts]
+
+
+file.finalNewlines
+==================
+
+Exactly one line ending after the last line; a file ending in HTML is content.
+
+- počet 1
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `1`, psr12 `1`, nette `1`, symfony `1` · pokrývá `single_blank_line_at_eof`, `PSR2.Files.EndFileNewline` .[decision-facts]
+
+
+file.openingTag
+===============
+
+The opening tag of PHP.
+
+- `full` nebo '<?php': `<?php`, never `<?` or `<?PHP`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `full`, psr12 `full`, nette `full`, symfony `full` · pokrývá `full_opening_tag`, `Generic.PHP.DisallowShortOpenTag` .[decision-facts]
+
+
+file.lineEnding
+===============
+
+The line ending of every line, which the code written new takes too; under `keep` that follows the file.
+
+- `LF`: every line ends with LF
+- `CRLF`: every line ends with CRLF
+- `majority`: every line ends as most lines of the file do, LF on a tie
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `majority`, psr12 `majority`, nette `majority`, symfony `majority` · pokrývá `line_ending`, `Generic.Files.LineEndings` .[decision-facts]
+
+Kde je klíč `keep`, nic se nehlásí a kód, který DressCode napíše nově, dostane konec řádku, který v souboru převládá.
+
+
+file.longLines
+==============
+
+A line wider than `file.maxLineLength`, which nothing could split, is reported.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` · pokrývá `Generic.Files.LineLength`, `SlevomatCodingStandard.Files.LineLength` .[decision-facts]
+
+Hlásí se až to, co nic nedokázalo zlomit: dlouhé signatury, podmínky a skupinové importy zlomí rozhodnutí sekce [multiline |multiline] a [imports |imports] dřív. Co zbude, je na vás: rozdělit výraz, pojmenovat mezivýsledek, zkrátit řetězec. Protože takový nález `fix` neopraví, bývá `file.longLines` první, co projekt zapíše do klíče [`warnOnly` |/configuration#risky-fixes]. Délka je tu kvůli místu na stránce snížená na 60 znaků:
+
+```neon
+file:
+	longLines: forbidden
+	maxLineLength: 60
+```
+
+```php .[before]
+use Some\Very\Long\Vendor\Namespace\WithAnEvenLonger\ClassName;
+
+$message = sprintf('%s has %d unread messages', $user->name, $count);  // The line is 69 characters long, more than 60.
+$greeting = 'Hello';
+```
+
+Import je širší než 60 znaků, ale nehlásí se: import jediného jména rozdělit na víc řádků nejde a `maxLineLengthIgnores` ho ve výchozím stavu vynechává.
+
+
+file.maxLineLength
+==================
+
+The widest line, by which what spreads over lines is split.
+
+- počet od 1
+- `none`: no line is too wide
+
+Parametr, výchozí `none` · standardy: perCs `120`, psr12 `120`, nette `140`, symfony `none` · pokrývá `Generic.Files.LineLength`, `SlevomatCodingStandard.Classes.RequireMultiLineMethodSignature`, `SlevomatCodingStandard.ControlStructures.RequireMultiLineCondition`, `SlevomatCodingStandard.Files.LineLength` .[decision-facts]
+
+
+file.maxLineLengthIgnores
+=========================
+
+The lines never reported: `imports` for a `use` import, which cannot be broken, and regular expressions of others.
+
+- seznam jmen
+
+Parametr, výchozí `[imports]` · standardy: perCs `[imports]`, psr12 `[imports]`, nette `[imports]`, symfony `[imports]` · pokrývá `Generic.Files.LineLength`, `SlevomatCodingStandard.Files.LineLength` .[decision-facts]
+
+Regulární výraz se hodí pro řádky s URL nebo pro tabulky dat, které by zalomením ztratily čitelnost. Seznam nahrazuje výchozí, takže kdo chce dál vynechávat importy, napíše i `imports`:
+
+```neon
+file:
+	longLines: forbidden
+	maxLineLength: 60
+	maxLineLengthIgnores:
+		- imports
+		- '~https?://~'
+```
+
+```php .[before]
+$docs = 'https://example.com/documentation/very/long/path/to/the/page';
+$data = ['alpha' => 1, 'beta' => 2, 'gamma' => 3, 'delta' => 4];  // The line is 64 characters long, more than 60.
+```
+
+
+file.bom
+========
+
+The file starts without a byte order mark.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `forbidden`, psr12 `forbidden`, nette `forbidden`, symfony `forbidden` · pokrývá `encoding`, `Generic.Files.ByteOrderMark` .[decision-facts]
+
+
+file.closingTagAtEnd
+====================
+
+A file of PHP only does not end with `?>`; a `?>` before HTML is content.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `forbidden`, psr12 `forbidden`, nette `forbidden`, symfony `forbidden` · pokrývá `no_closing_tag`, `PSR2.Files.ClosingTag` .[decision-facts]
+
+
+file.trailingWhitespace
+=======================
+
+No space or tab at the end of a line.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `forbidden`, psr12 `forbidden`, nette `forbidden`, symfony `forbidden` · pokrývá `no_trailing_whitespace`, `no_trailing_whitespace_in_comment`, `no_whitespace_in_blank_line`, `Squiz.WhiteSpace.SuperfluousWhitespace` .[decision-facts]
+
+
+file.strictTypes
+================
+
+Every file of PHP code declares `strict_types=1` as its first statement, a file starting with markup excepted.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep` · pokrývá `declare_strict_types`, `Generic.PHP.RequireStrictTypes`, `SlevomatCodingStandard.TypeHints.DeclareStrictTypes` .[decision-facts]
+
+Doplnit `declare(strict_types=1)` je riziková oprava (risky fix): PHP pak odmítne argument skalárního typu, který dřív potichu převedl, takže volání, které fungovalo, skončí `TypeError`. Udělá se, až rozhodnutí uvedete v klíči [`fixRisky` |/configuration#risky-fixes].
+
+
+file.strictTypesPlacement
+=========================
+
+Where the declaration of `strict_types` stands.
+
+- `openingTagLine`: `<?php declare(strict_types=1);` on one line
+- `ownLine`: on the line below the opening tag
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `openingTagLine`, symfony `keep` · pokrývá `PhpCsFixerCustomFixers/declare_after_opening_tag`, `declare_strict_types`, `Generic.PHP.RequireStrictTypes`, `SlevomatCodingStandard.TypeHints.DeclareStrictTypes` .[decision-facts]
+
+```neon
+file:
+	strictTypesPlacement: openingTagLine
+```
+
+```php .[before]
+<?php  // `declare(strict_types=1)` must be on the line of the opening tag.
+declare(strict_types=1);
+
+namespace App;
+```
+
+```php .[after]
+<?php declare(strict_types=1);
+
+namespace App;
+```
+
+
+file.statementsPerLine
+======================
+
+`foo(); bar();` is two lines; `for (;;)` is one statement.
+
+- počet 1
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `1`, psr12 `1`, nette `1`, symfony `1` · pokrývá `no_multiple_statements_per_line`, `Generic.Formatting.DisallowMultipleStatements`, `PSR12.Classes.ClosingBrace`, `PSR2.ControlStructures.SwitchDeclaration` .[decision-facts]

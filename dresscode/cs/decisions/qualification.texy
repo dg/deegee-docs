@@ -1,0 +1,293 @@
+Zápis jmen
+**********
+
+.[perex]
+Sekce `qualification` rozhoduje, jak daleko se vypisuje jméno třídy, funkce a konstanty: holé, importované příkazem `use`, nebo celé s úvodním lomítkem. Pro třídy jiného jmenného prostoru, pro globální třídy, funkce a konstanty zvlášť, a pro funkce a konstanty, se kterými umí pracovat kompilátor PHP, ještě jednou zvlášť.
+
+Jméno se dá napsat třemi způsoby a každý klíč sekce bere slovo pro jeden z nich:
+
+- `bare`: holé jméno, `strlen()`, které ve jmenném prostoru dosáhne na globální funkci až za běhu,
+- `imported`: jméno z příkazu `use`, `use function strlen;` a pak `strlen()`,
+- `fullyQualified`: celé jméno s úvodním lomítkem, `\strlen()`.
+
+Třídy a globální funkce a konstanty se přitom chovají jinak. Holé jméno třídy ve jmenném prostoru `App` je vždy `App\Exception`, takže globální třídu holou napsat nejde, jen importovat nebo kvalifikovat. Holá funkce nebo konstanta naopak dosáhne na globální, když jmenný prostor žádnou stejného jména nedeklaruje; proč je to pro nástroj nejisté a jak tu nejistotu odstranit, vysvětluje stránka [Funkce a konstanty ve jmenných prostorech |/namespaces].
+
+```neon
+qualification:
+	classOfAnotherNamespace: imported
+	globalClass: fullyQualified
+	globalFunction:
+		normally: bare
+		optimizedByCompiler: imported
+imports:
+	unused: forbidden
+```
+
+S touhle konfigurací se třída jiného jmenného prostoru importuje, globální třída dostane lomítko, globální funkce zůstanou holé a jen ty, které umí optimalizovat kompilátor PHP, se importují. Import, který tím přestane být potřeba, odebere `imports.unused`:
+
+```php .[before]
+namespace App\Model;
+
+use Exception;  // The import of `Exception` is unused.
+
+class Cart
+{
+	public function add(array $items, string $name): int
+	{
+		if (count($items) > 10 || strlen($name) === 0) {  // Global function `count()` must be imported. // Global function `strlen()` must be imported.
+			throw new Exception('Too many items');  // Global class `Exception` must be written with the leading backslash.
+		}
+		$clock = new \App\Util\Clock;  // The fully qualified name `\App\Util\Clock` must be imported.
+		return \array_sum($items);  // Global function `array_sum()` must be written without the leading backslash.
+	}
+}
+```
+
+```php .[after]
+namespace App\Model;
+
+use App\Util\Clock;
+use function count;
+use function strlen;
+
+class Cart
+{
+	public function add(array $items, string $name): int
+	{
+		if (count($items) > 10 || strlen($name) === 0) {
+			throw new \Exception('Too many items');
+		}
+		$clock = new Clock;
+		return array_sum($items);
+	}
+}
+```
+
+Kde snesete víc zápisů, napište seznam: `[bare, fullyQualified]` nechá projít oba a jméno, které neodpovídá žádnému, napíše podle prvního. Jednotlivá jména nebo skupiny jmen vyjmou klíče `except`, které berou jméno nebo vzor s hvězdičkou; přesné jméno má přednost před vzorem a delší vzor před kratším. A klíč `inFileWithoutNamespace` rozhoduje o souboru bez jmenného prostoru, kde je lomítko vždy zbytečné.
+
+
+Optimalizace kompilátoru
+========================
+
+Kompilátor PHP umí volání asi tří desítek funkcí jako `strlen()`, `count()` nebo `is_array()` nahradit jedinou instrukcí a s hodnotami konstant jako `PHP_VERSION_ID` počítat dopředu. Musí ale už při překladu vědět, že jde o globální funkci, tedy jméno importované nebo s lomítkem. Klíče `globalFunction.optimizedByCompiler` a `globalConstant.computedByCompiler` proto rozhodují o právě těchto jménech a mají přednost před `normally`. Nerozhodují podle seznamu jmen, ale podle místa: `in_array()` kompilátor optimalizuje jen s polem zapsaným přímo ve volání a `PHP_VERSION_ID` mu pomůže v podmínce, ne jako argument funkce. Hodnota `same` znamená "jako ostatní jména svého druhu". Co přesně PHP dělá a kolik to přinese, popisuje stránka [Optimalizace funkcí a konstant |/optimizations].
+
+Zápis optimalizovaného volání má ještě jeden důsledek: pojmenované a rozbalené argumenty optimalizaci vypnou. Klíč `optimizedByCompiler` s hodnotou `imported` nebo `fullyQualified` proto přepíše pojmenované argumenty takového volání na poziční a rozbalené ohlásí.
+
+
+Rizikové opravy
+===============
+
+Přepnout holou funkci na importovanou nebo naopak je bezpečné jen tehdy, když jmenný prostor žádnou funkci stejného jména nedeklaruje. Z jednoho souboru to vidět není, a tak je taková oprava riziková (risky fix) a čeká na svolení, dokud konfigurace neřekne [`nameResolution: certain` |/namespaces#name-resolution]. S ním DressCode ví, co ve vašich jmenných prostorech je, a opravy dělá rovnou.
+
+
+qualification.currentClass
+==========================
+
+How a class refers to itself in an expression: a static access, an instantiation, an `instanceof`.
+
+- `self`: the class named `self` inside itself
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `self`, symfony `keep` · pokrývá `self_accessor`, `SlevomatCodingStandard.Classes.UselessLateStaticBinding`, `Squiz.Classes.SelfMemberReference` .[decision-facts]
+
+
+qualification.currentClassForStatic
+===================================
+
+How `static` is written in a class no subclass can extend, a final class, an anonymous class and an enum, the return type `static` staying.
+
+- `self`: `static` written `self`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` · pokrývá `self_accessor`, `self_static_accessor`, `SlevomatCodingStandard.Classes.UselessLateStaticBinding`, `Squiz.Classes.SelfMemberReference` .[decision-facts]
+
+
+qualification.classOfAnotherNamespace
+=====================================
+
+A class, interface, trait or enum of another namespace.
+
+- `imported`: imported, `use Acme\Shop\Order;` and `Order`
+- `fullyQualified`: with the leading backslash, `\Acme\Shop\Order`
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- mapa jmen a vzorů s `*` na tato slova, kde vyhrává nejkonkrétnější položka
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `imported`, symfony `keep` · pokrývá `fully_qualified_strict_types`, `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly` .[decision-facts]
+
+
+qualification.globalClass
+=========================
+
+A class of the global namespace, which a bare name in a namespace does not reach.
+
+- `imported`: imported, `use Acme\Shop\Order;` and `Order`
+- `fullyQualified`: with the leading backslash, `\Acme\Shop\Order`
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- mapa jmen a vzorů s `*` na tato slova, kde vyhrává nejkonkrétnější položka
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `fullyQualified` · pokrývá `global_namespace_import`, `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly` .[decision-facts]
+
+
+qualification.functionOfAnotherNamespace
+========================================
+
+A function of another namespace.
+
+- `imported`: imported, `use Acme\Shop\Order;` and `Order`
+- `fullyQualified`: with the leading backslash, `\Acme\Shop\Order`
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- mapa jmen a vzorů s `*` na tato slova, kde vyhrává nejkonkrétnější položka
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` · pokrývá `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly` .[decision-facts]
+
+
+qualification.globalFunction.normally
+=====================================
+
+A global function in a namespace.
+
+- `bare`: bare, reached by the fallback at run time
+- `imported`: imported
+- `fullyQualified`: with the leading backslash
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `[fullyQualified, bare]` · pokrývá `global_namespace_import`, `native_function_invocation`, `SlevomatCodingStandard.Namespaces.FullyQualifiedGlobalFunctions`, `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly` .[decision-facts]
+
+
+qualification.globalFunction.optimizedByCompiler
+================================================
+
+A call PHP compiles to one opcode, `strlen`, `count`, `is_int` and the others, where its arguments allow it; written so, its arguments are passed positionally and an unpacked one is reported.
+
+- `imported`: imported, so that the compiler optimizes it
+- `fullyQualified`: with the leading backslash, so that the compiler optimizes it
+- `bare`: bare, forgoing the optimization
+- `same`: as the other global names of its kind
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `same` · pokrývá `global_namespace_import`, `native_function_invocation`, `SlevomatCodingStandard.Namespaces.FullyQualifiedGlobalFunctions`, `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly`, `SlevomatCodingStandard.PHP.OptimizedFunctionsWithoutUnpacking` .[decision-facts]
+
+
+qualification.globalFunction.except
+===================================
+
+Global functions by name or pattern, over the two keys above.
+
+- mapa jmen a vzorů s `*` na hodnotu z následujících, položka se odvolá hodnotou `keep`:
+	- `bare`: bare
+	- `imported`: imported
+	- `fullyQualified`: with the leading backslash
+	- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+```neon
+qualification:
+	globalFunction:
+		normally: bare
+		except:
+			sprintf: fullyQualified
+			'array_*': [bare, fullyQualified]
+```
+
+```php .[before]
+namespace App;
+
+$message = sprintf('%s items', \trim($label));  // Global function `sprintf()` must be written with the leading backslash. // Global function `trim()` must be written without the leading backslash.
+$total = \array_sum($items);
+```
+
+```php .[after]
+namespace App;
+
+$message = \sprintf('%s items', trim($label));
+$total = \array_sum($items);
+```
+
+`\array_sum()` zůstalo: vzor `array_*` dovoluje oba zápisy.
+
+
+qualification.constantOfAnotherNamespace
+========================================
+
+A constant of another namespace.
+
+- `imported`: imported, `use Acme\Shop\Order;` and `Order`
+- `fullyQualified`: with the leading backslash, `\Acme\Shop\Order`
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- mapa jmen a vzorů s `*` na tato slova, kde vyhrává nejkonkrétnější položka
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` · pokrývá `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly` .[decision-facts]
+
+
+qualification.globalConstant.normally
+=====================================
+
+A global constant in a namespace.
+
+- `bare`: bare, reached by the fallback at run time
+- `imported`: imported
+- `fullyQualified`: with the leading backslash
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `[fullyQualified, bare]` · pokrývá `global_namespace_import`, `native_constant_invocation`, `SlevomatCodingStandard.Namespaces.FullyQualifiedGlobalConstants`, `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly` .[decision-facts]
+
+
+qualification.globalConstant.computedByCompiler
+===============================================
+
+A constant the compiler computes with, `PHP_VERSION_ID` in a condition, `PHP_INT_MAX` in a constant expression.
+
+- `imported`: imported, so that the compiler optimizes it
+- `fullyQualified`: with the leading backslash, so that the compiler optimizes it
+- `bare`: bare, forgoing the optimization
+- `same`: as the other global names of its kind
+- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `same` · pokrývá `global_namespace_import`, `native_constant_invocation`, `SlevomatCodingStandard.Namespaces.FullyQualifiedGlobalConstants`, `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly` .[decision-facts]
+
+
+qualification.globalConstant.except
+===================================
+
+Global constants by name or pattern, over the two keys above.
+
+- mapa jmen a vzorů s `*` na hodnotu z následujících, položka se odvolá hodnotou `keep`:
+	- `bare`: bare
+	- `imported`: imported
+	- `fullyQualified`: with the leading backslash
+	- seznam těchto slov, kde projde každé a kód, který neodpovídá žádnému, se napíše podle prvního
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+qualification.inFileWithoutNamespace
+====================================
+
+A name where there is no namespace.
+
+- `bare`: never `\strlen()`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `bare`, symfony `keep` · pokrývá `PhpCsFixerCustomFixers/no_leading_slash_in_global_namespace` .[decision-facts]
+
+
+qualification.uselessBackslash
+==============================
+
+The leading backslash of an import, which changes nothing.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `forbidden`, psr12 `forbidden`, nette `forbidden`, symfony `forbidden` · pokrývá `PhpCsFixerCustomFixers/no_leading_slash_in_global_namespace`, `no_leading_import_slash`, `PSR12.Files.ImportStatement`, `SlevomatCodingStandard.Namespaces.UseDoesNotStartWithBackslash` .[decision-facts]

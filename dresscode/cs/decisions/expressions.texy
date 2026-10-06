@@ -1,0 +1,248 @@
+Výrazy
+******
+
+.[perex]
+Sekce `expressions` rozhoduje o operátorech a výrazech: přísné porovnání `===`, `!=` místo `<>`, `&&` místo `and`, Yoda podmínky, závorky tam, kde se priorita operátorů snadno splete, a ternární operátory, které jdou napsat kratším `??`, `?:`, nebo vůbec ne.
+
+Většina rozhodnutí sekce zkracuje zápis a význam nemění. Výjimkou je `comparison: strict`: z `==` udělá `===`, a kód, který na volném porovnání stál, se tím změní, takže oprava je riziková (risky fix). S [typy z PHPStanu |/types] ji DressCode udělá sám tam, kde porovnává hodnoty, u kterých volné i přísné porovnání dá totéž; jinde čeká na váš souhlas v klíči [`fixRisky` |/configuration#risky-fixes].
+
+```neon
+expressions:
+	comparison: strict
+	wordLogicalOperators: forbidden
+	notEquals: '!='
+	assignmentRepeatingTarget: forbidden
+	ternaryTestingNull: forbidden
+	ternaryReturningItsCondition: forbidden
+	ternaryOfTrueAndFalse: forbidden
+	doubleNegation: forbidden
+```
+
+```php .[before]
+if ($status == 'paid' and $total <> 0) {  // The `==` comparison must be written `===`. // The `and` operator must be written `&&`. // The `<>` operator must be written `!=`. // The `!=` comparison must be written `!==`.
+	$count = $count + 1;  // The assignment must be written `+=` instead of repeating its target.
+	$name = isset($input) ? $input : 'anonymous';  // The ternary testing for null must be written with `??`.
+	$title = $this->title ? $this->title : $default;  // The ternary repeating its condition must be written `?:`.
+	$valid = $total > 0 ? true : false;  // Useless ternary operator, because the condition itself is the result.
+	$flag = !!$value;  // The double negation `!!` must be written as a `(bool)` cast.
+}
+```
+
+```php .[after]
+if ($status === 'paid' && $total !== 0) {
+	$count += 1;
+	$name = $input ?? 'anonymous';
+	$title = $this->title ?: $default;
+	$valid = $total > 0;
+	$flag = (bool) $value;
+}
+```
+
+Na `<>` se tu sahá dvakrát: `notEquals` z něj udělá `!=` a `comparison` pak `!==`.
+
+
+expressions.getClassCalls
+=========================
+
+The name of the current class, of the one the method runs through and of the parent obtained by `get_class()`, `get_called_class()`, `get_parent_class()` and `__CLASS__`, which are `self::class`, `static::class` and `parent::class`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `SlevomatCodingStandard.Classes.ModernClassNameReference` .[decision-facts]
+
+
+expressions.getClassOnObjects
+=============================
+
+The class of an object obtained by `get_class($object)`, which is `$object::class`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `SlevomatCodingStandard.Classes.ModernClassNameReference` .[decision-facts]
+
+
+expressions.parenthesesAfterConstruct
+=====================================
+
+`return ($x);` is `return $x;`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `forbidden` · pokrývá `include`, `no_unneeded_control_parentheses`, `SlevomatCodingStandard.ControlStructures.LanguageConstructWithParentheses`, `Squiz.Strings.EchoedStrings` .[decision-facts]
+
+
+expressions.assignmentRepeatingTarget
+=====================================
+
+`$a = $a + $b` is `$a += $b`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `assign_null_coalescing_to_coalesce_equal`, `SlevomatCodingStandard.ControlStructures.RequireNullCoalesceEqualOperator`, `SlevomatCodingStandard.Operators.RequireCombinedAssignmentOperator` .[decision-facts]
+
+
+expressions.explicitPrecedence
+==============================
+
+An operand where logical or bitwise operators are easy to misread is parenthesized.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep` · pokrývá `Generic.CodeAnalysis.RequireExplicitBooleanOperatorPrecedence` .[decision-facts]
+
+
+expressions.incrementByAssignment
+=================================
+
+`$i += 1` is `$i++`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `forbidden` · pokrývá `standardize_increment` .[decision-facts]
+
+
+expressions.doubleNegation
+==========================
+
+`!!$a` is `(bool) $a`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `forbidden` · pokrývá `no_short_bool_cast` .[decision-facts]
+
+
+expressions.notEquals
+=====================
+
+The operator of inequality.
+
+- `exclamation` nebo '!=': `!=`, never `<>`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `exclamation`, symfony `exclamation` · pokrývá `standardize_not_equals` .[decision-facts]
+
+
+expressions.ternaryTestingNull
+==============================
+
+`isset($a) ? $a : $b`, `$a !== null ? $a : $b` are `$a ?? $b`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `ternary_to_null_coalescing`, `SlevomatCodingStandard.ControlStructures.RequireNullCoalesceOperator` .[decision-facts]
+
+
+expressions.ternaryReturningItsCondition
+========================================
+
+`$a ? $a : $b` is `$a ?: $b`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `ternary_to_elvis_operator`, `SlevomatCodingStandard.ControlStructures.RequireShortTernaryOperator` .[decision-facts]
+
+Zkrácení mění počet vyhodnocení podmínky a to nemusí být neškodné: `array_shift($queue) ? array_shift($queue) : null` odebere z fronty dva prvky, kdežto zkrácená podoba jen jeden. Zkracují se proto jen výrazy, jejichž opakované čtení nemá vedlejší účinek: proměnné, prvky polí, vlastnosti, konstanty a skalární hodnoty. Právě tady je vidět, co dává strom: PHP CS Fixer označuje svůj protějšek `ternary_to_elvis_operator` za rizikový, protože nad polem tokenů nerozezná volání od proměnné; tady to rozhodne strom.
+
+```neon
+expressions:
+	ternaryReturningItsCondition: forbidden
+```
+
+```php .[before]
+$name = $input ? $input : 'anonymous';  // The ternary repeating its condition must be written `?:`.
+$size = $options['size'] ? $options['size'] : 10;  // The ternary repeating its condition must be written `?:`.
+$next = array_shift($queue) ? array_shift($queue) : null;
+```
+
+```php .[after]
+$name = $input ?: 'anonymous';
+$size = $options['size'] ?: 10;
+$next = array_shift($queue) ? array_shift($queue) : null;
+```
+
+
+expressions.comparison
+======================
+
+A comparison of equality.
+
+- `strict`: `===` and `!==`, never `==` and `!=`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `strict`, symfony `keep` · pokrývá `strict_comparison` .[decision-facts]
+
+
+expressions.wordLogicalOperators
+================================
+
+`and`, `or` bind weaker than `=` and are written `&&`, `||`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `Squiz.Operators.ValidLogicalOperators` .[decision-facts]
+
+
+expressions.ternaryOfTrueAndFalse
+=================================
+
+`$a > 1 ? true : false` is the condition itself, where it is a boolean.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `SlevomatCodingStandard.ControlStructures.UselessTernaryOperator` .[decision-facts]
+
+
+expressions.yoda
+================
+
+Which side of a comparison holds the constant, a comparison of two variables or calls staying as it is.
+
+- `forbidden`: the variable on the left and the constant on the right, `$a === 1`
+- `required`: the constant on the left, `1 === $a`, so that an accidental assignment does not compile
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `SlevomatCodingStandard.ControlStructures.DisallowYodaComparison` .[decision-facts]
+
+
+expressions.backticks
+=====================
+
+`shell_exec()` instead.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `forbidden` · pokrývá `backtick_to_shell_exec` .[decision-facts]
+
+
+expressions.separateIssets
+==========================
+
+`isset($a) && isset($b)` is `isset($a, $b)`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `combine_consecutive_issets` .[decision-facts]
+
+
+expressions.consecutiveUnsets
+=============================
+
+`unset($a); unset($b);` is `unset($a, $b);`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `combine_consecutive_unsets` .[decision-facts]

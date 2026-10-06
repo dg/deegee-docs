@@ -1,0 +1,293 @@
+PhpDoc
+******
+
+.[perex]
+Sekce `phpdoc` rozhoduje o dokumentačních komentářích `/** */`: co v nich nemá být (anotace jako `@author`, komentář, který jen opakuje signaturu, prázdný komentář), jak se v nich píšou typy, kdy se komentář vlastnosti vejde na jeden řádek a co je v nich nejspíš chyba.
+
+Dokumentační komentář čte PHPStan i editor, a tak na jeho obsahu záleží víc než na obyčejném komentáři. Klíče `forbiddenAnnotations` a `forbiddenLines` odstraní, co projekt v komentářích mít nechce, `repeatingNativeTypes` komentář, který jen opakuje nativní typy signatury, a klíče pod `types` sjednotí zápis typů. Klíče pod `consistency` hlásí, co si odporuje se signaturou: `@param` neexistujícího parametru nebo druhé `@return`.
+
+```neon
+phpdoc:
+	forbiddenAnnotations: [@author]
+	empty: forbidden
+	repeatingNativeTypes: forbidden
+	propertyPhpdocOfOneLine: singleline
+	types:
+		builtin: canonical
+```
+
+```php .[before]
+class Cart
+{
+	/**
+	 * @author John
+	 * @var integer|null
+	 */
+	private ?int $count = null;  // Annotation `@author` is forbidden. // The doc comment with a single line of content must be written on one line. // The type `integer` in a doc comment must be written `int`.
+
+	/**
+	 * @param string $name
+	 * @return void
+	 */
+	public function add(string $name): void  // Useless doc comment, because it only repeats the signature.
+	{
+	}
+}
+```
+
+```php .[after]
+class Cart
+{
+	/** @var int|null */
+	private ?int $count = null;
+
+	public function add(string $name): void
+	{
+	}
+}
+```
+
+Typy, které deklaruje sám kód, rozhoduje sekce [types |types]; jestli jméno třídy zmíněné v komentáři drží import v použití, říká parametr `namesUseImports`.
+
+
+phpdoc.namesUseImports
+======================
+
+A class name in a doc comment, the name of an annotation such as `@DB\Entity` included, is resolved through the imports, which it therefore keeps in use.
+
+- `true`, nebo `false`
+
+Parametr, výchozí `true` · standardy: perCs `true`, psr12 `true`, nette `true`, symfony `true` · pokrývá `no_unused_imports`, `SlevomatCodingStandard.Namespaces.UnusedUses` .[decision-facts]
+
+
+phpdoc.annotations
+==================
+
+The letter case of a known annotation.
+
+- `canonicalCase`: as it is known, `@inheritDoc`, `@phpstan-var`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `canonicalCase`, symfony `keep` · pokrývá `SlevomatCodingStandard.Commenting.AnnotationName` .[decision-facts]
+
+
+phpdoc.forbiddenAnnotations
+===========================
+
+The annotations removed from doc comments, written with the `@`, such as `@author` and `@package`.
+
+- seznam jmen
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `[@access, @author, @copyright, @created, @license, @package, @since, @subpackage, @todo, @version]`, symfony `keep` · pokrývá `SlevomatCodingStandard.Commenting.ForbiddenAnnotations` .[decision-facts]
+
+
+phpdoc.forbiddenLines
+=====================
+
+The patterns of the lines of a description removed from doc comments, such as `~^Created by~`, what a pattern matches going and the line with it where nothing else is left.
+
+- seznam regulárních výrazů
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `['~^(?:(?!private|protected|static)\S+ )?(?:con|de)structor\.\z~i', '~^Created by \S+\.\z~i', '~^\S+ [gs]etter\.\z~i']`, symfony `keep` · pokrývá `SlevomatCodingStandard.Commenting.ForbiddenComments` .[decision-facts]
+
+
+phpdoc.empty
+============
+
+Removes empty doc comments.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `forbidden` · pokrývá `no_empty_phpdoc` .[decision-facts]
+
+
+phpdoc.stars
+============
+
+The `*` lines line up with the `/**`.
+
+- `aligned`: aligns the stars of a doc comment with its opening
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `aligned`, symfony `keep` · pokrývá `Squiz.Commenting.DocCommentAlignment` .[decision-facts]
+
+
+phpdoc.consistency.paramOfUnknownParameter
+==========================================
+
+A `@param` naming a parameter the function does not have.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `Squiz.Commenting.FunctionComment.DuplicateReturn`, `Squiz.Commenting.FunctionComment.ExtraParamComment`, `Squiz.Commenting.VariableComment` .[decision-facts]
+
+
+phpdoc.consistency.duplicateReturn
+==================================
+
+A second `@return` of a function.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `Squiz.Commenting.FunctionComment.DuplicateReturn`, `Squiz.Commenting.FunctionComment.ExtraParamComment`, `Squiz.Commenting.VariableComment` .[decision-facts]
+
+
+phpdoc.consistency.duplicateVar
+===============================
+
+A second `@var` of a property.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `Squiz.Commenting.FunctionComment.DuplicateReturn`, `Squiz.Commenting.FunctionComment.ExtraParamComment`, `Squiz.Commenting.VariableComment` .[decision-facts]
+
+
+phpdoc.consistency.emptyAnnotation
+==================================
+
+A `@param`, `@return`, `@var` or `@see` without content.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `Squiz.Commenting.FunctionComment.DuplicateReturn`, `Squiz.Commenting.FunctionComment.ExtraParamComment`, `Squiz.Commenting.VariableComment` .[decision-facts]
+
+
+phpdoc.blankLinesAtEdges
+========================
+
+None at the start or the end, at most one in a row inside.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `forbidden` · pokrývá `phpdoc_trim`, `phpdoc_trim_consecutive_blank_line_separation` .[decision-facts]
+
+
+phpdoc.types.builtin
+====================
+
+How a built-in type in a doc comment is written, `int` and never `integer` or `Int`, and whether a union names a type twice.
+
+- `canonical`: the short lowercase name of a built-in type, each type of a union named once
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `canonical`, symfony `canonical` · pokrývá `PhpCsFixerCustomFixers/phpdoc_type_list`, `phpdoc_list_type`, `phpdoc_scalar`, `phpdoc_types`, `phpdoc_types_no_duplicates`, `SlevomatCodingStandard.TypeHints.LongTypeHints` .[decision-facts]
+
+
+phpdoc.types.nullable
+=====================
+
+How a type of a doc comment of one type and `null` is written.
+
+- `questionMark` nebo '?T': a single type with `null` written with `?`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+phpdoc.types.nullPosition
+=========================
+
+Where `null` stands in a union type of a doc comment.
+
+- `last`: `int|string|null`
+- `first`: `null|int|string`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `last`, symfony `last` · pokrývá `phpdoc_types_order`, `SlevomatCodingStandard.TypeHints.NullTypeHintOnLastPosition` .[decision-facts]
+
+
+phpdoc.types.unionOrder
+=======================
+
+The order of the types of a union type of a doc comment.
+
+- `byName`: the types beside `null` sorted by name, case-insensitively
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` · pokrývá `phpdoc_types_order` .[decision-facts]
+
+
+phpdoc.types.array
+==================
+
+How an array type of a doc comment is written; `list<T>` is a different type and stays.
+
+- `generic` nebo 'array<T>': the generic notation
+- `brackets` nebo 'T[]': the brackets
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` · pokrývá `PhpCsFixerCustomFixers/phpdoc_array_style`, `PhpCsFixerCustomFixers/phpdoc_type_list`, `phpdoc_array_type`, `phpdoc_list_type`, `phpdoc_scalar`, `phpdoc_types`, `phpdoc_types_no_duplicates`, `phpdoc_types_order`, `SlevomatCodingStandard.TypeHints.DisallowArrayTypeHintSyntax`, `SlevomatCodingStandard.TypeHints.LongTypeHints`, `SlevomatCodingStandard.TypeHints.NullTypeHintOnLastPosition` .[decision-facts]
+
+
+phpdoc.promotedPropertyAnnotation
+=================================
+
+The annotation of a promoted property.
+
+- `atProperty` nebo '@var': a `@var` at the property, not a `@param` of the constructor
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `atProperty`, symfony `keep` .[decision-facts]
+
+
+phpdoc.propertyComment
+======================
+
+A property has `/** */`, never `//` or `/* */`.
+
+- `phpdoc`: reports a plain comment in place of a property doc comment
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `phpdoc`, symfony `keep` · pokrývá `Squiz.Commenting.VariableComment` .[decision-facts]
+
+
+phpdoc.propertyPhpdocOfOneLine
+==============================
+
+A property doc comment with a single line of content.
+
+- `singleline`: on one line, `/** @var int */`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `singleline`, symfony `keep` · pokrývá `SlevomatCodingStandard.Commenting.RequireOneLinePropertyDocComment` .[decision-facts]
+
+
+phpdoc.constantVar
+==================
+
+A `@var` on a class constant that says nothing.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `SlevomatCodingStandard.TypeHints.UselessConstantTypeHint` .[decision-facts]
+
+
+phpdoc.repeatingNativeTypes
+===========================
+
+A function doc comment that only repeats the native types of the signature, without a description of anything, is removed.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `SlevomatCodingStandard.Commenting.UselessFunctionDocComment` .[decision-facts]
+
+
+phpdoc.inheritdocOnly
+=====================
+
+A doc comment of `@inheritDoc` alone.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `SlevomatCodingStandard.Commenting.UselessInheritDocComment` .[decision-facts]

@@ -1,0 +1,651 @@
+Aktualizace kódu
+****************
+
+.[perex]
+Sekce `upgrading` rozhoduje o přechodu na novější PHP a na nové verze knihoven: co novější PHP umí napsat lépe, co zavrhlo a čím to nahradit, a co přejmenovaly nebo zrušily knihovny, které projekt používá.
+
+Rozhodnutí sekce jsou rozdělená podle toho, čeho se týkají: `syntax` novou syntaxi (`?->`, `match`, pipe operátor), `functions` nové funkce (`str_contains()`, `array_any()`, `clamp()`), `classes` nové možnosti tříd (vlastnosti deklarované v konstruktoru, `readonly`, `#[\Override]`), `phpdoc` anotace, které nahradil atribut nebo klíčové slovo, `php` to, co PHP zavrhlo, a `libraries` mapy náhrad pro knihovny. Novější zápis se zapíná slovem `adopted` ("piš novější tam, kde najdeš starší"), zavržený zápis slovem `forbidden`.
+
+```neon
+upgrading:
+	functions:
+		substringFunctions: adopted
+	syntax:
+		nullsafe: adopted
+		pipe: adopted
+```
+
+```php .[before]
+function describe(?User $user, string $url): string
+{
+	if (strpos($url, 'https://') === 0) {  // The `strpos()` comparison must be written with `str_starts_with()`.
+		$scheme = 'secure';
+	}
+	$name = $user === null ? null : $user->getName();  // The ternary testing for null must be written with `?->`.
+	return trim(strtolower(strip_tags($name)));  // The nested calls must be written with the pipe operator.
+}
+```
+
+```php .[after]
+function describe(?User $user, string $url): string
+{
+	if (str_starts_with($url, 'https://')) {
+		$scheme = 'secure';
+	}
+	$name = $user?->getName();
+	return $name |> strip_tags(...) |> strtolower(...) |> trim(...);
+}
+```
+
+Každé rozhodnutí, které píše novější PHP, ví, od které verze ho jazyk má, a uplatní se, až když to dovolí [cílová verze projektu |/configuration#Verze PHP a balíčků]. Pipe operátor z ukázky se do kódu dostane, až `composer.json` projektu dovolí jen PHP 8.5 a novější; do té doby `dresscode config` u rozhodnutí napíše `no effect: php`. Zavržení se naopak hlásí vždy, protože kód psaný pro starší PHP jednou poběží na verzi, která věc zavrhla.
+
+Psát rozhodnutí sekce po jednom nemusíte. Sada `modernization` zapne všechno, co píše novější zápis, a sada `deprecations` všechno, co opravuje zavržené; obě přidáte vedle standardu do klíče [`extends` |/configuration#Standardy a sady] a nové rozhodnutí, které DressCode získá, přinesou bez změny konfigurace. Jak přechod na novější PHP vypadá v praxi, popisuje [Přechod na novější PHP |/upgrading-php], aktualizaci knihoven [Aktualizace knihoven |/upgrading-libraries].
+
+
+Průvodce PHP
+============
+
+Co PHP zavrhlo nebo čím se dnes píše totéž, nese DressCode jako data, stejně jako balíčky pravidel nesou data knihoven: zavržená funkce se ohlásí, `utf8_encode()` se přepíše na `mb_convert_encoding()` a volání, které na cílové verzi nic nedělá, jako `curl_close()`, zmizí. Celý průvodce zapne jediné rozhodnutí `upgrading.php.guide` a jednotlivé položky z něj vyjme parametr `upgrading.php.except`:
+
+```neon
+upgrading:
+	php:
+		guide: forbidden
+		except:
+			curl_close: keep
+```
+
+
+Mapy knihoven
+=============
+
+Klíče pod `upgrading.libraries` jsou mapy náhrad: třída za třídu, člen za člen, volání za šablonu, zakázaná funkce s radou, co psát místo ní. Píše je projekt, když přejmenovává vlastní kód, a nesou je balíčky pravidel pro celé ekosystémy. Data balíčků zapínají dvě rozhodnutí podle záměru: `libraries.deprecations` to, co knihovny zavrhly, a `libraries.modernizations` novější zápis, který staré API neruší. Gramatiku map popisuje stránka [Mapy náhrad |/upgrading-data].
+
+
+upgrading.functions.array_is_list
+=================================
+
+For a hand-written test of a list.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.1 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.syntax.spreadMerge
+============================
+
+`[...$a, ...$b]` for `array_merge($a, $b)`.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.1 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.syntax.dynamicClassConstant
+=====================================
+
+`X::{$name}` for `constant("X::$name")`.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.3 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.php.constructorReturnValue
+====================================
+
+Of a constructor or a destructor, PHP 8.6 deprecated it.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.php.sleepAndWakeup
+============================
+
+`__sleep()`, `__wakeup()`, PHP 8.5 soft-deprecated.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.classes.Override
+==========================
+
+`#[\Override]` on a member overriding an inherited one.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.3 · jen s typy · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.classes.promotedProperties
+====================================
+
+A constructor parameter only assigned to a property.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.0 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.classes.readonlyClasses
+=================================
+
+A class whose every property is readonly.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.2 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.phpdoc.readonlyKeyword
+================================
+
+For `@readonly`.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.1 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` · pokrývá `phpdoc_readonly_class_comment_to_keyword` .[decision-facts]
+
+
+upgrading.classes.readonlyProperties
+====================================
+
+A property written only in the constructor, or not at all.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.1 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.classes.Stringable
+============================
+
+A class with `__toString()` declares it.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.0 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.functions.arraySearchFunctions
+========================================
+
+`array_any()`, `array_all()`, `array_find()` and `array_find_key()` for a `foreach` or an `array_filter()` that only asks what they answer.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.4 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.syntax.match
+======================
+
+For a `switch` whose every case returns or assigns one value.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.0 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.php.returnInFinally
+=============================
+
+PHP 8.6 deprecated it.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.syntax.throwExpression
+================================
+
+`$a ?? throw new E()` for an `if` throwing where the assigned value is null.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.0 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.syntax.catchWithoutVariable
+=====================================
+
+`catch (E)` where `$e` is never read.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.0 · standardy: perCs `keep`, psr12 `keep`, nette `adopted`, symfony `keep` · pokrývá `SlevomatCodingStandard.Exceptions.RequireNonCapturingCatch` .[decision-facts]
+
+
+upgrading.syntax.cloneWith
+==========================
+
+`clone($o, [...])` for a `clone` followed by assignments to the copy.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.5 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.syntax.nullsafe
+=========================
+
+`$a?->b` for `$a ? $a->b : null`.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.0 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.syntax.pipe
+=====================
+
+Calls nested one in another, each handing its result to the next, written with the pipe operator of PHP 8.5 in the order they run: `$x |> a(...) |> b(...)` for `b(a($x))`.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.5 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.syntax.pipeMinCalls
+=============================
+
+The calls a nest has at least for the pipe operator to be written.
+
+- počet od 2
+
+Parametr, výchozí `3` · PHP 8.5 · standardy: perCs `3`, psr12 `3`, nette `3`, symfony `3` .[decision-facts]
+
+
+upgrading.syntax.newWithoutParentheses
+======================================
+
+`new Foo()->bar()` for `(new Foo)->bar()`.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.4 · standardy: perCs `keep`, psr12 `keep`, nette `adopted`, symfony `keep` · pokrývá `new_expression_parentheses` .[decision-facts]
+
+
+upgrading.functions.arrayFirstLast
+==================================
+
+`array_first()`, `array_last()` for `reset()`, `end()` read as an item.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.5 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.functions.clamp
+=========================
+
+For `max($lo, min($x, $hi))`.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.6 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.php.csvDefaultEscape
+==============================
+
+The `escape` argument of `fgetcsv()` and kin is written out, its default 8.4 deprecated.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.syntax.firstClassCallables
+====================================
+
+`foo(...)` for `Closure::fromCallable()`, a forwarding closure and `'self::foo'`; from PHP 8.6 a partial application.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.1 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.functions.get_debug_type
+==================================
+
+For `is_object($x) ? get_class($x) : gettype($x)`.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.0 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.functions.json_validate
+=================================
+
+For `json_decode()` called only to test the input.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.3 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.classes.newInInitializer
+==================================
+
+`Clock $clock = new SystemClock` for a `null` default the body swaps for the object.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.1 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.functions.substringFunctions
+======================================
+
+`str_contains()`, `str_starts_with()`, `str_ends_with()` for `strpos() !== false`, `substr() ===`.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.0 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` · pokrývá `modernize_strpos` .[decision-facts]
+
+
+upgrading.functions.RoundingMode
+================================
+
+`RoundingMode::HalfAwayFromZero` for `PHP_ROUND_HALF_UP`.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.4 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.classes.SensitiveParameter
+====================================
+
+The names of the parameters holding a secret, whatever their letter case, which carry `#[\SensitiveParameter]` of PHP 8.2 to keep their values out of stack traces.
+
+- seznam jmen
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.2 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.php.dollarBraceInterpolation
+======================================
+
+`${name}` is `{$name}`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `forbidden` · pokrývá `simple_to_complex_string_variable` .[decision-facts]
+
+
+upgrading.syntax.octalPrefix
+============================
+
+`0o17` for `017`.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.1 · standardy: perCs `keep`, psr12 `keep`, nette `adopted`, symfony `keep` · pokrývá `octal_notation` .[decision-facts]
+
+```neon
+upgrading:
+	syntax:
+		octalPrefix: adopted
+```
+
+```php .[before]
+$mode = 0755;  // The octal number `0755` must be written `0o755`.
+$zero = 0;
+$flags = 0x1F;
+```
+
+```php .[after]
+$mode = 0o755;
+$zero = 0;
+$flags = 0x1F;
+```
+
+
+upgrading.php.reservedNames
+===========================
+
+Names PHP 8.6 reserved, in declarations and imports.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.phpdoc.Deprecated
+===========================
+
+`#[\Deprecated]` for `@deprecated`.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.4 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.classes.neverReturnType
+=================================
+
+The return type `never` of PHP 8.1 on a function or a method that always throws or exits, a method only where no descendant can declare it again.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.1 · standardy: perCs `keep`, psr12 `keep`, nette `adopted`, symfony `keep` .[decision-facts]
+
+
+upgrading.classes.neverReturnTypeOnClosures
+===========================================
+
+The return type `never` on a closure that always throws or exits, though its signature usually belongs to the call it is passed to.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.1 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.libraries.deprecations
+================================
+
+What the upgrading files of the installed packages list as retired is written as they say.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.libraries.modernizations
+==================================
+
+What the upgrading files of the installed packages offer as the newer form is written so.
+
+- `adopted`: written where the older way is found
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.libraries.replacedClasses
+===================================
+
+A class written instead of another one, both fully qualified (`Acme\Old\Mailer: Acme\Mail\Mailer`).
+
+- mapa v gramatice [map náhrad |/upgrading-data], položka se odvolá hodnotou `keep`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.libraries.replacedFunctions
+=====================================
+
+A function written instead of another one (`acme_send: Acme\Mail\send`).
+
+- mapa v gramatice [map náhrad |/upgrading-data], položka se odvolá hodnotou `keep`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.libraries.replacedMembers
+===================================
+
+A constant, a method or a property written instead of another one of the class (`Acme\Mail\Mailer::send(): sendMessage()`).
+
+- mapa v gramatice [map náhrad |/upgrading-data], položka se odvolá hodnotou `keep`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.libraries.replacedCalls
+=================================
+
+A call written as the template says (`Acme\Mail\Mailer::send($to, $body): send(new Message($to, $body))`).
+
+- mapa v gramatice [map náhrad |/upgrading-data], položka se odvolá hodnotou `keep`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.libraries.forbiddenClasses
+====================================
+
+A class that may not be used, with what to do instead (`Acme\Legacy\Db: "use the repository"`).
+
+- mapa v gramatice [map náhrad |/upgrading-data], položka se odvolá hodnotou `keep`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.libraries.forbiddenFunctions
+======================================
+
+A function that may not be called, with what to do instead.
+
+- mapa v gramatice [map náhrad |/upgrading-data], položka se odvolá hodnotou `keep`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` · pokrývá `Generic.PHP.ForbiddenFunctions`, `Generic.PHP.SAPIUsage`, `Squiz.PHP.DiscouragedFunctions` .[decision-facts]
+
+
+upgrading.libraries.forbiddenMembers
+====================================
+
+A constant, a method or a property that may not be used, with what to do instead.
+
+- mapa v gramatice [map náhrad |/upgrading-data], položka se odvolá hodnotou `keep`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.libraries.attributeForAnnotation
+==========================================
+
+An attribute written for an annotation (`@ORM\Entity: ORM\Entity`).
+
+- mapa v gramatice [map náhrad |/upgrading-data], položka se odvolá hodnotou `keep`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.libraries.attributeForMember
+======================================
+
+An attribute written for a member the class declares by convention.
+
+- mapa v gramatice [map náhrad |/upgrading-data], položka se odvolá hodnotou `keep`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.libraries.deprecatedClasses
+=====================================
+
+A class whose declaration is `@deprecated`.
+
+- `replaced`: replaced by the class the deprecation names, reported where it names none
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · jen s typy · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.libraries.deprecatedMembers
+=====================================
+
+A constant, method or property whose declaration is `@deprecated`.
+
+- `replaced`: replaced by the member the deprecation names, reported where it names none
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · jen s typy · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+upgrading.php.guide
+===================
+
+A call PHP retired is written as the guide of PHP says: a deprecated function reported, `utf8_encode()` written with `mb_convert_encoding()`, `curl_close()` and the other calls doing nothing on the target removed.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `Generic.PHP.DeprecatedFunctions` .[decision-facts]
+
+
+upgrading.php.except
+====================
+
+The entries of the guide withdrawn, by the name of the function or `Class::method`, each written `name: keep`.
+
+- mapa jmen a vzorů s `*` na hodnotu z následujících, položka se odvolá hodnotou `keep`:
+	- `forbidden`: never there
+
+Parametr, výchozí `[]` · standardy: perCs `[]`, psr12 `[]`, nette `[]`, symfony `[]` .[decision-facts]

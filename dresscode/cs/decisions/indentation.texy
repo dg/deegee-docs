@@ -1,0 +1,188 @@
+Odsazení
+********
+
+.[perex]
+Sekce `indentation` rozhoduje o odsazení: jestli se odsazuje tabulátorem, nebo mezerami, kolik sloupců má tabulátor, o kolik úrovní ustoupí řádek, který pokračuje výrazem, ternárním operátorem nebo řetězem volání, a jak se odsazuje heredoc.
+
+Odsazení DressCode neodvozuje z řádku nad tím, ale ze stromu: každý řádek dostane tolik úrovní, kolik konstrukcí ho obklopuje, a jednou úrovní je `unit`. Jeden špatně odsazený řádek proto nestrhne řádky pod sebou a nález ohlásí, o kolik ho čekal a kolik našel. Ostatní klíče sekce rozhodují o řádcích, které pokračují: o kolik ustoupí řádek začínající operátorem, `?` nebo `:` ternárního operátoru, `case` ve `switch` a článek řetězu volání.
+
+```neon
+indentation:
+	unit: '4 spaces'
+	tabWidth: 4
+	chain: single
+	switchCase: 1
+```
+
+Kde je `unit` `keep`, nic se nehlásí a řádky zůstanou, kde jsou. Kód, který DressCode napíše nově, třeba rozepsané volání, se ale nějak odsadit musí, a pak dostane tabulátor. Projekt, který odsazuje mezerami, proto `unit` napíše vždy; všechny čtyři standardy ho mají.
+
+```neon
+indentation:
+	unit: '4 spaces'
+```
+
+```php .[before]
+function total(array $items): int
+{
+	$sum = 0;  // Expected the statement indented by 4 spaces, 1 tab found.
+	foreach ($items as $item) {  // Expected the statement indented by 4 spaces, 1 tab found.
+		$sum += $item->price;  // Expected the statement indented by 8 spaces, 2 tabs found.
+	}  // Expected the closing brace indented by 4 spaces, 1 tab found.
+	return $sum;  // Expected the statement indented by 4 spaces, 1 tab found.
+}
+```
+
+```php .[after]
+function total(array $items): int
+{
+    $sum = 0;
+    foreach ($items as $item) {
+        $sum += $item->price;
+    }
+    return $sum;
+}
+```
+
+Řádky uvnitř `foreach` vypíše konzole pod nálezem cyklu jako `Then also`: posunou se jen proto, že se posune cyklus, a samostatná chyba to není.
+
+
+indentation.heredoc
+===================
+
+The indentation of the body and the closing marker of a heredoc or nowdoc, lines of the body indented further keeping their extra indentation.
+
+- `startPlusOne`: one level deeper than the line the heredoc starts on
+- `sameAsStart`: at the level of the line the heredoc starts on
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `startPlusOne`, psr12 `keep`, nette `startPlusOne`, symfony `keep` · pokrývá `heredoc_indentation` .[decision-facts]
+
+
+indentation.unit
+================
+
+Every line indented by the construct it continues, one level per nesting, the level being this unit; under `keep` a line stays where it is.
+
+- `tab`: one tab per level
+- `4 spaces`: four spaces per level
+- `2 spaces`: two spaces per level
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `'4 spaces'`, psr12 `'4 spaces'`, nette `tab`, symfony `'4 spaces'` .[decision-facts]
+
+
+indentation.tabWidth
+====================
+
+How many columns a tab counts for in the width of a line.
+
+- počet od 1 do 8
+
+Parametr, výchozí `4` · standardy: perCs `4`, psr12 `4`, nette `4`, symfony `4` .[decision-facts]
+
+
+indentation.binaryOperator
+==========================
+
+The levels a line opened by `&&`, `+`, `.` steps in by from the start of its expression, 1 at least where the expression shares its first line.
+
+- počet od 0 do 1
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `0`, psr12 `0`, nette `0`, symfony `keep` · pokrývá `array_indentation`, `indentation_type`, `method_chaining_indentation`, `no_leading_namespace_whitespace`, `statement_indentation`, `Generic.WhiteSpace.DisallowSpaceIndent`, `Generic.WhiteSpace.DisallowTabIndent`, `Generic.WhiteSpace.ScopeIndent`, `PEAR.WhiteSpace.ObjectOperatorIndent`, `PSR12.ControlStructures.ControlStructureSpacing`, `PSR2.ControlStructures.SwitchDeclaration`, `PSR2.Methods.FunctionCallSignature`, `PSR2.Namespaces.NamespaceDeclaration`, `SlevomatCodingStandard.Arrays.MultiLineArrayEndBracketPlacement`, `Squiz.WhiteSpace.ScopeClosingBrace` .[decision-facts]
+
+
+indentation.ternary
+===================
+
+The levels `?` and `:` opening a line step in by.
+
+- počet od 0 do 1
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `1`, psr12 `1`, nette `1`, symfony `1` · pokrývá `array_indentation`, `indentation_type`, `method_chaining_indentation`, `no_leading_namespace_whitespace`, `statement_indentation`, `Generic.WhiteSpace.DisallowSpaceIndent`, `Generic.WhiteSpace.DisallowTabIndent`, `Generic.WhiteSpace.ScopeIndent`, `PEAR.WhiteSpace.ObjectOperatorIndent`, `PSR12.ControlStructures.ControlStructureSpacing`, `PSR2.ControlStructures.SwitchDeclaration`, `PSR2.Methods.FunctionCallSignature`, `PSR2.Namespaces.NamespaceDeclaration`, `SlevomatCodingStandard.Arrays.MultiLineArrayEndBracketPlacement`, `Squiz.WhiteSpace.ScopeClosingBrace` .[decision-facts]
+
+
+indentation.ternaryBelowCondition
+=================================
+
+Where `?` and `:` below a condition spread over lines stand.
+
+- `stepped`: from the last line of the condition
+- `aligned`: lined up with the operators of the condition
+
+Parametr, výchozí `aligned` · standardy: perCs `aligned`, psr12 `aligned`, nette `stepped`, symfony `aligned` · pokrývá `array_indentation`, `indentation_type`, `method_chaining_indentation`, `no_leading_namespace_whitespace`, `statement_indentation`, `Generic.WhiteSpace.DisallowSpaceIndent`, `Generic.WhiteSpace.DisallowTabIndent`, `Generic.WhiteSpace.ScopeIndent`, `PEAR.WhiteSpace.ObjectOperatorIndent`, `PSR12.ControlStructures.ControlStructureSpacing`, `PSR2.ControlStructures.SwitchDeclaration`, `PSR2.Methods.FunctionCallSignature`, `PSR2.Namespaces.NamespaceDeclaration`, `SlevomatCodingStandard.Arrays.MultiLineArrayEndBracketPlacement`, `Squiz.WhiteSpace.ScopeClosingBrace` .[decision-facts]
+
+
+indentation.switchCase
+======================
+
+The levels `case` steps in by from `switch`.
+
+- počet od 0 do 1
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `1`, psr12 `1`, nette `1`, symfony `1` · pokrývá `array_indentation`, `indentation_type`, `method_chaining_indentation`, `no_leading_namespace_whitespace`, `statement_indentation`, `Generic.WhiteSpace.DisallowSpaceIndent`, `Generic.WhiteSpace.DisallowTabIndent`, `Generic.WhiteSpace.ScopeIndent`, `PEAR.WhiteSpace.ObjectOperatorIndent`, `PSR12.ControlStructures.ControlStructureSpacing`, `PSR2.ControlStructures.SwitchDeclaration`, `PSR2.Methods.FunctionCallSignature`, `PSR2.Namespaces.NamespaceDeclaration`, `SlevomatCodingStandard.Arrays.MultiLineArrayEndBracketPlacement`, `Squiz.WhiteSpace.ScopeClosingBrace` .[decision-facts]
+
+
+indentation.chain
+=================
+
+Where the links of a chain spread over lines stand.
+
+- `single`: every link one level below the start
+- `nested`: a link one level deeper or shallower than the link before it
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `single`, psr12 `single`, nette `nested`, symfony `keep` · pokrývá `array_indentation`, `indentation_type`, `method_chaining_indentation`, `no_leading_namespace_whitespace`, `statement_indentation`, `Generic.WhiteSpace.DisallowSpaceIndent`, `Generic.WhiteSpace.DisallowTabIndent`, `Generic.WhiteSpace.ScopeIndent`, `PEAR.WhiteSpace.ObjectOperatorIndent`, `PSR12.ControlStructures.ControlStructureSpacing`, `PSR2.ControlStructures.SwitchDeclaration`, `PSR2.Methods.FunctionCallSignature`, `PSR2.Namespaces.NamespaceDeclaration`, `SlevomatCodingStandard.Arrays.MultiLineArrayEndBracketPlacement`, `Squiz.WhiteSpace.ScopeClosingBrace` .[decision-facts]
+
+Hodnota `nested` je volba Nette Coding Standardu: článek smí ustoupit o úroveň hlouběji nebo mělčeji než článek před ním, takže řetěz, který na chvíli pracuje s jiným objektem, to může ukázat odsazením. Hlouběji než o úroveň ale ne:
+
+```neon
+indentation:
+	chain: nested
+```
+
+```php .[before]
+$form->addText('name')
+	->setRequired()
+	->addCondition($form::Filled)
+		->addRule($form::MaxLength, null, 100)
+	->endCondition();
+$users = $db->table('users')
+			->where('active', true);  // Expected the chained call indented by 1 tab, 3 tabs found.
+```
+
+```php .[after]
+$form->addText('name')
+	->setRequired()
+	->addCondition($form::Filled)
+		->addRule($form::MaxLength, null, 100)
+	->endCondition();
+$users = $db->table('users')
+	->where('active', true);
+```
+
+S hodnotou `single` by se článek `addRule()` vrátil na úroveň ostatních.
+
+
+indentation.singleLevel
+=======================
+
+A line steps in by one level at most, and only to a level something opened, a comment spanning several lines included.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+indentation.singleLevelInComments
+=================================
+
+A single-line comment standing on a line of its own steps in as a line of code does.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]

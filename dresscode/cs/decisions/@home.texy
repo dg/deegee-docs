@@ -1,0 +1,133 @@
+Struktura konfigurace
+*********************
+
+{{description: Celá konfigurace DressCode na jedné mapě: vyhrazené klíče, sekce rozhodnutí od mezer po aktualizaci kódu, druhy hodnot, které klíče berou, a co znamená keep.}}
+
+.[perex]
+Konfigurace DressCode je strom. Nahoře stojí pár vyhrazených klíčů, které říkají, co se kontroluje a za jakých podmínek, a pod nimi sekce rozhodnutí. Každý klíč sekce jmenuje jednu věc v kódu a jeho hodnota říká, jak se ta věc píše. Tahle stránka je mapa celého stromu; klíče každé sekce i s hodnotami a ukázkami najdete na její stránce.
+
+```neon
+extends:
+	- perCs
+	- cleanup
+
+paths:
+	- src
+	- tests
+
+braces:
+	class: nextLine
+spacing:
+	concatenation: '$a.$b'
+blankLines:
+	betweenMethods: 1
+	beforeStatement:
+		return: 1
+qualification:
+	globalFunction:
+		normally: bare
+		optimizedByCompiler: imported
+```
+
+Prvních pět řádků jsou vyhrazené klíče: z čeho konfigurace vychází a co se kontroluje. Zbytek jsou rozhodnutí a dají se číst nahlas: složená závorka třídy stojí na dalším řádku, tečka se píše bez mezer, mezi metodami je jeden prázdný řádek a před `return` taky, globální funkce zůstávají holé a ty, které PHP optimalizuje, se importují. Celou cestu k rozhodnutí, třeba `blankLines.betweenMethods`, uvidíte u každého nálezu ve výpisu a napíšete ji do komentáře `dresscode:ignore`, do `fixRisky` nebo za přepínač `--only`. Jak se konfigurace skládá z presetů, přepisů a příkazové řádky, popisuje stránka [Konfigurace |/configuration].
+
+
+Vyhrazené klíče
+===============
+
+Vyhrazený klíč není rozhodnutí o vzhledu kódu, ale fakt o projektu, rozsah běhu nebo to, jak běh naloží s tím, co najde.
+
+| klíč | co říká |
+|---|---|
+| `extends` | z jakých [presetů |/configuration#Standardy a sady] konfigurace vychází: standard a sady |
+| `targets` | pro jakou [verzi PHP a balíčků |/configuration#Verze PHP a balíčků] se kód píše, když to nemá platit podle `composer.json` |
+| `typeAnalysis` | odkud se berou [typy kódu |/types]; jediná hodnota je `phpstan` |
+| `namespaces` | [funkce a konstanty |/namespaces], které deklarují jmenné prostory projektu |
+| `nameResolution` | jestli jsou seznamy v `namespaces` úplné: `certain`, nebo `uncertain` |
+| `paths`, `excludePaths`, `fileExtensions`, `skipWhen` | co se [kontroluje |/configuration#Cesty] a co se vynechá |
+| `baseline` | soubor [baseline |/suppressing#baseline] s porušeními, která se zatím nehlásí |
+| `cacheDir` | kam si DressCode ukládá, které soubory prošly čistě |
+| `plugins` | [pluginy |/configuration#Pluginy], které projekt zapojuje |
+| `rules`, `ruleUrl` | [vlastní pravidla |/custom-rule] projektu, jmenovaná třídou, a adresa jejich stránek |
+| `analyses` | vlastní [analýzy |/rule-contract#Analýzy] pro pravidla |
+| `fixRisky` | rozhodnutí, jejichž [rizikové opravy |/configuration#risky-fixes] projekt přijímá |
+| `warnOnly` | rozhodnutí, jejichž porušení jen varují |
+| `suppressionComments` | [komentáře projektu |/suppressing#Potlačení na řádku], které umlčí rozhodnutí na svém řádku |
+| `overrides` | jiné hodnoty pro [část projektu |/configuration#Jiné hodnoty pro část projektu] |
+
+Ne každý klíč smí stát všude. Preset nese jen rozhodnutí, `extends` a `suppressionComments`, protože zná standard, ale ne váš projekt. Přepis pro část projektu smí navíc `targets` s verzí PHP, `namespaces`, `nameResolution`, `fixRisky` a `warnOnly`. Zbytek patří jen konfiguraci celého projektu.
+
+
+Sekce rozhodnutí
+================
+
+Sekce třídí rozhodnutí tak, aby se dala najít: kde byste hledali mezeru za čárkou, tam je. Nic dalšího z ní neplyne. Jak přísně se porušení hlásí, jestli smí opravu udělat sám, nebo kdy se rozhodnutí uplatní, řekne hodnota a vlastnosti rozhodnutí, ne jméno sekce.
+
+| sekce | o čem rozhoduje |
+|---|---|
+| [file |file] | soubor jako text: otevírací tag, konce řádků, délka řádku, `declare(strict_types=1)` |
+| [indentation |indentation] | odsazení: jednotka, šířka tabulátoru, odsazení pokračujících řádků |
+| [naming |naming] | velikost písmen ve jménech tříd, metod, konstant a proměnných |
+| [builtin |builtin] | zápis toho, co patří PHP: klíčová slova, `true`, `null`, vestavěné třídy, funkce a typy |
+| [qualification |qualification] | jak daleko se vypisuje jméno třídy, funkce a konstanty: holé, importované, nebo s lomítkem |
+| [imports |imports] | příkazy `use` na začátku souboru: tvar, skupiny, pořadí, nepoužité importy |
+| [spacing |spacing] | mezery na řádku: kolem operátorů, za čárkou, uvnitř závorek, za klíčovým slovem |
+| [multiline |multiline] | konstrukce rozepsané na řádky: signatura, volání, pole, podmínka, řetěz, čárka na konci |
+| [braces |braces] | složené závorky: kde stojí, kdy jsou povinné, prázdné tělo |
+| [blankLines |blankLines] | prázdné řádky v hlavičce souboru, ve třídě, v bloku a kolem příkazů |
+| [classes |classes] | třídy a jejich členové: pořadí, viditelnost, modifikátory, prázdné závorky |
+| [types |types] | typy v deklaracích: povinné typy, zápis `?int`, pořadí ve sjednocení |
+| [functions |functions] | funkce a closure: arrow funkce, `static`, zbytečný `return` |
+| [calls |calls] | volání funkcí, která se dají napsat jinak: aliasy, `is_null()`, `intval()`, ladicí výpisy |
+| [controlFlow |controlFlow] | řídicí struktury: `elseif`, zbytečné `else`, propadání ve `switch` |
+| [expressions |expressions] | operátory a výrazy: přísné porovnání, `!=`, ternární operátor, `$a += 1` |
+| [literals |literals] | zápis řetězců, čísel a polí: uvozovky, `[]`, oddělovače číslic |
+| [comments |comments] | obyčejné komentáře: `//` místo `#`, prázdné komentáře |
+| [phpdoc |phpdoc] | dokumentační komentáře: anotace, typy v nich, co v nich nemá být |
+| [correctness |correctness] | to, co je nejspíš chyba, ať je styl jakýkoli |
+| [upgrading |upgrading] | přechod na novější PHP a na nové verze knihoven |
+
+Plugin, který přináší vlastní pravidla, má vlastní sekci pojmenovanou po sobě: rozhodnutí balíčku `dresscode/rules-nette` stojí pod klíčem `nette`, třeba `nette.linkArguments`. Pravidla, která si projekt napíše sám, rozhodují pod klíčem `project`. Obojí se píše do konfigurace stejně jako sekce jádra; co plugin nebo projekt v sekci má, vypíše `dresscode catalogue`.
+
+
+Hodnoty
+=======
+
+Co klíč bere, říká jeho popis na stránce sekce a vypíše to i `dresscode explain <cesta>`. Druhů hodnot je pár a opakují se:
+
+- **Slovo** pojmenuje tvar: `braces.class: nextLine`, `imports.order: byKind`, `literals.quotes: single`.
+- **Tvar s ukázkou.** U mezer a zápisu operátorů má každá hodnota slovo i ukázku kódu a do konfigurace můžete napsat kterékoli z nich: `spacing.concatenation: compact` je totéž co `spacing.concatenation: '$a.$b'`. Ukázka se jen porovná s ukázkami, které klíč zná, DressCode ji nečte jako kód, a neznámá je chyba, která vypíše ty známé.
+- **Počet** prázdných řádků, číslic nebo délky: `blankLines.betweenMethods: 2`. Kde to klíč dovolí, i rozsah `[0, 1]` nebo `0-1` a rozsah s otevřeným koncem `[1, null]` nebo `1+`. Některé počty berou i slovo, třeba `file.maxLineLength: none`.
+- **Seznam** jmen, vzorů nebo pořadí: `classes.memberOrder: [traitUse, constant, property]`, `phpdoc.forbiddenAnnotations: [@author, @package]`. Seznam napsaný ve vyšší vrstvě nahradí ten pod ním celý, i výchozí.
+- **Tolerance** je seznam slov tam, kde klíč snese víc tvarů najednou: `multiline.condition: [perLine, compact]` nechá projít oba tvary a podmínku, která neodpovídá žádnému, napíše podle prvního.
+- **Mapa** jmen nebo druhů na hodnotu: `blankLines.beforeStatement: {return: 1, throw: 1}`, nebo jména a vzory s hvězdičkou u zápisu jmen. Mapa se s vrstvou pod sebou slévá po položkách a položku zdola odvolá hodnota `keep`. Kde klíč bere slovo i mapu, je slovo zkratka za mapu s položkou `*`.
+- **Text** je jediný případ, kde hodnotou je prostá věta: text komentáře u propadnutí `case` (`controlFlow.switchFallThrough: no break`).
+- **Ano, nebo ne** (`true`, `false`) mají jen klíče, které jinak odpovědět nejdou: `imports.orderCaseSensitive: true`.
+
+Některé klíče mají pod sebou další klíče: `multiline.trailingComma` sdružuje místa, kde se rozhoduje o čárce na konci seznamu, a `qualification.globalFunction` tři rozhodnutí o globálních funkcích. Píšou se jako vnořená mapa a cesta k nim má o článek víc, `multiline.trailingComma.array`.
+
+A pak je tu **`keep`**, které bere každé rozhodnutí, jež něco vyžaduje: "tady se nic nevynucuje, kód zůstane, jak je". Je to jediné slovo pro "nesahej na to" a neznamená žádný tvar. `keep` napsané u sekce nebo u klíče s podklíči platí pro všechno pod ním a pozdější vrstva pak oživí jen ty klíče, které sama jmenuje:
+
+```neon
+blankLines: keep        # o prázdných řádcích nerozhoduje nic
+```
+
+
+Požadavek, parametr a fakt
+==========================
+
+Většina rozhodnutí je **požadavek**: říká, jak se má věc psát, a kde má jinou hodnotu než `keep`, DressCode ji hlídá a opravuje. Požadavek, který nikdo nenapíše, nevyžaduje nic.
+
+**Parametr** požadavek jen upřesňuje a sám nic nezapíná: `controlFlow.trailingIfMinStatements` říká, od kolika příkazů se z `if` na konci funkce stane časný návrat, ale hlídat se to začne až s `controlFlow.trailingIf: forbidden`. Parametr nebere `keep`, má místo něj výchozí hodnotu, a na stránce sekce je u něj napsaná. Díky tomu seznam, který projekt napíše třeba do `types.traversableTypeHints`, nikdy sám nezapne povinné typy.
+
+**Fakt projektu** není rozhodnutí o vzhledu, ale o tom, co projekt obsahuje: `namespaces.functions` a `namespaces.constants` vyjmenují funkce a konstanty ve jmenných prostorech. Píšou se do vyhrazeného klíče `namespaces` a hlídač, který ohlásí deklaraci chybějící v seznamu, se zapne klíčem `nameResolution: certain`; podrobnosti jsou na stránce [Funkce a konstanty ve jmenných prostorech |/namespaces].
+
+
+Kde zjistit víc
+===============
+
+- `dresscode explain spacing.call` vypíše popis rozhodnutí, hodnoty s jejich významem, hodnotu ve vašem projektu i s vrstvou, která ji nastavila, a co říkají čtyři standardy. `dresscode explain spacing` totéž pro celou sekci.
+- `dresscode config` vypíše vyřešenou konfiguraci ve tvaru souboru a u každé hodnoty v komentáři, odkud se vzala.
+- `dresscode catalogue` vypíše všechna rozhodnutí, která vaše instalace zná, i s pluginy, a hvězdičkou označí ta, která konfigurace dělá; s `--format json` totéž jako data.
+
+Podrobnosti o všech třech příkazech jsou na stránce [Příkazová řádka |/cli].

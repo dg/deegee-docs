@@ -1,0 +1,419 @@
+Složené závorky
+***************
+
+.[perex]
+Sekce `braces` rozhoduje o složených závorkách: na kterém řádku stojí otevírací závorka třídy, funkce, closure (anonymní funkce) a řídicí struktury, kam patří `else` a `catch`, jak se píše prázdné tělo a kdy jsou závorky povinné.
+
+Kam patří `{`, je nejviditelnější rozhodnutí každého stylu a zároveň to, na kterém se styly nejčastěji rozcházejí. Proto má každý druh konstrukce vlastní klíč: třída, funkce, funkce s parametry na několika řádcích, closure, anonymní třída a řídicí struktura. PSR-12 a [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/] dávají deklaracím závorku na další řádek a všemu ostatnímu na řádek hlavičky:
+
+```neon
+braces:
+	class: nextLine
+	function: nextLine
+	closure: sameLine
+	controlStructure: sameLine
+	continuingKeyword: sameLine
+```
+
+```php .[before]
+class Cart {  // Expected a line break before the opening brace.
+	public function add(Item $item): void {  // Expected a line break before the opening brace.
+		if ($item->isFree())
+		{  // Expected no line break before the opening brace.
+			return;
+		}
+		$this->items[] = $item;
+	}
+}
+```
+
+```php .[after]
+class Cart
+{
+	public function add(Item $item): void
+	{
+		if ($item->isFree()) {
+			return;
+		}
+		$this->items[] = $item;
+	}
+}
+```
+
+Kromě otevírací závorky se hlídá, že za ní tělo začíná na novém řádku a že zavírací závorka stojí na řádku sama. Výjimky mají vlastní klíče: prázdné tělo `{}` (`emptyBody`), prázdná anonymní třída (`emptyAnonymousClass`) a closure napsaná celá na jednom řádku (`singlelineClosure`). Odsazení řádků, které tak vzniknou, je věc sekce [indentation |indentation], prázdné řádky za závorkou a před ní sekce [blankLines |blankLines].
+
+
+braces.controlStructureBody
+===========================
+
+`if ($a) foo();` is written with braces.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `required`, psr12 `required`, nette `required`, symfony `required` · pokrývá `control_structure_braces`, `Generic.ControlStructures.InlineControlStructure` .[decision-facts]
+
+```neon
+braces:
+	controlStructureBody: required
+```
+
+```php .[before]
+if ($item->isFree()) return;  // The body of the `if` must be enclosed in braces.
+```
+
+```php .[after]
+if ($item->isFree()) {
+	return;
+}
+```
+
+
+braces.alternativeSyntax
+========================
+
+`if: … endif;` is written with braces.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `forbidden` · pokrývá `no_alternative_syntax` .[decision-facts]
+
+
+braces.bareStatementGroup
+=========================
+
+No `{ … }` around statements that nothing opens.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `forbidden` · pokrývá `no_unneeded_braces`, `no_unneeded_curly_braces` .[decision-facts]
+
+
+braces.class
+============
+
+Where the `{` of a class, an interface, a trait and an enum stands, the members starting a line below it and the `}` taking a line of its own.
+
+- `sameLine`: on the line of what comes before
+- `nextLine`: on the next line
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `nextLine`, psr12 `nextLine`, nette `nextLine`, symfony `nextLine` · pokrývá `braces_position`, `PSR12.Classes.AnonClassDeclaration`, `PSR12.Files.DeclareStatement`, `PSR2.Classes.ClassDeclaration`, `Squiz.ControlStructures.ControlSignature`, `Squiz.Functions.MultiLineFunctionDeclaration`, `Squiz.WhiteSpace.ScopeClosingBrace` .[decision-facts]
+
+```neon
+braces:
+	class: sameLine
+```
+
+```php .[before]
+class Cart
+{  // Expected no line break before the opening brace.
+	private array $items = [];
+}
+```
+
+```php .[after]
+class Cart {
+	private array $items = [];
+}
+```
+
+
+braces.function
+===============
+
+Where the `{` of a function and of a method whose parameters stand on one line stands, the `{` of a property hook and of the list of hooks staying on the line of its head; the body starts a line below it and the `}` takes a line of its own.
+
+- `nextLine`: on the next line
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `nextLine`, psr12 `nextLine`, nette `nextLine`, symfony `nextLine` · pokrývá `PSR12.Classes.AnonClassDeclaration`, `PSR12.Files.DeclareStatement`, `PSR2.Classes.ClassDeclaration`, `Squiz.ControlStructures.ControlSignature`, `Squiz.Functions.MultiLineFunctionDeclaration`, `Squiz.WhiteSpace.ScopeClosingBrace` .[decision-facts]
+
+
+braces.afterMultilineSignature
+==============================
+
+Where the `{` of a function and of a method whose parameters are spread over lines stands.
+
+- `nextLineAfterReturnType`: below `): Foo` where a return type ends the signature, on the line of the `)` otherwise
+- `sameLine`: on the line of the `)`
+- `nextLine`: on the line below the `)`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `sameLine`, psr12 `sameLine`, nette `nextLineAfterReturnType`, symfony `sameLine` · pokrývá `PSR12.Classes.AnonClassDeclaration`, `PSR12.Files.DeclareStatement`, `PSR2.Classes.ClassDeclaration`, `Squiz.ControlStructures.ControlSignature`, `Squiz.Functions.MultiLineFunctionDeclaration`, `Squiz.WhiteSpace.ScopeClosingBrace` .[decision-facts]
+
+Hodnota `nextLineAfterReturnType` je volba Nette Coding Standardu: funkce bez návratového typu má `) {` jako v PER Coding Style, u funkce s návratovým typem stojí `): void` na samostatném řádku a závorka jde pod něj.
+
+```neon
+braces:
+	afterMultilineSignature: nextLineAfterReturnType
+```
+
+```php .[before]
+function send(
+	string $to,
+	string $subject,
+): void {  // Expected a line break before the opening brace.
+	mail($to, $subject);
+}
+
+function log(
+	string $message,
+)
+{  // Expected no line break before the opening brace.
+	echo $message;
+}
+```
+
+```php .[after]
+function send(
+	string $to,
+	string $subject,
+): void
+{
+	mail($to, $subject);
+}
+
+function log(
+	string $message,
+) {
+	echo $message;
+}
+```
+
+
+braces.closure
+==============
+
+Where the `{` of a closure stands, the body starting a line below it and the `}` taking a line of its own.
+
+- `sameLine`: on the line of what comes before
+- `nextLine`: on the next line
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `sameLine`, psr12 `sameLine`, nette `sameLine`, symfony `sameLine` · pokrývá `braces_position`, `PSR12.Classes.AnonClassDeclaration`, `PSR12.Files.DeclareStatement`, `PSR2.Classes.ClassDeclaration`, `Squiz.ControlStructures.ControlSignature`, `Squiz.Functions.MultiLineFunctionDeclaration`, `Squiz.WhiteSpace.ScopeClosingBrace` .[decision-facts]
+
+```neon
+braces:
+	closure: nextLine
+```
+
+```php .[before]
+$double = function (int $x) {  // Expected a line break before the opening brace.
+	return $x * 2;
+};
+```
+
+```php .[after]
+$double = function (int $x)
+{
+	return $x * 2;
+};
+```
+
+
+braces.anonymousClass
+=====================
+
+Where the `{` of an anonymous class stands, on the next line always where its interfaces are spread over lines, the members starting a line below it and the `}` taking a line of its own.
+
+- `sameLine`: on the line of what comes before
+- `nextLine`: on the next line
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `sameLine`, psr12 `sameLine`, nette `sameLine`, symfony `sameLine` · pokrývá `braces_position`, `PSR12.Classes.AnonClassDeclaration`, `PSR12.Files.DeclareStatement`, `PSR2.Classes.ClassDeclaration`, `Squiz.ControlStructures.ControlSignature`, `Squiz.Functions.MultiLineFunctionDeclaration`, `Squiz.WhiteSpace.ScopeClosingBrace` .[decision-facts]
+
+```neon
+braces:
+	anonymousClass: nextLine
+```
+
+```php .[before]
+$logger = new class implements Logger {  // Expected a line break before the opening brace.
+	public function log(string $message): void
+	{
+		echo $message;
+	}
+};
+```
+
+```php .[after]
+$logger = new class implements Logger
+{
+	public function log(string $message): void
+	{
+		echo $message;
+	}
+};
+```
+
+
+braces.controlStructure
+=======================
+
+Where the `{` of `if`, `else`, a loop, `declare`, `try`, `catch`, `finally`, `switch` and `match` stands, the body starting a line below it and the `}` taking a line of its own.
+
+- `sameLine`: on the line of what comes before
+- `nextLine`: on the next line
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `sameLine`, psr12 `sameLine`, nette `sameLine`, symfony `sameLine` · pokrývá `braces_position`, `PSR12.Classes.AnonClassDeclaration`, `PSR12.Files.DeclareStatement`, `PSR2.Classes.ClassDeclaration`, `Squiz.ControlStructures.ControlSignature`, `Squiz.Functions.MultiLineFunctionDeclaration`, `Squiz.WhiteSpace.ScopeClosingBrace` .[decision-facts]
+
+```neon
+braces:
+	controlStructure: nextLine
+```
+
+```php .[before]
+if ($ready) {  // Expected a line break before the opening brace.
+	start();
+}
+```
+
+```php .[after]
+if ($ready)
+{
+	start();
+}
+```
+
+
+braces.continuingKeyword
+========================
+
+Where the keyword continuing a structure after its `}` stands: `else`, `elseif`, `catch`, `finally` and the `while` of `do`.
+
+- `sameLine`: on the line of what comes before
+- `nextLine`: on the next line
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `sameLine`, psr12 `sameLine`, nette `sameLine`, symfony `sameLine` · pokrývá `control_structure_continuation_position`, `PSR12.Classes.AnonClassDeclaration`, `PSR12.Files.DeclareStatement`, `PSR2.Classes.ClassDeclaration`, `Squiz.ControlStructures.ControlSignature`, `Squiz.Functions.MultiLineFunctionDeclaration`, `Squiz.WhiteSpace.ScopeClosingBrace` .[decision-facts]
+
+```neon
+braces:
+	continuingKeyword: sameLine
+```
+
+```php .[before]
+try {
+	connect();
+}
+catch (ConnectionException $e) {  // Expected no line break before the `catch` keyword.
+	retry();
+}
+```
+
+```php .[after]
+try {
+	connect();
+} catch (ConnectionException $e) {
+	retry();
+}
+```
+
+Styl, který každou větev začíná na novém řádku, napíše `nextLine`:
+
+```neon
+braces:
+	continuingKeyword: nextLine
+```
+
+```php .[before]
+if ($ready) {
+	start();
+} else {  // Expected a line break before the `else` keyword.
+	wait();
+}
+```
+
+```php .[after]
+if ($ready) {
+	start();
+}
+else {
+	wait();
+}
+```
+
+
+braces.emptyBody
+================
+
+How an empty body of a class, a function, a closure and a property hook is written; a comment inside makes it not empty.
+
+- `ownLines`: `{` and `}` placed as those of any other body
+- `sameLine`: `{}` on the line of the head
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `sameLine`, psr12 `ownLines`, nette `ownLines`, symfony `ownLines` · pokrývá `PSR12.Classes.AnonClassDeclaration`, `PSR12.Files.DeclareStatement`, `PSR2.Classes.ClassDeclaration`, `Squiz.ControlStructures.ControlSignature`, `Squiz.Functions.MultiLineFunctionDeclaration`, `Squiz.WhiteSpace.ScopeClosingBrace` .[decision-facts]
+
+PER Coding Style prázdná těla zkracuje, a proto má preset `perCs` hodnotu `sameLine`; PSR-12 a ostatní standardy píšou závorky každou na svůj řádek.
+
+```neon
+braces:
+	emptyBody: sameLine
+```
+
+```php .[before]
+class NotFound extends Exception
+{  // Expected no line break before the opening brace.
+}  // Expected no line break before the closing brace.
+
+class Point
+{
+	public function __construct(private int $x, private int $y)
+	{  // Expected no line break before the opening brace.
+	}  // Expected no line break before the closing brace.
+}
+```
+
+```php .[after]
+class NotFound extends Exception {}
+
+class Point
+{
+	public function __construct(private int $x, private int $y) {}
+}
+```
+
+
+braces.emptyAnonymousClass
+==========================
+
+How an empty anonymous class is written, whatever `braces.emptyBody` says; one written on one line stays where it is kept.
+
+- `ownLines`: `{` and `}` placed as those of any other anonymous class
+- `sameLine`: `{}` on the line of the head, one holding a comment staying on its line as written
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `sameLine`, psr12 `keep`, nette `keep`, symfony `keep` · pokrývá `braces_position`, `PSR12.Classes.AnonClassDeclaration`, `PSR12.Files.DeclareStatement`, `PSR2.Classes.ClassDeclaration`, `Squiz.ControlStructures.ControlSignature`, `Squiz.Functions.MultiLineFunctionDeclaration`, `Squiz.WhiteSpace.ScopeClosingBrace` .[decision-facts]
+
+
+braces.singlelineClosure
+========================
+
+Whether a closure written whole on one line may stay so.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `forbidden`, psr12 `forbidden`, nette `keep`, symfony `keep` · pokrývá `braces_position`, `PSR12.Classes.AnonClassDeclaration`, `PSR12.Files.DeclareStatement`, `PSR2.Classes.ClassDeclaration`, `Squiz.ControlStructures.ControlSignature`, `Squiz.Functions.MultiLineFunctionDeclaration`, `Squiz.WhiteSpace.ScopeClosingBrace` .[decision-facts]
+
+PSR-12 chce tělo každé closure na vlastních řádcích, a proto presety `psr12` a `perCs` mají `forbidden`.
+
+```neon
+braces:
+	singlelineClosure: forbidden
+```
+
+```php .[before]
+$ids = array_map(function ($row) { return $row->id; }, $rows);  // Expected a line break after the opening brace. // Expected a line break before the closing brace.
+```
+
+```php .[after]
+$ids = array_map(function ($row) {
+	return $row->id;
+}, $rows);
+```
