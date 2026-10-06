@@ -78,7 +78,7 @@ U `--use`, `--only` a `--fix-risky` se vestavěný preset píše krátce: `--use
 Přidat preset: --use
 ====================
 
-`--use` přidá na jeden běh preset nebo plugin, tedy to, co by jinak stálo v klíči `extends` nebo `plugins`, a leží nad všemi vrstvami, nad konfigurací i nad přepisy:
+`--use` přidá na jeden běh preset nebo plugin, tedy to, co by jinak stálo v klíči `use`, a leží nad všemi vrstvami, nad konfigurací i nad přepisy:
 
 ```shell
 dresscode check --use modernizations        # konfigurace a k ní sada modernizations
@@ -193,15 +193,14 @@ Konfigurace je pár řádků, ale to, co z nich vzejde, jsou dvě stě rozhodnut
 DRESS|CODE 1.0.0
 Config     /var/www/shop/dresscode.neon
 Target     PHP 8.2 from `composer.json`
-Plugins    (none)
-Extends    dresscode/psr12, dresscode/perCs, dresscode/nette, dresscode/modernizations
+Use        dresscode/psr12, dresscode/perCs, dresscode/cleanup, dresscode/types, dresscode/correctness, dresscode/nette, dresscode/modernizations
 Targets    php 8.2
 Style      a tab, the line ending each file mostly has, lines of up to 140 characters
 Names      certain, the namespaces declare no function and no constant
 Decisions  260 of 339 set by a layer, the others asking for nothing
 
 file:
-	emptyStatements: forbidden                  # dresscode/psr12
+	emptyStatements: forbidden                  # dresscode/cleanup
 	maxLineLength: 140                          # dresscode/nette
 	strictTypes: required                       # dresscode/nette
 ...
@@ -209,7 +208,7 @@ spacing:
 	arrowFunction: spaced                       # the configuration
 ...
 classes:
-	methodOnlyCallingParent: forbidden          # dresscode/nette, no effect: typeAnalysis
+	methodOnlyCallingParent: forbidden          # dresscode/cleanup, no effect: typeAnalysis
 ...
 expressions:
 	comparison: keep                            # the override for src/legacy
@@ -219,12 +218,12 @@ upgrading:
 		arrayFirstLast: adopted                 # dresscode/modernizations, no effect: php
 ...
 correctness:
-	strictCalls: required                       # dresscode/nette, risky fixes accepted
+	strictCalls: required                       # dresscode/correctness, risky fixes accepted
 \--
 
-Řádek `Extends` jmenuje presety v pořadí, v jakém se položily, i s tím, z čeho samy vycházejí: `nette` stojí na `perCs`, ten na `psr12`. Řádek `Targets` říká, pro jakou verzi PHP a knihoven se kód píše, a řádek `Names`, jak se berou [nekvalifikovaná jména funkcí a konstant ve jmenných prostorech |namespaces]. U každé hodnoty stojí vrstva, která ji nastavila: preset, `the configuration`, nebo přepis. Rozhodnutí, které se neuplatní, říká proč: `no effect: php`, když potřebuje novější PHP, než projekt dovoluje, `no effect: typeAnalysis`, když potřebuje typy a konfigurace je nemá. Rozhodnutí, jehož [rizikové opravy |configuration#risky-fixes] jste přijali, nese `risky fixes accepted`, a rozhodnutí z klíče `warnOnly` `only warns`. Když projekt používá [data pro aktualizaci knihoven |upgrading-libraries], přibude řádek `Packages` s každým balíčkem, verzí, se kterou musí kód fungovat, a souborem, odkud data pocházejí.
+Řádek `Use` jmenuje nejdřív pluginy a pak presety v pořadí, v jakém se položily, i s tím, z čeho samy vycházejí: `nette` stojí na `perCs` a sadách `cleanup`, `types` a `correctness`, `perCs` na `psr12`. Řádek `Targets` říká, pro jakou verzi PHP a knihoven se kód píše, a řádek `Names`, jak se berou [nekvalifikovaná jména funkcí a konstant ve jmenných prostorech |namespaces]. U každé hodnoty stojí vrstva, která ji nastavila: preset, `the configuration`, nebo přepis. Rozhodnutí, které se neuplatní, říká proč: `no effect: php`, když potřebuje novější PHP, než projekt dovoluje, `no effect: typeAnalysis`, když potřebuje typy a konfigurace je nemá. Rozhodnutí, jehož [rizikové opravy |configuration#risky-fixes] jste přijali, nese `risky fixes accepted`, a rozhodnutí z klíče `warnOnly` `only warns`. Když projekt používá [data pro aktualizaci knihoven |upgrading-libraries], přibude řádek `Packages` s každým balíčkem, verzí, se kterou musí kód fungovat, a souborem, odkud data pocházejí.
 
-`--file cesta` ukáže totéž pro jeden soubor, tedy i s přepisy, které pro něj platí, a `--preset nette` jeden preset sám, i s tím, z čeho vychází. `--format json` dá výstup jako data pro nástroje: klíče prostředí tak, jak se píšou do konfigurace (`extends`, `targets`, `nameResolution`…), v klíči `decisions` každé rozhodnutí podle cesty s hodnotou (`value`), vrstvou (`layer`), důvodem, proč se neuplatní (`inactive`), a tím, jestli ho vybral `--only` (`selected`), a v klíči `rules` třídy pravidel s tím, jestli běží.
+`--file cesta` ukáže totéž pro jeden soubor, tedy i s přepisy, které pro něj platí, a `--preset nette` jeden preset sám, i s tím, z čeho vychází. `--format json` dá výstup jako data pro nástroje: klíče prostředí tak, jak se píšou do konfigurace (`use`, `targets`, `nameResolution`…), v klíči `decisions` každé rozhodnutí podle cesty s hodnotou (`value`), vrstvou (`layer`), důvodem, proč se neuplatní (`inactive`), a tím, jestli ho vybral `--only` (`selected`), a v klíči `rules` třídy pravidel s tím, jestli běží.
 
 
 Vysvětlení rozhodnutí: explain
@@ -313,7 +312,7 @@ Zapíše se jen to, co kód říká dost jasně. Hodnota, se kterou souhlasí as
 # Written by dresscode init from 3 of the 3 files. A number is the share of the places a decision
 # appears in that already agree with its value; what the file does not name, the standard decides.
 
-extends: perCs  # not chosen by measure; the other complete standards are psr12, nette and symfony
+use: perCs  # not chosen by measure; the other complete standards are psr12, nette and symfony
 
 # the namespaces of the scope declare no function and no constant, so an unqualified name in a namespace
 # is resolved for certain; one declared later is reported until it is listed
@@ -338,7 +337,7 @@ literals:
 
 Vedle tří rozhodnutí zapíše `init` i to, co deklarují jmenné prostory. Tady nejde o většinu, ale o úplnost, a tak vzorek nestačí: `init` projde všechny soubory v cestách, najde funkce a konstanty deklarované ve jmenných prostorech, zapíše jejich seznamy do klíče `namespaces` a k nim `nameResolution: certain`. Soubor, který nejde naparsovat, může deklarovat cokoli, a proto `init` jistotu v takovém případě nezapíše a v komentáři jmenuje první takový soubor. Co ty klíče znamenají, popisuje stránka [Funkce a konstanty ve jmenných prostorech |namespaces]. Najde-li mezi nainstalovanými balíčky `phpstan/phpstan`, zapíše i [`typeAnalysis: phpstan` |types#enable] s komentářem, co typy dají.
 
-Standard `init` neměří: vezme ten, který mu dáte přepínačem `--use`, a bez něj napíše `perCs` s komentářem, že ostatní tři jsou `psr12`, `nette` a `symfony`. Sady zadané dalšími `--use` zapíše za standard, takže `dresscode init --use nette --use modernizations` napíše do klíče `extends` obě jména. Cesty bere z autoloadu v `composer.json` a přidá k nim adresáře `src`, `tests`, `test`, `app`, `lib`, `bin`, `cron` a `www*`, které v kořeni opravdu jsou; když nenajde žádný, vezme celý kořen. Najde-li v nich soubory `.phpt`, zapíše i klíč `fileExtensions`.
+Standard `init` neměří: vezme ten, který mu dáte přepínačem `--use`, a bez něj napíše `perCs` s komentářem, že ostatní tři jsou `psr12`, `nette` a `symfony`. Sady zadané dalšími `--use` zapíše za standard, takže `dresscode init --use nette --use modernizations` napíše do klíče `use` obě jména. Cesty bere z autoloadu v `composer.json` a přidá k nim adresáře `src`, `tests`, `test`, `app`, `lib`, `bin`, `cron` a `www*`, které v kořeni opravdu jsou; když nenajde žádný, vezme celý kořen. Najde-li v nich soubory `.phpt`, zapíše i klíč `fileExtensions`.
 
 Než se soubor zapíše, `init` si ho sám přečte a nechá vyřešit, jestli z něj vyjdou tytéž hodnoty, které naměřil. Konfiguraci, která už existuje, nikdy nepřepíše: měření vypíše na standardní chybový výstup, návrh na standardní výstup a skončí s kódem `3`, takže si návrh můžete prohlédnout nebo přesměrovat do souboru.
 
@@ -540,7 +539,7 @@ Kdo balí DressCode do vlastního nástroje s vlastní binárkou, spustí v proc
 use DressCode\Config;
 use DressCode\Console\Application;
 
-$application = new Application(defaultConfig: new Config(extends: ['nette'], paths: ['src', 'tests']));
+$application = new Application(defaultConfig: new Config(use: ['nette'], paths: ['src', 'tests']));
 exit($application->run($argv));
 ```
 

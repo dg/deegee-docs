@@ -13,7 +13,7 @@ Konfigurační soubor
 Takhle vypadá celá konfigurace projektu, který stojí na PER Coding Style, chce uklidit zbytečný kód a pár věcí má po svém:
 
 ```neon
-extends:
+use:
 	- perCs
 	- cleanup
 
@@ -42,7 +42,7 @@ Totéž v PHP, kde každý klíč NEONu je pojmenovaný argument konstruktoru t�
 use DressCode\Config;
 
 return new Config(
-	extends: ['perCs', 'cleanup'],
+	use: ['perCs', 'cleanup'],
 	paths: ['src', 'tests'],
 	excludePaths: ['tests/fixtures'],
 	decisions: [
@@ -124,18 +124,18 @@ Psát stovky klíčů nemusíte, protože konfigurace stojí na dvou otázkách,
 | `types` | typy zapsané tam, kde je čte PHP |
 | `optimizedCalls` | volání ve tvaru, který PHP optimalizuje už při překladu |
 
-Obojí se píše do klíče `extends`, standard první a sady za ním; jediný preset napíšete i bez seznamu (`extends: perCs`):
+Obojí se píše do klíče `use`, standard první a sady za ním; jediný preset napíšete i bez seznamu (`use: perCs`):
 
 ```neon
-extends:
+use:
 	- perCs
 	- cleanup
 	- modernizations
 ```
 
-Sada jmenuje záměr, ne výčet klíčů. Místo dvaceti rozhodnutí napíšete `modernizations`, a když se DressCode v další verzi naučí novou modernizaci, sada ji přinese bez jediného řádku v konfiguraci. Rozhodnutí, které píše novější PHP, než projekt dovoluje, přitom tiše čeká, až ho cílová verze dovolí. Standard `nette` rozhoduje i o hygieně kódu, protože k Nette patří: jmenuje všechno ze sady `correctness` a většinu ze sady `cleanup`. Sady `modernizations` a `deprecations` nenese žádný standard, protože přechod na novější PHP je věc, kterou si pustíte, až ji chcete.
+Sada jmenuje záměr, ne výčet klíčů. Místo dvaceti rozhodnutí napíšete `modernizations`, a když se DressCode v další verzi naučí novou modernizaci, sada ji přinese bez jediného řádku v konfiguraci. Rozhodnutí, které píše novější PHP, než projekt dovoluje, přitom tiše čeká, až ho cílová verze dovolí. Standard `nette` rozhoduje i o hygieně kódu, protože k Nette patří: sám používá sady `cleanup`, `types` a `correctness` a pár jejich rozhodnutí vrací na `keep`, třeba nativní typy parametrů, vlastností a návratových hodnot. Sady `modernizations` a `deprecations` nenese žádný standard, protože přechod na novější PHP je věc, kterou si pustíte, až ji chcete.
 
-Preset je soubor téhož tvaru jako vaše konfigurace a co přesně který rozhoduje, i s komentáři proč, ukazuje stránka [Standardy a sady |presets-reference]. Vestavěné presety se píšou krátce, jako v ukázkách: plné jméno má tvar `vendor/jméno` a vendor vestavěných je `dresscode`, takže `perCs` je zkratka za `dresscode/perCs`. V plném tvaru jména vypisují `dresscode config` a `dresscode explain`. Preset z pluginu nebo z balíčku pravidel se píše vždycky celý. A klíč `extends` bere i cestu k souboru, třeba `extends: [perCs, ../shared/house.neon]`, relativně k souboru, který ji píše.
+Preset je soubor téhož tvaru jako vaše konfigurace a co přesně který rozhoduje, i s komentáři proč, ukazuje stránka [Standardy a sady |presets-reference]. Vestavěné presety se píšou krátce, jako v ukázkách: plné jméno má tvar `vendor/jméno` a vendor vestavěných je `dresscode`, takže `perCs` je zkratka za `dresscode/perCs`. V plném tvaru jména vypisují `dresscode config` a `dresscode explain`. Preset z pluginu nebo z balíčku pravidel se píše vždycky celý. A klíč `use` bere i cestu k souboru, třeba `use: [perCs, ../shared/house.neon]`, relativně k souboru, který ji píše.
 
 
 Vrstvy
@@ -143,7 +143,7 @@ Vrstvy
 
 Pro každý soubor se hodnoty skládají z vrstev, od nejnižší po nejvyšší:
 
-1. presety z klíče `extends` v pořadí zápisu, každý nad tím, z čeho sám vychází,
+1. presety z klíče `use` v pořadí zápisu, každý nad tím, z čeho sám vychází,
 2. rozhodnutí vaší konfigurace,
 3. [přepisy pro část projektu |#Jiné hodnoty pro část projektu], kterým soubor odpovídá, v pořadí zápisu,
 4. příkazová řádka (`--use`, `--set`).
@@ -159,8 +159,19 @@ Vyšší vrstva mění jen to, co sama říká, a jak to změní, záleží na d
 Každý preset se pokládá jednou, tam, kde ho něco jmenuje poprvé. Když ho uvedete znovu, nic nezmění, a běh to řekne:
 
 /--pre .[terminal]
-Warning: The configuration extends preset `dresscode/perCs`, which preset `dresscode/nette` already brings; the entry does nothing.
+Warning: The configuration uses preset `dresscode/perCs`, which preset `dresscode/nette` already brings; the entry does nothing.
 \--
+
+Totéž platí pro sady, které používá standard. `nette` stojí na `cleanup`, `types` a `correctness` a některá jejich rozhodnutí vypíná, třeba `types.parameter`. Když napíšete `use: [nette, types]`, sada `types` leží jen jednou, pod `nette`, takže vypnutá rozhodnutí zpátky nedostanete a běh vypíše stejné varování. Kdo je chce, napíše je sám:
+
+```neon
+use: nette
+
+types:
+	parameter: required
+	property: required
+	return: required
+```
 
 Pořadí klíčů v souboru na běh vliv nemá; v jakém pořadí běží pravidla, rozhoduje DressCode sám. Odkud každá hodnota přišla, vypíše [`dresscode config` |cli#Co konfigurace znamená: config] ve tvaru souboru s vrstvou v komentáři u každého klíče.
 
@@ -189,10 +200,10 @@ targets:
 Jiné hodnoty pro část projektu
 ==============================
 
-Projekt málokdy vypadá všude stejně. Knihovní kód chcete co nejrychlejší, testy mají vlastní pomocné funkce, šablony generátoru jiné odsazení. Přepis v klíči `overrides` platí pro soubory, které odpovídají jeho `paths`, a smí v něm stát rozhodnutí, presety v `extends`, verze PHP v `targets`, `namespaces`, `nameResolution`, `fixRisky`, `warnOnly` a `suppressionComments`:
+Projekt málokdy vypadá všude stejně. Knihovní kód chcete co nejrychlejší, testy mají vlastní pomocné funkce, šablony generátoru jiné odsazení. Přepis v klíči `overrides` platí pro soubory, které odpovídají jeho `paths`, a smí v něm stát rozhodnutí, presety v `use`, verze PHP v `targets`, `namespaces`, `nameResolution`, `fixRisky`, `warnOnly` a `suppressionComments`:
 
 ```neon
-extends: nette
+use: nette
 
 nameResolution: certain
 
@@ -200,7 +211,7 @@ overrides:
 	# knihovna píše volání tak, jak je PHP umí optimalizovat
 	-
 		paths: [src]
-		extends: [optimizedCalls]
+		use: [optimizedCalls]
 
 	# testy si ve svém jmenném prostoru deklarují pomocné funkce
 	-
@@ -321,18 +332,16 @@ namespaces:
 Pluginy
 =======
 
-Plugin je třída s rozhraním `DressCode\Plugin`, kterou balíček přináší projektu vlastní pravidla a presety, analýzy, vyloučené cesty a filtr souborů. Balíček svůj plugin obvykle ohlásí sám v `composer.json` pod klíčem `extra.dresscode.plugin`, a pak ho DressCode po instalaci najde v `vendor/composer/installed.json` a nikam ho psát nemusíte. Plugin, který žije přímo v projektu, uvedete v klíči `plugins`:
+Plugin je třída s rozhraním `DressCode\Plugin`, kterou balíček přináší projektu vlastní pravidla a presety, analýzy, vyloučené cesty a filtr souborů. Balíček svůj plugin obvykle ohlásí sám v `composer.json` pod klíčem `extra.dresscode.plugin`, a pak ho DressCode po instalaci najde v `vendor/composer/installed.json` a nikam ho psát nemusíte. Plugin, který žije přímo v projektu, uvedete v klíči `use` vedle presetů, třídou, nebo [entitou |#Objekty a callbacky] s argumenty:
 
 ```neon
-plugins:
+use:
 	- Acme\CodeStyle\Plugin
-
-extends:
 	- perCs
 	- acme/house
 ```
 
-Plugin o tom, jak se kód píše, nerozhoduje. Jeho pravidla mají rozhodnutí ve vlastní sekci pojmenované po pluginu a jeho presety se jen stanou známými; co z toho projekt chce, napíše sám do `extends` a do sekce pluginu. Proto je styl projektu vždycky čitelný v jeho vlastním souboru. Plugin patří celému projektu, takže ho uvádí jen konfigurace, přepis ani preset ne. Jak plugin napsat, popisuje [Vlastní preset a plugin |presets-and-extensions].
+Plugin o tom, jak se kód píše, nerozhoduje. Jeho pravidla mají rozhodnutí ve vlastní sekci pojmenované po pluginu a jeho presety se jen stanou známými; co z toho projekt chce, napíše sám do `use` a do sekce pluginu. Proto je styl projektu vždycky čitelný v jeho vlastním souboru. Plugin patří celému projektu, takže ho uvádí jen konfigurace. Plugin v `use` přepisu nebo presetu DressCode odmítne s chybou <code>''Plugin `Acme\CodeStyle\Plugin` is used by the configuration of the project, never by a preset or an override.''</code> Jak plugin napsat, popisuje [Vlastní preset a plugin |presets-and-extensions].
 
 Balíček může nést i soubory `upgrading.neon` s tím, co verze knihoven přejmenovaly nebo zrušily, které ohlásí pod `extra.dresscode.upgrading`. Žádné rozhodnutí sám nezapne: data se uplatní, až když projekt zapne jejich záměr, `upgrading.libraries.deprecations` nebo `upgrading.libraries.modernizations`, což dělají sady `deprecations` a `modernizations`. Víc v [Aktualizaci knihoven |upgrading-libraries].
 
@@ -347,11 +356,12 @@ Kde zápis v PHP předává objekt nebo callback, napíše se v NEONu entita. Vy
 - `App\CodeStyle\Filter::isGenerated(...)` předá samotnou metodu jako callback,
 - `App\CodeStyle\Filter(8.1)::withLimit(100)` zavolá metodu na tom, co vrátil předchozí článek řetězu.
 
-Entitu berou klíče `plugins`, `skipWhen`, `rules` a `analyses`; pravidlo a analýza s továrnou se píšou jako dvojice třída a entita:
+Entitu berou plugin v klíči `use` a klíče `skipWhen`, `rules` a `analyses`; pravidlo a analýza s továrnou se píšou jako dvojice třída a entita:
 
 ```neon
-plugins:
+use:
 	- App\CodeStyle\Plugin(strict: true)
+	- perCs
 
 skipWhen: App\CodeStyle\GeneratedFilter::isGenerated(...)
 

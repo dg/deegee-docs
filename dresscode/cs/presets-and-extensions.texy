@@ -8,14 +8,14 @@ Jak zabalit vlastní styl do presetu a vlastní pravidla do pluginu se sekcí ro
 Preset
 ======
 
-Preset je soubor NEON ve tvaru konfigurace. Nese rozhodnutí, klíč `extends` s tím, z čeho vychází, a případně `suppressionComments`; nic víc. Takhle vypadá domácí styl firmy Acme:
+Preset je soubor NEON ve tvaru konfigurace. Nese rozhodnutí, klíč `use` s tím, z čeho vychází, a případně `suppressionComments`; nic víc. Takhle vypadá domácí styl firmy Acme:
 
 ```neon
 # Acme house style
 #
 # PER Coding Style with tabs, lines of up to 100 characters, and the messages of exceptions as sentences.
 
-extends: perCs
+use: perCs
 
 file:
 	maxLineLength: 100
@@ -32,25 +32,24 @@ acme:
 ```
 
 - Preset začíná komentářem: na prvním řádku název, pod ním, co preset je. Proč má rozhodnutí svou hodnotu, říká komentář nad jeho klíčem; tak jsou psané i [standardy a sady |presets-reference] DressCode.
-- `extends` jsou presety, ze kterých ten váš vychází, ať standardy, sady, nebo jiné presety. Leží pod ním v pořadí zápisu a každý jen jednou, takže co preset napíše, přebije to, z čeho vychází, a projekt nad ním přebije preset. Hodnoty se slévají stejně jako v [konfiguraci |configuration#Vrstvy]: mapa podle jmen, slovo a seznam nahrazují celou hodnotu, `keep` u sekce maže všechno pod ní.
+- `use` jmenuje presety, ze kterých ten váš vychází, ať standardy, sady, nebo jiné presety. Leží pod ním v pořadí zápisu a každý jen jednou, takže co preset napíše, přebije to, z čeho vychází, a projekt nad ním přebije preset. Hodnoty se slévají stejně jako v [konfiguraci |configuration#Vrstvy]: mapa podle jmen, slovo a seznam nahrazují celou hodnotu, `keep` u sekce maže všechno pod ní.
 - Rozhodnutí presetu mohou patřit jádru i pluginu, jako `acme.exceptionMessagePeriod` v ukázce; plugin pak musí projekt mít, jinak klíč katalog nezná.
-- Rozhodnutí projektu preset udělat nemůže. Fakty o projektu (`targets`, `typeAnalysis`, `namespaces`, `nameResolution`), rozsah běhu (`paths`, `excludePaths` a další), `fixRisky`, `warnOnly`, `plugins` a `rules` nechává projektu. Preset, který by je nastavil, DressCode odmítne s chybou <code>''Preset `acme/house` sets `fixRisky`, which the project decides, not a preset.''</code>
+- Rozhodnutí projektu preset udělat nemůže. Fakty o projektu (`targets`, `typeAnalysis`, `namespaces`, `nameResolution`), rozsah běhu (`paths`, `excludePaths` a další), `fixRisky`, `warnOnly`, pluginy a `rules` nechává projektu. Preset, který by je nastavil, DressCode odmítne s chybou <code>''Preset `acme/house` sets `fixRisky`, which the project decides, not a preset.''</code>
 - Preset, který se má dát přidat ke kterémukoli standardu, je **sada**: o rozvržení kódu nerozhoduje, nevychází ze standardu a nesahá na mezery, odsazení, zalamování ani pořadí. Že je takový, řekněte v jeho úvodním komentáři.
 
 Na verzi PHP ani na to, co má projekt nainstalované, preset myslet nemusí: rozhodnutí, jehož pravidlo si v `requires` řekne o verzi PHP nebo o balíček, se tam, kde je projekt nemá, tiše neuplatní. Stejně tiše se neuplatní rozhodnutí, jehož pravidlo potřebuje typy, v projektu bez `typeAnalysis: phpstan`.
 
-Projekt preset použije cestou k souboru v `extends`, třeba `extends: tools/house.neon`, nebo jménem, když ho přinese [plugin |#Plugin]. Protože je to vrstva jako každá jiná, dá se použít i jen pro část projektu, v [přepisu |configuration#Jiné hodnoty pro část projektu]:
+Projekt preset použije cestou k souboru v `use`, třeba `use: tools/house.neon`, nebo jménem, když ho přinese [plugin |#Plugin]. Protože je to vrstva jako každá jiná, dá se použít i jen pro část projektu, v [přepisu |configuration#Jiné hodnoty pro část projektu]:
 
 ```neon
-plugins:
+use:
 	- Acme\CodeStyle\Plugin
-
-extends: perCs
+	- perCs
 
 overrides:
 	-
 		paths: [src]
-		extends: [acme/house]
+		use: [acme/house]
 ```
 
 
@@ -82,15 +81,14 @@ final class Plugin implements \DressCode\Plugin
 
 **Sekce** je jméno pluginu v konfiguraci. Všechna rozhodnutí jeho pravidel leží pod ní, `acme.exceptionMessagePeriod` a `acme.debugCalls`, takže se nesrazí s jádrem, s jiným pluginem ani s pravidly projektu v sekci `project`. Plugin, který přináší pravidla, sekci mít musí, a nesmí to být vyhrazený klíč ani sekce jádra. Uživatel pak píše rozhodnutí pluginu stejně jako kterékoli jiné, vidí je u nálezů, potlačí je v `dresscode:ignore acme.debugCalls`, přijme jejich rizikové opravy v `fixRisky` a nechá si je vysvětlit `dresscode explain acme`.
 
-Presety z manifestu dostanou svá jména ve tvaru `vendor/name`, takže je projekt použije jménem v `extends` (`acme/house`) nebo na jeden běh přes `--use`. V `ruleUrl` stojí adresa stránek pravidel se zástupcem `{slug}` za třídu pravidla bez přípony `Rule` s malým prvním písmenem; vypíše ji `dresscode explain` u každého rozhodnutí pravidla. Vyloučené cesty se přidají k cestám projektu, filtr `skipWhen` přeskočí soubor, i když má projekt vlastní filtr, a když projekt uvede analýzu stejné třídy jako plugin, platí ta projektová. Plugin, na kterém jiný stojí, leží pod ním a každá třída se použije jen jednou.
+Presety z manifestu dostanou svá jména ve tvaru `vendor/name`, takže je projekt použije jménem v `use` (`acme/house`) nebo na jeden běh přes `--use`. V `ruleUrl` stojí adresa stránek pravidel se zástupcem `{slug}` za třídu pravidla bez přípony `Rule` s malým prvním písmenem; vypíše ji `dresscode explain` u každého rozhodnutí pravidla. Vyloučené cesty se přidají k cestám projektu, filtr `skipWhen` přeskočí soubor, i když má projekt vlastní filtr, a když projekt uvede analýzu stejné třídy jako plugin, platí ta projektová. Plugin, na kterém jiný stojí, leží pod ním a každá třída se použije jen jednou.
 
 Všimněte si, co v manifestu **není**: plugin neudělá žádné rozhodnutí a nenastaví styl, protože takový klíč `PluginManifest` vůbec nemá. Pravidla pluginu se zapnou, až jejich rozhodnutí napíše projekt nebo preset, který projekt použije. Který styl se použije, je rozhodnutí projektu, a proto ho vždycky přečtete v jeho vlastním souboru:
 
 ```neon
-plugins:
+use:
 	- Acme\CodeStyle\Plugin
-
-extends: acme/house
+	- acme/house
 
 acme:
 	debugCalls: forbidden
@@ -103,13 +101,13 @@ Pravidla pluginu smějí číst i klíče jádra. `acme.debugCalls` v ukázce be
 
 Přesně takhle pracuje balíček `dresscode/rules-nette`: jeho plugin má sekci `nette` s rozhodnutími jako `nette.linkArguments` nebo mapou `nette.flagsAsNamedArguments` a data pro aktualizaci knihoven nese vedle v souborech `upgrading.neon`.
 
-Plugin stojí v klíči `plugins` konfigurace. Přepis ani preset ho mít nemohou, protože pravidla a presety zpřístupňuje celému projektu; preset, který by ho uvedl, DressCode odmítne s chybou <code>''Preset `acme/house` sets `plugins`, which the project decides, not a preset.''</code> Filtr `skipWhen`, továrnu pravidla se závislostmi i továrnu analýzy ale zapíše i samotný `dresscode.neon`, a to [entitou |configuration#Objekty a callbacky]. Plugin se hodí tam, kde nastavení nese balíček a projekt ho jen zapne.
+Plugin stojí v klíči `use` konfigurace vedle presetů, třídou, nebo [entitou |configuration#Objekty a callbacky] s argumenty. Přepis ani preset ho mít nemohou, protože pravidla a presety zpřístupňuje celému projektu; preset, který by ho uvedl, DressCode odmítne s chybou <code>''Preset `acme/house`: Plugin `Acme\CodeStyle\Plugin` is used by the configuration of the project, never by a preset or an override.''</code> Filtr `skipWhen`, továrnu pravidla se závislostmi i továrnu analýzy ale zapíše i samotný `dresscode.neon`, a to [entitou |configuration#Objekty a callbacky]. Plugin se hodí tam, kde nastavení nese balíček a projekt ho jen zapne.
 
 
 Balíček
 =======
 
-Balíček s presetem nebo s pravidly je obyčejný Composer balíček, který vyžaduje `dresscode/dresscode` a sdílí s projektem autoloader. Svůj plugin ohlásí v `composer.json` pod klíčem `extra.dresscode.plugin`, takže ho projekt po instalaci nemusí psát do `plugins`:
+Balíček s presetem nebo s pravidly je obyčejný Composer balíček, který vyžaduje `dresscode/dresscode` a sdílí s projektem autoloader. Svůj plugin ohlásí v `composer.json` pod klíčem `extra.dresscode.plugin`, takže ho projekt po instalaci nemusí psát do `use`:
 
 ```json
 {

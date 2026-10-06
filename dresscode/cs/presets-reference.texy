@@ -6,7 +6,7 @@ Standardy a sady
 .[perex]
 Vestavěný preset je soubor téhož tvaru jako vaše konfigurace, takže nejlepší popis toho, co rozhoduje, je on sám. Tady je každý celý, i s komentáři, které říkají, proč má rozhodnutí svou hodnotu. Standardy rozhodují o vzhledu kódu a projekt si jeden vezme za základ, sady přidávají jeden záměr a dají se položit vedle kteréhokoli standardu.
 
-Preset vychází z presetů, které jmenuje jeho klíč `extends`, a mění jen to, co sám napíše; `nette` tedy stojí na `perCs` a ten na `psr12`. Co z toho všeho nakonec platí i s tím, odkud se každá hodnota vzala, vypíše `dresscode config --preset nette`. Jak se presety skládají s vaší konfigurací, popisuje stránka [Konfigurace |configuration#Standardy a sady], co znamená každý klíč, [Struktura konfigurace |decisions/@home].
+Preset vychází z presetů, které jmenuje jeho klíč `use`, a mění jen to, co sám napíše; `nette` tedy stojí na `perCs` a ten na `psr12`. Co z toho všeho nakonec platí i s tím, odkud se každá hodnota vzala, vypíše `dresscode config --preset nette`. Jak se presety skládají s vaší konfigurací, popisuje stránka [Konfigurace |configuration#Standardy a sady], co znamená každý klíč, [Struktura konfigurace |decisions/@home].
 
 
 Standardy
@@ -26,90 +26,149 @@ Standardy
 # PSR-12, section by section; the specification defines the style and this preset adds nothing of its own.
 
 file:
+	# the invisible bytes some editors put before `<?php`, which PHP would send as output
 	bom: forbidden
+	# `<?` and `<?PHP` are written `<?php`
 	openingTag: '<?php'
+	# a file of PHP alone ends without `?>`; a `?>` followed by HTML stays
 	closingTagAtEnd: forbidden
+	# every line ends as most lines of the file do, LF on a tie
 	lineEnding: majority
+	# the last line ends with a line ending, and no blank line follows it
 	finalNewlines: 1
+	# at the end of a line of code or of a comment; the text of a string stays as it is
 	trailingWhitespace: forbidden
+	# a signature or a condition wider than this is spread over lines; a line nothing can spread stays as it is
 	maxLineLength: 120
+	# `foo(); bar();` takes two lines, the header of a `for` counting as one statement
 	statementsPerLine: 1
-	# an empty statement is removed rather than given a line of its own
+	# the second `;` of `foo();;` is removed rather than given a line of its own
 	emptyStatements: forbidden
 
 indentation:
 	unit: '4 spaces'
+	# a line opened by `&&`, `+` or `.` stands level with the start of its expression, `&& $b` right below `$a` in
+	# a condition spread over lines, and one level deeper where the expression begins on the line of `$x =` or `return`
 	binaryOperator: 0
+	# `?` and `:` opening a line stand one level deeper than the line the ternary begins on
 	ternary: 1
+	# `case` one level inside `switch`, its statements one more
 	switchCase: 1
+	# every link of a chain spread over lines one level below the line the chain begins on:
+	#     $query
+	#         ->where($a)
+	#         ->orderBy($b);
 	chain: single
 
 naming:
-	# the case of names PSR-1 prescribes
+	# the case of names PSR-1 prescribes; a name in another case is reported and never renamed, the code using it
+	# being anywhere, and a method of PHP such as `__construct()` passes
 	class: PascalCase
 	method: camelCase
 	constant: UPPER_CASE
 
 builtin:
+	# `IF`, `Function`, `SELF` are written in lowercase
 	keywords: lowercase
+	# `TRUE`, `False`, `NULL` are written in lowercase
 	trueFalseNull: lowercase
+	# `Int`, `STRING`, `Void` in a declaration are written in lowercase
 	types: lowercase
+	# `(integer)`, `(boolean)`, `(double)` are written `(int)`, `(bool)`, `(float)`, and `( int )` is `(int)`
 	castTypes: short
 
 qualification:
+	# `use \Acme\Shop\Order;` is written `use Acme\Shop\Order;`, an import being fully qualified anyway
 	uselessBackslash: forbidden
 
 imports:
+	# `use function` below the imports of classes and `use const` last, each kind in the order written
 	order: byKindOnly
 
+# Every value is the construct written with its spacing; a comment names what else the same spacing covers.
 spacing:
+	# nothing inside the parentheses, not even around the `=`
 	declare: 'declare(strict_types=1)'
+	# no space before the parenthesis of a call, nor of a declaration, `function foo($a)`
 	call: 'foo($a, $b)'
+	# nothing inside any parentheses, of a call, a signature, a condition or an expression alike
 	parentheses: '($a)'
+	# after `elseif`, `while`, `for`, `foreach`, `switch`, `match` and `catch` too, and before the `{`
 	controlKeyword: 'if ($a)'
+	# around `catch`, `finally` and the `while` of `do` too, and before `as`, `insteadof` and the `use` of a closure,
+	# each staying on the line of what precedes it
 	connectingKeyword: '} else {'
+	# the space after `function` of a closure, which the name of a function, `foo($x)`, does not have
 	closure: 'function ($x)'
+	# after `throw`, `yield`, `new`, `clone`, `include`, `print` and the other keywords followed by code too
 	languageConstruct: 'return $x'
+	# a line break after the comma is free
 	comma: '$a, $b'
+	# more spaces after a comma, aligning the columns of a table, collapse to one
 	commaAlignment: none
 	cast: '(int) $x'
 	reference: '&$x'
 	spread: '...$x'
+	# the other unary operators too, `!$a`, `++$i`, `~$x`, and a variable variable, `$$a`
 	unaryOperator: '-$x'
+	# `! $x` may keep its space, as written
 	unaryOperatorsWithSpace: [!]
+	# around an assignment, `=>`, `instanceof` and the `=` of a default too; `.` has a key of its own
 	binaryOperator: '$a + $b'
 	concatenation: '$a . $b'
+	# and around `?:` as a whole, `$a ?: $b`
 	ternary: '$a ? $b : $c'
+	# the head stays on one line, unless its interfaces are spread over lines
 	classHead: 'class Foo extends Bar implements Baz'
 	anonymousClass: 'new class ($a)'
 	modifiers: 'final public static function'
+	# nothing inside a type, one space before the name it declares, `): int` for a return type
 	typeDeclaration: '?int $x'
 	catchTypes: 'catch (A | B $e)'
 	switchCase: 'case 1:'
 
 multiline:
 	operatorPosition:
+		# a line broken at an operator other than `.` begins with the operator rather than the line before ending with it
 		binary: lineStart
 		# the boolean operators of a condition spanning lines stand all at the start of the lines
 		condition: lineStart
+	# a signature too long for its line gets every parameter on a line of its own
 	signatureOverMaxLength: split
+	# a constructor with promoted properties is spread only where its line is too long
 	constructorWithPromotedProperties: asSignature
+	# a signature, a call or a condition spread over lines has a line for every parameter, argument or part, the
+	# parentheses standing on lines of their own:
+	#     if (
+	#         $a
+	#         && $b
+	#     ) {
 	signature: perLine
 	call: perLine
 	condition: perLine
 
 braces:
+	# the `{` of a class, an interface, a trait, an enum and of a function whose parameters stand on one line goes
+	# below the head
 	class: nextLine
 	function: nextLine
+	# below parameters spread over lines, `) {` share a line of their own
 	afterMultilineSignature: sameLine
+	# the `{` of a closure, an anonymous class and a control structure stays on the line of its head
 	closure: sameLine
 	anonymousClass: sameLine
 	controlStructure: sameLine
+	# `if ($a) foo();` gets braces around its body
 	controlStructureBody: required
+	# `} else {`, `} catch (E $e) {`, `} while ($a);`
 	continuingKeyword: sameLine
+	# an empty body takes its lines as any other, `{` and `}` each on a line of its own
 	emptyBody: ownLines
+	# a closure written whole on one line, `function () { return 1; }`, is spread over lines
 	singlelineClosure: forbidden
 
+# One blank line ends each block of the header of a file, the opening tag, the namespace, the imports and each kind
+# of them, and none follows the `{` of a class or precedes its `}`.
 blankLines:
 	afterOpeningTag: 1
 	beforeNamespace: 1
@@ -120,19 +179,30 @@ blankLines:
 	afterLastMethod: 0
 	beforeFirstMember: 0
 	afterLastMember: 0
+	# the trait uses one below another, and a blank line between them and the members that follow
 	betweenTraitUses: 0
 	afterTraitUses: 1
 
 classes:
+	# every property, method and constant says its visibility, `var` written `public`, and the modifiers stand in the
+	# order `abstract` or `final`, visibility, `static`, `readonly`
 	memberVisibility: required
+	# a method of an interface says `public` too, though it is public anyway
 	interfaceMethodVisibility: required
+	# the trait uses before any other member
 	memberOrder: [traitUse]
+	# `public $a, $b;` is split into two declarations, and so is `use A, B;` inside a class
 	onePerDeclaration: [property, traitUse]
+	# `new Foo` is written `new Foo()`
 	newParentheses: required
 
 controlFlow:
+	# `else if` is written `elseif`
 	elseif: 'elseif'
+	# `case 1;` is written `case 1:`
 	switchCaseTerminator: ':'
+	# a non-empty `case` falling through to the next one carries `// no break`, and is reported where it lacks it, only
+	# the author knowing whether the fall-through is meant
 	switchFallThrough: no break
 ```
 
@@ -148,56 +218,81 @@ controlFlow:
 # PSR-12 plus what PER Coding Style added (trailing commas, short closures, empty bodies as `{}`, attributes,
 # enumerations, heredoc, property hooks); the specification defines the style and this preset adds nothing of its own.
 
-extends: psr12
+use: psr12
 
 indentation:
+	# the body and the closing marker of a heredoc one level deeper than the line it begins on:
+	#     $sql = <<<SQL
+	#         SELECT 1
+	#         SQL;
 	heredoc: startPlusOne
 
 naming:
+	# `case Hearts;` of an enum, reported and never renamed as every other name
 	enumCase: PascalCase
 
+# Every value is the construct written with its spacing.
 spacing:
 	attribute: '#[Foo($a)]'
 	arrowFunction: 'fn($x) => $x'
+	# and the `;` stays on the line of what it ends
 	beforeSemicolon: '$a;'
+	# the bar of a multi-catch is spaced as in a union type, unlike in PSR-12
 	catchTypes: 'catch (A|B $e)'
 	namedArgument: 'foo(name: $x)'
 
 multiline:
 	operatorPosition:
+		# a line broken at `.`, `?` or `:` begins with the operator, as at any other binary operator
 		concatenation: lineStart
 		ternary: lineStart
+	# a chain, a ternary or an array spread over lines has every link, branch or item on a line of its own
 	chain: perLine
 	ternary: perLine
 	array: perLine
+	# a list spread over lines ends with a comma where its closing bracket stands on a line of its own, and a list on
+	# one line never ends with one
 	trailingComma:
 		array: required
 		argument: required
 		parameter: required
 		matchArm: required
 		closureUse: required
+		# the names of a group use and the items of `list()` spread over lines may end with a comma or not
 		import: optional
 		list: optional
+	# every attribute group of a declaration on a line of its own above it, and of a parameter so where the
+	# parameters are spread over lines
 	attributes: ownLines
 	parameterAttributes: ownLines
 
 braces:
+	# an empty body is `{}` on the line of the head, `class Foo {}`, `function foo(): void {}`, and an empty
+	# anonymous class `new class {}`
 	emptyBody: sameLine
 	emptyAnonymousClass: sameLine
 
 classes:
+	# `const A = 1, B = 2;` is split into two declarations too
 	onePerDeclaration: [constant, property, traitUse]
+	# `public $a; public $b;` on one line is spread over two
 	membersPerLine: 1
+	# a doc comment stands above the attributes of its declaration, never between them and it
 	phpdocAboveAttributes: required
+	# `new class() {}` is written `new class {}`, `#[Foo()]` is written `#[Foo]`
 	anonymousClassParentheses: forbidden
 	attributeParentheses: forbidden
 
 types:
+	# `int|null` is written `?int`
 	nullable: '?int'
+	# `null|int|string` is written `int|string|null`
 	nullPosition: last
 
 literals:
+	# a heredoc with nothing to interpolate is a nowdoc, `<<<'SQL'`
 	heredocWithoutInterpolation: forbidden
+	# `array(1, 2)` is written `[1, 2]`, `list($a, $b) =` is written `[$a, $b] =`
 	longArraySyntax: forbidden
 ```
 
@@ -205,7 +300,7 @@ literals:
 `nette`
 =======
 
-[Nette Coding Standard |https://doc.nette.org/cs/contributing/coding-standard]: PER Coding Style s tabulátory a rozvržením knihoven Nette, `declare(strict_types=1)` na řádku `<?php` a hygiena kódu, kterou knihovny Nette dodržují. Je ze všech nejdelší, protože jmenuje všechno, co Nette chce, a nic nedědí skrytě.
+[Nette Coding Standard |https://doc.nette.org/cs/contributing/coding-standard]: PER Coding Style s tabulátory a rozvržením knihoven Nette, `declare(strict_types=1)` na řádku `<?php` a hygiena kódu, kterou knihovny Nette dodržují. Kromě `perCs` používá sady `cleanup`, `types` a `correctness` a pár jejich rozhodnutí vrací hodnotou `keep`: větev `else` za `return`, ladicí volání, třídu s `__toString()` bez `Stringable`, oba zápisy typu pole a nativní typy parametrů, vlastností a návratových hodnot. Projekt, který tytéž sady napíše vedle `nette`, je zpátky nedostane, protože každá sada leží jen jednou, pod `nette`; kdo je chce, napíše ta rozhodnutí sám.
 
 ```neon .[preset]
 # Nette Coding Standard
@@ -218,67 +313,94 @@ literals:
 # a multi-line signature below a return type, promoted properties on lines of their own, an expression on the line of
 # its return, and a chain, an array or a condition that may keep the shape it has.
 
-extends: perCs
+use: [perCs, cleanup, types, correctness]
 
 file:
+	# `declare(strict_types=1);` in every file of PHP code, which is a risky fix: a call passing `'1'` to an `int`
+	# parameter then throws
 	strictTypes: required
+	# `<?php declare(strict_types=1);`
 	strictTypesPlacement: openingTagLine
+	# a tab counting as four columns
 	maxLineLength: 140
 
 indentation:
+	# a tab per level, where PER Coding Style has four spaces
 	unit: tab
-	# a link of a chain that returns something else than the link before it stands one level deeper, and the branches of
-	# a ternary one level below a condition spread over lines
+	# a link of a chain working on what the link before it returned may stand one level deeper, and the branches of
+	# a ternary stand one level below a condition spread over lines:
+	#     $class->addMethod('__construct')
+	#         ->addPromotedParameter('container')
+	#             ->setPrivate();
 	ternaryBelowCondition: stepped
 	chain: nested
 
 naming:
+	# the cases of the Nette libraries beside those of PSR-1, reported and never renamed as every other name: `fooBar()`
+	# for a function, `$fooBar` for a property and a variable, and `DefaultTimeout` for a constant, where PSR-1 has
+	# `DEFAULT_TIMEOUT`
 	function: camelCase
 	constant: PascalCase
 	property: camelCase
 	variable: camelCase
+	# `FooInterface`, `FooTrait`, `AbstractFoo` and a plain class named `FooError` are reported
 	classKindInName: forbidden
 
 builtin:
+	# `__dir__` is written `__DIR__`
 	magicConstants: uppercase
+	# a class and a function of PHP are written as PHP declares them, `datetime` as `DateTime`, `StrLen()` as `strlen()`
 	classes: declared
 	functions: declared
 
 qualification:
-	# a class of another namespace imported
+	# `new \Acme\Shop\Order` is written `new Order` below `use Acme\Shop\Order;`
 	classOfAnotherNamespace: imported
+	# `Foo::bar()` and `new Foo` inside `Foo` are written `self::bar()` and `new self`
 	currentClass: self
-	# PSR-12 speaks only of the imports, the cleanup takes the names of the global namespace too
-	inFileWithoutNamespace: bare
 
 imports:
+	# classes, then functions, then constants, each kind in alphabetical order
 	order: byKind
+	# a `use` for every class, and the functions and the constants each in one `use`:
+	#     use Nette\Utils\Arrays;
+	#     use Nette\Utils\Strings;
+	#     use function count, is_array;
 	classes: separate
 	functions: combined
 	constants: combined
-	unused: forbidden
-	ofCurrentNamespace: forbidden
-	aliasEqualToName: forbidden
 
+# Every value is the construct written with its spacing.
 spacing:
+	# tabs after a comma aligning the columns of a table may stay
 	commaAlignment: tabs
+	# a `;` followed by more code on its line
 	semicolon: 'for ($i = 0; $i < 5; $i++)'
+	# `! $x` is written `!$x`, no unary operator keeping a space
 	unaryOperatorsWithSpace: []
+	# more spaces around `?` and `:` collapse to one
 	ternaryAlignment: none
 	doubleColon: 'Foo::bar()'
 	objectOperator: '$a->b()'
 	offsetBrackets: '$a[0]'
 	arrayBrackets: '[1, 2]'
+	# a space after the marker of `//`, `#` and `/*` and before `*/`, a ruler such as `////` excepted
 	comment: '// text'
+	# at least one space between the code and a comment following it on its line
 	commentAfterCode: '$a; // text'
 
 multiline:
+	# an expression spanning lines begins on the line of `return`, `throw`, `yield`, `print` or `echo`, `return [` rather
+	# than `return` above a lone `[`
 	expressionBelowReturn: forbidden
+	# the `;` of a statement spanning lines closes its last line rather than standing alone below it
 	semicolonOnOwnLine: forbidden
+	# a constructor with promoted properties has every parameter on a line of its own, however short
 	constructorWithPromotedProperties: split
-	# the first link of a chain may share the line of the object
+	# the first link of a chain may share the line of the object, `$form->addText('name')` above `->setRequired()`
 	chainFirstLinks: startLine
-	# a broken condition may begin on the line of its parenthesis or below it
+	# a broken condition may begin on the line of its parenthesis, `if ($a` above `&& $b`, or below it; one in neither
+	# shape is written in the first
 	condition: [perLine, compact]
 	# several items may share a line, an array wider than 130 characters is spread
 	array: asWritten
@@ -288,144 +410,181 @@ multiline:
 		closureUse: keep
 
 braces:
+	# below a signature spread over lines, the `{` stands on a line of its own where a return type ends it:
+	#     public function foo(
+	#         int $a,
+	#     ): Foo
+	#     {
 	afterMultilineSignature: nextLineAfterReturnType
+	# an empty body takes its lines as any other, where PER Coding Style writes `{}`
 	emptyBody: ownLines
 	emptyAnonymousClass: keep
 	singlelineClosure: keep
-	bareStatementGroup: forbidden
+	# `if (...): ... endif;` and the other colon forms are written with braces
 	alternativeSyntax: forbidden
 
+# A count of blank lines, or a range `[1, 2]` within which the author chooses.
 blankLines:
 	afterOpeningTag: keep
+	# the imports of all kinds form one block
 	betweenImportKinds: 0
+	# two blank lines above the class or the function the header of a file leads to, one or two around a declaration
+	# among statements
 	beforeDeclaration: 2
 	betweenDeclarations: [1, 2]
+	# two blank lines between methods, one between the methods of an interface, which have no body
 	betweenMethods: 2
 	betweenInterfaceMethods: 1
+	# properties, constants and enum cases may stand one below another or a blank line apart, while one with a doc
+	# comment or an attribute takes a blank line above it and none below it
 	betweenMembers: [0, 1]
 	beforeDocumentedMember: 1
 	afterPhpdoc: 0
+	# no blank line after the `{` of a block, at most one before its `}`
 	afterBlockOpeningBrace: 0
 	beforeBlockClosingBrace: [0, 1]
+	# a branch or a case another one follows ends with a blank line where its last statement stands apart, so that it
+	# does not read as the start of the next one:
+	#     if ($a) {
+	#         foo();
+	#
+	#         return 1;
+	#
+	#     } else {
 	betweenBranches: lastStatementSetApart
 	betweenCases: lastStatementSetApart
 
 classes:
 	# a method of an interface is public whatever it says, so it says nothing
 	interfaceMethodVisibility: forbidden
-	impliedModifiers: forbidden
+	# the trait uses, then the constants, then the properties, each by visibility; the methods follow in the order written
 	memberOrder: [traitUse, constant, publicConstant, protectedConstant, privateConstant, publicProperty, protectedProperty, privateProperty]
+	# `const A = 1, B = 2;` may stay, unlike in PER Coding Style
 	onePerDeclaration: [property, traitUse]
+	# `new Foo()` is written `new Foo`, the parentheses that `new Foo()->bar()` needs staying
 	newParentheses: forbidden
-	methodOnlyCallingParent: forbidden
-	untypedPropertyNullInitialization: forbidden
-	ReturnTypeWillChange: forbidden
 
 types:
+	# `int $x = null` is written `?int $x = null`
 	defaultNull: '?int $x = null'
+	# `/** @var Foo $x */` above an assignment is written as `assert($x instanceof Foo)` below it, a risky fix, the
+	# assertion failing where the annotation was wrong
 	inlineVarAnnotation: forbidden
+	# a type is written where it says something, a closure needs no `void` and an array no annotation of its items
+	parameter: keep
+	property: keep
+	return: keep
 
 functions:
+	# a function declared inside a function, a method or a closure, which exists only once that runs, is reported
 	innerFunctions: forbidden
+	# `function ($x) { return $x * 2; }` is written `fn($x) => $x * 2`, a closure holding another one too
 	closureReturningOneExpression: forbidden
 	closureReturningOneExpressionNested: forbidden
-	unreachableParameterDefault: forbidden
-	trailingBareReturn: forbidden
 
 calls:
-	aliasFunctions: [internal, imap, pg]
-	call_user_func: forbidden
-	explicitInvokeCalls: forbidden
+	# a debugging call may stay as it is
+	debugOutput: keep
+	# `is_null($x)` is written `$x === null`
 	is_null: forbidden
+	# `settype($x, 'int')` is written `$x = (int) $x`
 	settype: forbidden
+	# `intval($x)` is written `(int) $x`
 	conversionFunctions: forbidden
+	# `dirname(__FILE__)` is written `__DIR__`
 	dirnameOfFile: forbidden
-	uselessArguments: forbidden
 
 controlFlow:
+	# a non-empty `case` falling through to the next one carries `// break omitted`, and is reported where it lacks it
 	switchFallThrough: break omitted
-	ifReturningBoolean: forbidden
+	# an else after a return may stay
+	elseAfterExit: keep
+	# `global $config;` is reported
 	globalStatement: forbidden
 
 expressions:
+	# `==` and `!=` are written `===` and `!==`, a risky fix where a loose comparison of different types answers
+	# otherwise; `// intentionally ==` keeps one, see `suppressionComments`
 	comparison: strict
+	# `<>` is written `!=`
 	notEquals: '!='
+	# `1 === $a` is written `$a === 1`
 	yoda: forbidden
+	# `and` and `or` are written `&&` and `||` where the meaning stays, `xor` staying
 	wordLogicalOperators: forbidden
+	# `$a && $b || $c` is written `($a && $b) || $c`, and `$a & $b == 1` is written `$a & ($b == 1)`, as PHP reads it
 	explicitPrecedence: required
+	# `$i += 1` is written `$i++`
 	incrementByAssignment: forbidden
+	# `$a = $a + $b` is written `$a += $b`
 	assignmentRepeatingTarget: forbidden
+	# `!!$a` is written `(bool) $a`
 	doubleNegation: forbidden
-	ternaryOfTrueAndFalse: forbidden
+	# `$a ? $a : $b` is written `$a ?: $b`
 	ternaryReturningItsCondition: forbidden
+	# `isset($a) ? $a : $b` is written `$a ?? $b`
 	ternaryTestingNull: forbidden
+	# `get_class()` and `__CLASS__` are written `self::class`, `get_called_class()` is written `static::class`
 	getClassCalls: forbidden
+	# `get_class($o)` is written `$o::class`
 	getClassOnObjects: forbidden
+	# `isset($a) && isset($b)` is written `isset($a, $b)`
 	separateIssets: forbidden
+	# `unset($a); unset($b);` is written `unset($a, $b);`
 	consecutiveUnsets: forbidden
-	parenthesesAfterConstruct: forbidden
+	# the backtick operator is written `shell_exec()`
 	backticks: forbidden
 
 literals:
+	# `"text"` is written `'text'`, double quotes staying where they interpolate or escape
 	quotes: single
+	# in double quotes and a heredoc, `"\d+"` is written `"\\d+"`, every backslash that escapes nothing doubled
 	backslashes: escaped
-	concatenatedLiterals: joined
-	manualEmptyTest: forbidden
-	classNameInString: forbidden
+	# `1000000` is written `1_000_000`, a number of up to six digits staying as it is
 	digitGroupsFrom: 7
+	# a fraction of twenty digits and more is grouped too, `0.000_001`
 	fractionDigitGroupsFrom: 20
 
 comments:
+	# `# text` is written `// text`
 	singleLine: '//'
-	empty: forbidden
 
 phpdoc:
+	# `@Param`, `@inheritdoc` are written `@param`, `@inheritDoc`
 	annotations: canonicalCase
+	# every `*` of a doc comment right below the first `*` of its `/**`
 	stars: aligned
+	# no blank line opening or closing a doc comment, and at most one in a row inside it
 	blankLinesAtEdges: forbidden
-	empty: forbidden
-	inheritdocOnly: forbidden
-	repeatingNativeTypes: forbidden
-	constantVar: forbidden
+	# a plain comment above a property, `// the count` or `/* the count */`, is reported where a doc comment belongs
 	propertyComment: phpdoc
+	# a doc comment of a property with one line of content takes one line, `/** @var int */`
 	propertyPhpdocOfOneLine: singleline
+	# a promoted property is annotated by a `@var` of its own, not by a `@param` of the constructor
 	promotedPropertyAnnotation: '@var'
-	consistency:
-		paramOfUnknownParameter: forbidden
-		duplicateReturn: forbidden
-		duplicateVar: forbidden
-		emptyAnnotation: forbidden
+	# what the repository and the language say better, removed with their lines
 	forbiddenAnnotations: [@access, @author, @copyright, @created, @license, @package, @since, @subpackage, @todo, @version]
+	# the descriptions that say nothing, `Constructor.`, `Created by John.`, `Name getter.`, removed
 	forbiddenLines: ['~^(?:(?!private|protected|static)\S+ )?(?:con|de)structor\.\z~i', ~^Created by \S+\.\z~i, '~^\S+ [gs]etter\.\z~i']
 	types:
-		builtin: canonical
+		# both notations of an array type stay as they are
+		array: keep
+		# `null|int` is written `int|null` in a doc comment as in a declaration
 		nullPosition: last
-
-correctness:
-	strictCalls: required
-	thisOutsideObject: forbidden
-	unreachableCatch: forbidden
-	exceptionWhereThrowableBelongs: forbidden
-	continueInSwitch: forbidden
-	errorSuppression: forbidden
-	repeatedAssignment: forbidden
-	__set_state: static
-	__debugInfo: array
-	invisibleCharacters: forbidden
-	trailingWhitespaceInStrings: forbidden
-	consecutivePhpdocs: forbidden
 
 upgrading:
 	php:
-		guide: forbidden
+		# `"${name}"` is written `"{$name}"`, PHP 8.2 having deprecated the former
 		dollarBraceInterpolation: forbidden
 	syntax:
+		# `017` is written `0o17`
 		octalPrefix: adopted
-		catchWithoutVariable: adopted
-		newWithoutParentheses: adopted
 	classes:
-		neverReturnType: adopted
+		# a class with `__toString()` is `Stringable` without saying so
+		Stringable: keep
 
+# A comment that explains an exception keeps the decision quiet on its line: `// intentionally ==` a loose comparison,
+# and `// @ <why>` an `@` operator.
 suppressionComments:
 	'~\bintentionally\s+[!=]=~': expressions.comparison
 	'~^//\s*@\s+\S~': correctness.errorSuppression
@@ -445,7 +604,7 @@ Symfony Coding Standards tak, jak je definuje sada `@Symfony` PHP CS Fixeru, zat
 # set builds on, with the casing, the imports, the blank lines and the whitespace Symfony adds, and without the rules
 # that would break a construct over lines, which Symfony leaves to the author.
 
-extends: perCs
+use: perCs
 
 file:
 	maxLineLength: none
@@ -577,7 +736,7 @@ upgrading:
 Sady
 ====
 
-Sada nerozhoduje nic o vzhledu kódu, a proto se se standardem nikdy nepere. Pokládá se vedle něj (`extends: [nette, modernizations]`) a hlavně roste: rozhodnutí, které DressCode v nové verzi získá, přibude do své sady, a projekt, který ji rozšiřuje, ho dostane bez změny konfigurace.
+Sada nerozhoduje nic o vzhledu kódu, a proto se se standardem nikdy nepere. Pokládá se vedle něj (`use: [nette, modernizations]`) a hlavně roste: rozhodnutí, které DressCode v nové verzi získá, přibude do své sady, a projekt, který ji rozšiřuje, ho dostane bez změny konfigurace.
 
 
 `modernizations`
@@ -847,17 +1006,10 @@ Volání ve tvaru, který PHP optimalizuje už při překladu, viz [Optimalizace
 ```neon .[preset]
 # Optimized calls
 #
-# A call written in the form PHP optimizes when it compiles the code: a cast or a comparison instead of a function
-# that does the same, and the arguments of a call the compiler optimizes written so that it still can.
+# The arguments of a call the compiler optimizes written so that it still can.
 
 qualification:
 	globalFunction:
 		# every form passes, so no name is rewritten; what the compiler already optimizes keeps its arguments positional
 		optimizedByCompiler: [imported, fullyQualified, bare]
-
-calls:
-	conversionFunctions: forbidden
-	dirnameOfFile: forbidden
-	is_null: forbidden
-	settype: forbidden
 ```

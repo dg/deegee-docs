@@ -64,7 +64,7 @@ An example meant to win the reader over (the home page, the readme, the opening 
 - **nikic/PHP-Parser** is written exactly like this, with a link to GitHub at its first mention on a page.
 - **Installation** is offered in three ways: globally, with `create-project`, and as a development dependency. The last one is the way to get the types from the PHPStan of the project, so a page about types installs both into the project; its cost, the PHP version the tool requires forced on the project, is mentioned together with it. The PHP version of the tool and the target PHP version of the checked project are two different numbers.
 - **Updating code** is said on every page where a reader decides whether to use the tool (home, getting started, how it works, migration): DressCode formats and upgrades code in one run, to newer PHP and to new versions of libraries.
-- **A preset is chosen** in the key `extends` of the configuration file or with `--use` on the command line; never write as if only one of them existed.
+- **A preset is chosen** in the key `use` of the configuration file or with `--use` on the command line; never write as if only one of them existed.
 - **Czech terms.** At the first mention on a page, the English term follows the Czech one in parentheses ("potlačení (suppression)"). A term that is also the name of a class or a configuration key keeps its English form. The glossary for readers at the end of `how-it-works` must agree with this table.
 
 | English | Czech | note |
@@ -83,7 +83,7 @@ An example meant to win the reader over (the home page, the readme, the opening 
 | promoted property | vlastnost deklarovaná v konstruktoru | English in parentheses at the first mention |
 | profile | profil | |
 | override | přepis | |
-| plugin | plugin | a class implementing `Plugin`; a package announces it in its `composer.json`, a project names one of its own in the key `plugins` |
+| plugin | plugin | a class implementing `Plugin`; a package announces it in its `composer.json`, a project names one of its own in the key `use`, beside the presets |
 | engine | jádro | the word "engine" is not used in Czech text |
 | suppression | potlačení | |
 | baseline | baseline | as in PHPStan |

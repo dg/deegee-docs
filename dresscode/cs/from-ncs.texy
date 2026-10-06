@@ -10,7 +10,7 @@ Co se změnilo
 
 Nette Coding Standard byl do verze 3 tenká obálka nad PHP CS Fixerem a PHP_CodeSniffer s balíkem pravidel od Slevomatu: dva nástroje, dvě konfigurace (`ncs.php` pro fixer, `ncs.xml` pro sniffer) a příkaz `ecs`, který to celé spouštěl.
 
-Od verze 4 je standard **presetem DressCode**. Jmenuje se `nette` a je součástí DressCode, takže ho má k dispozici každý projekt bez ohledu na to, jestli s Nette pracuje. Stojí na PER Coding Style, který upravuje podle rozvržení knihoven Nette (tabulátory, dva prázdné řádky mezi metodami a další), a navíc rozhoduje všechno ze [sady |configuration#Standardy a sady] `correctness` a většinu ze sady `cleanup`; co přesně obsahuje, ukazuje [přehled standardů a sad |presets-reference]. Balíček `nette/coding-standard` k němu přidává to, co potřebuje navíc projekt postavený na Nette:
+Od verze 4 je standard **presetem DressCode**. Jmenuje se `nette` a je součástí DressCode, takže ho má k dispozici každý projekt bez ohledu na to, jestli s Nette pracuje. Stojí na PER Coding Style, který upravuje podle rozvržení knihoven Nette (tabulátory, dva prázdné řádky mezi metodami a další), a navíc používá [sady |configuration#Standardy a sady] `cleanup`, `types` a `correctness`, z nichž pár rozhodnutí vypíná; co přesně obsahuje, ukazuje [přehled standardů a sad |presets-reference]. Balíček `nette/coding-standard` k němu přidává to, co potřebuje navíc projekt postavený na Nette:
 
 - plugin s filtrem, který vynechá soubory s anotací `@phpVersion` nad běžící verzí PHP, jak to potřebují testy knihoven Nette, a s cestami, které vylučovala verze 3 (`expected`, `tmp`, `fixtures*`);
 - příkaz `ecs` z verze 3, aby projekt na trojce fungoval dál, než přejde.
@@ -28,19 +28,24 @@ Počítejte s tím, že DressCode vyžaduje PHP 8.4 až 8.6, a protože jde o v�
 Do kořene projektu přijde `dresscode.neon` se standardem a sadami, které chcete navíc:
 
 ```neon
-extends:
+use:
 	- nette
-	- types            # volitelně: nativní typy všude, kde je PHP čte
 	- optimizedCalls   # volitelně
 
 nameResolution: certain
+
+# volitelně: nativní typy všude, kde je PHP čte
+types:
+	parameter: required
+	property: required
+	return: required
 
 paths:
 	- src
 	- tests
 ```
 
-Kdo chce i filtr podle `@phpVersion` a vyloučené cesty verze 3, přidá `nette/coding-standard` a jeho plugin: `plugins: [Nette\CodingStandard\Plugin]`. Který styl se použije, říká klíč `extends`, protože to je rozhodnutí projektu, ne balíčku.
+Kdo chce i filtr podle `@phpVersion` a vyloučené cesty verze 3, přidá `nette/coding-standard` a jeho plugin napíše do klíče `use` vedle standardu: `use: [Nette\CodingStandard\Plugin, nette]`. Styl dál určuje preset `nette`, ne plugin, protože to je rozhodnutí projektu, ne balíčku.
 
 Opravy, které stojí na tom, že je funkce globální, a mezi nimi i to, co dělá sada [`optimizedCalls` |optimizations], udělá DressCode bez svolení jen tehdy, když ví, co ve vašich jmenných prostorech je. Proto v konfiguraci stojí `nameResolution: certain`, a pokud nějaké funkce nebo konstanty ve jmenných prostorech opravdu máte, patří k němu i jejich seznam v klíči `namespaces`; bez toho se takové opravy jen ohlásí. Proč, vysvětluje stránka [Funkce a konstanty ve jmenných prostorech |namespaces].
 
@@ -76,7 +81,7 @@ Přečte `ncs.php` a `ncs.xml` v aktuálním adresáři a napíše `dresscode.ne
 | verze 3 | verze 4 |
 |---|---|
 | `ncs.php` s `'fixer' => false` | rozhodnutí, které fixer pokrývá, s hodnotou `keep` |
-| `ncs.php` s `'Nette/optimize_global_calls' => true` | sada `optimizedCalls` v klíči `extends` |
+| `ncs.php` s `'Nette/optimize_global_calls' => true` | sada `optimizedCalls` v klíči `use` |
 | `ncs.xml` s `<exclude-pattern>` | klíč `excludePaths` |
 | `ncs.xml` s `<exclude-pattern>` uvnitř `<rule>` | přepis v klíči `overrides`, který rozhodnutí pro ty cesty dá `keep` |
 | `--config-file overrides.php` | `dresscode.neon` v kořeni projektu |
