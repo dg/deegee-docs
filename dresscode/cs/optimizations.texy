@@ -150,37 +150,28 @@ Rozbalené argumenty, třeba `\strlen(...$args)`, zkratku vypnou taky, protože 
 Jak s tím pomůže DressCode
 ==========================
 
-Hlídat to všechno ručně by bylo úmorné. Proto to za vás udělají dvě věci: [sada |configuration#Standardy a sady] `optimizedCalls`, kterou přidáte ke svému standardu, a rozhodnutí sekce [`qualification` |decisions/qualification], která řeknou, jak se jména optimalizovaných funkcí a konstant píšou:
+Hlídat to všechno ručně by bylo úmorné. Proto to za vás udělá [sada |configuration#Standardy a sady] `compilerOptimizations`, kterou přidáte ke svému standardu:
 
 ```neon
 use:
 	- nette
-	- optimizedCalls
-
-qualification:
-	globalFunction:
-		optimizedByCompiler: imported
-	globalConstant:
-		computedByCompiler: imported
+	- compilerOptimizations
 ```
 
-Žádný standard sadu sám nezapíná. Sada nahradí volání jazykovou konstrukcí: `is_null($x)` porovnáním `$x === null` (`calls.is_null`), `intval($x)` přetypováním `(int) $x` (`calls.conversionFunctions`), `settype()` přiřazením přetypované hodnoty (`calls.settype`) a `dirname(__FILE__)` konstantou `__DIR__` (`calls.dirnameOfFile`). Jazyková konstrukce žádnou zkratku nepotřebuje, je rychlá vždy a na jmenném prostoru nezáleží. A u volání, které kompilátor optimalizuje, přepíše pojmenované argumenty na poziční a rozbalené ohlásí.
+Žádný standard sadu sám nezapíná. Sada importuje funkci, se kterou zachází zvlášť kompilátor, tam, kde je volání s danými argumenty opravdu zrychlí, a konstantu, se kterou kompilátor počítá; konstanta smí místo importu nést i lomítko. Ostatní globální funkce a konstanty píše holé, protože jim kvalifikované jméno nic neušetří. A u volání, které kompilátor optimalizuje, přepíše pojmenované argumenty na poziční a rozbalené ohlásí.
 
-Zápis jmen sada nemění, protože o něm rozhoduje styl projektu: zapíše jméno tak, jak ho kód už má. Kdo chce, aby optimalizované funkce a konstanty nestály holé, napíše to dvěma klíči sekce `qualification` jako v ukázce. `optimizedByCompiler: imported` nenechá holou funkci, se kterou zachází zvlášť kompilátor, tam, kde je volání s danými argumenty opravdu zrychlí, a `computedByCompiler: imported` konstantu, se kterou kompilátor počítá. Kdo dává přednost lomítku, napíše `fullyQualified`. Podrobně to popisuje stránka [o jmenných prostorech |namespaces#Jak se píšou globální jména].
+Sada jsou čtyři klíče sekce [`qualification` |decisions/qualification]: `globalFunction.optimizedByCompiler: imported`, `globalFunction.normally: bare`, `globalConstant.computedByCompiler` a `globalConstant.normally: bare`. Kdo dává přednost lomítku před importem, napíše si v konfiguraci u optimalizovaných jmen `fullyQualified`. Podrobně to popisuje stránka [o jmenných prostorech |namespaces#Jak se píšou globální jména].
+
+Volání, které jde nahradit jazykovou konstrukcí, třeba `is_null($x)` porovnáním `$x === null` nebo `intval($x)` přetypováním `(int) $x`, sada nepřepisuje. To jsou rozhodnutí sekce [`calls` |decisions/calls]: jazyková konstrukce žádnou zkratku nepotřebuje, je rychlá vždy a na jmenném prostoru nezáleží, a standard `nette` je zapíná.
 
 Takhle vypadá metoda před opravou, v projektu pro PHP 8.4 s `nameResolution: certain`:
 
 ```neon
 use:
-	- optimizedCalls
+	- compilerOptimizations
 nameResolution: certain
 targets:
 	php: '8.4'
-qualification:
-	globalFunction:
-		optimizedByCompiler: imported
-	globalConstant:
-		computedByCompiler: imported
 ```
 
 ```php .[before]
@@ -238,4 +229,4 @@ Shrnutí
 - Skoro všechny zkratky potřebují jisté jméno: `\strlen()`, `use function strlen;` nebo soubor bez jmenného prostoru. Totéž platí pro konstanty jako `PHP_VERSION_ID`.
 - Volání bez rámce z PHP 8.4 funguje i s nekvalifikovaným jménem ve jmenném prostoru.
 - Pojmenované a rozbalené argumenty vypnou všechny zkratky.
-- Sada `optimizedCalls` a k ní klíče `qualification.globalFunction.optimizedByCompiler` a `qualification.globalConstant.computedByCompiler` zapíšou kód tak, aby zkratky platily: optimalizované funkce kvalifikují tam, kde je PHP s danými argumenty opravdu zrychlí, a konstanty PHP jen tam, kde s nimi kompilátor počítá.
+- Sada `compilerOptimizations` zapíše kód tak, aby zkratky platily: optimalizované funkce kvalifikují tam, kde je PHP s danými argumenty opravdu zrychlí, a konstanty PHP jen tam, kde s nimi kompilátor počítá.

@@ -57,7 +57,7 @@ An example meant to win the reader over (the home page, the readme, the opening 
 ## Names and terms
 
 - **PER Coding Style 3.1** is written in full, with a link to php-fig at its first mention on a page, and as PER Coding Style everywhere after it, the way php-fig writes it, never a bare "PER"; the preset is `perCs`.
-- **Names are camelCase**, as everything in the configuration is: the keys of the decisions, presets, sets and values (`blankLines.betweenMethods`, `perCs`, `optimizedCalls`, `nextLine`). Only the options of the command line (`--fix-risky`) and the names of Composer packages (`dresscode/rules-nette`) keep their own spelling.
+- **Names are camelCase**, as everything in the configuration is: the keys of the decisions, presets, sets and values (`blankLines.betweenMethods`, `perCs`, `compilerOptimizations`, `nextLine`). Only the options of the command line (`--fix-risky`) and the names of Composer packages (`dresscode/rules-nette`) keep their own spelling.
 - **A decision is always written by its whole path**, `braces.class`, never by its last word alone, because that is what the reader sees in the output, writes into the configuration and into `dresscode:ignore`. Inside the configuration snippet of its own section the key stands under its section, as it does in the file.
 - **Built-in presets are named short**, without the vendor: `perCs`, `nette`, `cleanup`, in the configuration, on the command line and in prose. That is how people write them, and the tool accepts it everywhere. The full name `dresscode/…` is kept only where it carries information: in quoted output the tool prints in that form (`config`, `explain`, messages), on the pages about moving from other tools, where names of several tools meet, on the pages about writing rules and presets, where the name `vendor/slug` is the subject, and next to names of other vendors. Names of plugins and rule packages are always written in full. What the vendor means is explained once, in `configuration` under Standardy a sady; other pages link there.
 - **A rule has no name** the reader would use. It is the implementation of decisions and appears only on the pages about writing rules, by its class.
@@ -77,7 +77,7 @@ An example meant to win the reader over (the home page, the readme, the opening 
 | violation | porušení | "nález" for a single report of it, never "chyba" |
 | fix / check | oprava / kontrola | the commands stay `fix` and `check` |
 | preset, standard | preset, standard | a standard is a preset deciding how the code looks: `perCs`, `psr12`, `nette`, `symfony` |
-| set | sada | a preset of one intent, deciding nothing about the looks: `modernizations`, `deprecations`, `cleanup`, `correctness`, `types`, `optimizedCalls`; extended beside the standard |
+| set | sada | a preset of one intent, deciding nothing about the looks: `modernizations`, `deprecations`, `cleanup`, `correctness`, `types`, `compilerOptimizations`; used beside the standard |
 | types | typy | what the PHPStan of the project knows about the code; the key is `typeAnalysis: phpstan` |
 | deprecated | zastaralé | as in the Nette documentation; the annotation stays `@deprecated` |
 | promoted property | vlastnost deklarovaná v konstruktoru | English in parentheses at the first mention |
