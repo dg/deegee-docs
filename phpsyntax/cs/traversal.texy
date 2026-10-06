@@ -21,7 +21,7 @@ $class = $file->findFirst(ClassNode::class);
 Když třída sama nestačí, přidá se za ni podmínka. Třída zůstává na svém místě, takže podmínka i výsledek jsou typované a IDE i PHPStan vědí, s čím pracují:
 
 ```php
-$long = $file->find(StringNode::class, fn(StringNode $s) => strlen($s->value) > 80);
+$long = $file->find(StringNode::class, fn(StringNode $s) => strlen($s->toValue()) > 80);
 ```
 
 Filtrem smí být i rozhraní, takže `find(ClassLikeNode::class)` najde naráz třídy, rozhraní, traity i výčty. Kdo chce úplně všechno a rozhodnout se až v podmínce, napíše `find(Node::class, $condition)`.
@@ -87,18 +87,18 @@ Pozice
 ======
 
 ```php
-$token->currentLine;     // řádek v aktuálním stavu stromu, od 1
-$token->currentColumn;   // sloupec od 1, ve znacích UTF-8
-$token->currentOffset;   // bajtový offset
-$token->getVisualColumn($style);   // sloupec s tabulátory rozvinutými podle stylu
-$token->line;            // řádek v přečteném souboru, nikdy se nemění
-$token->pos;             // bajtový offset v přečteném souboru
-$node->getStartLine();   // řádky uzlu
+$token->getCurrentLine();         // řádek v aktuálním stavu stromu, od 1
+$token->getCurrentColumn();       // sloupec od 1, ve znacích UTF-8
+$token->getCurrentOffset();       // bajtový offset
+$token->getVisualColumn($style);  // sloupec s tabulátory rozvinutými podle stylu
+$token->line;                     // řádek v přečteném souboru, nikdy se nemění
+$token->pos;                      // bajtový offset v přečteném souboru
+$node->getStartLine();            // řádky uzlu
 $node->getEndLine();
-$node->isMultiLine();    // končí uvnitř textu uzlu nějaký řádek? Funguje i bez souboru
+$node->isMultiLine();             // končí uvnitř textu uzlu nějaký řádek? Funguje i bez souboru
 ```
 
-Rozdíl mezi `currentLine` a `line` je podstatný, jakmile strom měníte: první sleduje změny, druhé je pozice, kterou zná uživatel ze svého souboru, a právě ta patří do hlášení. `line` a `pos` jsou vlastnosti zděděné z `PhpToken`; token, který nevznikl v lexeru, tedy vyrobený konstruktorem nebo naparsovaný jako fragment, má v obou `-1`. Přepíšete-li text jména nebo identifikátoru, nový token si původní pozici ponechá, takže hlášení pořád ukazuje na místo v souboru; token, který vložíte přes `replaceWith()`, má pozici vlastní. Zdroj v jiném kódování než UTF-8 projde bajt po bajtu, ale sloupce se počítají ve znacích UTF-8, takže u něj jsou jen přibližné. Vlastnosti `current*` jsou jen pro čtení a aktuální pozici mají jen tokeny stromu, který visí na `FileNode`; v odpojeném podstromu vrátí `currentLine`, `currentColumn`, `currentOffset`, `getVisualColumn()`, `getStartLine()` i `getEndLine()` hodnotu `null`.
+Rozdíl mezi `getCurrentLine()` a `line` je podstatný, jakmile strom měníte: první sleduje změny, druhé je pozice, kterou zná uživatel ze svého souboru, a právě ta patří do hlášení. `line` a `pos` jsou vlastnosti zděděné z `PhpToken`; token, který nevznikl v lexeru, tedy vyrobený konstruktorem nebo naparsovaný jako fragment, má v obou `-1`. Přepíšete-li text jména nebo identifikátoru, nový token si původní pozici ponechá, takže hlášení pořád ukazuje na místo v souboru; token, který vložíte přes `replaceWith()`, má pozici vlastní. Zdroj v jiném kódování než UTF-8 projde bajt po bajtu, ale sloupce se počítají ve znacích UTF-8, takže u něj jsou jen přibližné. Aktuální pozici mají jen tokeny stromu, který visí na `FileNode`; v odpojeném podstromu vrátí `getCurrentLine()`, `getCurrentColumn()`, `getCurrentOffset()`, `getVisualColumn()`, `getStartLine()` i `getEndLine()` hodnotu `null`.
 
 Opačným směrem, od pozice k uzlu, vede soubor. Hodí se, když pozici dodá jiný nástroj nebo editor:
 

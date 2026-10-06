@@ -54,7 +54,7 @@ Node of the concrete syntax tree; every token of the source is reachable through
 - `setEdgeTrivia(?list<Trivia> $leading = null, ?list<Trivia> $trailing = null): static` – Writes the trivia on the outer edges of the node: before its first token and after its last one. A `null` leaves that edge alone, `[]` clears it, and a node without tokens takes neither.
 - `withoutEdgeTrivia(): static` – A deep copy without a parent and without the trivia on its outer edges, which belong to the place it was copied from.
 - `replaceWith(Node $node): void` – Replaces this node in its parent; the trivia around the old node stay in place around the new one, or with the tokens on either side when the new one has no tokens, an empty list, and where the new one then stands right against a token it would be read together with, `.` against `1` or `return` against `FOO`, a space keeps the two apart.
-- `remove(CommentPolicy $comments = CommentPolicy::MoveToNextToken, bool $mergeBlankLines = false): void` – Removes this node from its list, together with the separator that goes with it. A node alone on its lines takes the lines with it (indentation and line ending), otherwise the whitespace around stays; its comments, those on its edges included, go where the policy says, each with its indentation and the line ending after it. With `$mergeBlankLines`, where the node and the token after it stand at the start of a line, the two gaps of blank lines the node stood between become the narrower of them, or the one toward the edge where the node was the first or the last item of its list, counted above the comments the node leaves behind.
+- `remove(CommentPolicy $comments = CommentPolicy::MoveToNextToken, bool $mergeBlankLines = false): void` – Removes this node from its list, together with the separator that goes with it. A node alone on its lines takes the lines with it (indentation and line ending), otherwise the whitespace around stays; the comments it owns, inside it, on its line, its doc comment and the ones right above it, go where the policy says, each with its indentation and the line ending after it, while a comment above set apart by a blank line stays where it is. With `$mergeBlankLines`, where the node and the token after it stand at the start of a line, the two gaps of blank lines the node stood between become the narrower of them, or the one toward the edge where the node was the first or the last item of its list, counted above the comments the node leaves behind.
 - `__toString(): string` – The node printed back to source, the trivia on its outer edges included; `$text` leaves them out.
 
 
@@ -93,8 +93,10 @@ Expression, which stands for a value; a destructuring stands where a target is w
 - `isDereferenceable(DereferenceKind $by = DereferenceKind::Fetch): bool` – Whether what is written after the expression may reach into it with no parentheses around it. A call takes a name or a member written before it for its own, which calls another thing entirely, and `::` takes the name of a class, which a name written there would become.
 - `canStandInString(): bool` – Whether the expression may be written inside a double-quoted string, a heredoc or a shell command in braces, `{$...}`: what the grammar reads as a variable there, which is a variable, an element, a property, a static property or a call of a function, a method or a static method, starting with the dollar of a variable.
 - `isWritable(): bool` – Whether the expression may stand where a place is assigned to: a variable, an element, a property, reached through a chain PHP writes through. A `?->` anywhere along it rules the write out, a call in the chain included, and so does a chain starting at a value of its own, a literal, a constant, `new` or `clone`, which has no place to write to. It says nothing about reading; that is `isRepeatableRead()`, and the two answer for the two sides of `=`.
+- `isInNullsafeChain(): bool` – Whether a `?->` stands in the chain the expression reads out of, its own access and parentheses included: PHP refuses to write there or to make a first-class callable of a call there, the `?->` possibly skipping the rest.
 - `isWritten(): bool` – Whether something writes the expression or an element of it, a variable, a property or an element alike: it is assigned, stepped, unset, bound, or taken by reference, either side of `=&` among them, the right one becoming a reference a write may later go through.
 - `isRepeatableRead(): bool` – Whether reading the expression again gives the same value with no side effects: variables, property, constant and offset fetches, literals, arrays of such items and what parentheses or a unary operator make of them, nothing that runs code of its own; an unpacked item may run a generator and one by reference creates the variable, so neither is repeatable. The answer is syntactic, so what the language runs behind such a read is out of sight and does not count: a magic getter or a property hook behind a fetch, an `ArrayAccess` behind an offset, a `__toString()` behind a string that interpolates. Whoever cannot assume that much has to know the types, which a syntax tree does not.
+- `hasEffect(): bool` – Whether evaluating the expression may do more than give its value: call code, create or clone an object, write, print, leave or run a command; a closure or an arrow function written in it counts by the expressions of its body, though making one runs nothing. The answer is syntactic as that of `isRepeatableRead()`, so a read an object answers through a magic method or a hook does not count.
 - `evaluatesToBoolean(): bool` – Whether the expression yields a boolean whatever its operands: a comparison, a logical operation, a negation, `instanceof`, `isset()`, `empty()`, a bool cast or a boolean literal.
 - `toValue(): mixed` – The value the expression is written as: a scalar, `null`, `true`, `false`, or an array of them. A name standing for a constant is not one, its value being a matter of what the code around it defines. Throws `LogicException` where the expression is written as no value; `hasValue()` tells beforehand.
 - `hasValue(): bool` – Whether the expression is written as a value, which is what `toValue()` gives.
@@ -107,6 +109,7 @@ FunctionLikeNode
 
 Declaration with parameters and a body: function, method, closure, arrow function, property hook; an interface, because a closure and an arrow function are expressions and the rest are not. Rozšiřuje `AttributeAwareNode`.
 
+- `$ampersand: ?Token` – The `&` by which the declaration returns a reference, that of `&get` among them; null where none is.
 - `$openParen: ?Token` – The parenthesis opening the parameters; null for a property hook written without parentheses.
 - `$parameters: ?SeparatedNodeList<ParameterNode>` – Null for a property hook written without parentheses.
 - `$closeParen: ?Token` – The parenthesis closing the parameters; null for a property hook written without parentheses.
@@ -208,6 +211,7 @@ Name of a class, function, constant or namespace: one token of any kind, includi
 - `$shortName: string` – The last segment, which is what an import of the name brings in.
 - `$symbolKind: SymbolKind` – Which table of names the name belongs to: functions when called, constants when fetched, what a use item imports, otherwise classes, a namespace among them. It follows the place in the tree, so moving the node changes it, and it says nothing about whether the name refers to a symbol or declares one, which is `isReference()`: whoever resolves names asks that first.
 - `static fromText(string $text): NameNode` – A name written as the text, in the token the name is written as (`Foo`, `A\B`, `\A\B`, `namespace\B`); a keyword passes as well, the grammar taking one as a name in some places, whether or not it can name a symbol here.
+- `static tryFromText(string $text): ?NameNode` – A name written as the text as `fromText()` makes it; null where the text is no name.
 - `isKeyword(): bool` – Whether the name is a keyword the grammar accepts in place of a name (`static`, `array`, `readonly`, `exit`...).
 - `isSpecialClass(): bool` – Whether the name is `self`, `static` or `parent`, which stand for a class only where they are written.
 - `isDeclaration(): bool` – Whether the name declares or imports a symbol instead of referring to one: a namespace statement or a use.
@@ -850,6 +854,8 @@ DeclareNode
 - `statements`: `?PlainNodeList<StatementNode>`
 - `endKeyword`: `?Token`
 - `semicolon`: `?Token`
+
+- `findDirective(string $name): ?DeclareItemNode` – The directive of the name given, such as `strict_types`, in any case as PHP reads it; null where none is.
 
 
 TryNode
@@ -1551,7 +1557,7 @@ Integer literal in any base, kept as written. Rozšiřuje `ScalarNode`.
 - `token`: `Token`
 
 - `$base: int` – The base the literal is written in: 2, 8, 10 or 16; a leading zero alone is the old octal notation.
-- `$value: int` – The value of the literal; a literal beyond the integer range is a float to PHP, so it is a FloatNode.
+- `toValue(): int` – The value of the literal; a literal beyond the integer range is a float to PHP, so it is a FloatNode.
 
 
 FloatNode
@@ -1561,7 +1567,7 @@ Literal PHP reads as a float, kept as written. That is not the same as float syn
 
 - `token`: `Token`
 
-- `$value: float` – The value of the literal, which is also how an integer literal beyond the integer range reaches PHP.
+- `toValue(): float` – The value of the literal, which is also how an integer literal beyond the integer range reaches PHP.
 
 
 BooleanNode
@@ -1570,8 +1576,6 @@ BooleanNode
 Boolean literal, kept in the letter case and with the leading backslash it is written with: `true`, `FALSE`, `\True`. Rozšiřuje `ScalarNode`.
 
 - `token`: `Token`
-
-- `$value: bool`
 
 
 NullNode
@@ -1590,9 +1594,9 @@ String literal without interpolation, quotes included. Rozšiřuje `ScalarNode`.
 - `token`: `Token`
 
 - `$quote: string` – The delimiter the literal is written with: `'` or `"`, a `b` or `B` prefix left out.
-- `$value: string` – The value of the literal with its escape sequences resolved.
 - `static fromValue(string $value, string $quote = "'"): Scalar\StringNode` – A literal standing for the value, escaped as the delimiter needs it.
-- `setValue(string $value, ?string $quote = null): static` – Writes the literal: the value escaped as the delimiter needs it, in the delimiter given or in the one it has. The two go together, because the delimiter decides how the value is written.
+- `toValue(): string` – The value of the literal with its escape sequences resolved.
+- `setValue(string $value, ?string $quote = null): static` – Writes the literal: the value escaped as the delimiter needs it, in the delimiter given or in the one it has. The two go together, because the delimiter decides how the value is written. A literal that already reads as the value, in that delimiter, stays as it is written.
 
 
 UnquotedStringNode
@@ -1602,7 +1606,7 @@ Name of an offset written without quotes inside an interpolated string (`"$row[l
 
 - `token`: `Token`
 
-- `$value: string` – The value of the offset, which is the text as it stands.
+- `toValue(): string` – The value of the offset, which is the text as it stands.
 
 
 MagicConstantNode
@@ -1634,7 +1638,7 @@ Heredoc or nowdoc; the closing delimiter keeps its indentation, the parts keep t
 
 - `$label: string` – The label between <<< and the body, without quotes.
 - `$indentation: string` – The indentation of the closing delimiter, which the body shares.
-- `$value: string` – The text of the body with its escape sequences resolved and the common indentation removed. Throws `LogicException` when the heredoc interpolates; `hasInterpolation()` tells beforehand.
+- `toValue(): string` – The text of the body with its escape sequences resolved and the common indentation removed. Throws `LogicException` when the heredoc interpolates; `hasInterpolation()` tells beforehand.
 - `isNowdoc(): bool` – Whether the label is in single quotes, which makes a nowdoc that resolves no escape sequences.
 - `hasInterpolation(): bool` – Whether any part of the body is an interpolation, which leaves the heredoc without a value of its own.
 
@@ -1642,7 +1646,7 @@ Heredoc or nowdoc; the closing delimiter keeps its indentation, the parts keep t
 InterpolatedStringPartNode
 --------------------------
 
-Literal text between interpolations, whitespace included. What its escape sequences mean depends on the string it stands in, so the part keeps them as written and whoever reads it resolves them for that string, as `HeredocNode::$value` does for a heredoc. Rozšiřuje `Node`.
+Literal text between interpolations, whitespace included. What its escape sequences mean depends on the string it stands in, so the part keeps them as written and whoever reads it resolves them for that string, as `HeredocNode::toValue()` does for a heredoc. Rozšiřuje `Node`.
 
 - `token`: `Token`
 

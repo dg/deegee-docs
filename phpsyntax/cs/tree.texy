@@ -65,7 +65,7 @@ Hodnoty druhů se mezi verzemi PHP liší, proto druh vždycky porovnávejte s k
 <div class=note>
 **Proč zrovna `PhpToken`.** `Token` i `Trivia` jsou potomky nativní třídy `PhpToken`, což zní samozřejmě: vždyť to jsou tokeny PHP. Kdybychom ale navrhovali API na zelené louce, dědění bychom se vyhnuli, protože s rodičem přišly i dvě věci, které bychom pojmenovali a ohlídali jinak. Vyhrála rychlost. `PhpToken::tokenize()` vyrábí v C rovnou instance třídy `Token`, takže lexer nemusí ke každému tokenu PHP stavět ještě jeden objekt. Vlastní třída v měření zpomalila parsování o 5 %, a to nám čistší API nestálo, ale možná jsme moc puntičkářští. Je to jako zařízený byt: nastěhujete se hned a levně, jen nábytek už někdo rozestavil po svém. Za ten nábytek se omlouváme dvakrát:
 
-- **`$line` a `$pos` jsou původní pozice**, ne aktuální. Správně by se jmenovaly `originalLine` a `originalOffset`, jenže jména jim dal `PhpToken` a potomek je změnit nemůže. Předponu proto dostaly aktuální pozice, `currentLine`, `currentColumn` a `currentOffset`, a holé jméno tak znamená "jak to bylo". Token nebo trivia, které ve zdrojáku nestály, mají v obou `-1`, ne `null`.
+- **`$line` a `$pos` jsou původní pozice**, ne aktuální. Správně by se jmenovaly `originalLine` a `originalOffset`, jenže jména jim dal `PhpToken` a potomek je změnit nemůže. Předponu proto dostaly aktuální pozice, `getCurrentLine()`, `getCurrentColumn()` a `getCurrentOffset()`, a holé jméno tak znamená "jak to bylo". Token nebo trivia, které ve zdrojáku nestály, mají v obou `-1`, ne `null`.
 - **`$text` jazyk nehlídá.** PHP sice potomkovi dovolí zavěsit na zděděnou vlastnost hook, jenže nativní kód `PhpToken` o hooku neví a čte i píše kolem něj: objekt by pak měl dva texty a `__toString()` by vracel jiný než `$token->text`. Ochranu proto zastupuje dohoda: text tokenu měňte jen metodou `setText()`, která o změně řekne indexu pozic, a místo změny trivia si metodou `withText()` vezměte její kopii.
 
 Ze zděděných metod se hodí `is()` a `getTokenName()`. Pozor jen na zděděné `Token::tokenize()`: vrací surové tokeny PHP, mezery a komentáře jako samostatné kusy, kdežto tokeny knihovny s trivia dává `Lexer::tokenize()`.
@@ -143,15 +143,15 @@ Role jména i to, jestli `equals()` ignoruje velikost písmen, se čtou z místa
 Skaláry
 =======
 
-Literály si drží text tak, jak byl zapsán, a hodnotu, kterou znamenají, dávají jako vlastnost:
+Literály si drží text tak, jak byl zapsán, a hodnotu, kterou znamenají, dávají metodou `toValue()`:
 
 ```php
 $int->token->text;   // '0o755'
-$int->value;         // 493
+$int->toValue();     // 493
 $int->base;          // 8
 
 $string->token->text;   // '"a\nb"'
-$string->value;         // "a\nb" se skutečným koncem řádku
+$string->toValue();     // "a\nb" se skutečným koncem řádku
 $string->quote;         // '"'
 ```
 
@@ -163,9 +163,9 @@ StringNode::fromValue("it's", '"');      // nový uzel: "it's"
 StringNode::fromValue('plain');          // 'plain'
 ```
 
-Co `fromValue()` zapíše, to `$value` přečte zpátky; drží to test knihovny. Holé jméno offsetu v interpolaci (`"$row[label]"`) není `StringNode`, ale `UnquotedStringNode`, aby `StringNode` znamenal jednu věc a `$quote` bylo vždycky `'` nebo `"`.
+Co `fromValue()` zapíše, to `toValue()` přečte zpátky; drží to test knihovny. Holé jméno offsetu v interpolaci (`"$row[label]"`) není `StringNode`, ale `UnquotedStringNode`, aby `StringNode` znamenal jednu věc a `$quote` bylo vždycky `'` nebo `"`.
 
-U heredocu se nejdřív zeptejte `hasInterpolation()`, teprve pak se dá číst jeho `value`. Ta hodnota je tělo, ze kterého se nejdřív odečte odsazení uzavíracího návěští a teprve potom se čtou escape sekvence, přesně jak to dělá PHP: odsazení je fyzické, kdežto to, co vyrobí `\n`, žádný řádek zdrojáku není a odsazení se z něj neubírá. Interpolovaný řetězec je vlastní uzel poskládaný ze svých částí.
+U heredocu se nejdřív zeptejte `hasInterpolation()`, teprve pak se dá číst jeho `toValue()`. Ta hodnota je tělo, ze kterého se nejdřív odečte odsazení uzavíracího návěští a teprve potom se čtou escape sekvence, přesně jak to dělá PHP: odsazení je fyzické, kdežto to, co vyrobí `\n`, žádný řádek zdrojáku není a odsazení se z něj neubírá. Interpolovaný řetězec je vlastní uzel poskládaný ze svých částí.
 
 
 Importy
