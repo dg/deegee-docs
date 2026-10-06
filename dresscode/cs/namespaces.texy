@@ -104,20 +104,20 @@ Seznamy a `nameResolution` jsou dvě různé věci, a proto mají každá svůj 
 | `certain` | seznamy jsou úplné, a co v nich není, je globální |
 | `uncertain` | seznamy úplné být nemusejí; totéž, jako když klíč chybí |
 
-S `uncertain` se DressCode chová opatrně: nekvalifikované jméno bere jako globální, ale opravu, která na tom stojí, považuje za [rizikovou |configuration#risky-fixes]. Ohlásí ji jako varování i s důvodem na řádku pod porušením, třeba <code>''the namespace may declare `is_null()`''</code>, a udělá ji teprve tehdy, když pravidlo uvedete v `fixRisky` nebo spustíte `fix --fix-risky`. Proto je `uncertain` výchozí hodnota: zapnout pravidlo ještě neznamená souhlasit s tím, že smí měnit chování kódu. Jakmile napíšete `certain`, tyhle opravy rizikové být přestanou.
+S `uncertain` se DressCode chová opatrně: nekvalifikované jméno bere jako globální, ale opravu, která na tom stojí, považuje za [rizikovou |configuration#risky-fixes]. Ohlásí ji jako varování i s důvodem na řádku pod porušením, třeba <code>''the namespace may declare `is_null()`''</code>, a udělá ji teprve tehdy, když rozhodnutí uvedete v `fixRisky` nebo spustíte `fix --fix-risky`. Proto je `uncertain` výchozí hodnota: napsat rozhodnutí do konfigurace ještě neznamená souhlasit s tím, že smí měnit chování kódu. Jakmile napíšete `certain`, tyhle opravy rizikové být přestanou.
 
 
 Každé pravidlo z toho těží
 ==========================
 
-Podstatné je, *kde* se ta znalost uplatní. DressCode ji nepředává jednotlivým pravidlům, ale analýze `NameResolver`, která pro všechna pravidla překládá jména. Ptají se jí vestavěná pravidla a ptá se jí i [vaše vlastní pravidlo |rule-contract#Analýzy]. Znalost tak leží na jednom místě a žádné pravidlo si nevede vlastní seznam výjimek.
+Podstatné je, *kde* se ta znalost uplatní. DressCode ji nepředává jednotlivým rozhodnutím, ale analýze `NameResolver`, která pro všechna pravidla překládá jména. Ptají se jí vestavěná pravidla a ptá se jí i [vaše vlastní pravidlo |rule-contract#Analýzy]. Znalost tak leží na jednom místě a žádné pravidlo si nevede vlastní seznam výjimek.
 
 Pravidla se jí ptají na dvě věci:
 
 - **Co je co.** `isGlobalFunctionCall($node, 'is_null')` vrátí `true` pro globální funkci a `App\is_null()` ze seznamu za ni nepovažuje. S `certain` je ta odpověď jistá, jinak jen předpoklad.
 - **Jak jistá je odpověď.** `getUnqualifiedResolution('is_null', SymbolKind::Function, $node)` řekne, kam nekvalifikované jméno míří: jistě do globálního prostoru (`Global`), jistě do jmenného prostoru (`Namespaced`), nebo do globálního jen za předpokladu, že ho jmenný prostor jinde nedeklaruje (`Uncertain`). Pravidlo, které se takhle zeptá, ohlásí svou opravu jako rizikovou právě u výskytu s `Uncertain`, a v projektu s `certain` tedy nikdy.
 
-A funguje to i obráceně, když pravidlo jméno funkce do kódu samo zapisuje. `noAliasFunctions` přepisuje `sizeof()` na `count()` a nové jméno napíše stejně jako to původní: `\sizeof()` na `\count()`, `sizeof()` na `count()`. Když ale soubor importuje nebo deklaruje vlastní `count`, nebo když podle konfigurace deklaruje `count()` jeho jmenný prostor, zapíše `\count()`, aby opravený kód volal totéž co původní.
+A funguje to i obráceně, když pravidlo jméno funkce do kódu samo zapisuje. `calls.aliasFunctions` přepisuje `sizeof()` na `count()` a nové jméno napíše stejně jako to původní: `\sizeof()` na `\count()`, `sizeof()` na `count()`. Když ale soubor importuje nebo deklaruje vlastní `count`, nebo když podle konfigurace deklaruje `count()` jeho jmenný prostor, zapíše `\count()`, aby opravený kód volal totéž co původní.
 
 Všechna pravidla tak čtou každé jméno stejně a výsledek nezávisí na tom, které z nich se na něj ptá.
 
@@ -125,19 +125,19 @@ Všechna pravidla tak čtou každé jméno stejně a výsledek nezávisí na tom
 Nová funkce neproklouzne
 ========================
 
-Seznam by nebyl k ničemu, kdyby zastaral. Proto ho hlídá pravidlo `noUnlistedNamespacedDeclarations`, které zapne sám klíč `nameResolution: certain`. Ohlásí funkci deklarovanou ve jmenném prostoru, která v seznamu `namespaces.functions` chybí, a totéž udělá pro `const` a pro `define('App\X', ...)`. Počítá i s deklarací uvnitř podmínky, třeba s polyfillem v `if (!function_exists(...))`. Jakmile někdo do projektu přidá funkci `App\Utils\slugify()`, `dresscode check` upozorní, že patří do konfigurace:
+Seznam by nebyl k ničemu, kdyby zastaral. Proto ho hlídá sám DressCode, jakmile konfigurace řekne `nameResolution: certain`, a nález ohlásí pod cestou seznamu, `namespaces.functions` nebo `namespaces.constants`. Ohlásí funkci deklarovanou ve jmenném prostoru, která v seznamu `namespaces.functions` chybí, a totéž udělá pro `const` a pro `define('App\X', ...)`. Počítá i s deklarací uvnitř podmínky, třeba s polyfillem v `if (!function_exists(...))`. Jakmile někdo do projektu přidá funkci `App\Utils\slugify()`, `dresscode check` upozorní, že patří do konfigurace:
 
 /--pre .[terminal]
 src/Utils/helpers.php
-  error  12:10  Function `App\Utils\slugify()` must be listed in `namespaces.functions`.  noUnlistedNamespacedDeclarations
+  error  12:10  Function `App\Utils\slugify()` must be listed in `namespaces.functions`.  namespaces.functions
 \--
 
-Tohle stačí, protože deklaraci na rozdíl od volání poznat jde: stojí v souboru, který DressCode kontroluje. Pozor jen na cesty vyloučené z kontroly. Funkci deklarovanou třeba v testech, které DressCode vynechává, ohlásit nemůže, a pokud ji kód volá bez importu, zapište ji do seznamu sami. S `uncertain` pravidlo mlčí, protože není co hlídat, a kdybyste ho s `certain` přesto nechtěli, vypnete ho v klíči `rules` jako kterékoli jiné.
+Tohle stačí, protože deklaraci na rozdíl od volání poznat jde: stojí v souboru, který DressCode kontroluje. Pozor jen na cesty vyloučené z kontroly. Funkci deklarovanou třeba v testech, které DressCode vynechává, ohlásit nemůže, a pokud ji kód volá bez importu, zapište ji do seznamu sami. S `uncertain` hlídač mlčí, protože není co hlídat. S `certain` ho nevypne ani `--only`: oprava, která na úplných seznamech stojí, nesmí přijít o to, co je drží pravdivé.
 
 Ani první seznam nemusíte psát ručně. [`dresscode init` |cli#init] projde všechny soubory v cestách projektu, najde funkce a konstanty deklarované ve jmenných prostorech a zapíše jejich seznamy spolu s `nameResolution: certain`. Když některý soubor nejde naparsovat, co deklaruje, zůstává neznámé, a tak `init` jistotu nezapíše a v komentáři ten soubor jmenuje.
 
 .[note]
-Do budoucna se nabízí, aby nový záznam do konfigurace zapsal rovnou `dresscode fix`, místo aby na něj pravidlo jen upozornilo.
+Do budoucna se nabízí, aby nový záznam do konfigurace zapsal rovnou `dresscode fix`, místo aby na něj jen upozornil.
 
 
 Pomocné funkce v testech
@@ -153,7 +153,7 @@ overrides:
 	  nameResolution: uncertain
 ```
 
-Soubory v `tests` pak DressCode čte opatrně: opravy, které stojí na tom, že je funkce globální, se tam jen ohlásí jako rizikové a pravidlo `noUnlistedNamespacedDeclarations` tam mlčí. Zdrojáky v `src` přitom dál těží z jistoty. Funguje to proto, že kód v `src` pomocné funkce testů nevolá, takže na význam jmen v `src` nemají vliv.
+Soubory v `tests` pak DressCode čte opatrně: opravy, které stojí na tom, že je funkce globální, se tam jen ohlásí jako rizikové a hlídač nevyjmenovaných deklarací tam mlčí. Zdrojáky v `src` přitom dál těží z jistoty. Funguje to proto, že kód v `src` pomocné funkce testů nevolá, takže na význam jmen v `src` nemají vliv.
 
 Jedna výjimka stojí za pozornost: trik s podvržením funkce, o kterém byla řeč [výš |#Proč to pálí nástroje]. Když test deklaruje `App\time()`, aby kód ve jmenném prostoru `App` zavolal podvrh, týká se to volání v `src`, ne v testech. Taková funkce proto patří do seznamu `namespaces.functions` projektu, aby ji pravidla v `src` nechala být.
 
@@ -165,27 +165,25 @@ Někdy píšete kód přímo do jmenného prostoru frameworku, protože vás k t
 
 Tyhle funkce proto DressCode zná sám: když má projekt nainstalovaný balíček `symfony/dependency-injection`, přidá je do seznamu `namespaces.functions` bez jediného řádku konfigurace a s jakýmkoli standardem. Ve výpisu `dresscode config` je najdete pod řádkem `Names`, každou se zdrojem `DressCode for symfony/dependency-injection`.
 
-Jiné balíčky dodají takové seznamy klíčem `namespaces` svého [souboru dat |upgrading-data], vlastní preset klíčem `namespaces` svého profilu (viz [vlastní preset |presets-and-extensions#Preset]). Všechny se sčítají s tím, co napíšete vy. Klíč `nameResolution` ale balíček ani preset nastavit nemůže: framework znají, váš projekt ne.
+Jiné balíčky dodají takové seznamy klíčem `namespaces` svého [souboru dat |upgrading-data], a ty se sčítají s tím, co napíšete vy. Klíč `nameResolution` ale balíček ani preset nastavit nemůže: framework znají, váš projekt ne.
 
 
 Jak se píšou globální jména
 ===========================
 
-S tím souvisejí dvě pravidla, protože jde o dvě různé otázky. Pravidlo `nameFallback` rozhoduje, jestli globální funkce nebo konstanta smí stát holá a spoléhat na pád do globálního jména. Pravidlo `nameNotation` rozhoduje, jak se píše jméno, které na pád nespoléhá: importem, nebo s úvodním lomítkem. Obě pravidla samy nerozhodují o ničem: co jim neřeknete, nechají být.
-
-
-Holé, nebo kvalifikované: nameFallback
---------------------------------------
-
-Třeba s touhle konfigurací:
+Jak se jméno globální funkce nebo konstanty zapisuje, rozhoduje sekce [`qualification` |decisions/qualification]. Každé jméno se dá napsat třemi způsoby a každý klíč sekce bere slovo pro jeden z nich: `bare` je holé jméno, které spoléhá na pád do globálního jména, `imported` jméno z příkazu `use function` nebo `use const` a `fullyQualified` jméno s úvodním lomítkem.
 
 ```neon
-rules:
-	nameFallback:
-		optimizedFunction: qualified
+qualification:
+	globalFunction:
+		normally: bare
+		optimizedByCompiler: imported
+	globalConstant:
+		normally: bare
+		computedByCompiler: imported
 ```
 
-doplňuje pravidlo řádky jako tenhle:
+S touhle konfigurací zůstanou globální funkce a konstanty holé a jen ty, se kterými umí pracovat kompilátor PHP, dostanou import:
 
 ```php
 namespace App;
@@ -200,46 +198,18 @@ Klíče jdou od obecného ke zvláštnímu:
 
 | klíč | o jakých jménech rozhoduje |
 |---|---|
-| `function`, `constant` | o všech globálních funkcích a konstantách |
-| `optimizedFunction` | o funkcích, se kterými kompilátor nebo OPcache zachází zvlášť, tam, kde je volání s danými argumenty opravdu optimalizuje |
-| `optimizedConstant` | o konstantách, které deklaruje PHP, tam, kde s nimi kompilátor počítá: v podmínce nebo v konstantním výrazu |
+| `globalFunction.normally`, `globalConstant.normally` | o všech globálních funkcích a konstantách ve jmenném prostoru |
+| `globalFunction.optimizedByCompiler` | o funkcích, se kterými kompilátor zachází zvlášť, tam, kde volání s danými argumenty opravdu optimalizuje |
+| `globalConstant.computedByCompiler` | o konstantách, se kterými kompilátor počítá: v podmínce nebo v konstantním výrazu |
+| `globalFunction.except`, `globalConstant.except` | o jménech a vzorech s hvězdičkou, které chcete mít jinak |
 
-Hodnota `qualified` říká, že jméno na pád spoléhat nesmí, `fallback`, že má stát holé, a `keep`, že se o jménu nerozhoduje. Klíč `optimizedConstant` se neřídí jménem, ale tím, jak konstanta v kódu stojí, a `fallback` v něm znamená, že se projekt optimalizace vzdává ve prospěch holého jména. Podobně `optimizedFunction` se u části funkcí řídí argumenty: `strlen()` optimalizuje PHP vždy, ale `dirname()`, `defined()` nebo `function_exists()` jen s konstantním argumentem, `sprintf()` jen s konstantním formátem, který nemá jiné zástupné znaky než `%s` a `%d` a má jich právě tolik, kolik hodnot volání předává, a `in_array()` jen s polem zapsaným přímo v kódu. Funkce se kvalifikuje, když ji jmenný prostor aspoň jednou takhle volá. `assert()` mezi optimalizovanými funkcemi není, protože ho PHP přeloží zvlášť, ať je importovaný, nebo ne.
+`optimizedByCompiler` se u části funkcí řídí argumenty: `strlen()` optimalizuje PHP vždy, ale `dirname()`, `defined()` nebo `function_exists()` jen s konstantním argumentem, `sprintf()` jen s konstantním formátem, který nemá jiné zástupné znaky než `%s` a `%d` a má jich právě tolik, kolik hodnot volání předává, a `in_array()` jen s polem zapsaným přímo v kódu. Funkce se kvalifikuje, když ji jmenný prostor aspoň jednou takhle volá. `computedByCompiler` se zase neřídí jménem, ale tím, jak konstanta v kódu stojí. Hodnota `bare` v nich znamená, že se projekt optimalizace vzdává ve prospěch holého jména, a `same`, že se jméno píše jako ostatní jména svého druhu.
 
-Jméno, které kvalifikuje, zapíše pravidlo tvarem, jaký chce `nameNotation`, a když to o jménu nic neříká, importem. Import zapíše tak, jak soubor importy už píše: do příkazu, který jich vyjmenovává víc, do skupinového importu, který pod jmenným prostorem toho jména už stojí, a na místo, kam patří podle abecedy, takže pravidla o tvaru a pořadí importů pak nemají co hlásit. Když soubor funkci už importuje pod jiným jménem, použije ten import. Kde import přidat nejde, třeba proto, že je jméno zabrané, napíše úvodní lomítko, a jen když o import výslovně žádá `nameNotation` a soubor na něj kvůli HTML kolem kódu nemá místo, ohlásí ho k dopsání ručně. Holé naopak udělá jméno jen tam, kde holé jméno opravdu dosáhne na globální funkci, a import, který už nikdo nepotřebuje, odebere.
+Import zapíše DressCode tak, jak soubor importy už píše: do příkazu, který jich vyjmenovává víc, do skupinového importu, který pod jmenným prostorem toho jména už stojí, a na místo, kam patří podle abecedy, takže rozhodnutí sekce [`imports` |decisions/imports] pak nemají co hlásit. Když soubor funkci už importuje pod jiným jménem, použije ten import. Kde import přidat nejde, třeba proto, že je jméno zabrané, napíše úvodní lomítko. Holé naopak udělá jméno jen tam, kde holé jméno opravdu dosáhne na globální funkci, a import, který už nikdo nepotřebuje, odebere.
 
-A tady se vracíme ke jmenným prostorům. Import `use function strlen;` přišpendlí volání ke globální funkci. Kdyby projekt měl vlastní `App\strlen()`, import by změnil chování. S `uncertain` proto DressCode každý přechod mezi holým jménem a importem nebo zpětným lomítkem považuje za rizikový. S `certain` ví, že `App\strlen()` neexistuje, a pravidlo import prostě doplní. Funkci ze seznamu přirozeně neimportuje.
+A tady se vracíme ke jmenným prostorům. Import `use function strlen;` přišpendlí volání ke globální funkci. Kdyby projekt měl vlastní `App\strlen()`, import by změnil chování. S `uncertain` proto DressCode každý přechod mezi holým jménem a importem nebo zpětným lomítkem považuje za rizikový. S `certain` ví, že `App\strlen()` neexistuje, a import prostě doplní. Funkci ze seznamu `namespaces.functions` přirozeně neimportuje.
 
-
-Import, nebo lomítko: nameNotation
-----------------------------------
-
-Tohle pravidlo rozhoduje o jménech, která jsou jistá: o třídách, o jménech z jiných jmenných prostorů a o globálních funkcích a konstantách, které už kvalifikované jsou. Oba tvary znamenají totéž, takže žádná jeho oprava riziková není. Holou globální funkci ani konstantu nechá být, ta patří pravidlu `nameFallback`.
-
-| klíč | o jakých jménech rozhoduje |
-|---|---|
-| `class`, `function`, `constant` | o všech třídách, funkcích a konstantách |
-| `globalClass`, `globalFunction`, `globalConstant` | jen o těch z globálního jmenného prostoru |
-
-Hodnotou klíče je tvar, jakým se jméno píše: `import`, `backslash` pro `\strlen()` a `keep`, když se o jménu nerozhoduje.
-
-U obou pravidel můžete místo prosté hodnoty dát mapu ze jména nebo ze vzoru s hvězdičkou na hodnotu. Výjimkou jsou `optimizedFunction` a `optimizedConstant`, které berou jen prostou hodnotu:
-
-```neon
-rules:
-	nameNotation:
-		class: import                   # use App\Model\User; ... User
-		globalClass: backslash          # \Exception
-		globalFunction: import          # use function strlen; ... strlen()
-	nameFallback:
-		optimizedFunction: qualified
-		constant:
-			'PHP_*': qualified          # use const PHP_EOL; ... PHP_EOL
-```
-
-Když o jménu mluví víc klíčů, rozhoduje nejkonkrétnější odpověď: přesně napsané jméno má přednost před vzorem, delší vzor před kratším a obojí před prostou hodnotou klíče. Při shodě vyhraje konkrétnější klíč, a tak v ukázce dostane `\Exception` lomítko, přestože `class` říká import. Na pořadí zápisu nezáleží: když preset kvalifikuje `'PHP_*'` a váš projekt napíše `PHP_EOL: fallback`, přesné jméno vyhraje. Mapa se s hodnotou vrstvy pod sebou slévá, jako by ta hodnota byla vzor `*`, takže projekt nad presetem se `globalFunction: backslash` může napsat jen `globalFunction: {strlen: import}` a platí obojí. Prostá hodnota naopak vrstvu pod sebou nahradí celou i s jejími vzory. Samotné `nameNotation: true` nebo `nameFallback: true` nedělá nic a DressCode na to upozorní (<code>No key such as function or optimizedFunction is given, so every name stays as it is.</code>).
-
-Jméno bez úvodního lomítka, třeba `Model\User` s `use App\Model;`, pravidla nechají být, protože se čte relativně k importu nebo k jmennému prostoru souboru. Soubor bez jmenného prostoru nechají celý: úvodní lomítko tam odebere pravidlo `uselessLeadingBackslash` s volbou `globalNamespace` a jméno zůstane kvalifikované.
+Třídy se tímhle netrápí: holé jméno třídy ve jmenném prostoru nikdy nepadá do globálního, takže o třídách rozhodují `classOfAnotherNamespace` a `globalClass` jen mezi importem a lomítkem a žádná jejich oprava riziková není. Kde o jménu mluví víc klíčů, rozhoduje nejkonkrétnější odpověď: přesně napsané jméno v `except` má přednost před vzorem, delší vzor před kratším a obojí před hodnotou `normally`, ať je napsala kterákoli vrstva. Jméno bez úvodního lomítka, třeba `Model\User` s `use App\Model;`, se nechává být, protože se čte relativně k importu nebo k jmennému prostoru souboru. V souboru bez jmenného prostoru rozhoduje `inFileWithoutNamespace`, kde je lomítko vždy zbytečné.
 
 
 Shrnutí
@@ -249,5 +219,5 @@ Shrnutí
 - Napište do konfigurace `nameResolution: certain` a případně seznamy v klíči `namespaces`. Chování všech pravidel je pak jednoznačné a opravy, které stály na odhadu, přestanou být rizikové.
 - Část projektu, kde seznamy úplné nejsou, třeba testy s pomocnými funkcemi, dostane v přepisu `nameResolution: uncertain`.
 - Bez toho je DressCode opatrný a takové opravy dělá jen se svolením v `fixRisky` nebo s `--fix-risky`.
-- Novou deklaraci ve jmenném prostoru ohlásí `noUnlistedNamespacedDeclarations`; první seznamy napíše `dresscode init`.
+- Novou deklaraci ve jmenném prostoru ohlásí DressCode pod cestou `namespaces.functions`; první seznamy napíše `dresscode init`.
 - Funkci z jmenného prostoru volejte přes `use function`. Když se její soubor nenačte, dozvíte se to hned.
