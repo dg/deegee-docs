@@ -10,12 +10,12 @@ DressCode kód nejen formátuje, ale i přepisuje na to, co přináší novějš
 Jak to vypadá
 =============
 
-Tyhle čtyři řádky jsou psané pro PHP 8.0. Projekt teď přechází na PHP 8.6 a jeho konfigurace k standardu přidává sadu `modernization`:
+Tyhle čtyři řádky jsou psané pro PHP 8.0. Projekt teď přechází na PHP 8.6 a jeho konfigurace k standardu přidává sadu `modernizations`:
 
 ```neon
 extends:
 	- perCs
-	- modernization
+	- modernizations
 targets:
 	php: '8.6'
 ```
@@ -55,16 +55,16 @@ Pro jakou verzi PHP je kód psaný, čte DressCode z `require.php` v `composer.j
 /--pre .[terminal]
 upgrading:
 	functions:
-		arraySearchFunctions: adopted           # dresscode/modernization, no effect: php
-		arrayFirstLast: adopted                 # dresscode/modernization, no effect: php
+		arraySearchFunctions: adopted           # dresscode/modernizations, no effect: php
+		arrayFirstLast: adopted                 # dresscode/modernizations, no effect: php
 \--
 
-Rozhodnutí pro přechod na novější PHP sdružuje [sada |configuration#Standardy a sady] `modernization`. Žádný standard ji nenese, protože přepis na novější PHP je věc aktualizace, ne měřítko každodenní kontroly. Ke svému standardu si ji přidáte:
+Rozhodnutí pro přechod na novější PHP sdružuje [sada |configuration#Standardy a sady] `modernizations`. Žádný standard ji nenese, protože přepis na novější PHP je věc aktualizace, ne měřítko každodenní kontroly. Ke svému standardu si ji přidáte:
 
 ```neon
 extends:
 	- perCs
-	- modernization
+	- modernizations
 ```
 
 
@@ -83,7 +83,7 @@ Přehled podle verze, ve které PHP danou věc přineslo:
 | 8.5 | vnořená volání na pipe operátor, čtení prvního a posledního prvku pole na `array_first()` a `array_last()`, klon, jehož vlastnosti se hned potom přiřazují, na `clone($this, ['name' => $name])` |
 | 8.6 | dvojice `max()` a `min()` na `clamp()`, anonymní funkce, která jen předává své parametry jednomu volání, na částečnou aplikaci (partial application): `fn($s) => str_pad($s, 10, '-')` na `str_pad(?, 10, '-')` |
 
-Tohle všechno zapne sada `modernization` a každá položka má v sekci [`upgrading` |decisions/upgrading] vlastní klíč, který projekt může napsat i sám (`upgrading.syntax.match: adopted`). Atribut `#[\Deprecated]` mění chování programu ze své podstaty, protože zastaralá metoda začne za běhu hlásit, že je zastaralá. Každá jeho oprava je proto riziková (risky fix) a udělá se, až rozhodnutí `upgrading.phpdoc.Deprecated` uvedete v klíči `fixRisky`, viz [dál |#Rizikové opravy]. Rizikové můžou být i přepisy na `array_any()` a jeho sourozence, protože ty volají callback i s klíčem a jen do chvíle, než znají odpověď, a přepisy na částečnou aplikaci a na `clone()`, protože jejich argumenty se vyhodnotí jednou, hned při vytvoření; kde kód ukazuje, že na tom nezáleží, udělá se oprava rovnou. Sada `modernization` také ohlásí metody `__sleep()` a `__wakeup()`, které PHP 8.5 označilo za překonané ve prospěch `__serialize()` a `__unserialize()`; přepsat je nejde, protože by se změnil formát uložených dat. Sada `cleanup` přidá zkrácený zápis `new Foo()->bar()` z PHP 8.4, tedy bez závorek kolem `new`, a podle verze PHP odstraní, co novější PHP už nepotřebuje: proměnnou v `catch`, kterou blok nečte (8.0), atribut `#[\ReturnTypeWillChange]` u metody, která návratový typ už deklaruje (8.1), a argument, který PHP přestalo číst. Návratový typ `never` z PHP 8.1 přidá sada `types`.
+Tohle všechno zapne sada `modernizations` a každá položka má v sekci [`upgrading` |decisions/upgrading] vlastní klíč, který projekt může napsat i sám (`upgrading.syntax.match: adopted`). Atribut `#[\Deprecated]` mění chování programu ze své podstaty, protože zastaralá metoda začne za běhu hlásit, že je zastaralá. Každá jeho oprava je proto riziková (risky fix) a udělá se, až rozhodnutí `upgrading.phpdoc.Deprecated` uvedete v klíči `fixRisky`, viz [dál |#Rizikové opravy]. Rizikové můžou být i přepisy na `array_any()` a jeho sourozence, protože ty volají callback i s klíčem a jen do chvíle, než znají odpověď, a přepisy na částečnou aplikaci a na `clone()`, protože jejich argumenty se vyhodnotí jednou, hned při vytvoření; kde kód ukazuje, že na tom nezáleží, udělá se oprava rovnou. Sada `modernizations` také ohlásí metody `__sleep()` a `__wakeup()`, které PHP 8.5 označilo za překonané ve prospěch `__serialize()` a `__unserialize()`; přepsat je nejde, protože by se změnil formát uložených dat. Sada `cleanup` přidá zkrácený zápis `new Foo()->bar()` z PHP 8.4, tedy bez závorek kolem `new`, a podle verze PHP odstraní, co novější PHP už nepotřebuje: proměnnou v `catch`, kterou blok nečte (8.0), atribut `#[\ReturnTypeWillChange]` u metody, která návratový typ už deklaruje (8.1), a argument, který PHP přestalo číst. Návratový typ `never` z PHP 8.1 přidá sada `types`.
 
 Atribut `#[\Override]` z PHP 8.3 žádná sada nenese, protože nenahrazuje starší zápis, ale přidává záruku, pro kterou se projekt rozhoduje sám: napíše `upgrading.classes.Override: adopted`. Doplní atribut k metodě, která přepisuje metodu rodiče, od PHP 8.5 i k vlastnosti a od PHP 8.6 ke konstantě a k `case` výčtu. Implementaci abstraktní metody nebo metody rozhraní vynechá, tu PHP pohlídá samo. Co třída dědí, mu řeknou [typy z PHPStanu |types].
 
@@ -106,12 +106,12 @@ fixRisky:
 Co novější PHP zavrhlo
 ======================
 
-Nová verze PHP věci nejen přidává, ale i zavrhuje, a na zavržené věci v kódu pak za běhu upozorňuje. Opravuje je sada `deprecations`: typ parametru s výchozí hodnotou `null` dostane `?`, u sjednocení typů `|null`, funkce pro CSV dostanou výslovně argument `escape`, jehož výchozí hodnotu PHP 8.4 zavrhlo, `utf8_encode()` a `utf8_decode()` se přepíšou na `mb_convert_encoding()` (riziková oprava, protože ta potřebuje rozšíření mbstring), volání `curl_close()` a dalších funkcí, které na cílové verzi nic nedělají, zmizí, `${name}` a `${name[0]}` v řetězci na `{$name}` a `{$name[0]}`, callable `'self::sort'` na `self::sort(...)` tam, kde kód ukazuje, že jde o callable, zpětné apostrofy na `shell_exec()`, klíč pole `null` na `''`, přetypování `(integer)`, `(boolean)`, `(double)` a `(binary)` na `(int)`, `(bool)`, `(float)` a `(string)`, středník za `case` na dvojtečku. Zmizí i hodnota vrácená z konstruktoru, kterou zavrhlo PHP 8.6. Ohlásí se volání zastaralé funkce a také to, co opravit nejde: hodnota argumentu, kterou PHP zavrhlo (`E_USER_ERROR` v `trigger_error()`), třída s rozhraním `Serializable` bez metod `__serialize()` a `__unserialize()`, `return` uvnitř `finally` a jména `let` a `is`, která si PHP 8.6 vyhradilo. Na cílové verzi přitom nezáleží: náhradu zná i starší PHP a kód psaný pro PHP 8.1 jednou poběží na verzi, která věc zavrhla, takže `strftime()` se ohlásí i v něm. Funkce, které PHP zavrhlo, i ty, které na cílové verzi nic nedělají, zná DressCode jako data, průvodce PHP pod rozhodnutím `upgrading.php.guide`, a jednotlivou položku z něj vyjme parametr `upgrading.php.except`. Tatáž sada přepisuje i zastaralé API knihoven, viz [Aktualizace knihoven |upgrading-libraries], a přidáte ji vedle `modernization`:
+Nová verze PHP věci nejen přidává, ale i zavrhuje, a na zavržené věci v kódu pak za běhu upozorňuje. Opravuje je sada `deprecations`: typ parametru s výchozí hodnotou `null` dostane `?`, u sjednocení typů `|null`, funkce pro CSV dostanou výslovně argument `escape`, jehož výchozí hodnotu PHP 8.4 zavrhlo, `utf8_encode()` a `utf8_decode()` se přepíšou na `mb_convert_encoding()` (riziková oprava, protože ta potřebuje rozšíření mbstring), volání `curl_close()` a dalších funkcí, které na cílové verzi nic nedělají, zmizí, `${name}` a `${name[0]}` v řetězci na `{$name}` a `{$name[0]}`, callable `'self::sort'` na `self::sort(...)` tam, kde kód ukazuje, že jde o callable, zpětné apostrofy na `shell_exec()`, klíč pole `null` na `''`, přetypování `(integer)`, `(boolean)`, `(double)` a `(binary)` na `(int)`, `(bool)`, `(float)` a `(string)`, středník za `case` na dvojtečku. Zmizí i hodnota vrácená z konstruktoru, kterou zavrhlo PHP 8.6. Ohlásí se volání zastaralé funkce a také to, co opravit nejde: hodnota argumentu, kterou PHP zavrhlo (`E_USER_ERROR` v `trigger_error()`), třída s rozhraním `Serializable` bez metod `__serialize()` a `__unserialize()`, `return` uvnitř `finally` a jména `let` a `is`, která si PHP 8.6 vyhradilo. Na cílové verzi přitom nezáleží: náhradu zná i starší PHP a kód psaný pro PHP 8.1 jednou poběží na verzi, která věc zavrhla, takže `strftime()` se ohlásí i v něm. Funkce, které PHP zavrhlo, i ty, které na cílové verzi nic nedělají, zná DressCode jako data, průvodce PHP pod rozhodnutím `upgrading.php.guide`, a jednotlivou položku z něj vyjme parametr `upgrading.php.except`. Tatáž sada přepisuje i zastaralé API knihoven, viz [Aktualizace knihoven |upgrading-libraries], a přidáte ji vedle `modernizations`:
 
 ```neon
 extends:
 	- perCs
-	- modernization
+	- modernizations
 	- deprecations
 ```
 
@@ -160,4 +160,4 @@ Kam dál
 
 - [Typy z PHPStanu |types], aby DressCode doplnil `#[\Override]`, přepsal zastaralé API a poznal, že řetězec je jméno třídy.
 - [Aktualizace knihoven |upgrading-libraries], když s novou verzí PHP přechází i Nette nebo jiná knihovna.
-- [Sekce upgrading |decisions/upgrading] se všemi rozhodnutími o přechodu na novější PHP a [sada `modernization` |presets-reference#modernization] celá.
+- [Sekce upgrading |decisions/upgrading] se všemi rozhodnutími o přechodu na novější PHP a [sada `modernizations` |presets-reference#modernizations] celá.

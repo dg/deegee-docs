@@ -77,7 +77,7 @@ An example meant to win the reader over (the home page, the readme, the opening 
 | violation | porušení | "nález" for a single report of it, never "chyba" |
 | fix / check | oprava / kontrola | the commands stay `fix` and `check` |
 | preset, standard | preset, standard | a standard is a preset deciding how the code looks: `perCs`, `psr12`, `nette`, `symfony` |
-| set | sada | a preset of one intent, deciding nothing about the looks: `modernization`, `deprecations`, `cleanup`, `correctness`, `types`, `optimizedCalls`; extended beside the standard |
+| set | sada | a preset of one intent, deciding nothing about the looks: `modernizations`, `deprecations`, `cleanup`, `correctness`, `types`, `optimizedCalls`; extended beside the standard |
 | types | typy | what the PHPStan of the project knows about the code; the key is `typeAnalysis: phpstan` |
 | deprecated | zastaralé | as in the Nette documentation; the annotation stays `@deprecated` |
 | promoted property | vlastnost deklarovaná v konstruktoru | English in parentheses at the first mention |
