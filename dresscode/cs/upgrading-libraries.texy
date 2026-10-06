@@ -42,7 +42,7 @@ Co která verze knihovny přejmenovala, přesunula nebo zrušila, je zapsané v 
 
 ```neon
 package: nette/forms
-group: deprecations
+intent: deprecations
 
 since 3.1.11:
 	replacedMembers:
@@ -60,7 +60,7 @@ since 3.0:
 
 Každá sekce `since` říká, co přinesla daná verze knihovny, a platí jen tehdy, když na ni verze, na které projekt stojí, dosáhne. U knihovny, kterou si projekt vyžaduje sám, je to nejnižší verze, kterou jeho omezení v `composer.json` dovolí, ne ta zrovna nainstalovaná: kód psaný pro novější by se rozbil všude, kam omezení pustí starší. U knihovny, která se doinstalovala jen jako závislost něčeho jiného, rozhoduje ta nainstalovaná. Knihovnu, kterou jiný balíček nahrazuje v klíči `replace` svou vlastní verzí, třeba `illuminate/support` v `laravel/framework`, posuzuje DressCode podle verze toho balíčku. Nenastavujete nic a soubory DressCode najde sám, stačí, že je balíček uvede ve svém `composer.json`.
 
-Kde data nejsou, pomůže samotný kód knihovny. Dobře udržovaná knihovna staré API nesmaže ze dne na den, nejdřív ho označí anotací, třeba `@deprecated use Form::Filled`. S typy z PHPStanu tohle DressCode přečte a zápis přepíše podle rozhodnutí `upgrading.libraries.deprecatedMembers` a `deprecatedClasses`. Anotace ale pomůže jen do chvíle, kdy knihovna staré API opravdu smaže, a projekt, který jednu hlavní verzi přeskočí, ve vendoru žádnou anotaci nenajde, jen chybějící třídu. Data v balíčku pravidel zůstanou i po smazání, a kde je mají, mají přednost.
+Kde data nejsou, pomůže samotný kód knihovny. Dobře udržovaná knihovna staré API nesmaže ze dne na den, nejdřív ho označí anotací, třeba `@deprecated use Form::Filled`. S typy z PHPStanu tohle DressCode přečte a zápis přepíše podle rozhodnutí `upgrading.declarations.deprecatedMember` a `deprecatedClass`. Anotace ale pomůže jen do chvíle, kdy knihovna staré API opravdu smaže, a projekt, který jednu hlavní verzi přeskočí, ve vendoru žádnou anotaci nenajde, jen chybějící třídu. Data v balíčku pravidel zůstanou i po smazání, a kde je mají, mají přednost.
 
 
 Balíčky pro ekosystémy
@@ -85,7 +85,7 @@ Jak takový balíček napsat pro jiný ekosystém, popisuje stránka [Mapy náhr
 Zapnutí
 =======
 
-Balíček DressCode po instalaci najde sám, takže ho nikam neregistrujete. Každý soubor dat říká klíčem `group`, jaký má záměr: u zastaralého API je to `deprecations`, u novějšího zápisu, který staré API neruší, `modernizations`, jako u atributů Laravelu 13 v balíčku `dresscode/rules-laravel`. Data se uplatní, až když projekt jejich záměr zapne rozhodnutím `upgrading.libraries.deprecations` nebo `upgrading.libraries.modernizations`, a to dělají [sady |configuration#Standardy a sady] `deprecations` a `modernizations`. Většina přepisů potřebuje [typy z PHPStanu |types], protože bez nich nepozná, čí metodu které volání volá. Konfigurace proto uvádí i klíč `typeAnalysis`:
+Soubory dat balíčku DressCode po instalaci najde sám, takže je nikam neregistrujete. Každý soubor dat říká klíčem `intent`, jaký má záměr: u zastaralého API je to `deprecations`, u novějšího zápisu, který staré API neruší, `modernizations`, jako u atributů Laravelu 13 v balíčku `dresscode/rules-laravel`. Data se uplatní, až když projekt jejich záměr zapne rozhodnutím `upgrading.libraries.deprecations` nebo `upgrading.libraries.modernizations`, a to dělají [sady |configuration#Standardy a sady] `deprecations` a `modernizations`. Většina přepisů potřebuje [typy z PHPStanu |types], protože bez nich nepozná, čí metodu které volání volá. Konfigurace proto uvádí i klíč `typeAnalysis`:
 
 ```neon
 typeAnalysis: phpstan
@@ -93,7 +93,10 @@ typeAnalysis: phpstan
 use:
 	- perCs           # váš standard
 	- deprecations
+	- dresscode/rules-nette
 ```
+
+Jméno balíčku v `use` pustí dovnitř jeho plugin, tedy pravidla, která balíček nese vedle dat, jako převod příznaku `Json::PRETTY` na pojmenovaný argument. Data samotná se uplatní i bez něj.
 
 Data přicházejí do map sekce [`upgrading` |decisions/upgrading] a sada `deprecations` k nim zapne i rozhodnutí, která pracují bez dat, s kódem nainstalované verze:
 
@@ -106,13 +109,13 @@ Data přicházejí do map sekce [`upgrading` |decisions/upgrading] a sada `depre
 | `upgrading.libraries.attributeForAnnotation` | nahradí anotaci atributem | ne |
 | `upgrading.libraries.attributeForMember` | nahradí atributem třídy vlastnost, metodu nebo rozhraní, podle kterých knihovna třídu dřív našla | ne |
 | `upgrading.libraries.forbiddenClasses`, `forbiddenFunctions`, `forbiddenMembers` | ohlásí, co náhradu nemá nebo ji musí napsat člověk, i s tím, co dělat | jen `forbiddenMembers` |
-| `upgrading.libraries.deprecatedClasses`, `deprecatedMembers` | přepíše, co knihovna označila `@deprecated` a data neznají | ano |
+| `upgrading.declarations.deprecatedClass`, `deprecatedMember` | přepíše, co knihovna označila `@deprecated` a data neznají | ano |
 | `classes.overridingSignature` | přizpůsobí metodu potomka signatuře, kterou jí nová verze předka předepíše | ano |
 | `correctness.finalParent`, `correctness.unimplementedAbstractMethods` | ohlásí potomka třídy, která se stala `final`, a abstraktní metodu, kterou nová verze přidala a potomek nemá | ano |
 
 Rozhodnutí, která typy potřebují, se bez nich tiše neuplatní, takže sadu zapnout můžete i bez PHPStanu; opraví se pak jen třídy, funkce a anotace. Soubory se záměrem `modernizations`, jako atributy Laravelu 13, zapne až sada `modernizations`, a tak ji přidáte vedle `deprecations`, když o nový zápis stojíte.
 
-Balíček pravidel může přinést i pravidla svého ekosystému a jejich rozhodnutí stojí v sekci pojmenované po pluginu balíčku. Mapa `nette.flagsAsNamedArguments`, která nahradí příznaky spojené přes `|` pojmenovanými argumenty, dostává data stejně jako mapy jádra, takže ji zapne záměr jejích souborů. Rozhodnutí, která data nemají, napíše projekt sám, jako každé jiné: `nette.linkArguments` a `nette.monitorCallbacks` z `dresscode/rules-nette`, `laravel.castsMethod` a `laravel.scopeAttribute` z `dresscode/rules-laravel`. Co dělají, popisují stránky [Nette |upgrading-nette] a [Laravel |upgrading-laravel].
+Balíček pravidel může přinést i pravidla svého ekosystému a jejich rozhodnutí stojí v sekci pojmenované po pluginu balíčku. Plugin s pravidly přináší kód, který běží při každé kontrole, a tak se načte, až projekt napíše jméno balíčku do `use`, třeba `dresscode/rules-nette`; bez toho běh jen upozorní, že plugin vynechal. Mapa `nette.flagsAsNamedArguments`, která nahradí příznaky spojené přes `|` pojmenovanými argumenty, dostává data stejně jako mapy jádra, takže ji zapne záměr jejích souborů. Rozhodnutí, která data nemají, napíše projekt sám, jako každé jiné: `nette.linkArguments` a `nette.monitorCallbacks` z `dresscode/rules-nette`, `laravel.castsMethod` a `laravel.scopeAttribute` z `dresscode/rules-laravel`. Co dělají, popisují stránky [Nette |upgrading-nette] a [Laravel |upgrading-laravel].
 
 
 Po jedné verzi, nebo najednou
@@ -120,7 +123,7 @@ Po jedné verzi, nebo najednou
 
 Kód převádějte po jedné hlavní verzi, každou až poté, co ji nainstalujete. V `composer.json` zvednete omezení na další hlavní verzi, spustíte `composer update`, potom `dresscode fix`, pustíte testy a změnu commitnete. Pak totéž s další verzí.
 
-V každém kroku se tak data potkají s kódem knihovny. Data opraví, co právě nainstalovaná verze přejmenovala nebo smazala. Nové třídy a atributy, které data do kódu píšou, už ve vendoru jsou, takže DressCode s typy z PHPStanu ověří, že existují. A anotace `@deprecated` v nainstalovaném kódu prozradí, co zmizí v další verzi: rozhodnutí `upgrading.libraries.deprecatedMembers` a `deprecatedClasses` na to kód rovnou převedou, nebo aspoň ukážou, kde bude potřeba sáhnout.
+V každém kroku se tak data potkají s kódem knihovny. Data opraví, co právě nainstalovaná verze přejmenovala nebo smazala. Nové třídy a atributy, které data do kódu píšou, už ve vendoru jsou, takže DressCode s typy z PHPStanu ověří, že existují. A anotace `@deprecated` v nainstalovaném kódu prozradí, co zmizí v další verzi: rozhodnutí `upgrading.declarations.deprecatedMember` a `deprecatedClass` na to kód rovnou převedou, nebo aspoň ukážou, kde bude potřeba sáhnout.
 
 Aplikaci psanou pro hodně staré verze můžete převést i najednou: nainstalujete současné verze a `dresscode fix` pustíte jen jednou. Data smazání přežijí, takže se opraví i volání metod, které současná verze už nemá. Přijdete ale o anotace přeskočených verzí, a kde data nejsou, zůstane místo opravy chyba, kterou najde až PHPStan.
 

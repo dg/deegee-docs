@@ -151,7 +151,7 @@ Pro každý soubor se hodnoty skládají z vrstev, od nejnižší po nejvyšší
 Vyšší vrstva mění jen to, co sama říká, a jak to změní, záleží na druhu hodnoty:
 
 - **slovo, ukázka, počet** a ano, nebo ne, nahradí hodnotu zdola;
-- **seznam** nahradí celý seznam zdola, i výchozí: `calls.aliasFunctions: [internal, mysqli]` znamená jen tyhle dvě sady aliasů, ať preset říkal cokoli, takže kdo chce přidávat, opíše i zděděné položky;
+- **seznam** nahradí celý seznam zdola, i výchozí: `cleanup.aliasFunctions: [internal, mysqli]` znamená jen tyhle dvě sady aliasů, ať preset říkal cokoli, takže kdo chce přidávat, opíše i zděděné položky;
 - **mapa** jmen se slévá po položkách a položku zdola odvolá hodnota `keep`; přesná položka má přednost před vzorem s hvězdičkou, ať ji napsala kterákoli vrstva;
 - **sekce** a klíč s podklíči se slévají po klíčích, takže změnit jedno číslo z presetu znamená napsat jedno číslo;
 - **`keep`** napsané u sekce nebo klíče s podklíči odvolá všechno pod ním a pozdější vrstva oživí jen ty klíče, které sama jmenuje.
@@ -257,22 +257,22 @@ Riziková oprava (risky fix) je taková, která může změnit, co kód dělá, 
 
 - **Typ hodnoty.** Rozhodly by ho [typy |types], které DressCode vezme z PHPStanu vašeho projektu.
 - **Jméno funkce.** Nekvalifikované `is_null()` ve jmenném prostoru může být vaše funkce `App\is_null()`. To rozhodne řádek [`nameResolution: certain` |namespaces#name-resolution].
-- **Váš úsudek.** `file.strictTypes` zapne přísné typy, a tím mění chování kódu ze své podstaty; `functions.closureWithoutThis` nevidí, jestli closure někde jinde nepřivážete k objektu. Tady žádná informace nepomůže, rozhodujete vy.
+- **Váš úsudek.** `file.strictTypes` zapne přísné typy, a tím mění chování kódu ze své podstaty; `functions.staticClosureWithoutThis` nevidí, jestli closure někde jinde nepřivážete k objektu. Tady žádná informace nepomůže, rozhodujete vy.
 
 Ve výpisu má rizikové místo stav `risky` a pod zprávou větu o tom, co se na tom místě může pokazit:
 
 /--pre .[terminal]
 src/Users.php
-  risky  17:16  The `in_array()` call must pass `$strict = true`.  correctness.strictCalls
+  risky  17:16  The `in_array()` call must pass `$strict = true`.  correctness.strictComparisonArgument
                 Risky because a strict search no longer finds a value of another type.
 \--
 
-Napsat rozhodnutí do konfigurace, ať sami, nebo presetem, ještě neznamená souhlasit s jeho rizikovými opravami. Souhlas dává projekt klíčem `fixRisky`, seznamem rozhodnutí, jejichž rizikové opravy přijímá; místo rozhodnutí může stát i sekce nebo preset, které platí za všechno pod sebou. Preset tenhle souhlas dát nemůže. Git hook ani editor proto nepotřebují žádný přepínač: opraví, co projekt přijal, a zbytek ohlásí. Přepínač `--fix-risky` dovolí rizikové opravy všech rozhodnutí na jeden běh, `--fix-risky=correctness.strictCalls` jen toho jednoho:
+Napsat rozhodnutí do konfigurace, ať sami, nebo presetem, ještě neznamená souhlasit s jeho rizikovými opravami. Souhlas dává projekt klíčem `fixRisky`, seznamem rozhodnutí, jejichž rizikové opravy přijímá; místo rozhodnutí může stát i sekce nebo preset, které platí za všechno pod sebou. Sekce, která se jmenuje stejně jako sada (`cleanup`, `correctness`, `types`), se píše `cleanup.*`, sada celým jménem `dresscode/cleanup`; holé jméno by mohlo znamenat obojí, a tak ho DressCode odmítne. Preset tenhle souhlas dát nemůže. Git hook ani editor proto nepotřebují žádný přepínač: opraví, co projekt přijal, a zbytek ohlásí. Přepínač `--fix-risky` dovolí rizikové opravy všech rozhodnutí na jeden běh, `--fix-risky=correctness.strictComparisonArgument` jen toho jednoho:
 
 ```neon
 fixRisky:
-	- correctness.strictCalls
-	- expressions.getClassCalls
+	- correctness.strictComparisonArgument
+	- cleanup.classNameNotation
 ```
 
 Oba seznamy se přes vrstvy sčítají, takže přepis může jen pro svou část projektu přijmout rizikové opravy, které jinde přijmout nechcete. Bez souhlasu se rizikové místo ohlásí a jeho závažnost se řídí tím, co by ho rozhodlo. Kde by stačily typy nebo `nameResolution`, je to varování, protože tlačit takové místo exit kódem by vedlo k souhlasu naslepo. Kde oprava mění chování ze své podstaty, je to chyba jako každé jiné porušení. Shrnutí rizikové opravy spočítá podle příčiny a ke každé řekne, co s ní:
@@ -332,16 +332,17 @@ namespaces:
 Pluginy
 =======
 
-Plugin je třída s rozhraním `DressCode\Plugin`, kterou balíček přináší projektu vlastní pravidla a presety, analýzy, vyloučené cesty a filtr souborů. Balíček svůj plugin obvykle ohlásí sám v `composer.json` pod klíčem `extra.dresscode.plugin`, a pak ho DressCode po instalaci najde v `vendor/composer/installed.json` a nikam ho psát nemusíte. Plugin, který žije přímo v projektu, uvedete v klíči `use` vedle presetů, třídou, nebo [entitou |#Objekty a callbacky] s argumenty:
+Plugin je třída s rozhraním `DressCode\Plugin`, kterou balíček přináší projektu vlastní pravidla a presety, analýzy, vyloučené cesty a filtr souborů. Balíček svůj plugin ohlásí v `composer.json` pod klíčem `extra.dresscode.plugin` a DressCode ho po instalaci najde v `vendor/composer/installed.json`. Načte ho ale, jen když ho projekt pustí dovnitř: napíše do klíče `use` jméno balíčku nebo třídu pluginu. Plugin totiž přináší kód, který běží při každé kontrole, a projekt ho vpouští stejně, jako Composer vpouští své pluginy. Plugin nainstalovaného balíčku, který `use` nejmenuje, se nenačte a běh na to upozorní; jmenovat nemusíte jen plugin, který ohlásí `composer.json` samotného projektu. Plugin, který žije přímo v projektu, uvedete v klíči `use` vedle presetů, třídou, nebo [entitou |#Objekty a callbacky] s argumenty:
 
 ```neon
 use:
+	- acme/coding-rules
 	- Acme\CodeStyle\Plugin
 	- perCs
 	- acme/house
 ```
 
-Plugin o tom, jak se kód píše, nerozhoduje. Jeho pravidla mají rozhodnutí ve vlastní sekci pojmenované po pluginu a jeho presety se jen stanou známými; co z toho projekt chce, napíše sám do `use` a do sekce pluginu. Proto je styl projektu vždycky čitelný v jeho vlastním souboru. Plugin patří celému projektu, takže ho uvádí jen konfigurace. Plugin v `use` přepisu nebo presetu DressCode odmítne s chybou <code>''Plugin `Acme\CodeStyle\Plugin` is used by the configuration of the project, never by a preset or an override.''</code> Jak plugin napsat, popisuje [Vlastní preset a plugin |presets-and-extensions].
+První řádek pustí plugin balíčku `acme/coding-rules`; samo jméno balíčku žádný preset není. Plugin o tom, jak se kód píše, nerozhoduje. Jeho pravidla mají rozhodnutí ve vlastní sekci pojmenované po pluginu a jeho presety se jen stanou známými; co z toho projekt chce, napíše sám do `use` a do sekce pluginu. Proto je styl projektu vždycky čitelný v jeho vlastním souboru. Plugin patří celému projektu, takže ho uvádí jen konfigurace. Plugin v `use` přepisu nebo presetu DressCode odmítne s chybou <code>''Plugin `Acme\CodeStyle\Plugin` is used by the configuration of the project, never by a preset or an override.''</code> Jak plugin napsat, popisuje [Vlastní preset a plugin |presets-and-extensions].
 
 Balíček může nést i soubory `upgrading.neon` s tím, co verze knihoven přejmenovaly nebo zrušily, které ohlásí pod `extra.dresscode.upgrading`. Žádné rozhodnutí sám nezapne: data se uplatní, až když projekt zapne jejich záměr, `upgrading.libraries.deprecations` nebo `upgrading.libraries.modernizations`, což dělají sady `deprecations` a `modernizations`. Víc v [Aktualizaci knihoven |upgrading-libraries].
 
@@ -356,7 +357,7 @@ Kde zápis v PHP předává objekt nebo callback, napíše se v NEONu entita. Vy
 - `App\CodeStyle\Filter::isGenerated(...)` předá samotnou metodu jako callback,
 - `App\CodeStyle\Filter(8.1)::withLimit(100)` zavolá metodu na tom, co vrátil předchozí článek řetězu.
 
-Entitu berou plugin v klíči `use` a klíče `skipWhen`, `rules` a `analyses`; pravidlo a analýza s továrnou se píšou jako dvojice třída a entita:
+Entitu berou jen tři místa: plugin v klíči `use`, klíč `skipWhen` a továrna analýzy v klíči `analyses`, která se píše jako dvojice třída a entita:
 
 ```neon
 use:
@@ -367,14 +368,23 @@ skipWhen: App\CodeStyle\GeneratedFilter::isGenerated(...)
 
 rules:
 	- App\CodeStyle\ExceptionMessagePeriodRule
-	App\CodeStyle\CacheKeyRule: App\CodeStyle\CacheKeyRule(App\CodeStyle\Keys::load())
 
 analyses:
 	- App\CodeStyle\Analyses\Imports
 	App\CodeStyle\Analyses\Calls: App\CodeStyle\Analyses\Calls::create(...)
 ```
 
-Plugin, `skipWhen` a továrna analýzy se vyhodnotí hned při načtení konfigurace. U pravidla je entita recept: pravidlo s vlastními závislostmi se podle něj postaví pokaždé, když ho DressCode potřebuje, třeba zvlášť pro soubory každého přepisu. Při načtení se jen ověří, že třída nebo metoda existuje, takže překlep je chyba konfigurace hned, ne až během kontroly.
+`skipWhen` a továrna analýzy se vyhodnotí hned při načtení konfigurace, plugin z `use` až ve chvíli, kdy je jisté, že jeho třída plugin opravdu je. Konfigurace repozitáře, který si jen stáhnete a zkontrolujete, tak jménem třídy nespustí žádný jiný kód. Pravidlo projektu se v NEONu jmenuje jen třídou. Pravidlo s vlastními závislostmi se staví podle továrny pokaždé, když ho DressCode potřebuje, třeba zvlášť pro soubory každého přepisu, a taková továrna je obyčejná closure v `dresscode.php`:
+
+```php
+return new Config(
+	use: ['perCs'],
+	rules: [
+		App\CodeStyle\ExceptionMessagePeriodRule::class,
+		App\CodeStyle\CacheKeyRule::class => fn() => new App\CodeStyle\CacheKeyRule(App\CodeStyle\Keys::load()),
+	],
+);
+```
 
 
 Příkazová řádka
@@ -383,8 +393,8 @@ Příkazová řádka
 Příkazová řádka je nejvyšší vrstva a leží nad konfigurací i nad všemi přepisy. `--use` přidá preset nebo plugin, `--set` dá jednomu rozhodnutí hodnotu v NEONu a `--only` zúží běh na rozhodnutí, sekce nebo presety, které jmenuje, aniž by měnil hodnoty:
 
 ```shell
-dresscode fix --set calls.is_null=forbidden   # konfigurace a k ní tohle rozhodnutí
-dresscode fix --only cleanup                  # jen rozhodnutí sady cleanup
+dresscode fix --set cleanup.is_null=forbidden   # konfigurace a k ní tohle rozhodnutí
+dresscode fix --only dresscode/cleanup        # jen rozhodnutí sady cleanup
 dresscode check src --use psr12               # cizí projekt bez konfigurace
 ```
 

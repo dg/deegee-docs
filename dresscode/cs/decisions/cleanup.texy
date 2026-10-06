@@ -1,18 +1,18 @@
-Volání funkcí
-*************
+Úklid
+*****
 
 .[perex]
-Sekce `calls` rozhoduje o voláních funkcí, která jdou napsat jinak a lépe: alias místo funkce, `is_null()` a `intval()` místo jazykové konstrukce, `dirname(__FILE__)` místo `__DIR__`, `call_user_func()` místo přímého volání, argument, který PHP ignoruje, a zapomenutý ladicí výpis.
+Sekce `cleanup` rozhoduje o kódu, který jde napsat jednodušeji a se stejným významem: alias místo funkce, `is_null()` a `intval()` místo jazykové konstrukce, `dirname(__FILE__)` místo `__DIR__`, `get_class()` místo `::class`, `call_user_func()` místo přímého volání a argument, který PHP ignoruje.
 
 Jazyková konstrukce je rychlá vždy a nezáleží u ní na jmenném prostoru. Ve jmenném prostoru jsou opravy rizikové (risky fixes): nekvalifikované `is_null()` může být funkce `App\is_null()`, kterou deklaruje váš projekt. Dokud konfigurace neřekne [`nameResolution: certain` |/namespaces#name-resolution], čekají na svolení.
 
 ```neon
-calls:
+cleanup:
 	aliasFunctions: [internal]
 	conversionFunctions: forbidden
 	is_null: forbidden
 	dirnameOfFile: forbidden
-	debugOutput: commentedOut
+	get_class: forbidden
 	call_user_func: forbidden
 ```
 
@@ -22,7 +22,7 @@ $id = intval($row['id']);  // The `intval()` call must be written as the `(int)`
 if (is_null($user)) {  // The `is_null()` call must be written as a comparison with `null`.
 	$dir = dirname(__FILE__);  // The `dirname(__FILE__)` call must be written `__DIR__`.
 }
-var_dump($items);  // The call of `var_dump()` must be commented out.
+$type = get_class($order);  // The class name must be obtained with `$order::class`.
 $result = call_user_func($callback, $id);  // The callable must be called directly, not through `call_user_func()`.
 ```
 
@@ -32,34 +32,37 @@ $id = (int) $row['id'];
 if ($user === null) {
 	$dir = __DIR__;
 }
-// var_dump($items);
+$type = $order::class;
 $result = $callback($id);
 ```
 
+Sekce se jmenuje stejně jako [sada `cleanup` |/configuration#Standardy a sady], ale nejsou totéž: sada rozhoduje i v jiných sekcích, o nepoužitých importech nebo prázdných komentářích, a z téhle sekce bere jen část. Kde se jméno píše do `--only`, `fixRisky` nebo `warnOnly`, holé `cleanup` by mohlo znamenat obojí, a tak ho DressCode odmítne: sekci napíšete `cleanup.*`, sadu `dresscode/cleanup`. Stejně je to se sekcemi a sadami `correctness` a `types`.
 
-calls.debugOutput
-=================
 
-A statement calling a debugging function to print, a call that may return its output instead, `print_r($a, true)`, staying.
+cleanup.classNameNotation
+=========================
 
-- `commentedOut`: the statement changed into a comment, `// var_dump($a);`
+The name of the current class, of the one the method runs through and of the parent; the class of an object is `cleanup.get_class`.
+
+- `classKeyword` nebo `'self::class'`: `self::class`, `static::class` and `parent::class`, never `get_class()`, `get_called_class()`, `get_parent_class()` or `__CLASS__`
 - `keep`: nic se nevynucuje, kód zůstane, jak je
 
-Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` · pokrývá `PhpCsFixerCustomFixers/commented_out_function` .[decision-facts]
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `classKeyword`, symfony `keep` · pokrývá `SlevomatCodingStandard.Classes.ModernClassNameReference` .[decision-facts]
 
 
-calls.debugFunctions
-====================
+cleanup.get_class
+=================
 
-The debugging functions whose calls print.
+The class of an object obtained by `get_class($object)`, which is `$object::class`; the name of the current class is `cleanup.classNameNotation`.
 
-- seznam jmen
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
 
-Parametr, výchozí `[print_r, var_dump, var_export]` · standardy: perCs `[print_r, var_dump, var_export]`, psr12 `[print_r, var_dump, var_export]`, nette `[print_r, var_dump, var_export]`, symfony `[print_r, var_dump, var_export]` · pokrývá `PhpCsFixerCustomFixers/commented_out_function` .[decision-facts]
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `SlevomatCodingStandard.Classes.ModernClassNameReference` .[decision-facts]
 
 
-calls.aliasFunctions
-====================
+cleanup.aliasFunctions
+======================
 
 The sets of functions whose aliases are written by their canonical names.
 
@@ -83,8 +86,8 @@ The sets of functions whose aliases are written by their canonical names.
 Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `[internal, imap, pg]`, symfony `keep` · pokrývá `no_alias_functions` .[decision-facts]
 
 
-calls.call_user_func
-====================
+cleanup.call_user_func
+======================
 
 `call_user_func($f, $x)` is `$f($x)`, `call_user_func_array($f, $a)` is `$f(...$a)`.
 
@@ -94,8 +97,8 @@ calls.call_user_func
 Požadavek · PHP 7.0 · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `regular_callable_call` .[decision-facts]
 
 
-calls.conversionFunctions
-=========================
+cleanup.conversionFunctions
+===========================
 
 `intval($x)` is `(int) $x`; `intval($x, 16)` is no cast.
 
@@ -105,8 +108,8 @@ calls.conversionFunctions
 Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `modernize_types_casting` .[decision-facts]
 
 
-calls.explicitInvokeCalls
-=========================
+cleanup.__invoke
+================
 
 `$f->__invoke($x)` is `$f($x)`.
 
@@ -116,8 +119,8 @@ calls.explicitInvokeCalls
 Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `SlevomatCodingStandard.PHP.DisallowDirectMagicInvokeCall` .[decision-facts]
 
 
-calls.dirnameOfFile
-===================
+cleanup.dirnameOfFile
+=====================
 
 `dirname(__FILE__)` is `__DIR__`; nested `dirname()` by the `levels` argument.
 
@@ -127,8 +130,8 @@ calls.dirnameOfFile
 Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `PhpCsFixerCustomFixers/no_useless_dirname_call`, `combine_nested_dirname`, `dir_constant` .[decision-facts]
 
 
-calls.is_null
-=============
+cleanup.is_null
+===============
 
 `is_null($x)` is `$x === null`.
 
@@ -138,8 +141,19 @@ calls.is_null
 Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `is_null` .[decision-facts]
 
 
-calls.settype
-=============
+cleanup.strlenEmptyTest
+=======================
+
+`strlen($s) === 0` is `$s === ''`.
+
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · jen s typy · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `PhpCsFixerCustomFixers/no_useless_strlen`, `string_length_to_empty` .[decision-facts]
+
+
+cleanup.settype
+===============
 
 `settype($x, 'int')` as a statement is `$x = (int) $x`.
 
@@ -149,8 +163,8 @@ calls.settype
 Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `set_type_to_cast` .[decision-facts]
 
 
-calls.uselessArguments
-======================
+cleanup.redundantArguments
+==========================
 
 An argument PHP ignores or that repeats the default.
 

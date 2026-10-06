@@ -94,9 +94,9 @@ Jedno rozhodnutí na jeden běh: --set a --only
 `--set` dá rozhodnutí hodnotu, jako by stála v konfiguraci, a `--only` zúží běh na to, co jmenujete. Oba přepínače se dají opakovat a spolu pokryjí, co chcete s rozhodnutími udělat jen jednou, bez úprav konfigurace. Hodnota za `=` se píše v NEONu, takže je to přesně totéž, co byste napsali do souboru; ukázku s mezerami dejte do uvozovek, aby ji shell nerozložil:
 
 ```shell
-dresscode check --set calls.is_null=forbidden
+dresscode check --set cleanup.is_null=forbidden
 dresscode check --set blankLines.betweenMethods=1
-dresscode check --set 'spacing.arrowFunction="fn ($x) => $x"'
+dresscode check --set 'spacing.fnKeyword="fn ($x) => $x"'
 ```
 
 `--only` nemění žádnou hodnotu. Strom konfigurace se vyřeší celý a `--only` nad ním jen vybere, co se hlásí a opravuje. Rozhodnutí mimo výběr mlčí, ale jeho hodnota platí dál pro všechno, co vybraná rozhodnutí napíšou: když `--only` pustí přepis na `match` v projektu se čtyřmi mezerami, nový blok dostane čtyři mezery.
@@ -155,13 +155,13 @@ Uklidit starý kód po krocích
 Velký úklid se jako jeden diff špatně čte. Rozdělte ho podle záměru, jeden commit na každou [sadu |configuration#Standardy a sady], kterou konfigurace používá, nebo na každou sekci:
 
 ```shell
-dresscode fix --only cleanup
-dresscode fix --only correctness
+dresscode fix --only dresscode/cleanup
+dresscode fix --only dresscode/correctness
 dresscode fix --only blankLines
 dresscode fix
 ```
 
-Jméno sady nebo presetu v `--only` pustí jen ta jeho rozhodnutí, která konfigurace opravdu dělá, nikdy víc. Není to totiž rozhodnutí o žádném z nich, a tak nepřebije, co projekt nechal na `keep` schválně. Přitom nic nezamlčí: když jste některá rozhodnutí sady v konfiguraci vypnuli, běh řekne která:
+Sada, která se jmenuje stejně jako sekce (`cleanup`, `correctness`, `types`), se tu píše celým jménem, `dresscode/cleanup`, a sekce jako `cleanup.*`; holé jméno by mohlo znamenat obojí, a tak ho DressCode odmítne. Jméno sady nebo presetu v `--only` pustí jen ta jeho rozhodnutí, která konfigurace opravdu dělá, nikdy víc. Není to totiž rozhodnutí o žádném z nich, a tak nepřebije, co projekt nechal na `keep` schválně. Přitom nic nezamlčí: když jste některá rozhodnutí sady v konfiguraci vypnuli, běh řekne která:
 
 /--pre .[terminal]
 Warning: Option `--only` keeps 27 of the 28 rules of preset `dresscode/cleanup` that may run here, without `controlFlow.elseAfterExit`, `controlFlow.elseifAfterExit`, which the configuration turns off.
@@ -232,7 +232,7 @@ Vysvětlení rozhodnutí: explain
 Cesta rozhodnutí ve výpisu je odkaz, ne vysvětlení. `dresscode explain <cesta>` k ní dá popis, hodnoty, které rozhodnutí bere, i s jejich významem, hodnotu v tomhle projektu s vrstvou, která ji nastavila, a co říkají čtyři standardy:
 
 /--pre .[terminal]
-`spacing.arrowFunction`
+`spacing.fnKeyword`
 
 The space between `fn` and its parenthesis.
 
@@ -246,7 +246,7 @@ The standards: perCs `compact`, psr12 `keep`, nette `compact`, symfony `spaced`.
 
 Rule `DressCode\Rules\Whitespace\ConstructSpacingRule`, stage Formatting.
 
-See https://dresscode.run/decisions/spacing.arrowFunction
+See https://dresscode.run/decisions/spacing.fnKeyword
 \--
 
 Se jménem sekce, `dresscode explain blankLines`, vysvětlí všechna její rozhodnutí. Bez argumentu vysvětlí celou konfiguraci projektu, po sekcích a jen to, co nějaká vrstva rozhoduje. S `--format markdown` vypíše totéž jako dokument v Markdownu na standardní výstup; do souboru ho dostanete přesměrováním:
@@ -264,8 +264,8 @@ Katalog rozhodnutí: catalogue
 `dresscode catalogue` vypíše všechna rozhodnutí, která instalace zná, vestavěná i ta z pluginů a vlastních pravidel projektu, každé s popisem a se jmény pravidel jiných nástrojů, která pokrývá. Hvězdičkou označí ta, která vaše konfigurace dělá:
 
 /--pre .[terminal]
-* file.emptyStatements          The second `;` of `foo();;`  (covers no_empty_statement, SlevomatCodingStandard.PHP.UselessSemicolon)
-* file.finalNewlines            Exactly one line ending after the last line; a file ending in HTML is content  (covers single_blank_line_at_eof, PSR2.Files.EndFileNewline)
+* file.finalLineEndings         Exactly one line ending after the last line; a file ending in HTML is content  (covers single_blank_line_at_eof, PSR2.Files.EndFileNewline)
+* file.openingTag               The opening tag of PHP  (covers full_opening_tag, Generic.PHP.DisallowShortOpenTag)
   file.longLines                A line wider than `file.maxLineLength`, which nothing could split, is reported  (covers Generic.Files.LineLength, SlevomatCodingStandard.Files.LineLength)
 ...
 \--
@@ -351,10 +351,10 @@ Přepínač `--format` volí celý tvar výstupu, ne jeho detail; formáty se ne
 
 /--pre .[terminal]
 src/Cart.php
-  error      1  `declare(strict_types=1)` must be on the line of the opening tag.  file.strictTypesPlacement
+  error      1  `declare(strict_types=1)` must be on the line of the opening tag.  file.strictTypesPosition
   error      2  Expected 1 blank line before the namespace, 2 found.               blankLines.beforeNamespace
   error      6  Expected 2 blank lines before the class, 1 found.                  blankLines.beforeDeclaration
-  risky  14:10  The `in_array()` call must pass `$strict = true`.                  correctness.strictCalls
+  risky  14:10  The `in_array()` call must pass `$strict = true`.                  correctness.strictComparisonArgument
                 Risky because a strict search no longer finds a value of another type.
   error  20:10  A plain string must be written with single quotes.                 literals.quotes
   error  20:47  A plain string must be written with single quotes.                 literals.quotes
@@ -386,7 +386,7 @@ FOUND  8 violations, 1 of them following from others, a fix leaves none in 1 fil
 
 /--pre .[terminal]
 src/Cart.php  rewritten
-  risky  13:10  The `in_array()` call must pass `$strict = true`.  correctness.strictCalls
+  risky  13:10  The `in_array()` call must pass `$strict = true`.  correctness.strictComparisonArgument
                 Risky because a strict search no longer finds a value of another type.
 
 1 risky fix waits, the type is unknown: set `typeAnalysis: phpstan`. See https://dresscode.run/types#enable
@@ -402,7 +402,7 @@ Barvy se vypnou samy, jakmile výstup nejde do terminálu. V terminálu je cesta
 
 /--pre .[terminal]
 src/Cart.php  rewritten
-  risky  13:10  The `in_array()` call must pass `$strict = true`.  correctness.strictCalls
+  risky  13:10  The `in_array()` call must pass `$strict = true`.  correctness.strictComparisonArgument
 
 src/Order.php  rewritten
   error  16:3  The line is 144 characters long, more than 140.  file.longLines
@@ -432,12 +432,12 @@ dresscode check --format json src/Cart.php
             "path": "src/Cart.php",
             "violations": [
                 {
-                    "decision": "correctness.strictCalls",
+                    "decision": "correctness.strictComparisonArgument",
                     "message": "The `in_array()` call must pass `$strict = true`.",
                     "line": 19,
                     "column": 10,
                     "severity": "warning",
-                    "risk": "TypeUnknown",
+                    "risk": "typeUnknown",
                     "refused": true,
                     "because": "a strict search no longer finds a value of another type",
                     "fingerprint": "2f83e4aa829e87db",
@@ -446,12 +446,12 @@ dresscode check --format json src/Cart.php
             ],
             "remaining": [
                 {
-                    "decision": "correctness.strictCalls",
+                    "decision": "correctness.strictComparisonArgument",
                     "message": "The `in_array()` call must pass `$strict = true`.",
                     "line": 19,
                     "column": 10,
                     "severity": "warning",
-                    "risk": "TypeUnknown",
+                    "risk": "typeUnknown",
                     "refused": true,
                     "because": "a strict search no longer finds a value of another type",
                     "fingerprint": "2f83e4aa829e87db",
@@ -489,7 +489,7 @@ Hlavička říká verzi formátu `version`, zda šlo o `check`, nebo `fix` (`mod
 - `failure`: pravidlo v souboru selhalo nebo se pravidla nedohodla, se zprávou `message` a odkazem do dokumentace `docs`, jinak `null`;
 - `changed`: oprava text mění (u `check` by ho měnila), a `written`: soubor se zapsal.
 
-Porušení nese cestu rozhodnutí `decision`, zprávu `message`, řádek `line`, sloupec `column` (u porušení v bílých znacích nebo v komentáři `null`), závažnost `severity` (`error`, nebo `warning`), a u rizikové opravy `risk` s tím, co by ji rozhodlo: `TypeUnknown` (typ hodnoty), `NameUncertain` (jméno funkce ve jmenném prostoru), nebo `BehaviorChanges` (oprava mění chování ze své podstaty); jinak `null`. `refused` říká, že běh rizikovou opravu neudělal, protože k ní nebylo svolení, a `because` doplní větu, co přesně se na tom místě může pokazit, tam, kde to samotné riziko neřekne. `fingerprint` je otisk, pod kterým porušení zná [baseline |suppressing#baseline], a `derivedFrom` otisk porušení, z jehož opravy tohle plyne.
+Porušení nese cestu rozhodnutí `decision`, zprávu `message`, řádek `line`, sloupec `column` (u porušení v bílých znacích nebo v komentáři `null`), závažnost `severity` (`error`, nebo `warning`), a u rizikové opravy `risk` s tím, co by ji rozhodlo: `typeUnknown` (typ hodnoty), `nameUncertain` (jméno funkce ve jmenném prostoru), nebo `behaviorChanges` (oprava mění chování ze své podstaty); jinak `null`. `refused` říká, že běh rizikovou opravu neudělal, protože k ní nebylo svolení, a `because` doplní větu, co přesně se na tom místě může pokazit, tam, kde to samotné riziko neřekne. `fingerprint` je otisk, pod kterým porušení zná [baseline |suppressing#baseline], a `derivedFrom` otisk porušení, z jehož opravy tohle plyne.
 
 `summary` sečte běh: počet zpracovaných souborů `files`, nalezená porušení `violations`, zbylá `remaining`, odmítnuté rizikové opravy `refused`, soubory, které oprava mění, `changedFiles`, soubory se syntaktickou chybou `syntaxErrors`, soubory, kde pravidlo selhalo, `failures`, porušení, která umlčela baseline, `baselined`, a exit kód běhu `exitCode`. Nakonec stojí `warnings` k celému běhu, třeba o zastaralých položkách baseline.
 

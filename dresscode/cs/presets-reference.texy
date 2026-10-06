@@ -30,18 +30,17 @@ file:
 	openingTag: '<?php'                       # not `<?` or `<?PHP`
 	closingTagAtEnd: forbidden                # a `?>` before HTML stays
 	lineEnding: majority                      # as most lines of the file, LF on a tie
-	finalNewlines: 1
+	finalLineEndings: 1
 	trailingWhitespace: forbidden             # the text of a string stays
 	maxLineLength: 120                        # a signature or a condition wider is spread
 	statementsPerLine: 1                      # `foo(); bar();` takes two lines
-	emptyStatements: forbidden                # `foo();;`
 
 indentation:
 	unit: '4 spaces'
 	binaryOperator: 0                         # `&& $b` right below `$a`, a level deeper after `$x =` or `return`
 	ternary: 1                                # `?` and `:` opening a line
 	switchCase: 1                             # `case` inside `switch`
-	chain: single                             # every link one level below the start of the chain
+	chain: flat                               # every link one level below the start of the chain
 
 # names are reported, never renamed
 naming:
@@ -50,16 +49,16 @@ naming:
 	constant: UPPER_CASE
 
 builtin:
-	keywords: lowercase                       # `self`, `parent` too
+	keyword: lowercase                        # `self`, `parent` too
 	trueFalseNull: lowercase
-	types: lowercase                          # `int`, `string`, `void`
-	castTypes: short                          # `(int)`, not `(integer)` or `( int )`
+	type: lowercase                           # `int`, `string`, `void`
+	castType: short                           # `(int)`, not `(integer)` or `( int )`
 
 qualification:
 	uselessBackslash: forbidden               # `use Foo\Bar;`, not `use \Foo\Bar;`
 
 imports:
-	order: byKindOnly                         # classes, functions, constants, each in the order written
+	order: groupedByKind                       # classes, functions, constants, each in the order written
 
 spacing:
 	declare: 'declare(strict_types=1)'
@@ -67,7 +66,7 @@ spacing:
 	parentheses: '($a)'
 	controlKeyword: 'if ($a)'                 # `while`, `for`, `foreach`, `switch`, `catch` too
 	connectingKeyword: '} else {'             # `catch`, `finally`, `as`, the `use` of a closure too
-	closure: 'function ($x)'
+	functionKeyword: 'function ($x)'
 	languageConstruct: 'return $x'            # `throw`, `yield`, `new`, `include` too
 	comma: '$a, $b'
 	commaAlignment: none                      # no extra spaces after a comma
@@ -81,9 +80,9 @@ spacing:
 	ternary: '$a ? $b : $c'                   # `$a ?: $b` too
 	classHead: 'class Foo extends Bar implements Baz'
 	anonymousClass: 'new class ($a)'
-	modifiers: 'final public static function'
+	modifier: 'final public static function'
 	typeDeclaration: '?int $x'                # `): int` too
-	catchTypes: 'catch (A | B $e)'
+	catchType: 'catch (A | B $e)'
 	switchCase: 'case 1:'
 
 multiline:
@@ -91,7 +90,7 @@ multiline:
 		binary: lineStart                     # `+ $b` opens the line, not ends the one before
 		condition: lineStart                  # `&& $b` opens the line
 	signatureOverMaxLength: split             # a parameter per line
-	constructorWithPromotedProperties: asSignature   # spread only when too long
+	signatureWithPromotedProperties: asSignature     # spread only when too long
 	signature: perLine                        # a parameter per line once spread
 	call: perLine                             # an argument per line once spread
 	condition: perLine                        # `if (` above `$a`, `) {` below the last part
@@ -103,7 +102,7 @@ braces:
 	closure: sameLine
 	anonymousClass: sameLine
 	controlStructure: sameLine
-	controlStructureBody: required            # `if ($a) foo();` gets braces
+	bracelessBody: forbidden                  # `if ($a) foo();` gets braces
 	continuingKeyword: sameLine               # `} else {`
 	emptyBody: ownLines                       # not `{}`
 	singlelineClosure: forbidden              # `function () { return 1; }` is spread
@@ -122,16 +121,18 @@ blankLines:
 	afterTraitUses: 1
 
 classes:
-	memberVisibility: required                # `var` is `public`, `final public static`
+	memberVisibility: required                # `var` is `public`
+	modifierOrder: canonical                  # `final public static`
 	interfaceMethodVisibility: required       # `public` though implied
 	memberOrder: [traitUse]
-	onePerDeclaration: [property, traitUse]   # `public $a, $b;` is split
+	groupedDeclarationAllowedFor: [constant]  # `public $a, $b;` is split
 	newParentheses: required                  # `new Foo()`
 
 controlFlow:
 	elseif: 'elseif'                          # not `else if`
 	switchCaseTerminator: ':'                 # not `case 1;`
 	switchFallThrough: no break               # the comment of a fall-through
+	emptyStatement: forbidden                 # `foo();;`
 ```
 
 
@@ -156,9 +157,9 @@ naming:
 
 spacing:
 	attribute: '#[Foo($a)]'
-	arrowFunction: 'fn($x) => $x'
+	fnKeyword: 'fn($x) => $x'
 	beforeSemicolon: '$a;'
-	catchTypes: 'catch (A|B $e)'             # as a union type
+	catchType: 'catch (A|B $e)'             # as a union type
 	namedArgument: 'foo(name: $x)'
 
 multiline:
@@ -185,9 +186,8 @@ braces:
 	emptyAnonymousClass: sameLine            # `new class {}`
 
 classes:
-	onePerDeclaration: [constant, property, traitUse]   # `const A = 1, B = 2;` is split
+	groupedDeclarationAllowedFor: []         # `const A = 1, B = 2;` is split
 	membersPerLine: 1
-	phpdocAboveAttributes: required
 	anonymousClassParentheses: forbidden     # `new class {}`, not `new class() {}`
 	attributeParentheses: forbidden          # `#[Foo]`, not `#[Foo()]`
 
@@ -198,6 +198,9 @@ types:
 literals:
 	heredocWithoutInterpolation: forbidden   # a nowdoc `<<<'EOT'` instead
 	longArraySyntax: forbidden               # `[1, 2]`, not `array(1, 2)`
+
+phpdoc:
+	aboveAttributes: required
 ```
 
 
@@ -225,7 +228,7 @@ use:
 
 file:
 	strictTypes: required             # risky, `'1'` passed to `int` then throws
-	strictTypesPlacement: openingTagLine
+	strictTypesPosition: openingTagLine
 	maxLineLength: 140                # a tab counts as 4 columns
 
 indentation:
@@ -242,19 +245,19 @@ naming:
 	classKindInName: forbidden        # `FooInterface`, `FooTrait`, `AbstractFoo`
 
 builtin:
-	magicConstants: uppercase
-	classes: declared                 # `DateTime`, not `datetime`
-	functions: declared               # `strlen()`, not `StrLen()`
+	magicConstant: uppercase
+	class: declared                   # `DateTime`, not `datetime`
+	function: declared                # `strlen()`, not `StrLen()`
 
 qualification:
 	classOfAnotherNamespace: imported
 	currentClass: self                # `self::bar()` inside `Foo`, not `Foo::bar()`
 
 imports:
-	order: byKind                     # classes, functions, constants, each alphabetically
-	classes: separate                 # `use A; use B;`
-	functions: combined               # `use function a, b;`
-	constants: combined               # `use const A, B;`
+	order: alphabetical               # classes, functions, constants, each alphabetically
+	class: separate                   # `use A; use B;`
+	function: combined                # `use function a, b;`
+	constant: combined                # `use const A, B;`
 
 spacing:
 	commaAlignment: tabs              # tabs aligning columns may stay
@@ -271,11 +274,11 @@ spacing:
 multiline:
 	expressionBelowReturn: forbidden          # `return [`, not `return` above `[`
 	semicolonOnOwnLine: forbidden
-	constructorWithPromotedProperties: split  # however short
-	chainFirstLinks: startLine                # `$form->addText()` above `->setRequired()`
+	signatureWithPromotedProperties: split    # however short
+	chainFirstLinks: sameLine                 # `$form->addText()` above `->setRequired()`
 	condition: [perLine, compact]             # `if (` above `$a`, or `if ($a` above `&& $b`
 	array: asWritten                          # items may share a line
-	arrayOverWidth: 130
+	arrayMaxWidth: 130
 	trailingComma:
 		matchArm: keep
 		closureUse: keep
@@ -307,11 +310,10 @@ classes:
 	interfaceMethodVisibility: forbidden     # public anyway
 	# the methods then in the order written
 	memberOrder: [traitUse, constant, publicConstant, protectedConstant, privateConstant, publicProperty, protectedProperty, privateProperty]
-	onePerDeclaration: [property, traitUse]  # `const A = 1, B = 2;` may stay
+	groupedDeclarationAllowedFor: [constant] # `const A = 1, B = 2;` may stay
 	newParentheses: forbidden                # `new Foo`, but `new Foo()->bar()`
 
 types:
-	defaultNull: '?int $x = null'
 	inlineVarAnnotation: forbidden   # becomes `assert()`, risky
 	# a type only where it says something
 	parameter: keep
@@ -321,19 +323,19 @@ types:
 functions:
 	innerFunctions: forbidden
 	closureReturningOneExpression: forbidden         # `fn() =>` instead
-	closureReturningOneExpressionNested: forbidden   # also one holding another closure
+	closureReturningOneExpressionNested: yes         # also one holding another closure
 
-calls:
-	debugOutput: keep                         # may stay
+cleanup:
 	is_null: forbidden                        # `$x === null`
 	settype: forbidden                        # `$x = (int) $x`
 	conversionFunctions: forbidden            # `(int) $x`, not `intval($x)`
 	dirnameOfFile: forbidden                  # `__DIR__`
+	classNameNotation: classKeyword           # `self::class`, `static::class`
+	get_class: forbidden                      # `$o::class`
 
 controlFlow:
 	switchFallThrough: break omitted          # the comment of a fall-through
 	elseAfterExit: keep                       # may stay
-	globalStatement: forbidden
 
 expressions:
 	comparison: strict                        # risky
@@ -346,10 +348,8 @@ expressions:
 	doubleNegation: forbidden                 # `(bool) $a`, not `!!$a`
 	ternaryReturningItsCondition: forbidden   # `$a ?: $b`
 	ternaryTestingNull: forbidden             # `$a ?? $b`
-	getClassCalls: forbidden                  # `self::class`, `static::class`
-	getClassOnObjects: forbidden              # `$o::class`
 	separateIssets: forbidden                 # `isset($a, $b)`
-	consecutiveUnsets: forbidden              # `unset($a, $b);`
+	separateUnsets: forbidden                 # `unset($a, $b);`
 	backticks: forbidden                      # `shell_exec()`
 
 literals:
@@ -359,14 +359,14 @@ literals:
 	fractionDigitGroupsFrom: 20
 
 comments:
-	singleLine: '//'                          # not `#`
+	singleline: '//'                          # not `#`
 
 phpdoc:
 	annotations: canonicalCase                # `@inheritDoc`, not `@inheritdoc`
 	stars: aligned                            # below the first `*` of `/**`
-	blankLinesAtEdges: forbidden
+	blankLines: trimmed
 	propertyComment: phpdoc                   # not `//` or `/* */`
-	propertyPhpdocOfOneLine: singleline       # `/** @var int */`
+	propertyOfOneLine: singleline             # `/** @var int */`
 	promotedPropertyAnnotation: '@var'        # not `@param` of the constructor
 	forbiddenAnnotations: [@access, @author, @copyright, @created, @license, @package, @since, @subpackage, @todo, @version]
 	# `Constructor.`, `Name getter.`
@@ -375,9 +375,14 @@ phpdoc:
 		array: keep   # both notations stay
 		nullPosition: last
 
+correctness:
+	globalStatement: forbidden
+	debugOutput: keep                         # may stay
+
 upgrading:
 	php:
 		dollarBraceInterpolation: forbidden   # `{$name}`, not `${name}`
+		implicitNullable: forbidden           # `?int $x = null`, not `int $x = null`
 	syntax:
 		octalPrefix: adopted                  # `0o17`, not `017`
 	classes:
@@ -414,31 +419,27 @@ indentation:
 	heredoc: keep                             # heredoc_indentation belongs to another set
 
 builtin:
-	magicConstants: uppercase
-	classes: declared                         # `DateTime`, not `datetime`
-	functions: declared                       # `strlen()`, not `StrLen()`
+	magicConstant: uppercase
+	class: declared                           # `DateTime`, not `datetime`
+	function: declared                        # `strlen()`, not `StrLen()`
 
-# global_namespace_import imports nothing: a class is written fully qualified, a function and a constant too where
+# global_namespace_import imports nothing: a class is written with the backslash, a function and a constant too where
 # they are qualified, and a bare one stays bare
 qualification:
-	globalClass: fullyQualified               # `\DateTime`
-	globalFunction:
-		normally: [fullyQualified, bare]
-		optimizedByCompiler: same
-	globalConstant:
-		normally: [fullyQualified, bare]
-		computedByCompiler: same
+	globalClass: backslashed                  # `\DateTime`
+	globalFunction: [backslashed, bare]       # `\strlen()` or `strlen()`, never imported
+	globalConstant: [backslashed, bare]
 
 imports:
-	order: byKind                             # classes, functions, constants, each alphabetically
-	classes: separate                         # `use A; use B;`
-	functions: separate
-	constants: separate
+	order: alphabetical                       # classes, functions, constants, each alphabetically
+	class: separate                           # `use A; use B;`
+	function: separate
+	constant: separate
 	groupUse: forbidden                       # not `use Acme\{A, B};`
 	unused: forbidden
 
 spacing:
-	arrowFunction: 'fn ($x) => $x'
+	fnKeyword: 'fn ($x) => $x'
 	commaAlignment: any                       # aligning spaces and tabs may stay
 	semicolon: 'for ($i = 0; $i < 5; $i++)'
 	unaryOperatorsWithSpace: []               # `!$x`, never `! $x`
@@ -491,9 +492,6 @@ blankLines:
 classes:
 	untypedPropertyNullInitialization: forbidden   # `public $a;`, not `public $a = null;`
 
-types:
-	defaultNull: '?int $x = null'
-
 functions:
 	trailingBareReturn: forbidden             # no `return;` closing a function
 
@@ -512,11 +510,11 @@ literals:
 	heredocWithoutInterpolation: keep         # heredoc_to_nowdoc belongs to another set
 
 comments:
-	singleLine: '//'                          # not `#`
+	singleline: '//'                          # not `#`
 	empty: forbidden
 
 phpdoc:
-	blankLinesAtEdges: forbidden
+	blankLines: trimmed
 	empty: forbidden
 	types:
 		builtin: canonical                    # `int`, not `integer`, each type of a union once
@@ -528,6 +526,7 @@ correctness:
 upgrading:
 	php:
 		dollarBraceInterpolation: forbidden   # `{$name}`, not `${name}`
+		implicitNullable: forbidden           # `?int $x = null`, not `int $x = null`
 ```
 
 
@@ -551,18 +550,20 @@ Konstrukce novějšího PHP tam, kde totéž říká starší zápis, každá a�
 
 functions:
 	closureReturningOneExpression: forbidden   # `fn() =>` instead
-	closureReturningOneExpressionNested: forbidden   # also one holding another closure
+	closureReturningOneExpressionNested: yes         # also one holding another closure
+
+cleanup:
+	classNameNotation: classKeyword            # `self::class`, `static::class`
 
 controlFlow:
 	ifReturningOneOfTwoValues: forbidden       # `return $c ? 1 : 2;`
 
 expressions:
-	getClassCalls: forbidden                   # `self::class`, `static::class`
 	assignmentRepeatingTarget: forbidden       # `$a += $b`, not `$a = $a + $b`
 	ternaryTestingNull: forbidden              # `$a ?? $b`
 	ternaryReturningItsCondition: forbidden    # `$a ?: $b`
 	separateIssets: forbidden                  # `isset($a, $b)`
-	consecutiveUnsets: forbidden               # `unset($a, $b);`
+	separateUnsets: forbidden                  # `unset($a, $b);`
 
 literals:
 	longArraySyntax: forbidden                 # `[1, 2]`, not `array(1, 2)`
@@ -581,9 +582,11 @@ upgrading:
 		cloneWith: adopted                     # `clone($o, [...])`
 		nullsafe: adopted                      # `$a?->b`, not `$a ? $a->b : null`
 		pipe: adopted                          # `$x |> a(...) |> b(...)`, not `b(a($x))`
-		newWithoutParentheses: adopted         # `new Foo()->bar()`, not `(new Foo())->bar()`
+		newWithoutWrapping: adopted            # `new Foo()->bar()`, not `(new Foo())->bar()`
 		firstClassCallables: adopted           # `foo(...)`, not `Closure::fromCallable('foo')`
 		octalPrefix: adopted                   # `0o17`, not `017`
+		newInInitializer: adopted              # `Clock $c = new SystemClock`, not a `null` swapped in the body
+		promotedProperties: adopted
 	functions:
 		array_is_list: adopted
 		arraySearchFunctions: adopted          # `array_find()`, `array_any()` for a `foreach`
@@ -592,12 +595,9 @@ upgrading:
 		get_debug_type: adopted
 		json_validate: adopted                 # not `json_decode()` only testing
 		substringFunctions: adopted            # `str_contains()`, not `strpos() !== false`
-		RoundingMode: adopted                  # `RoundingMode::HalfAwayFromZero`, not `PHP_ROUND_HALF_UP`
-	classes:
-		promotedProperties: adopted
-		newInInitializer: adopted              # `Clock $c = new SystemClock`, not a `null` swapped in the body
+		roundingMode: adopted                  # `RoundingMode::HalfAwayFromZero`, not `PHP_ROUND_HALF_UP`
 	phpdoc:
-		Deprecated: adopted                    # `#[\Deprecated]`, not `@deprecated`
+		deprecated: adopted                    # `#[\Deprecated]`, not `@deprecated`
 ```
 
 
@@ -614,23 +614,17 @@ Co novější PHP zavrhlo nebo zrušilo, opravené tam, kde náhrada existuje, a
 # meeting it wherever it runs on the version that made it.
 
 builtin:
-	castTypes: short                          # `(int)`, not `(integer)`, PHP 8.5
+	castType: short                           # `(int)`, not `(integer)`, PHP 8.5
 
 classes:
 	overridingSignature: asAncestor           # a child matching a parent changed by an upgrade
 	overridingParameterNames: asAncestor
-
-types:
-	defaultNull: nullable                     # `?int $x = null`, not `int $x = null`, PHP 8.4
 
 controlFlow:
 	switchCaseTerminator: colon               # `case 1:`, not `case 1;`, PHP 8.5
 
 expressions:
 	backticks: forbidden                      # `shell_exec()`, PHP 8.5
-
-literals:
-	nullArrayKey: forbidden                   # `['' => 1]`, not `[null => 1]`, PHP 8.5
 
 # what a library breaks in a major version, reported
 correctness:
@@ -641,9 +635,12 @@ correctness:
 upgrading:
 	libraries:
 		deprecations: forbidden               # as the upgrading files of the packages say
-		deprecatedClasses: replaced           # by what `@deprecated` names
-		deprecatedMembers: replaced
+	declarations:
+		deprecatedClass: replaced             # by what `@deprecated` names
+		deprecatedMember: replaced
 	php:
+		nullArrayKey: forbidden               # `['' => 1]`, not `[null => 1]`, PHP 8.5
+		implicitNullable: forbidden           # `?int $x = null`, not `int $x = null`, PHP 8.4
 		guide: forbidden                      # `mb_convert_encoding()`, not `utf8_encode()`
 		constructorReturnValue: forbidden     # PHP 8.6
 		sleepAndWakeup: forbidden             # `__serialize()`, PHP 8.5
@@ -668,9 +665,6 @@ Kód, který je tam pro nic: co opakuje, co jazyk už říká, co se nikdy nevyk
 # function, a comment or a doc comment that says nothing. It decides nothing about the layout, so it goes with any
 # standard.
 
-file:
-	emptyStatements: forbidden               # `foo();;`
-
 qualification:
 	uselessBackslash: forbidden              # `use Foo\Bar;`, not `use \Foo\Bar;`
 	inFileWithoutNamespace: bare             # `strlen()`, not `\strlen()`
@@ -693,14 +687,15 @@ functions:
 	trailingBareReturn: forbidden            # no `return;` closing a function
 	unreachableParameterDefault: forbidden   # a default before a required parameter
 
-calls:
-	debugOutput: commentedOut                # `// var_dump($a);`, risky
+cleanup:
 	aliasFunctions: [internal, imap, pg]     # `count()`, not `sizeof()`
+	strlenEmptyTest: forbidden               # `$s === ''`, not `strlen($s) === 0`
 	call_user_func: forbidden                # `$f($x)`, not `call_user_func($f, $x)`, risky
-	explicitInvokeCalls: forbidden           # `$f($x)`, not `$f->__invoke($x)`
-	uselessArguments: forbidden              # `json_encode($a)`, not `json_encode($a, 0)`
+	__invoke: forbidden                      # `$f($x)`, not `$f->__invoke($x)`
+	redundantArguments: forbidden            # `json_encode($a)`, not `json_encode($a, 0)`
 
 controlFlow:
+	emptyStatement: forbidden                # `foo();;`
 	ifReturningBoolean: forbidden            # `return $a > 1;` for an `if` returning `true` or `false`
 	elseAfterExit: forbidden                 # the `else` after a `return` goes, its body following the `if`
 
@@ -710,7 +705,6 @@ expressions:
 
 literals:
 	classNameInString: forbidden             # `Order::class`, not `'Acme\Shop\Order'`
-	manualEmptyTest: forbidden               # `$s === ''`, not `strlen($s) === 0`
 	concatenatedLiterals: joined             # `'ab'`, not `'a' . 'b'`
 
 comments:
@@ -722,12 +716,17 @@ phpdoc:
 	repeatingNativeTypes: forbidden          # one only repeating the signature
 	inheritdocOnly: forbidden                # one holding only `{@inheritDoc}`
 
+correctness:
+	debugOutput: commentedOut                # `// var_dump($a);`, risky
+
 upgrading:
 	php:
 		guide: forbidden                     # a call doing nothing on the target, as `curl_close()`, goes
 	syntax:
 		catchWithoutVariable: adopted        # `catch (E)` where `$e` is not read
-		newWithoutParentheses: adopted       # `new Foo()->bar()`, not `(new Foo())->bar()`
+		newWithoutWrapping: adopted          # `new Foo()->bar()`, not `(new Foo())->bar()`
+		readonlyProperties: adopted          # `readonly` on one only the constructor writes
+		readonlyClasses: adopted             # `readonly class` for a final one whose every property is
 ```
 
 
@@ -743,11 +742,10 @@ To, co je nejspíš chyba, ať je styl jakýkoli.
 # object is, a `catch` nothing reaches, a doc comment contradicting itself, invisible characters in the code.
 
 phpdoc:
-	consistency:
-		paramOfUnknownParameter: forbidden      # a `@param` of no parameter
-		duplicateReturn: forbidden
-		emptyAnnotation: forbidden              # `@param`, `@return`, `@var`, `@see` without content
-		duplicateVar: forbidden
+	paramOfUnknownParameter: forbidden          # a `@param` of no parameter
+	duplicateReturn: forbidden
+	emptyAnnotation: forbidden                  # `@param`, `@return`, `@var`, `@see` without content
+	duplicateVar: forbidden
 
 correctness:
 	__debugInfo: array                          # `[]`, not `null`
@@ -758,7 +756,7 @@ correctness:
 	exceptionWhereThrowableBelongs: forbidden   # `catch (Exception)` where `Throwable` is meant, reported
 	errorSuppression: forbidden                 # the `@` operator, reported
 	invisibleCharacters: forbidden              # zero-width, no-break and bidi characters, escaped
-	strictCalls: required                       # `in_array($a, $b, true)`, risky
+	strictComparisonArgument: required          # `in_array($a, $b, true)`, risky
 	trailingWhitespaceInStrings: forbidden      # in a multi-line string or inline HTML
 	consecutivePhpdocs: forbidden               # the first of two is lost, reported
 	repeatedAssignment: forbidden               # `$a = $a = 1`
@@ -789,9 +787,10 @@ phpdoc:
 		array: generic             # `array<int>`, not `int[]`
 
 upgrading:
+	syntax:
+		neverReturnType: adopted   # on a function that always throws
 	classes:
 		Stringable: adopted        # on a class with `__toString()`
-		neverReturnType: adopted   # on a function that always throws
 ```
 
 
@@ -808,10 +807,8 @@ Globální funkce a konstanty ve tvaru, který PHP optimalizuje už při překla
 # written bare.
 
 qualification:
-	globalFunction:
-		normally: bare                                    # `array_map()`, reached by the fallback at run time
-		optimizedByCompiler: imported                     # `use function strlen;`, its arguments positional
-	globalConstant:
-		normally: bare                                    # `E_ALL`
-		computedByCompiler: [imported, fullyQualified]    # `PHP_VERSION_ID` imported or `\PHP_VERSION_ID`
+	globalFunction: bare                            # `array_map()`, reached by the fallback at run time
+	optimizedFunction: imported                     # `use function strlen;`, its arguments positional
+	globalConstant: bare                            # `E_ALL`
+	optimizedConstant: [imported, backslashed]      # `PHP_VERSION_ID` imported or `\PHP_VERSION_ID`
 ```

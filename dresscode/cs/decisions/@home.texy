@@ -24,9 +24,8 @@ blankLines:
 	beforeStatement:
 		return: 1
 qualification:
-	globalFunction:
-		normally: bare
-		optimizedByCompiler: imported
+	globalFunction: bare
+	optimizedFunction: imported
 ```
 
 Prvních pět řádků jsou vyhrazené klíče: z čeho konfigurace vychází a co se kontroluje. Zbytek jsou rozhodnutí a dají se číst nahlas: složená závorka třídy stojí na dalším řádku, tečka se píše bez mezer, mezi metodami je jeden prázdný řádek a před `return` taky, globální funkce zůstávají holé a ty, které PHP optimalizuje, se importují. Celou cestu k rozhodnutí, třeba `blankLines.betweenMethods`, uvidíte u každého nálezu ve výpisu a napíšete ji do komentáře `dresscode:ignore`, do `fixRisky` nebo za přepínač `--only`. Jak se konfigurace skládá z presetů, přepisů a příkazové řádky, popisuje stránka [Konfigurace |/configuration].
@@ -77,7 +76,7 @@ Sekce třídí rozhodnutí tak, aby se dala najít: kde byste hledali mezeru za 
 | [classes |classes] | třídy a jejich členové: pořadí, viditelnost, modifikátory, prázdné závorky |
 | [types |types] | typy v deklaracích: povinné typy, zápis `?int`, pořadí ve sjednocení |
 | [functions |functions] | funkce a closure: arrow funkce, `static`, zbytečný `return` |
-| [calls |calls] | volání funkcí, která se dají napsat jinak: aliasy, `is_null()`, `intval()`, ladicí výpisy |
+| [cleanup |cleanup] | volání, která se dají napsat jednodušeji: aliasy, `is_null()`, `intval()`, `get_class()`, `call_user_func()` |
 | [controlFlow |controlFlow] | řídicí struktury: `elseif`, zbytečné `else`, propadání ve `switch` |
 | [expressions |expressions] | operátory a výrazy: přísné porovnání, `!=`, ternární operátor, `$a += 1` |
 | [literals |literals] | zápis řetězců, čísel a polí: uvozovky, `[]`, oddělovače číslic |
@@ -94,7 +93,7 @@ Hodnoty
 
 Co klíč bere, říká jeho popis na stránce sekce a vypíše to i `dresscode explain <cesta>`. Druhů hodnot je pár a opakují se:
 
-- **Slovo** pojmenuje tvar: `braces.class: nextLine`, `imports.order: byKind`, `literals.quotes: single`.
+- **Slovo** pojmenuje tvar: `braces.class: nextLine`, `imports.order: alphabetical`, `literals.quotes: single`.
 - **Tvar s ukázkou.** U mezer a zápisu operátorů má každá hodnota slovo i ukázku kódu a do konfigurace můžete napsat kterékoli z nich: `spacing.concatenation: compact` je totéž co `spacing.concatenation: '$a.$b'`. Ukázka se jen porovná s ukázkami, které klíč zná, DressCode ji nečte jako kód, a neznámá je chyba, která vypíše ty známé.
 - **Počet** prázdných řádků, číslic nebo délky: `blankLines.betweenMethods: 2`. Kde to klíč dovolí, i rozsah `[0, 1]` nebo `0-1` a rozsah s otevřeným koncem `[1, null]` nebo `1+`. Některé počty berou i slovo, třeba `file.maxLineLength: none`.
 - **Seznam** jmen, vzorů nebo pořadí: `classes.memberOrder: [traitUse, constant, property]`, `phpdoc.forbiddenAnnotations: [@author, @package]`. Seznam napsaný ve vyšší vrstvě nahradí ten pod ním celý, i výchozí.
@@ -103,9 +102,9 @@ Co klíč bere, říká jeho popis na stránce sekce a vypíše to i `dresscode 
 - **Text** je jediný případ, kde hodnotou je prostá věta: text komentáře u propadnutí `case` (`controlFlow.switchFallThrough: no break`).
 - **Ano, nebo ne** (`true`, `false`) mají jen klíče, které jinak odpovědět nejdou: `imports.orderCaseSensitive: true`.
 
-Některé klíče mají pod sebou další klíče: `multiline.trailingComma` sdružuje místa, kde se rozhoduje o čárce na konci seznamu, a `qualification.globalFunction` tři rozhodnutí o globálních funkcích. Píšou se jako vnořená mapa a cesta k nim má o článek víc, `multiline.trailingComma.array`.
+Některé klíče mají pod sebou další klíče: `multiline.trailingComma` sdružuje místa, kde se rozhoduje o čárce na konci seznamu, a `phpdoc.types` rozhodnutí o zápisu typů v dokumentačních komentářích. Píšou se jako vnořená mapa a cesta k nim má o článek víc, `multiline.trailingComma.array`.
 
-A pak je tu **`keep`**, které bere každé rozhodnutí, jež něco vyžaduje: "tady se nic nevynucuje, kód zůstane, jak je". Je to jediné slovo pro "nesahej na to" a neznamená žádný tvar. `keep` napsané u sekce nebo u klíče s podklíči platí pro všechno pod ním a pozdější vrstva pak oživí jen ty klíče, které sama jmenuje:
+A pak je tu **`keep`**, které bere každé rozhodnutí, jež něco vyžaduje, mapa po položkách: "tady se nic nevynucuje, kód zůstane, jak je". Je to jediné slovo pro "nesahej na to" a neznamená žádný tvar. `keep` napsané u sekce nebo u klíče s podklíči platí pro všechno pod ním a pozdější vrstva pak oživí jen ty klíče, které sama jmenuje:
 
 ```neon
 blankLines: keep        # o prázdných řádcích nerozhoduje nic
@@ -117,7 +116,7 @@ Požadavek, parametr a fakt
 
 Většina rozhodnutí je **požadavek**: říká, jak se má věc psát, a kde má jinou hodnotu než `keep`, DressCode ji hlídá a opravuje. Požadavek, který nikdo nenapíše, nevyžaduje nic.
 
-**Parametr** požadavek jen upřesňuje a sám nic nezapíná: `controlFlow.trailingIfMinStatements` říká, od kolika příkazů se z `if` na konci funkce stane časný návrat, ale hlídat se to začne až s `controlFlow.trailingIf: forbidden`. Parametr nebere `keep`, má místo něj výchozí hodnotu, a na stránce sekce je u něj napsaná. Díky tomu seznam, který projekt napíše třeba do `types.traversableTypeHints`, nikdy sám nezapne povinné typy.
+**Parametr** požadavek jen upřesňuje a sám nic nezapíná: `controlFlow.trailingIfMinStatements` říká, od kolika příkazů se z `if` na konci funkce stane časný návrat, ale hlídat se to začne až s `controlFlow.trailingIf: forbidden`. Parametr nebere `keep`, má místo něj výchozí hodnotu, a na stránce sekce je u něj napsaná. Díky tomu seznam, který projekt napíše třeba do `types.traversableClasses`, nikdy sám nezapne povinné typy.
 
 **Fakt projektu** není rozhodnutí o vzhledu, ale o tom, co projekt obsahuje: `namespaces.functions` a `namespaces.constants` vyjmenují funkce a konstanty ve jmenných prostorech. Píšou se do vyhrazeného klíče `namespaces` a hlídač, který ohlásí deklaraci chybějící v seznamu, se zapne klíčem `nameResolution: certain`; podrobnosti jsou na stránce [Funkce a konstanty ve jmenných prostorech |/namespaces].
 

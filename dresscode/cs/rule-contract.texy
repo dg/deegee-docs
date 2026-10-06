@@ -47,7 +47,7 @@ Riziko opravy do `RuleInfo` nepatří. Je to vždy vlastnost výskytu a pravidlo
 Rozhodnutí
 ==========
 
-Co pravidlo vynucuje, ohlásí statickou metodou `getDecisions()` jako seznam objektů `DressCode\Decision`. Rozhodnutí všech pravidel, jádra, pluginů i projektu, tvoří katalog: proti němu se čte konfigurace, z něj čerpají `dresscode explain` a `dresscode catalogue` a podle něj se hledá nejbližší cesta, když se uživatel v klíči překlepne.
+Co pravidlo vynucuje, ohlásí statickou metodou `getDecisions()` jako seznam objektů `DressCode\Decision`. Aspoň jedno rozhodnutí mít musí: každé porušení se hlásí pod rozhodnutím a pravidlo, které žádné nemá, DressCode odmítne hláškou <code>''Rule `Acme\CodeStyle\NoDebugCallsRule` declares no decision.''</code> Rozhodnutí všech pravidel, jádra, pluginů i projektu, tvoří katalog: proti němu se čte konfigurace, z něj čerpají `dresscode explain` a `dresscode catalogue` a podle něj se hledá nejbližší cesta, když se uživatel v klíči překlepne.
 
 ```php
 public static function getDecisions(): array
@@ -82,8 +82,8 @@ new Decision('acme.debugMethods', new Names, 'The methods whose calls count as d
 | `new Words([...])` | slovo z vlastního výčtu, každé s větou o tom, co znamená | `expressions.yoda: forbidden` |
 | `new Shapes([...])` | tvar konstrukce, slovo i ukázka kódu | `spacing.call: compact` nebo `'foo($a, $b)'` |
 | `new Count`, `Domain::blankLines()` | počet, rozsah `1-2`, otevřený rozsah `1+` | `blankLines.betweenMethods: 2` |
-| `new Names` | seznam jmen, vzorů nebo pořadí | `calls.debugFunctions: [dump, bdump]` |
-| `new Table($domain)` | mapa jmen nebo vzorů s `*` na hodnoty jiného oboru | `upgrading.libraries.replacedClasses` |
+| `new Names` | seznam jmen, vzorů nebo pořadí | `correctness.debugOutputFunctions: [dump, bdump]` |
+| `new Map($domain)` | mapa jmen nebo vzorů s `*` na hodnoty jiného oboru | `upgrading.libraries.replacedClasses` |
 | `new Structure([...])` | skupina klíčů pod jednou cestou | `blankLines.beforeStatement: {return: 1}` |
 | `new Flag`, `new Text` | ano a ne, volný text | |
 
@@ -98,14 +98,14 @@ Hodnoty pro soubor dostane pravidlo v metodě `configure()` jako objekt `Values`
 ```php
 public function configure(Values $values): void
 {
-	$names = $values->get('calls.debugFunctions')->getNames();
+	$names = $values->get('correctness.debugOutputFunctions')->getNames();
 	$this->functions = array_fill_keys(array_map(strtolower(...), $names), true);
 }
 ```
 
 `$values->get($path)` vrátí `Value`, tedy co projekt pro rozhodnutí vyřešil, a u parametru jeho výchozí hodnotu, když ji nikdo nezměnil. `Value` se čte metodou podle oboru: `getWord()`, `getShape()`, `getCount()`, `getNames()`, `getEntries()`, `getFlag()`, `getText()`; `isKept()` řekne, jestli je hodnota `keep`, a `$values->isKept($path)` totéž rovnou podle cesty.
 
-Číst smí pravidlo i cizí klíč, nejen své. Ukázka si bere seznam ladicích funkcí z parametru jádra `calls.debugFunctions`, který projekt možná už nastavil, místo aby zaváděla vlastní; projekt tak jedním seznamem řekne, co je ladicí funkce, všem pravidlům najednou. Stejně se pravidlo, které píše nový kód, zeptá, jak ho psát, třeba jaké uvozovky projekt chce.
+Číst smí pravidlo i cizí klíč, nejen své. Ukázka si bere seznam ladicích funkcí z parametru jádra `correctness.debugOutputFunctions`, který projekt možná už nastavil, místo aby zaváděla vlastní; projekt tak jedním seznamem řekne, co je ladicí funkce, všem pravidlům najednou. Stejně se pravidlo, které píše nový kód, zeptá, jak ho psát, třeba jaké uvozovky projekt chce.
 
 `$values->isSelected($path)` odpovídá na jinou otázku: jestli se požadavek v tomto běhu hlásí a opravuje. Rozdíl dělá `--only`, které běh zúží a žádnou hodnotu nezmění. Kód, který pravidlo zapíše, se proto vždycky řídí `get()`, celou konfigurací, a `isSelected()` je jen pro pravidlo, které si chce ušetřit práci s požadavkem, který se v běhu nehlásí.
 
@@ -129,12 +129,12 @@ if (version_compare($context->phpVersion, '8.4', '>=')) {
 Mapa s daty
 -----------
 
-Pravidlo, které přepisuje podle seznamu od projektu nebo od knihovny, dostane mapu: obor `Table` s hodnotami `Data` a gramatikou, podle které se položky přečtou, až se slijí vrstvy. Tak to dělá `nette.flagsAsNamedArguments` z balíčku `dresscode/rules-nette`, jehož klíčem je volání a hodnotou příznaky převedené na pojmenované argumenty:
+Pravidlo, které přepisuje podle seznamu od projektu nebo od knihovny, dostane mapu: obor `Map` s hodnotami `Data` a gramatikou, podle které se položky přečtou, až se slijí vrstvy. Tak to dělá `nette.flagsAsNamedArguments` z balíčku `dresscode/rules-nette`, jehož klíčem je volání a hodnotou příznaky převedené na pojmenované argumenty:
 
 ```php
 public static function getDecisions(): array
 {
-	return [new Decision('nette.flagsAsNamedArguments', new Table(new Data, grammar: self::createGrammar()), 'A call passing the named arguments its method takes for the flags of an integer')];
+	return [new Decision('nette.flagsAsNamedArguments', new Map(new Data, grammar: self::createGrammar()), 'A call passing the named arguments its method takes for the flags of an integer')];
 }
 
 
@@ -144,14 +144,14 @@ public function configure(Values $values): void
 }
 ```
 
-Gramatika je schéma z knihovny [nette/schema |https://doc.nette.org/cs/schema]; pro klíče se členy a tvarem argumentů ji sestaví `Rules\Upgrading\MemberMaps::map()`, takže mapa pluginu čte klíče stejně jako mapy jádra. `$values->read()` vrátí položky přečtené gramatikou. Takovou mapu plní nejen projekt, ale i [soubory dat |upgrading-data] balíčků, které ji jmenují celou cestou.
+Gramatika je schéma z knihovny [nette/schema |https://doc.nette.org/cs/schema]; pro klíče se členy a tvarem argumentů ji sestaví `Rules\Upgrading\MemberMaps::createMapSchema()`, takže mapa pluginu čte klíče stejně jako mapy jádra. `$values->read()` vrátí položky přečtené gramatikou. Takovou mapu plní nejen projekt, ale i [soubory dat |upgrading-data] balíčků, které ji jmenují celou cestou.
 
 
 Které uzly a kdy
 ================
 
 ```php
-public function getVisitedTypes(): array
+public function getVisitedNodes(): array
 {
 	return [FunctionCallNode::class];
 }
@@ -197,7 +197,7 @@ Riziková oprava smí změnit chování kódu, nikdy ale nesmí zapsat kód, kte
 
 Kde bezpečnost opravy závisí na typu hodnoty, odpovídá pravidlo ve třech stavech, jak je vrací výčet `Tristate`: jistě ano, pak je oprava bezpečná; jistě ne, pak pravidlo mlčí, protože riziková oprava nesmí být rada, o které pravidlo ví, že je špatná; a nevím, pak je oprava riziková s `Risk::TypeUnknown`. Odpověď dají nejdřív deklarace na dohled, typ parametru, vlastnosti nebo návratový typ metody, a co nechají otevřené, zúží [typy |#Typy kódu].
 
-Výskyt, pro který pravidlo opravu nemá a jen ho hlásí, ohlaste s `fixable: false`. `report()` pak vrátí `false` vždy a hlášení nikdy není rizikové. Jinak by rizikové hlášení bez opravy vypadalo jako oprava, která čeká na svolení, a souhrn by radil `--fix-risky`, přestože by se nic neopravilo. Třeba `correctness.strictCalls` explicitní `false` v `in_array()` jen hlásí, protože ho autor kódu napsal vědomě:
+Výskyt, pro který pravidlo opravu nemá a jen ho hlásí, ohlaste s `fixable: false`. `report()` pak vrátí `false` vždy a hlášení nikdy není rizikové. Jinak by rizikové hlášení bez opravy vypadalo jako oprava, která čeká na svolení, a souhrn by radil `--fix-risky`, přestože by se nic neopravilo. Třeba `correctness.strictComparisonArgument` explicitní `false` v `in_array()` jen hlásí, protože ho autor kódu napsal vědomě:
 
 ```php
 $context->report($strict, 'The `in_array()` call must pass `$strict = true`.', fixable: false);

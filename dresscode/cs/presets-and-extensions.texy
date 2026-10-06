@@ -93,21 +93,21 @@ use:
 acme:
 	debugCalls: forbidden
 
-calls:
-	debugFunctions: [dump]
+correctness:
+	debugOutputFunctions: [dump]
 ```
 
-Pravidla pluginu smějí číst i klíče jádra. `acme.debugCalls` v ukázce bere seznam ladicích funkcí z parametru jádra `calls.debugFunctions`, takže ho projekt napíše jednou pro všechna pravidla, která se na ladicí funkce ptají; jak to pravidlo udělá, popisuje [Pravidlo do detailu |rule-contract#Hodnoty v pravidle].
+Pravidla pluginu smějí číst i klíče jádra. `acme.debugCalls` v ukázce bere seznam ladicích funkcí z parametru jádra `correctness.debugOutputFunctions`, takže ho projekt napíše jednou pro všechna pravidla, která se na ladicí funkce ptají; jak to pravidlo udělá, popisuje [Pravidlo do detailu |rule-contract#Hodnoty v pravidle].
 
 Přesně takhle pracuje balíček `dresscode/rules-nette`: jeho plugin má sekci `nette` s rozhodnutími jako `nette.linkArguments` nebo mapou `nette.flagsAsNamedArguments` a data pro aktualizaci knihoven nese vedle v souborech `upgrading.neon`.
 
-Plugin stojí v klíči `use` konfigurace vedle presetů, třídou, nebo [entitou |configuration#Objekty a callbacky] s argumenty. Přepis ani preset ho mít nemohou, protože pravidla a presety zpřístupňuje celému projektu; preset, který by ho uvedl, DressCode odmítne s chybou <code>''Preset `acme/house`: Plugin `Acme\CodeStyle\Plugin` is used by the configuration of the project, never by a preset or an override.''</code> Filtr `skipWhen`, továrnu pravidla se závislostmi i továrnu analýzy ale zapíše i samotný `dresscode.neon`, a to [entitou |configuration#Objekty a callbacky]. Plugin se hodí tam, kde nastavení nese balíček a projekt ho jen zapne.
+Plugin stojí v klíči `use` konfigurace vedle presetů, třídou, nebo [entitou |configuration#Objekty a callbacky] s argumenty. Přepis ani preset ho mít nemohou, protože pravidla a presety zpřístupňuje celému projektu; preset, který by ho uvedl, DressCode odmítne s chybou <code>''Preset `acme/house`: Plugin `Acme\CodeStyle\Plugin` is used by the configuration of the project, never by a preset or an override.''</code> Filtr `skipWhen` a továrnu analýzy ale zapíše i samotný `dresscode.neon`, a to [entitou |configuration#Objekty a callbacky], továrnu pravidla se závislostmi `dresscode.php`. Plugin se hodí tam, kde nastavení nese balíček a projekt ho jen zapne.
 
 
 Balíček
 =======
 
-Balíček s presetem nebo s pravidly je obyčejný Composer balíček, který vyžaduje `dresscode/dresscode` a sdílí s projektem autoloader. Svůj plugin ohlásí v `composer.json` pod klíčem `extra.dresscode.plugin`, takže ho projekt po instalaci nemusí psát do `use`:
+Balíček s presetem nebo s pravidly je obyčejný Composer balíček, který vyžaduje `dresscode/dresscode` a sdílí s projektem autoloader. Svůj plugin ohlásí v `composer.json` pod klíčem `extra.dresscode.plugin`, takže projekt po instalaci nemusí znát jeho třídu a pustí ho dovnitř jménem balíčku v `use`:
 
 ```json
 {
@@ -126,4 +126,13 @@ Balíček s presetem nebo s pravidly je obyčejný Composer balíček, který vy
 }
 ```
 
-Vedle `plugin` zná DressCode pod `extra.dresscode` ještě klíč `upgrading` se soubory dat pro [aktualizaci knihoven |upgrading-data]; jiný klíč ohlásí jako varování a přeskočí ho, protože balíček může být novější než DressCode, který ho čte. Uvnitř balíčku jsou třídy pravidel, soubory presetů, plugin a fixtury s testy. Jména presetů nesou vendor balíčku (`acme/…`) a rozhodnutí sekci pluginu, aby se nesrazila s jinými. Uživatel pak balíček nainstaluje a všechno ostatní si vybere v konfiguraci.
+Vedle `plugin` zná DressCode pod `extra.dresscode` ještě klíč `upgrading` se soubory dat pro [aktualizaci knihoven |upgrading-data]; jiný klíč ohlásí jako varování a přeskočí ho, protože balíček může být novější než DressCode, který ho čte. Uvnitř balíčku jsou třídy pravidel, soubory presetů, plugin a fixtury s testy. Jména presetů nesou vendor balíčku (`acme/…`) a rozhodnutí sekci pluginu, aby se nesrazila s jinými. Uživatel pak balíček nainstaluje, napíše jeho jméno do `use` a všechno ostatní si vybere v konfiguraci:
+
+```neon
+use:
+	- perCs
+	- acme/code-style
+	- acme/house
+```
+
+Jméno balíčku žádný preset není, jen pouští dovnitř jeho plugin. Plugin totiž přináší kód, který běží při každé kontrole, a tak se načte, jen když ho projekt jmenuje, stejně jako Composer spouští jen pluginy, které projekt povolí. Nainstalovaný balíček, který `use` nejmenuje, běh ohlásí varováním <code>''Package `acme/code-style` brings the plugin `Acme\CodeStyle\Plugin`, which loads only where `use` names the package or the plugin; skipped.''</code> Data pro aktualizaci knihoven pod klíčem `upgrading` se načtou i bez jména, protože kód nenesou.

@@ -10,7 +10,7 @@ Sekce `classes` rozhoduje o třídách a jejich členech: v jakém pořadí čle
 classes:
 	memberOrder: [traitUse, constant, property]
 	memberVisibility: required
-	onePerDeclaration: [constant, property]
+	groupedDeclarationAllowedFor: []
 	newParentheses: required
 ```
 
@@ -42,10 +42,10 @@ class Cart
 ```
 
 
-classes.internalClass
-=====================
+classes.markedInternal
+======================
 
-A class annotated `@internal`, which nothing outside the package may extend.
+A class its author marked `@internal`, which nothing outside the package may extend.
 
 - `final`: declared final
 - `keep`: nic se nevynucuje, kód zůstane, jak je
@@ -53,8 +53,8 @@ A class annotated `@internal`, which nothing outside the package may extend.
 Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` · pokrývá `final_internal_class` .[decision-facts]
 
 
-classes.internalAnnotations
-===========================
+classes.markedInternalAnnotations
+=================================
 
 The annotations a class must all carry to count as internal.
 
@@ -63,8 +63,8 @@ The annotations a class must all carry to count as internal.
 Parametr, výchozí `[@internal]` · standardy: perCs `[@internal]`, psr12 `[@internal]`, nette `[@internal]`, symfony `[@internal]` .[decision-facts]
 
 
-classes.internalExemptAnnotations
-=================================
+classes.markedInternalExcept
+============================
 
 The annotations that keep an internal class as it is, an entity for instance.
 
@@ -136,10 +136,22 @@ The names of the parameters of a method overriding one of a parent class or an i
 Požadavek · jen s typy · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
 
 
-classes.onePerDeclaration
-=========================
+classes.publicWithSetVisibility
+===============================
 
-The kinds of members a declaration of several is split into one declaration per member, `public $a, $b;` becoming two, each sharing the modifiers and the type of the original.
+The `public` of a property with a set visibility, `public protected(set) int $x`, which reads the same without it.
+
+- `required`: always there
+- `forbidden`: never there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · PHP 8.4 · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` .[decision-facts]
+
+
+classes.groupedDeclarationAllowedFor
+====================================
+
+The kinds of members whose declaration may stay grouped, as `public $a, $b;` is; a declaration of several members of any other kind is split into one per member, each sharing the modifiers and the type of the original, so `[]` splits every kind, while `keep` leaves every declaration as it is.
 
 - seznam z těchto slov:
 	- `constant`: a constant, a `const` outside a class included
@@ -147,7 +159,7 @@ The kinds of members a declaration of several is split into one declaration per 
 	- `traitUse`: a trait of a `use` without adaptations
 - `keep`: nic se nevynucuje, kód zůstane, jak je
 
-Požadavek · standardy: perCs `[constant, property, traitUse]`, psr12 `[property, traitUse]`, nette `[property, traitUse]`, symfony `[constant, property, traitUse]` · pokrývá `single_class_element_per_statement`, `single_trait_insert_per_statement`, `PSR12.Traits.UseDeclaration`, `SlevomatCodingStandard.Classes.DisallowMultiConstantDefinition`, `SlevomatCodingStandard.Classes.DisallowMultiPropertyDefinition`, `SlevomatCodingStandard.Classes.TraitUseDeclaration` .[decision-facts]
+Požadavek · standardy: perCs `[]`, psr12 `[constant]`, nette `[constant]`, symfony `[]` · pokrývá `single_class_element_per_statement`, `single_trait_insert_per_statement`, `PSR12.Traits.UseDeclaration`, `SlevomatCodingStandard.Classes.DisallowMultiConstantDefinition`, `SlevomatCodingStandard.Classes.DisallowMultiPropertyDefinition`, `SlevomatCodingStandard.Classes.TraitUseDeclaration` .[decision-facts]
 
 
 classes.membersPerLine
@@ -161,15 +173,28 @@ How many members of a class stand on one line.
 Požadavek · standardy: perCs `1`, psr12 `keep`, nette `1`, symfony `1` · pokrývá `PSR12.Classes.ClosingBrace` .[decision-facts]
 
 
-classes.methodWithoutThis
-=========================
+classes.staticMethodWithoutThis
+===============================
 
-A private method that does not use `$this`.
+The `static` keyword of a method that does not use `$this`, of the visibilities `classes.staticMethodWithoutThisVisibility` names.
 
-- `static`: declared static
+- `required`: declared `static`
 - `keep`: nic se nevynucuje, kód zůstane, jak je
 
 Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` · pokrývá `static_private_method` .[decision-facts]
+
+
+classes.staticMethodWithoutThisVisibility
+=========================================
+
+The visibilities of the methods made static.
+
+- seznam z těchto slov:
+	- `private`: a private method
+	- `protected`: a protected method, where no child and no ancestor can declare it
+	- `public`: a public method, where no child and no ancestor can declare it
+
+Parametr, výchozí `[private]` · standardy: perCs `[private]`, psr12 `[private]`, nette `[private]`, symfony `[private]` .[decision-facts]
 
 
 classes.impliedModifiers
@@ -219,12 +244,23 @@ Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony 
 classes.memberVisibility
 ========================
 
-The visibility every property, method and constant declares, `var` becoming `public`, and the order of its modifiers: `abstract` or `final`, visibility, set visibility, `static`, `readonly`.
+The visibility every property, method and constant declares, `var` becoming `public` and a set visibility counting as one.
 
 - `required`: always there
 - `keep`: nic se nevynucuje, kód zůstane, jak je
 
-Požadavek · standardy: perCs `required`, psr12 `required`, nette `required`, symfony `required` · pokrývá `modifier_keywords`, `visibility_required`, `PSR12.Properties.ConstantVisibility`, `PSR2.Classes.PropertyDeclaration`, `PSR2.Methods.MethodDeclaration`, `SlevomatCodingStandard.Classes.ClassConstantVisibility`, `SlevomatCodingStandard.Classes.PropertyDeclaration`, `Squiz.Scope.MethodScope` .[decision-facts]
+Požadavek · standardy: perCs `required`, psr12 `required`, nette `required`, symfony `required` · pokrývá `modifier_keywords`, `visibility_required`, `PSR12.Properties.ConstantVisibility`, `PSR2.Classes.PropertyDeclaration`, `SlevomatCodingStandard.Classes.ClassConstantVisibility`, `Squiz.Scope.MethodScope` .[decision-facts]
+
+
+classes.modifierOrder
+=====================
+
+The order of the modifiers of a property, a method and a constant.
+
+- `canonical`: `abstract` or `final`, visibility, set visibility, `static`, `readonly`
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `canonical`, psr12 `canonical`, nette `canonical`, symfony `canonical` · pokrývá `modifier_keywords`, `visibility_required`, `PSR2.Classes.PropertyDeclaration`, `PSR2.Methods.MethodDeclaration`, `SlevomatCodingStandard.Classes.PropertyDeclaration` .[decision-facts]
 
 
 classes.interfaceMethodVisibility
@@ -273,14 +309,3 @@ The empty parentheses of an attribute.
 - `keep`: nic se nevynucuje, kód zůstane, jak je
 
 Požadavek · standardy: perCs `forbidden`, psr12 `keep`, nette `forbidden`, symfony `forbidden` · pokrývá `attribute_empty_parentheses` .[decision-facts]
-
-
-classes.phpdocAboveAttributes
-=============================
-
-The doc comment stands above the attributes.
-
-- `required`: always there
-- `keep`: nic se nevynucuje, kód zůstane, jak je
-
-Požadavek · standardy: perCs `required`, psr12 `keep`, nette `required`, symfony `required` · pokrývá `SlevomatCodingStandard.Attributes.RequireAttributeAfterDocComment` .[decision-facts]

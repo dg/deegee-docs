@@ -4,14 +4,14 @@ PhpDoc
 .[perex]
 Sekce `phpdoc` rozhoduje o dokumentačních komentářích `/** */`: co v nich nemá být (anotace jako `@author`, komentář, který jen opakuje signaturu, prázdný komentář), jak se v nich píšou typy, kdy se komentář vlastnosti vejde na jeden řádek a co je v nich nejspíš chyba.
 
-Dokumentační komentář čte PHPStan i editor, a tak na jeho obsahu záleží víc než na obyčejném komentáři. Klíče `forbiddenAnnotations` a `forbiddenLines` odstraní, co projekt v komentářích mít nechce, `repeatingNativeTypes` komentář, který jen opakuje nativní typy signatury, a klíče pod `types` sjednotí zápis typů. Klíče pod `consistency` hlásí, co si odporuje se signaturou: `@param` neexistujícího parametru nebo druhé `@return`.
+Dokumentační komentář čte PHPStan i editor, a tak na jeho obsahu záleží víc než na obyčejném komentáři. Klíče `forbiddenAnnotations` a `forbiddenLines` odstraní, co projekt v komentářích mít nechce, `repeatingNativeTypes` komentář, který jen opakuje nativní typy signatury, a klíče pod `types` sjednotí zápis typů. Klíče `paramOfUnknownParameter`, `duplicateReturn`, `duplicateVar` a `emptyAnnotation` hlásí, co si odporuje se signaturou nebo samo se sebou: `@param` neexistujícího parametru, druhé `@return` nebo anotaci bez obsahu.
 
 ```neon
 phpdoc:
 	forbiddenAnnotations: [@author]
 	empty: forbidden
 	repeatingNativeTypes: forbidden
-	propertyPhpdocOfOneLine: singleline
+	propertyOfOneLine: singleline
 	types:
 		builtin: canonical
 ```
@@ -71,6 +71,17 @@ The letter case of a known annotation.
 Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `canonicalCase`, symfony `keep` · pokrývá `SlevomatCodingStandard.Commenting.AnnotationName` .[decision-facts]
 
 
+phpdoc.aboveAttributes
+======================
+
+The doc comment stands above the attributes.
+
+- `required`: always there
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Požadavek · standardy: perCs `required`, psr12 `keep`, nette `required`, symfony `required` · pokrývá `SlevomatCodingStandard.Attributes.RequireAttributeAfterDocComment` .[decision-facts]
+
+
 phpdoc.forbiddenAnnotations
 ===========================
 
@@ -107,16 +118,16 @@ Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony 
 phpdoc.stars
 ============
 
-The `*` lines line up with the `/**`.
+The `*` opening each line of a doc comment.
 
-- `aligned`: aligns the stars of a doc comment with its opening
+- `aligned`: each `*` below the first `*` of the opening `/**`
 - `keep`: nic se nevynucuje, kód zůstane, jak je
 
 Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `aligned`, symfony `keep` · pokrývá `Squiz.Commenting.DocCommentAlignment` .[decision-facts]
 
 
-phpdoc.consistency.paramOfUnknownParameter
-==========================================
+phpdoc.paramOfUnknownParameter
+==============================
 
 A `@param` naming a parameter the function does not have.
 
@@ -126,8 +137,8 @@ A `@param` naming a parameter the function does not have.
 Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `Squiz.Commenting.FunctionComment.ExtraParamComment` .[decision-facts]
 
 
-phpdoc.consistency.duplicateReturn
-==================================
+phpdoc.duplicateReturn
+======================
 
 A second `@return` of a function.
 
@@ -137,8 +148,8 @@ A second `@return` of a function.
 Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `Squiz.Commenting.FunctionComment.DuplicateReturn` .[decision-facts]
 
 
-phpdoc.consistency.duplicateVar
-===============================
+phpdoc.duplicateVar
+===================
 
 A second `@var` of a property.
 
@@ -148,8 +159,8 @@ A second `@var` of a property.
 Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `Squiz.Commenting.VariableComment` .[decision-facts]
 
 
-phpdoc.consistency.emptyAnnotation
-==================================
+phpdoc.emptyAnnotation
+======================
 
 A `@param`, `@return`, `@var` or `@see` without content.
 
@@ -159,15 +170,15 @@ A `@param`, `@return`, `@var` or `@see` without content.
 Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `Squiz.Commenting.VariableComment` .[decision-facts]
 
 
-phpdoc.blankLinesAtEdges
-========================
+phpdoc.blankLines
+=================
 
-None at the start or the end, at most one in a row inside.
+The blank lines inside a doc comment.
 
-- `forbidden`: never there
+- `trimmed`: none at the start or the end, at most one in a row inside
 - `keep`: nic se nevynucuje, kód zůstane, jak je
 
-Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `forbidden` · pokrývá `phpdoc_trim`, `phpdoc_trim_consecutive_blank_line_separation` .[decision-facts]
+Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `trimmed`, symfony `trimmed` · pokrývá `phpdoc_trim`, `phpdoc_trim_consecutive_blank_line_separation` .[decision-facts]
 
 
 phpdoc.types.builtin
@@ -241,16 +252,16 @@ Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `atProperty`, symfony
 phpdoc.propertyComment
 ======================
 
-A property has `/** */`, never `//` or `/* */`.
+The comment describing a property, `/** */` and not `//` or `/* */`.
 
-- `phpdoc`: reports a plain comment in place of a property doc comment
+- `phpdoc`: a doc comment, never a plain comment
 - `keep`: nic se nevynucuje, kód zůstane, jak je
 
 Požadavek · standardy: perCs `keep`, psr12 `keep`, nette `phpdoc`, symfony `keep` · pokrývá `Squiz.Commenting.VariableComment` .[decision-facts]
 
 
-phpdoc.propertyPhpdocOfOneLine
-==============================
+phpdoc.propertyOfOneLine
+========================
 
 A property doc comment with a single line of content.
 
