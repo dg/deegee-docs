@@ -2,7 +2,7 @@ Přechod z PHP CS Fixeru
 ***********************
 
 .[perex]
-Převod `.php-cs-fixer.dist.php` na konfiguraci DressCode, sady `@PSR12`, `@PER-CS` a `@Symfony` na presety, tabulka příkazů a vysvětlení, co tu znamená rizikové (risky) pravidlo.
+Převod `.php-cs-fixer.dist.php` na konfiguraci DressCode, sady `@PSR12`, `@PER-CS` a `@Symfony` na standardy, fixery na rozhodnutí, tabulka příkazů a vysvětlení, co tu znamená rizikové (risky) pravidlo.
 
 
 Než začnete
@@ -13,7 +13,7 @@ Projděte si [společný postup |migration]: kód a komentáře můžete nechat,
 Nejdůležitější věc rovnou: **konfigurace PHP CS Fixeru je PHP soubor, který se musí spustit**, a vrací objekt jeho knihovny. Příkaz `dresscode import` ho proto přečte jen tehdy, když běží jako `vendor/bin/dresscode` v projektu, kde je `friendsofphp/php-cs-fixer` ještě nainstalovaný. DressCode nainstalovaný mimo projekt (globálně nebo přes `create-project`) autoloader projektu nenačte, třídy Fixeru nenajde a skončí chybou konfigurace s exit kódem `3`:
 
 /--pre .[terminal]
-Error: File `.php-cs-fixer.dist.php` cannot be read: Class "PhpCsFixer\Config" not found; run the dresscode installed in the project beside PHP CS Fixer, which loads its classes.
+Error: File `.php-cs-fixer.dist.php` needs the classes of PHP CS Fixer, which this dresscode cannot load; run the `vendor/bin/dresscode` of the project that has PHP CS Fixer installed: Class "PhpCsFixer\Finder" not found.
 \--
 
 Na převod si ho tedy přidejte do projektu jako vývojovou závislost, viz [Instalace |getting-started#Instalace], a překládejte dřív, než Fixer odeberete.
@@ -26,15 +26,109 @@ Převod konfigurace
 dresscode import .php-cs-fixer.dist.php > dresscode.php
 ```
 
-Sady se překládají na presety: `@PSR1`, `@PSR2` a `@PSR12` na `dresscode/psr12`, `@PER`, `@PER-CS` a jejich číslované varianty na `dresscode/perCs`, který odpovídá [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/], a `@Symfony` na `dresscode/symfony`, který zatím nemá většinu pravidel o phpDocu. Sady bez protějšku, hlavně `@PhpCsFixer`, `import` ohlásí; v takovém případě začněte od `dresscode/perCs` a doplňte pravidla, na kterých vám záleží. Sady s příponou `:risky` protějšek nemají, protože rizikové opravy (risky fixes) tu nezapíná sada, ale projekt u jednotlivých pravidel (viz níže).
+Sady se překládají na standardy: `@PSR1`, `@PSR2` a `@PSR12` na `psr12`, `@PER`, `@PER-CS` a jejich číslované varianty na `perCs`, který odpovídá [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/], a `@Symfony` na `symfony`, který zatím nemá většinu pravidel o phpDocu. Sady bez protějšku `import` ohlásí a řekne, odkud začít; u `@PhpCsFixer` je to `symfony`. Sady s příponou `:risky` protějšek nemají, protože rizikové opravy (risky fixes) tu nezapíná sada, ale projekt u jednotlivých rozhodnutí (viz níže).
 
-Jednotlivé fixery se překládají jménem, a kde má volba protějšek, tak i s ní: `no_unused_imports` je [`dresscode/unusedImports` |rules/unusedImports], `binary_operator_spaces` je [`dresscode/binaryOperatorSpacing` |rules/binaryOperatorSpacing], `trailing_comma_in_multiline` je [`dresscode/trailingComma` |rules/trailingComma] a místa vyjmenovaná v jeho `elements` v něm dostanou hodnotu `required`. Fixer, který protějšek nemá, se objeví ve výpisu na chybovém výstupu, a z toho máte seznam věcí, o kterých je potřeba rozhodnout. Vlastní fixery z balíčku `kubawerlos/php-cs-fixer-custom-fixers` se překládají také, pokud pro ně DressCode pravidlo má.
+Fixery se překládají na rozhodnutí, a kde má volba protějšek, tak i s ní. Z konfigurace se standardem `@PER-CS`, fixerem `no_unused_imports` a `trailing_comma_in_multiline` s `elements` pro pole, argumenty a parametry vyjde:
+
+/--pre .[terminal]
+<?php declare(strict_types=1);
+
+use DressCode\Config;
+
+return new Config(
+	extends: ['perCs'],
+	decisions: ['imports' => ['unused' => 'forbidden'], 'phpdoc' => ['namesUseImports' => true], 'multiline' => ['trailingComma' => ['array' => 'required', 'argument' => 'required', 'parameter' => 'required', 'matchArm' => 'optional', 'closureUse' => 'optional', 'import' => 'optional', 'list' => 'optional']]],
+);
+
+Read 3 rules; set 9 decisions and 1 preset.
+\--
+
+`no_unused_imports` je [`imports.unused` |decisions/imports], který k tomu dostal i `phpdoc.namesUseImports`, protože fixer počítá za použití i jméno v phpDocu. `trailing_comma_in_multiline` se rozložil do klíčů [`multiline.trailingComma` |decisions/multiline], jeden na každé místo, kde čárka může stát; co `elements` nevyjmenovaly, dostalo `optional`, tedy čárku nechat, jak ji autor napsal. Fixer, který protějšek nemá, se objeví ve výpisu na chybovém výstupu, a z toho máte seznam věcí, o kterých je potřeba rozhodnout. Vlastní fixery z balíčku `kubawerlos/php-cs-fixer-custom-fixers` se překládají také, pokud jejich konstrukci DressCode zná.
 
 Co `import` nepřenese, protože to v konfiguraci Fixeru nejsou pravidla:
 
 - **Finder.** Cesty, `exclude()` a `notPath()` přepište do klíčů `paths` a `excludePaths`; vzory popisuje [Konfigurace |configuration#Cesty].
-- **Odsazení a konce řádků** (`setIndent()`, `setLineEnding()`). Nastaví je preset. Pokud žádný nepoužíváte, doplňte klíče `indent` a `lineEnding`, na které vás `import` bez presetu sám upozorní.
-- **`setRiskyAllowed(true)`**. Svolení k rizikovým opravám nedává DressCode celé konfiguraci, ale jednotlivým pravidlům: jejich jména patří do seznamu `fixRisky`. Bez něj se rizikové opravy jen hlásí.
+- **Odsazení a konce řádků** (`setIndent()`, `setLineEnding()`). Nastaví je standard. Pokud žádný nepoužíváte, doplňte rozhodnutí `indentation.unit` a `file.lineEnding`, na která vás `import` bez standardu sám upozorní.
+- **`setRiskyAllowed(true)`**. Svolení k rizikovým opravám nedává DressCode celé konfiguraci, ale jednotlivým rozhodnutím: jejich cesty patří do seznamu `fixRisky`. Bez něj se rizikové opravy jen hlásí.
+
+
+Jedna věc, jeden klíč
+=====================
+
+PHP CS Fixer má pravidla, která se o jednu konstrukci dělí, a výsledek vznikne z jejich souhry. Projekt na PER Coding Style, který chce globální třídy psát s lomítkem, `\Exception`, a funkce bez něj, kromě těch, které PHP umí optimalizovat, potřebuje dva fixery a pět voleb, z nichž jedna říká opak toho, co čtete: `import_classes => false` neznamená "neimportovat", ale "importované třídy přepsat na celé jméno". K tomu `no_unused_imports`, aby zmizely importy, které po přepisu zbudou:
+
+```php
+'@PER-CS' => true,
+'native_function_invocation' => [
+	'include' => ['@compiler_optimized'],
+	'scope' => 'namespaced',
+	'strict' => true,
+],
+'global_namespace_import' => [
+	'import_classes' => false,
+	'import_constants' => false,
+	'import_functions' => false,
+],
+'no_unused_imports' => true,
+```
+
+V DressCode jsou to klíče jedné sekce, [`qualification` |decisions/qualification], a každý jmenuje, co chce; nepoužité importy smaže `imports.unused`:
+
+```neon
+extends: perCs
+
+qualification:
+	globalClass: fullyQualified
+	globalFunction:
+		normally: bare
+		optimizedByCompiler: fullyQualified
+
+imports:
+	unused: forbidden
+```
+
+Z tohohle kódu:
+
+```php .[before]
+<?php
+
+namespace App\Model;
+
+use DateTimeImmutable;
+use InvalidArgumentException;
+
+class Cart
+{
+    public function add(array $items, string $sku): DateTimeImmutable
+    {
+        if (strlen($sku) === 0 || in_array($sku, $items, true)) {
+            throw new InvalidArgumentException('Invalid SKU');
+        }
+        return new DateTimeImmutable(\date('Y-m-d'));
+    }
+}
+```
+
+udělají oba nástroje tohle:
+
+```php .[after]
+<?php
+
+namespace App\Model;
+
+class Cart
+{
+    public function add(array $items, string $sku): \DateTimeImmutable
+    {
+        if (\strlen($sku) === 0 || in_array($sku, $items, true)) {
+            throw new \InvalidArgumentException('Invalid SKU');
+        }
+        return new \DateTimeImmutable(date('Y-m-d'));
+    }
+}
+```
+
+Až na jedno místo: `in_array($sku, $items, true)` PHP CS Fixer kvalifikuje, protože `in_array` je v seznamu `@compiler_optimized`, kdežto DressCode ho nechá holé, protože kompilátor zrychlí jen hledání v poli zapsaném přímo v kódu, ne v proměnné. DressCode rozhoduje podle volání, ne podle jména. Lomítko u `date()` vezme bez rizika, když konfigurace řekne `nameResolution: certain`; jinak je to riziková oprava, stejně jako je `native_function_invocation` rizikový fixer. Zbytek sekce, konstanty a importy globálních jmen, popisuje [Jak se píšou globální jména |namespaces#Jak se píšou globální jména].
 
 
 Riziková pravidla
@@ -42,9 +136,9 @@ Riziková pravidla
 
 PHP CS Fixer označuje jako rizikové (risky) takové pravidlo, které nad polem tokenů nedokáže odlišit bezpečný případ od nebezpečného, a rozhodnutí nechává na vás. Typický příklad je `ternary_to_elvis_operator`: nepozná, jestli je podmínka ternárního operátoru proměnná, nebo volání funkce s vedlejším účinkem, takže hlídá jen `++` a `--` a zbytek je váš problém.
 
-V DressCode tohle rozdělení není, protože otázku zodpoví strom: pravidlo [`dresscode/shortTernaryForRepeatedCondition` |rules/shortTernaryForRepeatedCondition] zkrátí ternární operátor jen tehdy, když je podmínku bezpečné vyhodnotit dvakrát, a volání funkce nechá být. Totéž platí pro další pravidla, která byla riziková z téhož důvodu.
+V DressCode tohle rozdělení není, protože otázku zodpoví strom: rozhodnutí [`expressions.ternaryReturningItsCondition` |decisions/expressions] zkrátí ternární operátor jen tehdy, když je podmínku bezpečné vyhodnotit dvakrát, a volání funkce nechá být. Totéž platí pro další pravidla, která byla riziková z téhož důvodu.
 
-Něco jiného jsou opravy, které mohou změnit chování programu. Ty DressCode nezapíná zvláštní sadou. Pravidlo je hlásí jako rizikové místo po místě a u každého řekne, co by ho rozhodlo: `dresscode/strictCall` doplní do `in_array()` parametr `$strict = true` rovnou tam, kde [typy |types] z PHPStanu řeknou, že se hledá celé číslo mezi celými čísly, a jinde opravu jen ohlásí jako rizikovou. Riziková oprava se udělá teprve tehdy, když pravidlo uvedete v seznamu `fixRisky` v konfiguraci, nebo na jeden běh s `--fix-risky`; do té doby je to varování, kde by ji rozhodly typy, a chyba, kde mění chování ze své podstaty, jako přidání `declare(strict_types=1)`. Zapnutím pravidla, které mění význam kódu, jako `dresscode/strictComparison`, se pro jeho opravy ještě nerozhodujete; rozhodnutí je až souhlas v `fixRisky`.
+Něco jiného jsou opravy, které mohou změnit chování programu. Ty DressCode nezapíná zvláštní sadou. Hlásí je jako rizikové místo po místě a u každého řekne, co by ho rozhodlo: `correctness.strictCalls` doplní do `in_array()` parametr `$strict = true` rovnou tam, kde [typy |types] z PHPStanu řeknou, že se hledá celé číslo mezi celými čísly, a jinde opravu jen ohlásí jako rizikovou. Riziková oprava se udělá teprve tehdy, když rozhodnutí uvedete v seznamu `fixRisky` v konfiguraci, nebo na jeden běh s `--fix-risky`; do té doby je to varování, kde by ji rozhodly typy, a chyba, kde mění chování ze své podstaty, jako přidání `declare(strict_types=1)`. Napsáním rozhodnutí, které mění význam kódu, jako `expressions.comparison: strict`, se pro jeho opravy ještě nerozhodujete; rozhodnutí je až souhlas v `fixRisky`.
 
 Zvláštní skupinou jsou fixery, které PHP CS Fixer označuje jako rizikové proto, že funkci může někdo přepsat ve jmenném prostoru: `is_null`, `no_alias_functions`, `dir_constant` a další. Tuhle nejistotu v DressCode rozhoduje konfigurace. S klíčem `nameResolution: certain` a seznamy v klíči `namespaces` ví, co ve vašich jmenných prostorech je, a odpovídající opravy jsou bezpečné; viz [Funkce a konstanty ve jmenných prostorech |namespaces].
 
@@ -58,10 +152,11 @@ Příkazy
 | `php-cs-fixer fix --dry-run --diff` | `dresscode check --diff` |
 | `php-cs-fixer fix` | `dresscode fix` |
 | `php-cs-fixer fix --config=soubor` | `dresscode fix --config soubor` |
-| `php-cs-fixer fix --rules=jméno` | `dresscode fix --only jméno`, které pustí jen to pravidlo, nebo `dresscode fix --use jméno`, které ho přidá ke konfiguraci; obojí se jménem pravidla DressCode, ne fixeru |
+| `php-cs-fixer fix --rules=jméno` | `dresscode fix --set cesta=hodnota`, které rozhodnutí přidá ke konfiguraci, nebo `dresscode fix --only cesta`, které pustí jen ta, která jmenujete |
 | `php-cs-fixer fix src --rules=@PSR12` | `dresscode fix src --use psr12` v projektu bez konfigurace |
 | `php-cs-fixer fix --format=checkstyle` | `dresscode check -f checkstyle` |
-| `php-cs-fixer fix --allow-risky=yes` | `dresscode fix --fix-risky`; natrvalo seznam pravidel v klíči `fixRisky` |
+| `php-cs-fixer fix --allow-risky=yes` | `dresscode fix --fix-risky`; natrvalo seznam rozhodnutí v klíči `fixRisky` |
+| `php-cs-fixer describe jméno` | `dresscode explain cesta` |
 | `.php-cs-fixer.cache` | cache je zapnutá sama; `--no-cache` ji obejde |
 
 Exit kód PHP CS Fixeru je bitová maska (8 znamená nalezená porušení, 16 chybu konfigurace a tak dále), kdežto DressCode vrací `0` pro čisto, `1` pro porušení, `2` pro selhání na některém souboru a `3` pro chybu v příkazové řádce nebo v konfiguraci. Skript v CI, který masku vyhodnocoval, potřebuje jednu úpravu.
@@ -70,10 +165,10 @@ Exit kód PHP CS Fixeru je bitová maska (8 znamená nalezená porušení, 16 ch
 Co v PHP CS Fixeru nebylo
 =========================
 
-- **PER Coding Style 3.1.** PHP CS Fixer implementuje verzi 3.0 (sada `@PER-CS3x0`), preset `perCs` verzi 3.1. Po PHP CS Fixeru najde DressCode nad Laravelem ještě 1 201 míst a nad Symfony 3.4 jich je 7 497; jsou to místa, kde PER Coding Style chce jednu položku na řádek, heredoc odsazený s okolním kódem nebo čárku za víceřádkovým seznamem, viz [srovnání |how-it-works#PER Coding Style a PSR-12 proti PHP CS Fixeru a PHP_CodeSniffer].
+- **PER Coding Style 3.1.** PHP CS Fixer implementuje verzi 3.0 (sada `@PER-CS3x0`), standard `perCs` verzi 3.1. Po PHP CS Fixeru najde DressCode nad Laravelem ještě 1 201 míst a nad Symfony 3.4 jich je 7 497; jsou to místa, kde PER Coding Style chce jednu položku na řádek, heredoc odsazený s okolním kódem nebo čárku za víceřádkovým seznamem, viz [srovnání |how-it-works#PER Coding Style a PSR-12 proti PHP CS Fixeru a PHP_CodeSniffer].
 - **Zpráva u každého místa, i s tím, co může oprava změnit.** `php-cs-fixer fix --dry-run -v` vypíše u souboru jména fixerů, které by ho změnily, a s `--diff` změnu samotnou; formát `checkstyle` má jednu položku na fixer a soubor, bez čísla řádku. Proč je fixer rizikový, řekne `php-cs-fixer describe` jednou pro všechna místa, u `strict_param` větou `Risky when the fixed function is overridden or if the code relies on non-strict usage.` S `--allow-risky=yes` pak doplní `true` do každého `in_array()`, bez něj do žádného. DressCode s [typy z PHPStanu |types] posoudí každé volání zvlášť: kde se hledá `int` v `list<int>`, doplní `true` sám, a kde je hledaná hodnota `mixed`, ohlásí opravu s důvodem `Risky because a strict search no longer finds a value of another type.` a počká na váš souhlas. Ve stejném výpisu je i přepsaná metoda, jejíž parametr se jmenuje jinak než u rodiče, a volání metody, kterou knihovna označila jako zastaralou; ty PHP CS Fixer nehlásí ani se sadami `@PhpCsFixer:risky` a `@Symfony:risky`. Celý výpis ukazuje [Začínáme |getting-started#Kontrola kódu].
-- **Potlačení na řádku.** PHP CS Fixer neumí vypnout pravidlo pro jeden řádek ani pro blok, jen pro celý soubor přes Finder. Tady je na to `// dresscode:ignore jméno` a dvojice `dresscode:disable` a `dresscode:enable`, viz [Potlačení pravidel a baseline |suppressing].
-- **Pravidlo jen pro některé cesty** zapíšete jako přepis v klíči `overrides`, bez druhého konfiguračního souboru; pravidlo tam dostane jinou hodnotu, nebo `false`, které ho vypne.
-- **Jedno pravidlo na zkoušku bez ztráty konfigurace.** `--rules` v PHP CS Fixeru nahradí pravidla z konfiguračního souboru, takže fixer na zkoušku běží bez zbytku vaší sady a s výchozími volbami, pokud mu jiné nevypíšete v JSONu. V DressCode na to máte dva přepínače: `dresscode check --only jméno --diff` pustí jen to pravidlo, s volbami, které mu dala konfigurace, a to i tehdy, když ho vypíná. `dresscode fix --use jméno` ho přidá ke zbytku konfigurace, takže jeho změny vyjdou rovnou zformátované podle vašeho standardu, připravené na jeden commit, viz [Příkazová řádka |cli#Jedno pravidlo nebo skupina na jeden běh: --only].
-- **Baseline.** Pravidlo, které váš kód zatím nesplňuje a opravit ho za vás nejde, zapnete hned: dnešní porušení zapíše příkaz `dresscode baseline` a hlásit se budou jen nová. PHP CS Fixer ji nemá; jak ji DressCode skloubil s opravami, popisuje [Baseline |suppressing#baseline].
+- **Potlačení na řádku.** PHP CS Fixer neumí vypnout pravidlo pro jeden řádek ani pro blok, jen pro celý soubor přes Finder. Tady je na to `// dresscode:ignore cesta` a dvojice `dresscode:disable` a `dresscode:enable`, viz [Potlačení a baseline |suppressing].
+- **Jiné hodnoty pro část projektu** zapíšete jako přepis v klíči `overrides`, bez druhého konfiguračního souboru; rozhodnutí tam dostane jinou hodnotu, nebo `keep`, viz [Konfigurace |configuration#Jiné hodnoty pro část projektu].
+- **Rozhodnutí na zkoušku bez ztráty konfigurace.** `--rules` v PHP CS Fixeru nahradí pravidla z konfiguračního souboru, takže fixer na zkoušku běží bez zbytku vaší sady a s výchozími volbami, pokud mu jiné nevypíšete v JSONu. V DressCode `dresscode fix --set cesta=hodnota` přidá rozhodnutí ke zbytku konfigurace, takže jeho změny vyjdou rovnou zformátované podle vašeho standardu, připravené na jeden commit, a `--only cesta` k tomu zúží výpis jen na ně, viz [Příkazová řádka |cli#Jedno rozhodnutí na jeden běh: --set a --only].
+- **Baseline.** Rozhodnutí, které váš kód zatím nesplňuje a opravit ho za vás nejde, zapíšete hned: dnešní porušení zapíše příkaz `dresscode baseline` a hlásit se budou jen nová. PHP CS Fixer ji nemá; jak ji DressCode skloubil s opravami, popisuje [Baseline |suppressing#baseline].
 - **Vlastní pravidlo** píšete proti stromu, ne proti tokenům. [Návod |custom-rule] je na jedno odpoledne a kdo má vlastní fixer, přepíše ho podle [samostatné stránky |porting-rules].
