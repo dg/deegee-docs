@@ -18,18 +18,76 @@ Převod konfigurace
 dresscode import phpcs.xml > dresscode.php
 ```
 
-Sady `PSR1`, `PSR2` a `PSR12` se překládají na preset `dresscode/psr12`. Jednotlivé sniffy (pravidla PHP_CodeSniffer) se překládají jménem, a kde má vlastnost z `<properties>` protějšek, tak i s ní: `Generic.Files.LineLength` je [`dresscode/lineLength` |rules/lineLength] a jeho `absoluteLineLimit` se stane klíčem [`lineLength` |configuration#Styl, verze PHP a jmenné prostory], `SlevomatCodingStandard.Namespaces.UnusedUses` je [`dresscode/unusedImports` |rules/unusedImports] a jeho vlastnost `searchAnnotations` se stane volbou `annotations`, `Squiz.WhiteSpace.OperatorSpacing` je [`dresscode/binaryOperatorSpacing` |rules/binaryOperatorSpacing]. Délka řádku je v DressCode jedna pro všechna pravidla, takže ji nastaví i `SlevomatCodingStandard.Files.LineLength` a o jedna menší než `minLineLength` také `RequireMultiLineMethodSignature` a `RequireMultiLineCondition` ze Slevomatu; když se hodnoty liší, `import` nechá nejmenší a upozorní na to.
+Sady `PSR1`, `PSR2` a `PSR12` se překládají na standard `psr12`. Jednotlivé sniffy (pravidla PHP_CodeSniffer) se překládají na rozhodnutí, a kde má vlastnost z `<properties>` protějšek, tak i s ní: `Generic.Files.LineLength` je [`file.longLines` |decisions/file#file.longLines] a jeho `absoluteLineLimit` se stane hodnotou `file.maxLineLength`, `SlevomatCodingStandard.Namespaces.UnusedUses` je [`imports.unused` |decisions/imports] a jeho vlastnost `searchAnnotations` se stane rozhodnutím `phpdoc.namesUseImports`, `Squiz.WhiteSpace.OperatorSpacing` je `spacing.binaryOperator`. Délka řádku je v DressCode jedna pro všechno, takže ji nastaví i `SlevomatCodingStandard.Files.LineLength` a o jedna menší než `minLineLength` také `RequireMultiLineMethodSignature` a `RequireMultiLineCondition` ze Slevomatu; když se hodnoty liší, `import` nechá nejmenší a upozorní na to.
 
-Vyloučení sniffu uvnitř sady (`<exclude name="…"/>`) `import` přenese jako vypnutí pravidla, které sniffu odpovídá. Když ale odpovídající pravidlo DressCode pokrývá i jiný sniff, `import` ho nechá zapnuté a vypíše varování; stejně tak u vyloučení jedné zprávy sniffu (`Generic.PHP.ForbiddenFunctions.Found`), protože na jednu zprávu se pravidlo zúžit nedá. Umlčení přes `<severity>0</severity>` `import` nepřenáší; takové pravidlo vypněte v klíči `rules` hodnotou `false`. Sniff bez protějšku skončí ve výpisu na chybovém výstupu; typicky jde o sniffy o dokumentačních komentářích z balíku `Squiz.Commenting` a o sniffy, které hlídají totéž co jiný sniff, jen jinými slovy.
+Vyloučení sniffu uvnitř sady (`<exclude name="…"/>`) i umlčení přes `<severity>0</severity>` `import` přenese jako hodnotu `keep` u rozhodnutí, které sniffu odpovídá. Když ale totéž rozhodnutí pokrývá i jiný sniff, `import` ho nechá a vypíše varování; stejně tak u vyloučení jedné zprávy sniffu (`Generic.PHP.ForbiddenFunctions.Found`), protože na jednu zprávu se rozhodnutí zúžit nedá. Sniff bez protějšku skončí ve výpisu na chybovém výstupu; typicky jde o sniffy o dokumentačních komentářích z balíku `Squiz.Commenting` a o sniffy, které hlídají totéž co jiný sniff, jen jinými slovy.
 
 Co v `phpcs.xml` není pravidlo a přepíšete to ručně:
 
-- `<file>` a `<exclude-pattern>` do klíčů `paths` a `excludePaths`; vzory popisuje [Konfigurace |configuration#Cesty]. `<exclude-pattern>` uvnitř `<rule>` patří do [přepisu |configuration#Jiný profil pro část projektu], který pravidlu pro ty cesty dá hodnotu `false`. Na `<exclude-pattern>` `import` upozorní, na `<file>` ne.
+- `<file>` a `<exclude-pattern>` do klíčů `paths` a `excludePaths`; vzory popisuje [Konfigurace |configuration#Cesty]. `<exclude-pattern>` uvnitř `<rule>` patří do [přepisu |configuration#Jiné hodnoty pro část projektu], který rozhodnutí pro ty cesty dá hodnotu `keep`. Na `<exclude-pattern>` `import` upozorní, na `<file>` ne.
 - `<arg name="extensions">` do klíče `fileExtensions`.
 - `<config name="php_version">` není potřeba, cílovou verzi si DressCode přečte z `composer.json`.
-- `<arg name="tab-width">` a odsazení řeší preset, nebo klíč `indent`.
+- `<arg name="tab-width">` do rozhodnutí `indentation.tabWidth`; odsazení řeší standard, nebo rozhodnutí `indentation.unit`.
 
 Slevomat: jeho sniffy, které DressCode pokrývá, se přeloží jménem jako každé jiné. Jeho pomocné třídy ani nastavení `installed_paths` tu nic nepotřebuje.
+
+
+Sekce místo sniffů
+==================
+
+PHP_CodeSniffer skládá jednu oblast stylu ze sniffů různých autorů, a každý má vlastní slovník. Prázdné řádky v PSR-12 s jedním řádkem mezi metodami, žádným za otevírací závorkou třídy a bloku a jedním před `return` jsou devět sniffů:
+
+```xml
+<rule ref="PSR2.Namespaces.NamespaceDeclaration"/>
+<rule ref="PSR2.Namespaces.UseDeclaration"/>
+<rule ref="SlevomatCodingStandard.Classes.EmptyLinesAroundClassBraces">
+	<properties>
+		<property name="linesCountAfterOpeningBrace" value="0"/>
+		<property name="linesCountBeforeClosingBrace" value="0"/>
+	</properties>
+</rule>
+<rule ref="SlevomatCodingStandard.Classes.ClassMemberSpacing">
+	<properties>
+		<property name="linesCountBetweenMembers" value="1"/>
+	</properties>
+</rule>
+<rule ref="SlevomatCodingStandard.Classes.MethodSpacing">
+	<properties>
+		<property name="minLinesCount" value="1"/>
+		<property name="maxLinesCount" value="1"/>
+	</properties>
+</rule>
+<rule ref="Squiz.WhiteSpace.FunctionOpeningBraceSpace"/>
+<rule ref="PSR2.Methods.FunctionClosingBrace"/>
+<rule ref="Squiz.WhiteSpace.ControlStructureSpacing"/>
+<rule ref="SlevomatCodingStandard.ControlStructures.JumpStatementsSpacing">
+	<properties>
+		<property name="jumpStatements" type="array">
+			<element value="return"/>
+		</property>
+		<property name="linesCountBefore" value="1"/>
+		<property name="linesCountBeforeFirst" value="0"/>
+		<property name="linesCountAfter" value="0"/>
+		<property name="linesCountAfterLast" value="0"/>
+	</properties>
+</rule>
+```
+
+V DressCode je to jedna sekce, [`blankLines` |decisions/blankLines], a v ní sedm rozhodnutí, jejichž jména říkají, kde ten prázdný řádek je:
+
+```neon
+blankLines:
+	afterNamespace: 1
+	afterImports: 1
+	beforeFirstMember: 0
+	betweenMethods: 1
+	afterBlockOpeningBrace: 0
+	beforeBlockClosingBrace: 0
+	beforeStatement:
+		return: 1
+```
+
+Obě konfigurace udělají z téhož souboru totéž. Rozdíl je v tom, co musíte vědět, abyste je napsali a přečetli: u sniffů, který z nich hlídá které místo a jak se jmenuje jeho vlastnost, tady jen to, kde chcete kolik prázdných řádků. Celou sekci, i s rozsahy jako `1-2` pro "jeden nebo dva", popisuje její stránka.
 
 
 Příkazy
@@ -40,14 +98,14 @@ Příkazy
 | `phpcs src` | `dresscode check src` |
 | `phpcbf src` | `dresscode fix src` |
 | `phpcs --standard=PSR12 src` | `dresscode check --use psr12 src` |
-| `phpcs --sniffs=SlevomatCodingStandard.Namespaces.UnusedUses src` | `dresscode check --only unusedImports src` |
-| `phpcs --exclude=SlevomatCodingStandard.Namespaces.UnusedUses src` | `dresscode check --use unusedImports=false src` |
+| `phpcs --sniffs=SlevomatCodingStandard.Namespaces.UnusedUses src` | `dresscode check --only imports.unused src` |
+| `phpcs --exclude=SlevomatCodingStandard.Namespaces.UnusedUses src` | `dresscode check --set imports.unused=keep src` |
+| `phpcs -e` | `dresscode catalogue` nebo `dresscode config` |
 | `phpcs --report=checkstyle` | `dresscode check -f checkstyle` |
 | `phpcs --report=json` | `dresscode check -f json` |
 | `phpcs --parallel=8` | `dresscode check --jobs 8` |
 | `phpcs --cache` | cache je zapnutá sama; `--no-cache` ji obejde |
 | `phpcs -p` | průběh se na terminálu ukazuje sám |
-| `.phpcs.xml.dist` | `dresscode.neon.dist` |
 
 PHP_CodeSniffer rozlišuje exit kódem, jestli jsou nalezená porušení opravitelná, a `phpcbf` má vlastní stupnici. DressCode vrací `0` pro čisto, `1` pro porušení, `2` pro selhání na některém souboru a `3` pro chybu v příkazové řádce nebo v konfiguraci; kolik porušení po opravě zbude, řekne shrnutí `check` a formát `json`. Skript, který exit kód vyhodnocuje, potřebuje jednu úpravu.
 
@@ -58,8 +116,8 @@ Co je jinak
 - **Jeden nástroj na kontrolu i opravu.** `phpcs` a `phpcbf` byly dva příkazy, které se občas neshodly, protože oprava mohla odhalit další porušení. Tady je `fix` totéž co `check` plus zápis, a co `fix` neopraví, ohlásí stejně jako `check`.
 - **Zpráva řekne, co může oprava změnit.** Očekávanou a nalezenou hodnotu uvádějí zprávy obou nástrojů, rozdíl je jinde. Slevomat má sniff `StrictCall` a na dvě volání `in_array()` bez `$strict` napíše dvakrát totéž: `Strict parameter missing in in_array() call.` DressCode s [typy z PHPStanu |types] rozliší, že na prvním místě se hledá `int` v `list<int>`, a `true` tam doplní sám; na druhém je hledaná hodnota `mixed`, a tak opravu jen ohlásí s větou `Risky because a strict search no longer finds a value of another type.` Ve stejném výpisu stojí i věci, na které nemá sniff žádný ze standardů dodávaných s PHP_CodeSniffer: přepsaná metoda, jejíž parametr se jmenuje jinak než u rodiče, takže volání s pojmenovaným argumentem skončí chybou, a volání metody, kterou knihovna označila jako zastaralou, i s radou knihovny, co psát místo ní. Celý výpis ukazuje [Začínáme |getting-started#Kontrola kódu].
 - **PSR-12 i tam, kde `phpcbf` jen hlásí.** Viditelnost konstant, kterou PSR-12 vyžaduje, `phpcbf` ohlásí, ale doplnit neumí; DressCode ji doplní. Nad Laravelem najde DressCode po `phpcbf` ještě 772 míst, viz [srovnání |how-it-works#PER Coding Style a PSR-12 proti PHP CS Fixeru a PHP_CodeSniffer].
-- **Vyzkoušet jde i pravidlo, které standard nemá.** `--sniffs` v PHP_CodeSniffer vybírá ze sniffů, které obsahuje zvolený standard. `dresscode check --only jméno --diff` pustí pravidlo, i když ho konfigurace nezmiňuje nebo vypíná, a varováním řekne, že to udělal. Jméno skupiny nebo presetu naopak jen zúží běh na pravidla, která konfigurace pouští, takže nepřebije nic, co projekt vypnul schválně, viz [Příkazová řádka |cli#Jedno pravidlo nebo skupina na jeden běh: --only].
+- **Vyzkoušet jde i rozhodnutí, které standard nemá.** `--sniffs` v PHP_CodeSniffer vybírá ze sniffů, které obsahuje zvolený standard. `dresscode check --set cesta=hodnota --only cesta --diff` dá rozhodnutí hodnotu na jeden běh a ukáže jen jeho změny. Jméno sady nebo sekce v `--only` naopak jen zúží běh na rozhodnutí, která konfigurace dělá, takže nepřebije nic, co projekt nechal na `keep` schválně, viz [Příkazová řádka |cli#Jedno rozhodnutí na jeden běh: --set a --only].
 - **Priority sniffů neexistují**, pravidla běží opakovaně do ustálení; [proč |how-it-works#Bez priorit: pravidla běží do ustálení].
-- **Komentáře `phpcs:ignore`, `phpcs:disable`, `phpcs:enable`, `phpcs:ignoreFile` a `@phpcsSuppress` fungují dál**, a to i se jmény sniffů. Jediný rozdíl je v tom, že `phpcs:ignore` na samostatném řádku kryje celý následující příkaz, ne jen řádek, viz [společný postup |migration#1. Kód nechte, jak je]. Přepis na `dresscode:*` je jeden příkaz a je dobrovolný.
+- **Komentáře `phpcs:ignore`, `phpcs:disable`, `phpcs:enable`, `phpcs:ignoreFile` a `@phpcsSuppress` fungují dál**, a to i se jmény sniffů, které DressCode přeloží na rozhodnutí. Jediný rozdíl je v tom, že `phpcs:ignore` na samostatném řádku kryje celý následující příkaz, ne jen řádek, viz [společný postup |migration#1. Kód nechte, jak je]. Přepis na `dresscode:*` je jeden příkaz a je dobrovolný.
 - **Baseline je vestavěná.** U PHP_CodeSniffer se o ní léta diskutuje a řeší se doplňky třetích stran. Tady ji zapíše příkaz `dresscode baseline` a obsahuje jen to, co `fix` opravit neumí, takže opravám nepřekáží; viz [Baseline |suppressing#baseline].
 - **Vlastní sniff** se nepřenáší, ale přepisuje; nad stromem z něj obvykle zbude zlomek délky. Návod je na [samostatné stránce |porting-rules].
