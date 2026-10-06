@@ -14,17 +14,17 @@ Instalace
 composer require --dev dresscode/rules-laravel
 ```
 
-A do konfigurace typy a skupinu `deprecations`, jak popisuje [Aktualizace knihoven |upgrading-libraries#Zapnutí]:
+A do konfigurace typy a sadu `deprecations`, jak popisuje [Aktualizace knihoven |upgrading-libraries#Zapnutí]:
 
 ```neon
-types: phpstan
+typeAnalysis: phpstan
 
-use:
+extends:
 	- perCs           # váš standard
 	- deprecations
 ```
 
-Balíček žádné pravidlo nezapne sám. Data se uplatní jen tehdy, když projekt má `laravel/framework`, a jen ty verze, na které projekt dosáhne.
+Balíček nic nezapne sám. Data se uplatní jen tehdy, když projekt má `laravel/framework`, a jen ty verze, na které projekt dosáhne.
 
 Larastan v projektu nevadí, naopak: ať ho máte v `phpstan.neon`, nebo ho zaregistroval `phpstan/extension-installer`, DressCode spustí aplikaci stejně jako PHPStan a fasádu `Request::get()` čte jako metodu třídy, která za ní stojí. Selže-li při tom `bootstrap/app.php`, vypíše Larastan sám hlášku "Application bootstrap failed" i s výjimkou, na které start aplikace selhal, a celý běh ukončí. Pozor v CI: běh skončí nenulovým exit kódem, a když běží v jednom procesu, je to 1, stejně jako když DressCode v kódu něco najde. Alias z `config/app.php` psaný bez jmenného prostoru, `\Request::get()`, nezná žádná statická analýza, a ten zůstane nepovšimnutý.
 
@@ -112,7 +112,7 @@ Helper volaný bez zpětného lomítka uvnitř jmenného prostoru, jak je to v a
 
 `Request::get()` a `input()` nejsou úplně totéž: `get()` čte napřed atributy routy, pak query a nakonec tělo požadavku, `input()` atributy nečte, tělo má před query a klíč s tečkou bere jako cestu do pole. Laravel sám u zastaralého `get()` radí `input()` a DressCode ho píše také; hodnotu, kterou nastavuje middleware jako atribut routy, čtěte přes `$request->attributes->get()`.
 
-Co framework změnil v signaturách, metodu, kterou přidal kontrakt, a návratový typ, který musí deklarovat potomek, data nepotřebuje: ohlásí a zapíše to `noUnimplementedAbstractMethods` a `overrideSignature` z téže skupiny, z deklarací nainstalované verze. Dopsání návratového typu je riziková oprava (risky fix): tělo metody může vracet něco jiného, a proto se udělá jen s `--fix-risky` nebo s pravidlem v klíči [`fixRisky` |configuration#risky-fixes].
+Co framework změnil v signaturách, metodu, kterou přidal kontrakt, a návratový typ, který musí deklarovat potomek, data nepotřebuje: ohlásí a zapíše to `correctness.unimplementedAbstractMethods` a `classes.overridingSignature` z téže sady, z deklarací nainstalované verze. Dopsání návratového typu je riziková oprava (risky fix): tělo metody může vracet něco jiného, a proto se udělá jen s `--fix-risky` nebo s rozhodnutím v klíči [`fixRisky` |configuration#risky-fixes].
 
 
 Co zůstane na vás
@@ -135,19 +135,23 @@ Stejně se ohlásí i další místa, například tato:
 
 Úplný výčet i s tím, co napsat místo toho, je opět v datech balíčku.
 
-Co framework jen označil jako zastaralé a náhradu k tomu napsal, v datech často není; s typy to ohlásí, a kde anotace náhradu řekne, i přepíše `noDeprecatedMembers`. Změny chování a konfigurace data nezachytí vůbec, ty najdete v průvodci upgradem Laravelu.
+Co framework jen označil jako zastaralé a náhradu k tomu napsal, v datech často není; s typy to ohlásí, a kde anotace náhradu řekne, i přepíše podle `upgrading.libraries.deprecatedMembers`. Změny chování a konfigurace data nezachytí vůbec, ty najdete v průvodci upgradem Laravelu.
 
 
 Atributy Laravelu 13
 ====================
 
-Laravel 13 čte z atributů třídy to, co dřív četl z vlastností: `#[Table('posts')]` místo `protected $table = 'posts'`, `#[Tries(3)]` místo `public $tries = 3`. Vlastnosti fungují dál, a proto je tahle část nabídka, ne oprava, v samostatné skupině `modernization`:
+Laravel 13 čte z atributů třídy to, co dřív četl z vlastností: `#[Table('posts')]` místo `protected $table = 'posts'`, `#[Tries(3)]` místo `public $tries = 3`. Vlastnosti fungují dál, a proto je tahle část nabídka, ne oprava, a data k ní mají záměr `modernization`, který zapne stejnojmenná sada. Rozhodnutí sekce `laravel` napíšete sami:
 
 ```neon
-use:
+extends:
 	- perCs           # váš standard
 	- deprecations
 	- modernization
+
+laravel:
+	castsMethod: adopted
+	scopeAttribute: adopted
 ```
 
 ```php .[before]
@@ -191,7 +195,7 @@ class Post extends Model
 }
 ```
 
-Atributy přinášejí data pravidla `attributeForMember` pro modely, příkazy, form requesty, API resources a joby, listenery, mailables a notifikace ve frontě; vlastnosti téže třídy atributu, `$table`, `$primaryKey` a `$keyType`, se spojí do jednoho `#[Table]`. Třídu, která vlastnost sama čte, abstraktní třídu a metodu `getRouteKeyName()` s logikou pravidlo ohlásí a nechá. Metodu `casts()` píše `laravel/castsMethodForCastsProperty` a scope s atributem `laravel/scopeAttributeForScopePrefix`. Ta druhá oprava je riziková: volání `scopePublished()` starým jménem v jiném souboru nevidí, a proto se udělá jen s `--fix-risky`. Metodu píše chráněnou, protože statické volání `Post::published()` k ní jinak nedojde.
+Atributy přinášejí data mapy `upgrading.libraries.attributeForMember` pro modely, příkazy, form requesty, API resources a joby, listenery, mailables a notifikace ve frontě; vlastnosti téže třídy atributu, `$table`, `$primaryKey` a `$keyType`, se spojí do jednoho `#[Table]`. Třídu, která vlastnost sama čte, abstraktní třídu a metodu `getRouteKeyName()` s logikou pravidlo ohlásí a nechá. Metodu `casts()` píše rozhodnutí `laravel.castsMethod` a scope s atributem `laravel.scopeAttribute`, obě ze sekce balíčku, kterou napíšete sami. Ta druhá oprava je riziková: volání `scopePublished()` starým jménem v jiném souboru nevidí, a proto se udělá jen s `--fix-risky`. Metodu píše chráněnou, protože statické volání `Post::published()` k ní jinak nedojde.
 
 
 Co balíček pokrývá

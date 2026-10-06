@@ -60,7 +60,7 @@ since 3.0:
 
 Každá sekce `since` říká, co přinesla daná verze knihovny, a platí jen tehdy, když na ni verze, na které projekt stojí, dosáhne. U knihovny, kterou si projekt vyžaduje sám, je to nejnižší verze, kterou jeho omezení v `composer.json` dovolí, ne ta zrovna nainstalovaná: kód psaný pro novější by se rozbil všude, kam omezení pustí starší. U knihovny, která se doinstalovala jen jako závislost něčeho jiného, rozhoduje ta nainstalovaná. Knihovnu, kterou jiný balíček nahrazuje v klíči `replace` svou vlastní verzí, třeba `illuminate/support` v `laravel/framework`, posuzuje DressCode podle verze toho balíčku. Nenastavujete nic a soubory DressCode najde sám, stačí, že je balíček uvede ve svém `composer.json`.
 
-Kde data nejsou, pomůže samotný kód knihovny. Dobře udržovaná knihovna staré API nesmaže ze dne na den, nejdřív ho označí anotací, třeba `@deprecated use Form::Filled`. S typy z PHPStanu tohle DressCode přečte a zápis přepíše pravidly `noDeprecatedMembers` a `noDeprecatedClasses`. Anotace ale pomůže jen do chvíle, kdy knihovna staré API opravdu smaže, a projekt, který jednu hlavní verzi přeskočí, ve vendoru žádnou anotaci nenajde, jen chybějící třídu. Data v balíčku pravidel zůstanou i po smazání, a kde je mají, mají přednost.
+Kde data nejsou, pomůže samotný kód knihovny. Dobře udržovaná knihovna staré API nesmaže ze dne na den, nejdřív ho označí anotací, třeba `@deprecated use Form::Filled`. S typy z PHPStanu tohle DressCode přečte a zápis přepíše podle rozhodnutí `upgrading.libraries.deprecatedMembers` a `deprecatedClasses`. Anotace ale pomůže jen do chvíle, kdy knihovna staré API opravdu smaže, a projekt, který jednu hlavní verzi přeskočí, ve vendoru žádnou anotaci nenajde, jen chybějící třídu. Data v balíčku pravidel zůstanou i po smazání, a kde je mají, mají přednost.
 
 
 Balíčky pro ekosystémy
@@ -85,34 +85,34 @@ Jak takový balíček napsat pro jiný ekosystém, popisuje stránka [Mapy náhr
 Zapnutí
 =======
 
-Balíček DressCode po instalaci najde sám, takže ho nikam neregistrujete. Každý soubor dat říká klíčem `group`, ke které [skupině |configuration#Skupiny pravidel] patří: u zastaralého API je to `deprecations`, u novějšího zápisu, který staré API neruší, `modernization`, jako u atributů Laravelu 13 v balíčku `dresscode/rules-laravel`. Zapnutá skupina zapne pravidla, která její soubory krmí, a data se v nich uplatní. Většina z nich potřebuje [typy z PHPStanu |types], protože bez nich nepozná, čí metodu které volání volá. Konfigurace proto uvádí i klíč `types`:
+Balíček DressCode po instalaci najde sám, takže ho nikam neregistrujete. Každý soubor dat říká klíčem `group`, jaký má záměr: u zastaralého API je to `deprecations`, u novějšího zápisu, který staré API neruší, `modernization`, jako u atributů Laravelu 13 v balíčku `dresscode/rules-laravel`. Data se uplatní, až když projekt jejich záměr zapne rozhodnutím `upgrading.libraries.deprecations` nebo `upgrading.libraries.modernizations`, a to dělají [sady |configuration#Standardy a sady] `deprecations` a `modernization`. Většina přepisů potřebuje [typy z PHPStanu |types], protože bez nich nepozná, čí metodu které volání volá. Konfigurace proto uvádí i klíč `typeAnalysis`:
 
 ```neon
-types: phpstan
+typeAnalysis: phpstan
 
-use:
+extends:
 	- perCs           # váš standard
 	- deprecations
 ```
 
-Ve skupině tak běží tahle pravidla, ta s mapou jen tehdy, když je krmí některý soubor skupiny, a spolu s nimi vše ostatní, co PHP zavrhlo:
+Data přicházejí do map sekce [`upgrading` |decisions/upgrading] a sada `deprecations` k nim zapne i rozhodnutí, která pracují bez dat, s kódem nainstalované verze:
 
-| pravidlo | co dělá | typy |
+| rozhodnutí | co dělá | typy |
 |---|---|---|
-| `replacedClasses` | přepíše třídu, rozhraní nebo výčet na jiné | ne |
-| `replacedFunctions` | přepíše volání funkce na jinou funkci | ne |
-| `replacedMembers` | přepíše konstantu, metodu nebo vlastnost, která se jmenuje jinak a používá se stejně | ano |
-| `replacedCalls` | přepíše volání, které se píše jinak: jiný tvar argumentů, přejmenovaný parametr, getter místo vlastnosti | ano |
-| `attributeForAnnotation` | nahradí anotaci atributem | ne |
-| `attributeForMember` | nahradí atributem třídy vlastnost, metodu nebo rozhraní, podle kterých knihovna třídu dřív našla | ne |
-| `forbiddenClasses`, `forbiddenFunctions`, `forbiddenMembers` | ohlásí, co náhradu nemá nebo ji musí napsat člověk, i s tím, co dělat | jen `forbiddenMembers` |
-| `noDeprecatedClasses`, `noDeprecatedMembers` | přepíše, co knihovna označila `@deprecated` a data neznají | ano |
-| `overrideSignature` | přizpůsobí metodu potomka signatuře, kterou jí nová verze předka předepíše | ano |
-| `noFinalParents`, `noUnimplementedAbstractMethods` | ohlásí potomka třídy, která se stala `final`, a abstraktní metodu, kterou nová verze přidala a potomek nemá | ano |
+| `upgrading.libraries.replacedClasses` | přepíše třídu, rozhraní nebo výčet na jiné | ne |
+| `upgrading.libraries.replacedFunctions` | přepíše volání funkce na jinou funkci | ne |
+| `upgrading.libraries.replacedMembers` | přepíše konstantu, metodu nebo vlastnost, která se jmenuje jinak a používá se stejně | ano |
+| `upgrading.libraries.replacedCalls` | přepíše volání, které se píše jinak: jiný tvar argumentů, přejmenovaný parametr, getter místo vlastnosti | ano |
+| `upgrading.libraries.attributeForAnnotation` | nahradí anotaci atributem | ne |
+| `upgrading.libraries.attributeForMember` | nahradí atributem třídy vlastnost, metodu nebo rozhraní, podle kterých knihovna třídu dřív našla | ne |
+| `upgrading.libraries.forbiddenClasses`, `forbiddenFunctions`, `forbiddenMembers` | ohlásí, co náhradu nemá nebo ji musí napsat člověk, i s tím, co dělat | jen `forbiddenMembers` |
+| `upgrading.libraries.deprecatedClasses`, `deprecatedMembers` | přepíše, co knihovna označila `@deprecated` a data neznají | ano |
+| `classes.overridingSignature` | přizpůsobí metodu potomka signatuře, kterou jí nová verze předka předepíše | ano |
+| `correctness.finalParent`, `correctness.unimplementedAbstractMethods` | ohlásí potomka třídy, která se stala `final`, a abstraktní metodu, kterou nová verze přidala a potomek nemá | ano |
 
-Pravidla, která typy potřebují, ze skupiny bez nich tiše vypadnou, takže skupinu zapnout můžete i bez PHPStanu; opraví se pak jen třídy, funkce a anotace. Soubory skupiny `modernization`, jako atributy Laravelu 13, zapne až ta skupina, a tak ji přidáte vedle `deprecations`, když o nový zápis stojíte.
+Rozhodnutí, která typy potřebují, se bez nich tiše neuplatní, takže sadu zapnout můžete i bez PHPStanu; opraví se pak jen třídy, funkce a anotace. Soubory se záměrem `modernization`, jako atributy Laravelu 13, zapne až sada `modernization`, a tak ji přidáte vedle `deprecations`, když o nový zápis stojíte.
 
-Balíček pravidel může přinést i pravidla svého ekosystému. Pravidlo `nette/namedArgumentsForFlags`, které nahradí příznaky spojené přes `|` pojmenovanými argumenty, vlastní skupinu nemá a zapne ho skupina souborů, jejichž data ho krmí. Jiná pravidla mají skupinu sama: `nette/linkDestinationNotation` a `nette/monitorForAttachedHook` patří do `deprecations`, `laravel/castsMethodForCastsProperty` a `laravel/scopeAttributeForScopePrefix` do `modernization`. Co dělají, popisují stránky [Nette |upgrading-nette] a [Laravel |upgrading-laravel].
+Balíček pravidel může přinést i pravidla svého ekosystému a jejich rozhodnutí stojí v sekci pojmenované po pluginu balíčku. Mapa `nette.flagsAsNamedArguments`, která nahradí příznaky spojené přes `|` pojmenovanými argumenty, dostává data stejně jako mapy jádra, takže ji zapne záměr jejích souborů. Rozhodnutí, která data nemají, napíše projekt sám, jako každé jiné: `nette.linkArguments` a `nette.monitorCallbacks` z `dresscode/rules-nette`, `laravel.castsMethod` a `laravel.scopeAttribute` z `dresscode/rules-laravel`. Co dělají, popisují stránky [Nette |upgrading-nette] a [Laravel |upgrading-laravel].
 
 
 Po jedné verzi, nebo najednou
@@ -120,7 +120,7 @@ Po jedné verzi, nebo najednou
 
 Kód převádějte po jedné hlavní verzi, každou až poté, co ji nainstalujete. V `composer.json` zvednete omezení na další hlavní verzi, spustíte `composer update`, potom `dresscode fix`, pustíte testy a změnu commitnete. Pak totéž s další verzí.
 
-V každém kroku se tak data potkají s kódem knihovny. Data opraví, co právě nainstalovaná verze přejmenovala nebo smazala. Nové třídy a atributy, které data do kódu píšou, už ve vendoru jsou, takže DressCode s typy z PHPStanu ověří, že existují. A anotace `@deprecated` v nainstalovaném kódu prozradí, co zmizí v další verzi: pravidla `noDeprecatedMembers` a `noDeprecatedClasses` na to kód rovnou převedou, nebo aspoň ukážou, kde bude potřeba sáhnout.
+V každém kroku se tak data potkají s kódem knihovny. Data opraví, co právě nainstalovaná verze přejmenovala nebo smazala. Nové třídy a atributy, které data do kódu píšou, už ve vendoru jsou, takže DressCode s typy z PHPStanu ověří, že existují. A anotace `@deprecated` v nainstalovaném kódu prozradí, co zmizí v další verzi: rozhodnutí `upgrading.libraries.deprecatedMembers` a `deprecatedClasses` na to kód rovnou převedou, nebo aspoň ukážou, kde bude potřeba sáhnout.
 
 Aplikaci psanou pro hodně staré verze můžete převést i najednou: nainstalujete současné verze a `dresscode fix` pustíte jen jednou. Data smazání přežijí, takže se opraví i volání metod, které současná verze už nemá. Přijdete ale o anotace přeskočených verzí, a kde data nejsou, zůstane místo opravy chyba, kterou najde až PHPStan.
 
@@ -147,7 +147,7 @@ A u každé položky mapy uvede jako původ soubor a balíček, ze kterého poch
 Na co si dát pozor
 ------------------
 
-Pravidla počítají s tím, že starý člen už ve vendoru být nemusí. Volání poznají podle typu toho, na čem se volá, a deklaraci starého členu nepotřebují. Na dvě věci ale po aktualizaci nedosáhnou.
+DressCode počítá s tím, že starý člen už ve vendoru být nemusí. Volání poznají podle typu toho, na čem se volá, a deklaraci starého členu nepotřebují. Na dvě věci ale po aktualizaci nedosáhnou.
 
 **Potomek smazané třídy.** Když knihovna smaže třídu, ze které dědí třída vašeho projektu, PHPStan nezná předky potomka. Volání `$gone->old()` na proměnné typu smazané třídy se opraví, ale `$this->old()` uvnitř potomka ne, protože DressCode nepozná, že jde o člen smazaného předka. Projekt s takovou třídou proto převeďte s klíčem `targets` ještě před `composer update`, dokud je stará verze nainstalovaná, a zbytek dořeší `dresscode fix` po aktualizaci.
 
@@ -157,9 +157,9 @@ Pravidla počítají s tím, že starý člen už ve vendoru být nemusí. Volá
 Co se opraví a co jen ohlásí
 ============================
 
-Oprava podle dat není rizikovou opravou (risky fix), protože mění přesně to, co autor dat zapsal. Výjimkou je výraz, který se po přepisu vyhodnotí jinak než předtím: argument, který se nově vyhodnotí jen někdy (za `??`, `&&` nebo za `?->`), vůbec, nebo v jiném pořadí, a čtení vlastnosti, které data nahrazují jiným výrazem, nalevo od `??`, kde se PHP nejdřív ptá, jestli je vlastnost nastavená. Riziková je i oprava volání globální funkce bez kvalifikace uvnitř jmenného prostoru, protože stejnojmennou funkci by mohl deklarovat ten prostor. Takové opravy čekají na svolení v klíči `fixRisky` a do té doby se hlásí s důvodem. Výraz, který by se po přepisu vyhodnotil dvakrát, se neopraví vůbec.
+Oprava podle dat není rizikovou opravou (risky fix), protože mění přesně to, co autor dat zapsal. Výjimkou je výraz, který se po přepisu vyhodnotí jinak než předtím: argument, který se nově vyhodnotí jen někdy (za `??`, `&&` nebo za `?->`), vůbec, nebo v jiném pořadí, a čtení vlastnosti, které data nahrazují jiným výrazem, nalevo od `??`, kde se PHP nejdřív ptá, jestli je vlastnost nastavená. Riziková je i oprava volání globální funkce bez kvalifikace uvnitř jmenného prostoru, protože stejnojmennou funkci by mohl deklarovat ten prostor. Takové opravy čekají na svolení v klíči `fixRisky` (`upgrading.libraries.replacedCalls` a další) a do té doby se hlásí s důvodem. Výraz, který by se po přepisu vyhodnotil dvakrát, se neopraví vůbec.
 
-Co data zakazují (`forbiddenClasses`, `forbiddenMembers`, `forbiddenFunctions`), se jen ohlásí, protože náhrada buď není, nebo je jiné povahy a napsat ji musí člověk. Hláška končí větou, co udělat:
+Co data zakazují (`upgrading.libraries.forbiddenClasses`, `forbiddenMembers`, `forbiddenFunctions`), se jen ohlásí, protože náhrada buď není, nebo je jiné povahy a napsat ji musí člověk. Hláška končí větou, co udělat:
 
 ```
 Method `Nette\Http\Request::getReferer()` is forbidden: use `getOrigin()`, which reads the Origin header and gives only the scheme, the host and the port instead of the whole URL of the referring page.
@@ -171,14 +171,15 @@ A kde data opravu nabízejí, ale na tomhle místě kódu nejde provést, třeba
 Vlastní přejmenování v projektu
 ===============================
 
-Totéž, co balíčky pravidel, můžete udělat s vlastním kódem. Přejmenovali jste třídu, kterou používá půl projektu, nebo jste globální funkci přesunuli do jmenného prostoru? Pravidla dostanou mapu, co čím nahradit, a přepíšou každý výskyt:
+Totéž, co balíčky pravidel, můžete udělat s vlastním kódem. Přejmenovali jste třídu, kterou používá půl projektu, nebo jste globální funkci přesunuli do jmenného prostoru? Napište do konfigurace mapu, co čím nahradit, a DressCode přepíše každý výskyt:
 
 ```neon
-rules:
-	replacedClasses:
-		App\Model\Customer: App\Model\Client
-	replacedFunctions:
-		formatPrice: App\Utils\formatPrice
+upgrading:
+	libraries:
+		replacedClasses:
+			App\Model\Customer: App\Model\Client
+		replacedFunctions:
+			formatPrice: App\Utils\formatPrice
 ```
 
 ```php .[before]
@@ -207,7 +208,7 @@ final class OrderMailer
 }
 ```
 
-Třída se přepíše všude, kde stojí: v importu, v typu, za `new`, u statického přístupu i v atributu, i v souboru bez jmenného prostoru, jako jsou testy. Jak se zapisují mapy ostatních pravidel, klíče s tvarem argumentů a hodnoty jako výraz PHP, popisuje stránka [Mapy náhrad |upgrading-data].
+Třída se přepíše všude, kde stojí: v importu, v typu, za `new`, u statického přístupu i v atributu, i v souboru bez jmenného prostoru, jako jsou testy. Mapa, kterou napíše projekt, platí vždy, bez ohledu na sady; data balíčků pod ní leží a projekt jejich položku odvolá hodnotou `keep`. Jak se zapisují ostatní mapy, klíče s tvarem argumentů a hodnoty jako výraz PHP, popisuje stránka [Mapy náhrad |upgrading-data].
 
 
 Kam dál

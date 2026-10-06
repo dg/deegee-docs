@@ -14,17 +14,21 @@ Instalace
 composer require --dev dresscode/rules-nette
 ```
 
-A do konfigurace typy a skupinu `deprecations`, jak popisuje [Aktualizace knihoven |upgrading-libraries#Zapnutí]:
+A do konfigurace typy a sadu `deprecations`, jak popisuje [Aktualizace knihoven |upgrading-libraries#Zapnutí]:
 
 ```neon
-types: phpstan
+typeAnalysis: phpstan
 
-use:
+extends:
 	- nette           # váš standard
 	- deprecations
+
+nette:
+	linkArguments: adopted
+	monitorCallbacks: adopted
 ```
 
-Balíček žádné pravidlo nezapne sám: tři pravidla, která přináší, jen přihlásí do DressCode svým pluginem a zapne je až skupina `deprecations`. Data každé knihovny se uplatní jen tehdy, když ji projekt má, a jen ty verze, na které projekt dosáhne.
+Balíček nic nezapne sám. Data ve svých souborech zapne sada `deprecations` a s nimi i převod příznaků na pojmenované argumenty, mapu `nette.flagsAsNamedArguments`; dvě rozhodnutí o destinacích odkazů a o hookách komponent, která data nemají, napíšete do sekce `nette`, jak ukazuje konfigurace výše. Data každé knihovny se uplatní jen tehdy, když ji projekt má, a jen ty verze, na které projekt dosáhne.
 
 
 Co se opraví
@@ -57,7 +61,7 @@ public function add(string $code): void
 }
 ```
 
-Řádek `$items = $section->items ?? []` zůstal: čtení vlastnosti nalevo od `??` se u `SessionSection` nejdřív ptá, jestli je nastavená, a `get()` se neptá. Oprava je proto [riziková (risky fix) |configuration#risky-fixes] a udělá se, až pravidlo `replacedCalls` uvedete v klíči `fixRisky`.
+Řádek `$items = $section->items ?? []` zůstal: čtení vlastnosti nalevo od `??` se u `SessionSection` nejdřív ptá, jestli je nastavená, a `get()` se neptá. Oprava je proto [riziková (risky fix) |configuration#risky-fixes] a udělá se, až rozhodnutí `upgrading.libraries.replacedCalls` uvedete v klíči `fixRisky`.
 
 Co všechno balíček opravuje:
 
@@ -72,7 +76,7 @@ Co všechno balíček opravuje:
 - **anotace** na atributy: `@persistent` a `@crossOrigin` v presenterech, `@filter` a `@function` ve třídách parametrů šablon Latte, a atribut `#[CrossOrigin]` na `#[Requires(sameOrigin: false)]`,
 - **hooky** `attached()` a `detached()` komponent na callbacky metody `monitor()` v konstruktoru, a **query string a fragment v destinaci odkazu**, `link('Product:show?id=1#reviews')`, na argumenty.
 
-Příznaky převádí pravidlo `nette/namedArgumentsForFlags` podle dat, hooky a destinace odkazů pravidla `nette/monitorForAttachedHook` a `nette/linkDestinationNotation`; všechna tři balíček přináší. Zbytek dělají pravidla jádra DressCode podle dat.
+Příznaky převádí mapa `nette.flagsAsNamedArguments` podle dat, hooky a destinace odkazů rozhodnutí `nette.monitorCallbacks` a `nette.linkArguments`; jejich pravidla balíček přináší. Zbytek dělají pravidla jádra DressCode podle dat.
 
 
 Co zůstane na vás
@@ -85,7 +89,7 @@ Method `Nette\Http\UrlScript::setPath()` is forbidden: the class is immutable; t
 Constant `Nette\Application\IRouter::SECURED` is forbidden: write the protocol, `https://`, into the mask of the route.
 ```
 
-Co knihovna jen tiše označila jako zastaralé, v datech není; s typy to ohlásí, a kde anotace náhradu řekne, i přepíše `noDeprecatedMembers`. Změny chování, konfigurace v NEONu a syntaxe šablon Latte data nezachytí vůbec, ty najdete v průvodcích upgradem jednotlivých knihoven.
+Co knihovna jen tiše označila jako zastaralé, v datech není; s typy to ohlásí, a kde anotace náhradu řekne, i přepíše podle `upgrading.libraries.deprecatedMembers`. Změny chování, konfigurace v NEONu a syntaxe šablon Latte data nezachytí vůbec, ty najdete v průvodcích upgradem jednotlivých knihoven.
 
 
 Co balíček pokrývá
