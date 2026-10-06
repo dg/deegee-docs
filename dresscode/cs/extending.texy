@@ -2,21 +2,21 @@ Rozšiřování DressCode
 *********************
 
 .[perex]
-Vlastní pravidlo, preset, plugin, analýza nebo data pro aktualizaci knihoven: co je kdy správná volba a na které části DressCode se dá spolehnout jako na veřejné API.
+Vlastní pravidlo s vlastními rozhodnutími, preset, plugin, analýza nebo data pro aktualizaci knihoven: co je kdy správná volba a na které části DressCode se dá spolehnout jako na veřejné API.
 
 
 Pět míst, kam se dá sáhnout
 ===========================
 
-**Pravidlo** je odpověď na "chci hlídat ještě tohle". Buď `NodeRule`, které řekne, které uzly ho zajímají, položí otázku a případně opraví, nebo `GapRule`, které vysloví požadavek na bílé znaky mezi tokeny. Napíšete ho za odpoledne: [Jak napsat vlastní pravidlo |custom-rule]. Když plní některý ze šesti záměrů, které pojmenovávají [skupiny pravidel |configuration#Skupiny pravidel], přihlásí se do své skupiny a začne pracovat každému, kdo si o ni řekl, aniž by o vašem pravidle věděl. Vlastní skupinu si vymyslet nemůžete, a to je záměr: šest jmen je celý seznam, který se uživatel učí, ať má nainstalováno cokoli.
+**Pravidlo** je odpověď na "chci hlídat ještě tohle". Ohlásí [rozhodnutí |rule-contract#Rozhodnutí], která vynucuje, a buď jako `NodeRule` řekne, které uzly ho zajímají, položí otázku a případně opraví, nebo jako `GapRule` vysloví nárok na bílé znaky mezi tokeny. Uživatel pak píše jeho rozhodnutí stejně jako rozhodnutí jádra: pravidla projektu v sekci `project`, pravidla pluginu v sekci pojmenované po pluginu. Napíšete ho za odpoledne: [Jak napsat vlastní pravidlo |custom-rule].
 
-**Preset** je odpověď na "chci tenhle styl na všech projektech". Pojmenovaná sada pravidel s volbami a stylem, která může vycházet z jiného presetu a dá se zapnout pro celý projekt i jen pro jeho část. Viz [Vlastní preset a plugin |presets-and-extensions].
+**Preset** je odpověď na "chci tenhle styl na všech projektech". Soubor NEON ve tvaru konfigurace, který nese rozhodnutí, může vycházet z jiného presetu a dá se použít pro celý projekt i jen pro jeho část. Viz [Vlastní preset a plugin |presets-and-extensions].
 
-**Plugin** je odpověď na "chci to rozdávat jako balíček". Třída s rozhraním `DressCode\Plugin`, jejíž jediná metoda `getManifest()` vrátí `PluginManifest`: pravidla a presety balíčku, které tím dostanou svá jména, pluginy, na kterých staví, analýzy, vyloučené cesty, filtr souborů a adresu stránek pravidel. Projekt ho uvede v klíči `use`, nebo ho balíček ohlásí sám v `extra.dresscode.plugin` svého `composer.json` a pak se načte už tím, že je nainstalovaný. Jak má kód vypadat, plugin nerozhoduje: styl si projekt vybere presetem. Viz [Vlastní preset a plugin |presets-and-extensions].
+**Plugin** je odpověď na "chci to rozdávat jako balíček". Třída s rozhraním `DressCode\Plugin`, jejíž jediná metoda `getManifest()` vrátí `PluginManifest`: pravidla balíčku, sekci jejich rozhodnutí, presety se jmény, pluginy, na kterých staví, analýzy, vyloučené cesty, filtr souborů a adresu stránek pravidel. Projekt ho uvede v klíči `plugins`, nebo ho balíček ohlásí sám v `extra.dresscode.plugin` svého `composer.json` a pak se načte už tím, že je nainstalovaný. Jak má kód vypadat, plugin nerozhoduje: rozhodnutí napíše projekt nebo preset. Viz [Vlastní preset a plugin |presets-and-extensions].
 
 **Analýza** je odpověď na "tuhle informaci o souboru potřebuje víc pravidel". Obyčejná třída postavená nad stromem, kterou si pravidla vyžádají; jádro ji vytvoří jednou a po každé změně stromu zahodí, jen analýza s rozhraním `PassAnalysis` vydrží celý průchod. Vestavěné jsou [NameResolver a Scope |phpsyntax:analyses], `PhpDoc`, `PhpSymbols` s `PhpSignatures` (co deklaruje samo PHP) a `Types` (typy kódu z PHPStanu projektu). Viz [Pravidlo do detailu |rule-contract#Analýzy].
 
-**Data pro aktualizaci** jsou odpověď na "nová verze mé knihovny přejmenovala API a uživatelé to mají opravit". Nejsou to pravidla, ale soubor NEON, který balíček ohlásí v `extra.dresscode.upgrading` a který plní mapy vestavěných pravidel jako `replacedClasses` nebo `replacedMembers`. Viz [Mapy náhrad |upgrading-data].
+**Data pro aktualizaci** jsou odpověď na "nová verze mé knihovny přejmenovala API a uživatelé to mají opravit". Nejsou to pravidla, ale soubor NEON, který balíček ohlásí v `extra.dresscode.upgrading` a který plní mapy jádra jako `upgrading.libraries.replacedClasses` nebo mapy pravidel pluginů. Viz [Mapy náhrad |upgrading-data].
 
 Co rozšířit nejde, je parser. Ten je samostatná knihovna [PhpSyntax |phpsyntax:], jeho gramatikou je PHP a nic jiného, a strom, který z ní vzejde, je pro všechna pravidla stejný. Právě proto se dají pravidla skládat, aniž by o sobě musela navzájem vědět. A nejde ani přidat vlastní formát výstupu: výstup je smlouva sama o sobě, a kdo chce výsledky zpracovat jinde, přečte JSON z `dresscode check --format json`.
 
@@ -26,18 +26,21 @@ Co je veřejné API
 
 Na tyhle třídy se plugin může spolehnout mezi minoritními verzemi:
 
-- **psaní pravidla**: `Rule` s potomky `NodeRule` a `GapRule`, `ConfigurableRule`, `RuleInfo`, `RuleContext`, `Claim`, `Space`, `Line`, `Gap`, `Style`, `Violation` a výčty `Stage`, `Severity`, `RuleGroup`, `Tristate` a `Risk`;
-- **konfigurace a presety**: `Config`, `Profile`, `Override`, `Plugin`, `PluginManifest`, `Preset`, `PresetInfo` a vestavěné presety v `Presets\`;
-- **pomocníci pravidel**: `Rules\GlobalCalls` (kterou globální funkci volání volá), `Rules\CodeWriter` (kód zapsaný v podobě, jakou soubor má) a gramatika map v `Rules\Upgrading\` (`MemberMaps`, `MemberPattern`, `MapEntry`, `ArgumentPattern` a jejich hodnoty); vestavěná pravidla v `Rules\` jen jménem a jmenným prostorem třídy, aby je šlo jmenovat v konfiguraci a v `RuleContext::findRule()`, jejich metody veřejné nejsou;
+- **psaní pravidla**: `Rule` s potomky `NodeRule` a `GapRule`, `RuleInfo`, `RuleContext`, `Claim`, `Space`, `Line`, `Gap`, `Style`, `Violation` a výčty `Stage`, `Severity`, `Tristate` a `Risk`;
+- **rozhodnutí**: `Decision`, `Domain` s obory v `Domains\` (`Words`, `Shapes`, `Count`, `Names`, `Table`, `Structure`, `Flag`, `Text`, `Data`), hodnoty `Values` a `Value` a katalog `Config\Catalogue`;
+- **konfigurace**: `Config`, `Profile`, `Override`, `Plugin`, `PluginManifest` a výčet `Intent`; presety jsou soubory NEON a jejich jména;
+- **pomocníci pravidel**: `Rules\GlobalCalls` (kterou globální funkci volání volá), `Rules\CodeWriter` (kód zapsaný v podobě, jakou soubor má) a gramatika map v `Rules\Upgrading\` (`MemberMaps`, `MemberPattern`, `MapEntry`, `ArgumentPattern` a jejich hodnoty); vestavěná pravidla v `Rules\` jen jménem a jmenným prostorem třídy, aby je šlo jmenovat v `RuleContext::findRule()`, jejich metody veřejné nejsou;
 - **analýzy a testování**: všechno v `Analyses\` kromě `Registry`, `PhpStan`, `PhpSymbolsData` a `PhpSignaturesData`, dále `Testing\RuleTester` a `Testing\UpgradingTester` s výjimkou `Testing\TestFailure` a výsledek souboru `FileResult`, který vrací `UpgradingTester::runSample()`;
 - **příkazová řádka**: `Console\Application` a `Console\UsageException` pro program, který chce běh vložit do sebe;
 - **výjimky**: `ConfigurationException`, `RuleException`, `ConvergenceException`;
 - z knihovny [PhpSyntax |phpsyntax:] všechno, co není označené `@internal`: `Parser`, `Lexer`, `Printer`, `Node`, `Token`, `Trivia`, uzly, analýzy, `Style`, `Indentation`, výčty a `ParseException`.
 
-Co je označené `@internal`, se může změnit kdykoli: jádro, načítání konfigurace, výstupní formáty a pomocníci, které si vestavěná pravidla sdílejí jen mezi sebou. Program, který chce DressCode spustit, ho proto spouští z příkazové řádky. Oba seznamy hlídá test, takže třída, která není ani v jednom, shodí testovací sadu, místo aby se veřejným API stala nedopatřením. A protože s novou syntaxí PHP může v minoritní verzi přibýt nový uzel stromu, potřebuje každý `match` přes třídy uzlů větev `default`.
+Co je označené `@internal`, se může změnit kdykoli: jádro, načítání a řešení konfigurace, výstupní formáty a pomocníci, které si vestavěná pravidla sdílejí jen mezi sebou. Program, který chce DressCode spustit, ho proto spouští z příkazové řádky. Oba seznamy hlídá test, takže třída, která není ani v jednom, shodí testovací sadu, místo aby se veřejným API stala nedopatřením. A protože s novou syntaxí PHP může v minoritní verzi přibýt nový uzel stromu, potřebuje každý `match` přes třídy uzlů větev `default`.
 
 
 Pojmenování
 ===========
 
-Jméno pravidla má tvar `vendor/ruleName` v camelCase a podle konvence je to jméno třídy bez přípony `Rule` s malým prvním písmenem: třída `ExceptionMessagePeriodRule` od dodavatele `acme` je pravidlo `acme/exceptionMessagePeriod`. Jméno říká stav, který pravidlo vynucuje, ne krok, který dělá oprava, tedy `exceptionMessagePeriod`, ne `addPeriod`. Vestavěný katalog používá ustálený slovník: `no…` je konstrukce, která se nesmí objevit vůbec (`noGlobalStatements`), `useless…` konstrukce, která je jinde v pořádku, ale na tomhle místě nic nepřidává (`uselessElse`), `<konstrukce>For<situace>` zápis, který nahrazuje starší (`matchForSwitch`), `…Spacing` mezery na řádku, `…BlankLines` prázdné řádky a `…Indentation` odsazení. Pravidlo, které je rozhodnutím, nese jméno konstrukce (`bracesPosition`), politika se seznamem od projektu začíná `forbidden…` nebo `replaced…`. Jméno presetu má tvar `vendor/name`. Je to konvence vestavěného katalogu a plugin, který se jí drží, do něj zapadne.
+Co uživatel píše a čte, je cesta rozhodnutí, a tak na jejím jménu záleží nejvíc. Cesta jmenuje věc v kódu, ne krok, který dělá oprava: `acme.exceptionMessagePeriod: required`, ne `acme.addPeriod: true`. Hodnota pak říká, jak se ta věc píše, a vestavěný katalog na to má ustálená slova: `forbidden` a `required` pro to, co v kódu být nesmí, nebo musí, `sameLine` a `nextLine` pro polohu tokenu, `adopted` pro konstrukci novějšího PHP, počet pro prázdné řádky. Kde má věc víc míst, dostane každé svůj klíč (`braces.class`, `braces.function`), a parametr, který jen upřesňuje, nese jméno toho, co upřesňuje (`calls.debugFunctions`). Cesty se píšou v camelCase.
+
+Třída pravidla nese podle konvence příponu `Rule` a jméno stavu, který vynucuje, takže `ExceptionMessagePeriodRule` vynucuje `acme.exceptionMessagePeriod`. Z tohoto jména bez přípony, s malým prvním písmenem, skládá `ruleUrl` adresu stránky pravidla. Jméno presetu má tvar `vendor/name` a sekce pluginu jméno pluginu. Je to konvence vestavěného katalogu a plugin, který se jí drží, do něj zapadne.
