@@ -2,71 +2,62 @@ Vlastní preset a plugin
 ***********************
 
 .[perex]
-Jak zabalit vlastní pravidla a styl do presetu, jak k němu přidat plugin, rozdávat obojí přes Composer a nechat uživatele zapnout to jediným řádkem, pro celý projekt nebo jen pro jeho část.
+Jak zabalit vlastní styl do presetu a vlastní pravidla do pluginu se sekcí rozhodnutí, rozdávat obojí přes Composer a nechat uživatele zapnout to jediným řádkem, pro celý projekt nebo jen pro jeho část.
 
 
 Preset
 ======
 
-Preset je třída s atributem `#[PresetInfo]` a jedinou metodou `getProfile()`. Ta vrátí [profil |configuration#Jeden tvar pro projekt, jeho části i presety]: tytéž klíče, které píšete do konfigurace, jen zapsané v PHP.
-
-```php
-namespace Acme\CodeStyle;
-
-use DressCode\Preset;
-use DressCode\PresetInfo;
-use DressCode\Presets\PerCs;
-use DressCode\Profile;
-
-
-#[PresetInfo('acme/house', 'The Acme house style')]
-final class HousePreset implements Preset
-{
-	public function getProfile(): Profile
-	{
-		return new Profile(
-			use: [PerCs::class],
-			indent: 'tab',
-			lineEnding: 'LF',
-			lineLength: 100,
-			rules: [
-				'orderedImports' => true,
-				'lineLength' => true,
-				'yoda' => 'forbidden',
-				'noAlternativeSyntax' => 'keep',
-				ExceptionMessagePeriodRule::class => true,
-			],
-		);
-	}
-}
-```
-
-- `use` jsou presety, ze kterých ten váš vychází, a [skupiny pravidel |configuration#Skupiny pravidel], které zapíná. Použijí se nejdřív, v pořadí zápisu a každý jen jednou, a uvést je můžete třídou i jménem, skupinu i případem výčtu `RuleGroup`. Položka, kterou váš preset uvede znovu, se s nimi slévá stejně jako v [konfiguraci |configuration#Presety a vrstvy]: mapa mění jen volby, které jmenuje, skalár a seznam nahrazují celou hodnotu, `keep` položku maže. Pořadí pravidel odpovídá pořadí první zmínky.
-- Vestavěná pravidla lze uvést jménem, krátce jako v konfiguraci (`'orderedImports'` je totéž co `'dresscode/orderedImports'`), vlastní názvem třídy; jméno vlastního pravidla se zaregistruje při první zmínce.
-- Hodnotou pravidla je `true`, `keep` (nebo `false`), hodnota rozhodnutí u pravidla, které má jediné (`'yoda' => 'forbidden'`), mapa voleb, nebo továrna `fn(): Rule` pro pravidlo se závislostmi.
-- `indent`, `lineEnding` a `lineLength` jsou styl, se kterým preset počítá. Nastavit ho smí kterýkoli preset a platí jako každá jiná hodnota z nejvyšší vrstvy, která ho říká: preset položený nad jiným ho přebije a konfigurace projektu nebo přepis taky.
-- `namespaces` vyjmenuje funkce a konstanty, které framework presetu deklaruje ve jmenném prostoru, do kterého kód projektu píše, třeba `['functions' => ['Acme\Framework\Config\{service, param}']]`. Položky se zapisují jako v příkazu `use` a sčítají se s konfigurací projektu; viz [Funkce a konstanty ve jmenných prostorech |namespaces#Funkce, které deklaruje framework].
-- Skupiny v `use` uvádí standard tehdy, když k jeho vzhledu patří i hygiena kódu, jak to dělá `nette`. Leží pod pravidly téhož profilu, takže je preset může jednotlivě přenastavit, a projekt nad ním taky. Plugin do `use` presetu nepatří: zpřístupňuje jména celému projektu, a tak ho uvádí jen konfigurace.
-- Rozhodnutí projektu preset udělat nemůže: klíče `targets`, `nameResolution`, `fixRisky` a `warnOnly` nechává projektu. Preset, který by je nastavil, DressCode odmítne s chybou <code>''Preset `acme/house` sets `fixRisky`, which the project decides, not a preset.''</code>
-- Preset, který se má dát přidat ke kterémukoli standardu, o rozvržení kódu nerozhoduje: nemá styl, nevychází z presetu, který rozvržení určuje, a nesahá na mezery, odsazení, zalamování ani pořadí. Že je takový, řekněte v jeho popisu.
-
-Na verzi PHP ani na to, co má projekt nainstalované, preset myslet nemusí: pravidlo, které si v `requires` řekne o verzi PHP nebo o balíček, se tam, kde je nemá, vynechá samo. Stejně tiše se vynechá pravidlo, které potřebuje typy, v projektu bez `types: phpstan`.
-
-Projekt preset zapne názvem třídy v klíči `use`, a tím mu dá i jméno, které pak platí všude jinde v konfiguraci. Když preset přináší [plugin |#Plugin] balíčku, stačí jeho jméno. Protože je to profil, dá se zapnout i jen pro část projektu, v [přepisu |configuration#Jiný profil pro část projektu]:
+Preset je soubor NEON ve tvaru konfigurace. Nese rozhodnutí, klíč `extends` s tím, z čeho vychází, a případně `suppressionComments`; nic víc. Takhle vypadá domácí styl firmy Acme:
 
 ```neon
-use: perCs
+# Acme house style
+#
+# PER Coding Style with tabs, lines of up to 100 characters, and the messages of exceptions as sentences.
+
+extends: perCs
+
+file:
+	maxLineLength: 100
+
+indentation:
+	unit: tab
+
+expressions:
+	# a comparison reads in the order it is spoken
+	yoda: forbidden
+
+acme:
+	exceptionMessagePeriod: required
+```
+
+- Preset začíná komentářem: na prvním řádku název, pod ním, co preset je. Proč má rozhodnutí svou hodnotu, říká komentář nad jeho klíčem; tak jsou psané i [standardy a sady |presets-reference] DressCode.
+- `extends` jsou presety, ze kterých ten váš vychází, ať standardy, sady, nebo jiné presety. Leží pod ním v pořadí zápisu a každý jen jednou, takže co preset napíše, přebije to, z čeho vychází, a projekt nad ním přebije preset. Hodnoty se slévají stejně jako v [konfiguraci |configuration#Vrstvy]: mapa podle jmen, slovo a seznam nahrazují celou hodnotu, `keep` u sekce maže všechno pod ní.
+- Rozhodnutí presetu mohou patřit jádru i pluginu, jako `acme.exceptionMessagePeriod` v ukázce; plugin pak musí projekt mít, jinak klíč katalog nezná.
+- Rozhodnutí projektu preset udělat nemůže. Fakty o projektu (`targets`, `typeAnalysis`, `namespaces`, `nameResolution`), rozsah běhu (`paths`, `excludePaths` a další), `fixRisky`, `warnOnly`, `plugins` a `rules` nechává projektu. Preset, který by je nastavil, DressCode odmítne s chybou <code>''Preset `acme/house` sets `fixRisky`, which the project decides, not a preset.''</code>
+- Preset, který se má dát přidat ke kterémukoli standardu, je **sada**: o rozvržení kódu nerozhoduje, nevychází ze standardu a nesahá na mezery, odsazení, zalamování ani pořadí. Že je takový, řekněte v jeho úvodním komentáři.
+
+Na verzi PHP ani na to, co má projekt nainstalované, preset myslet nemusí: rozhodnutí, jehož pravidlo si v `requires` řekne o verzi PHP nebo o balíček, se tam, kde je projekt nemá, tiše neuplatní. Stejně tiše se neuplatní rozhodnutí, jehož pravidlo potřebuje typy, v projektu bez `typeAnalysis: phpstan`.
+
+Projekt preset použije cestou k souboru v `extends`, třeba `extends: tools/house.neon`, nebo jménem, když ho přinese [plugin |#Plugin]. Protože je to vrstva jako každá jiná, dá se použít i jen pro část projektu, v [přepisu |configuration#Jiné hodnoty pro část projektu]:
+
+```neon
+plugins:
+	- Acme\CodeStyle\Plugin
+
+extends: perCs
 
 overrides:
-	- paths: [src]
-	  use: [Acme\CodeStyle\HousePreset]
+	-
+		paths: [src]
+		extends: [acme/house]
 ```
 
 
 Plugin
 ======
 
-Plugin je to, co balíček přinese projektu: třída s rozhraním `DressCode\Plugin`, jejíž metoda `getManifest()` vrátí `PluginManifest`. Ten vyjmenuje pravidla a presety, které mají dostat svá jména, pluginy, na kterých stojí, analýzy, vyloučené cesty, filtr souborů `skipWhen` a adresu stránek pravidel `ruleUrl`. Takhle vypadá plugin balíčku firmy Acme:
+Plugin je to, co balíček přinese projektu: třída s rozhraním `DressCode\Plugin`, jejíž metoda `getManifest()` vrátí `PluginManifest`. Ten vyjmenuje pravidla, presety se jmény a soubory, **sekci**, ve které rozhodují pravidla pluginu, pluginy, na kterých stojí, analýzy, vyloučené cesty, filtr souborů `skipWhen` a adresu stránek pravidel `ruleUrl`. Takhle vypadá plugin balíčku firmy Acme:
 
 ```php
 namespace Acme\CodeStyle;
@@ -79,8 +70,9 @@ final class Plugin implements \DressCode\Plugin
 	public function getManifest(): PluginManifest
 	{
 		return new PluginManifest(
-			rules: [ExceptionMessagePeriodRule::class],
-			presets: [HousePreset::class],
+			rules: [ExceptionMessagePeriodRule::class, NoDebugCallsRule::class],
+			presets: ['acme/house' => __DIR__ . '/house.neon'],
+			section: 'acme',
 			excludePaths: ['generated'],
 			ruleUrl: 'https://acme.dev/rules/{slug}',
 		);
@@ -88,29 +80,36 @@ final class Plugin implements \DressCode\Plugin
 }
 ```
 
-Pravidla a presety z manifestu dostanou svá jména, takže je projekt zapne jménem (`acme/house`), na jeden běh přes `--use` a potlačí v komentáři `dresscode:ignore`. V `ruleUrl` stojí adresa stránek pravidel se zástupcem `{slug}` za jméno pravidla bez vendora; vypíše ji `dresscode explain` a v terminálu na ni odkazuje jméno pravidla u porušení. Vyloučené cesty se přidají k cestám projektu, filtr `skipWhen` přeskočí soubor, i když má projekt vlastní filtr, a když projekt uvede analýzu stejné třídy jako plugin, platí ta projektová. Plugin, na kterém jiný stojí, leží pod ním a každá třída se použije jen jednou.
+**Sekce** je jméno pluginu v konfiguraci. Všechna rozhodnutí jeho pravidel leží pod ní, `acme.exceptionMessagePeriod` a `acme.debugCalls`, takže se nesrazí s jádrem, s jiným pluginem ani s pravidly projektu v sekci `project`. Plugin, který přináší pravidla, sekci mít musí, a nesmí to být vyhrazený klíč ani sekce jádra. Uživatel pak píše rozhodnutí pluginu stejně jako kterékoli jiné, vidí je u nálezů, potlačí je v `dresscode:ignore acme.debugCalls`, přijme jejich rizikové opravy v `fixRisky` a nechá si je vysvětlit `dresscode explain acme`.
 
-Všimněte si, co v manifestu **není**: plugin nezapne žádný preset ani pravidlo a nenastaví styl, protože takový klíč `PluginManifest` vůbec nemá. Který styl se použije, je rozhodnutí projektu, a proto ho vždycky přečtete v jeho vlastním souboru. Uživatel plugin zapne jedním řádkem a presety si vybere sám, klidně pro každou část projektu jiné:
+Presety z manifestu dostanou svá jména ve tvaru `vendor/name`, takže je projekt použije jménem v `extends` (`acme/house`) nebo na jeden běh přes `--use`. V `ruleUrl` stojí adresa stránek pravidel se zástupcem `{slug}` za třídu pravidla bez přípony `Rule` s malým prvním písmenem; vypíše ji `dresscode explain` u každého rozhodnutí pravidla. Vyloučené cesty se přidají k cestám projektu, filtr `skipWhen` přeskočí soubor, i když má projekt vlastní filtr, a když projekt uvede analýzu stejné třídy jako plugin, platí ta projektová. Plugin, na kterém jiný stojí, leží pod ním a každá třída se použije jen jednou.
+
+Všimněte si, co v manifestu **není**: plugin neudělá žádné rozhodnutí a nenastaví styl, protože takový klíč `PluginManifest` vůbec nemá. Pravidla pluginu se zapnou, až jejich rozhodnutí napíše projekt nebo preset, který projekt použije. Který styl se použije, je rozhodnutí projektu, a proto ho vždycky přečtete v jeho vlastním souboru:
 
 ```neon
-use:
+plugins:
 	- Acme\CodeStyle\Plugin
-	- perCs
 
-overrides:
-	- paths: [src]
-	  use: [acme/house]
+extends: acme/house
+
+acme:
+	debugCalls: forbidden
+
+calls:
+	debugFunctions: [dump]
 ```
 
-Přesně takhle pracuje balíček `dresscode/rules-nette`: jeho plugin dává jména třem pravidlům pro API Nette, třeba `nette/namedArgumentsForFlags`, a data pro aktualizaci knihoven nese vedle v souborech `upgrading.neon`.
+Pravidla pluginu smějí číst i klíče jádra. `acme.debugCalls` v ukázce bere seznam ladicích funkcí z parametru jádra `calls.debugFunctions`, takže ho projekt napíše jednou pro všechna pravidla, která se na ladicí funkce ptají; jak to pravidlo udělá, popisuje [Pravidlo do detailu |rule-contract#Hodnoty v pravidle].
 
-Plugin stojí v klíči `use` konfigurace vedle presetů a skupin, ale přepis ani preset ho mít nemohou, protože jména zpřístupňuje celému projektu. Pravidlo do `use` nepatří vůbec; DressCode ho odmítne s chybou <code>''`use` names rule `Acme\CodeStyle\ExceptionMessagePeriodRule`; a rule is named in `rules`.''</code> Filtr `skipWhen`, továrnu pravidla se závislostmi i továrnu analýzy ale zapíše i samotný `dresscode.neon`, a to [entitou |configuration#Objekty a callbacky]. Plugin se hodí tam, kde nastavení nese balíček a projekt ho jen zapne.
+Přesně takhle pracuje balíček `dresscode/rules-nette`: jeho plugin má sekci `nette` s rozhodnutími jako `nette.linkArguments` nebo mapou `nette.flagsAsNamedArguments` a data pro aktualizaci knihoven nese vedle v souborech `upgrading.neon`.
+
+Plugin stojí v klíči `plugins` konfigurace. Přepis ani preset ho mít nemohou, protože pravidla a presety zpřístupňuje celému projektu; preset, který by ho uvedl, DressCode odmítne s chybou <code>''Preset `acme/house` sets `plugins`, which the project decides, not a preset.''</code> Filtr `skipWhen`, továrnu pravidla se závislostmi i továrnu analýzy ale zapíše i samotný `dresscode.neon`, a to [entitou |configuration#Objekty a callbacky]. Plugin se hodí tam, kde nastavení nese balíček a projekt ho jen zapne.
 
 
 Balíček
 =======
 
-Balíček s presetem nebo s pravidly je obyčejný Composer balíček, který vyžaduje `dresscode/dresscode` a sdílí s projektem autoloader. Svůj plugin ohlásí v `composer.json` pod klíčem `extra.dresscode.plugin`, takže ho projekt po instalaci nemusí psát do `use`:
+Balíček s presetem nebo s pravidly je obyčejný Composer balíček, který vyžaduje `dresscode/dresscode` a sdílí s projektem autoloader. Svůj plugin ohlásí v `composer.json` pod klíčem `extra.dresscode.plugin`, takže ho projekt po instalaci nemusí psát do `plugins`:
 
 ```json
 {
@@ -129,4 +128,4 @@ Balíček s presetem nebo s pravidly je obyčejný Composer balíček, který vy
 }
 ```
 
-Vedle `plugin` zná DressCode pod `extra.dresscode` ještě klíč `upgrading` se soubory dat pro [aktualizaci knihoven |upgrading-data]; jiný klíč ohlásí jako varování a přeskočí ho, protože balíček může být novější než DressCode, který ho čte. Uvnitř balíčku jsou třídy pravidel, presety, plugin a fixtury s testy. Jména pravidel i presetů nesou vendor balíčku (`acme/…`), aby se nesrazila s jinými. Uživatel pak balíček nainstaluje a všechno ostatní si vybere jménem.
+Vedle `plugin` zná DressCode pod `extra.dresscode` ještě klíč `upgrading` se soubory dat pro [aktualizaci knihoven |upgrading-data]; jiný klíč ohlásí jako varování a přeskočí ho, protože balíček může být novější než DressCode, který ho čte. Uvnitř balíčku jsou třídy pravidel, soubory presetů, plugin a fixtury s testy. Jména presetů nesou vendor balíčku (`acme/…`) a rozhodnutí sekci pluginu, aby se nesrazila s jinými. Uživatel pak balíček nainstaluje a všechno ostatní si vybere v konfiguraci.
