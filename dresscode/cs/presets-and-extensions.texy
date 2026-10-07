@@ -56,7 +56,7 @@ overrides:
 Plugin
 ======
 
-Plugin je to, co balíček přinese projektu: třída s rozhraním `DressCode\Plugin`, jejíž metoda `getManifest()` vrátí `PluginManifest`. Ten vyjmenuje pravidla, presety se jmény a soubory, **sekci**, ve které rozhodují pravidla pluginu, pluginy, na kterých stojí, analýzy, vyloučené cesty, filtr souborů `skipWhen` a adresu stránek pravidel `ruleUrl`. Takhle vypadá plugin balíčku firmy Acme:
+Plugin je to, co balíček přinese projektu: třída s rozhraním `DressCode\Plugin`, jejíž metoda `getManifest()` vrátí `PluginManifest`. Ten vyjmenuje pravidla, presety se jmény a soubory, **sekci**, ve které rozhodují pravidla pluginu, rozhodnutí sdílená víc jeho pravidly, pluginy, na kterých stojí, analýzy, vyloučené cesty, filtr souborů `skipWhen` a adresu stránek pravidel `ruleUrl`. Takhle vypadá plugin balíčku firmy Acme:
 
 ```php
 namespace Acme\CodeStyle;
@@ -81,9 +81,26 @@ final class Plugin implements \DressCode\Plugin
 
 **Sekce** je jméno pluginu v konfiguraci. Všechna rozhodnutí jeho pravidel leží pod ní, `acme.exceptionMessagePeriod` a `acme.debugCalls`, takže se nesrazí s jádrem, s jiným pluginem ani s pravidly projektu v sekci `project`. Plugin, který přináší pravidla, sekci mít musí, a nesmí to být vyhrazený klíč ani sekce jádra. Uživatel pak píše rozhodnutí pluginu stejně jako kterékoli jiné, vidí je u nálezů, potlačí je v `dresscode:ignore acme.debugCalls`, přijme jejich rizikové opravy v `fixRisky` a nechá si je vysvětlit `dresscode explain acme`.
 
+**Sdílené rozhodnutí.** Rozhodnutí obvykle patří jednomu pravidlu, které ho vrací z `getDecisions()`. Když jednu věc vynucují dvě pravidla s nezávislou logikou, třeba ladicí výstup ve volání a v komentáři, deklaruje rozhodnutí manifest v `decisions` a obě pravidla ho jmenují v `#[RuleInfo(decisions: [...])]`. Uživatel píše jeden klíč, který zapne obě pravidla, a nálezy obou se hlásí pod ním:
+
+```php
+return new PluginManifest(
+	rules: [DebugCallsRule::class, DebugCommentsRule::class],
+	section: 'acme',
+	decisions: [new Decision('acme.debugOutput', Domain::state('forbidden'), 'Debugging output left in the code')],
+);
+```
+
+```php
+#[RuleInfo(Stage::Structure, decisions: ['acme.debugOutput'])]
+final class DebugCommentsRule extends NodeRule
+```
+
+Pravidlo smí jmenovat i rozhodnutí jádra, třeba `multiline.operatorPosition.binary`, a řídit se jím stejně jako pravidla jádra. Testy si sdílená rozhodnutí najdou samy: `RuleTester` přečte plugin z klíče `extra.dresscode.plugin` v `composer.json` balíčku, ve kterém pravidlo leží.
+
 Presety z manifestu dostanou svá jména ve tvaru `vendor/name`, takže je projekt použije jménem v `use` (`acme/house`) nebo na jeden běh přes `--use`. V `ruleUrl` stojí adresa stránek pravidel se zástupcem `{slug}` za třídu pravidla bez přípony `Rule` s malým prvním písmenem; vypíše ji `dresscode explain` u každého rozhodnutí pravidla. Vyloučené cesty se přidají k cestám projektu, filtr `skipWhen` přeskočí soubor, i když má projekt vlastní filtr, a když projekt uvede analýzu stejné třídy jako plugin, platí ta projektová. Plugin, na kterém jiný stojí, leží pod ním a každá třída se použije jen jednou.
 
-Všimněte si, co v manifestu **není**: plugin neudělá žádné rozhodnutí a nenastaví styl, protože takový klíč `PluginManifest` vůbec nemá. Pravidla pluginu se zapnou, až jejich rozhodnutí napíše projekt nebo preset, který projekt použije. Který styl se použije, je rozhodnutí projektu, a proto ho vždycky přečtete v jeho vlastním souboru:
+Všimněte si, co v manifestu **není**: plugin nedá žádnému rozhodnutí hodnotu a nenastaví styl, protože takový klíč `PluginManifest` vůbec nemá; `decisions` rozhodnutí jen deklaruje. Pravidla pluginu se zapnou, až jejich rozhodnutí napíše projekt nebo preset, který projekt použije. Který styl se použije, je rozhodnutí projektu, a proto ho vždycky přečtete v jeho vlastním souboru:
 
 ```neon
 use:
