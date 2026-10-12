@@ -85,8 +85,10 @@ What a line too wide leaves as it is: a construct named is not spread over lines
 	- `binaryOperator`: the operands of a boolean operator or of concatenations
 	- `array`: the items of an array, which `multiline.arrayMaxWidth` spreads all the same
 	- `implements`: the interfaces a class implements or an interface extends
+	- `matchArm`: the conditions of a `match` arm
+	- `message`: a call or `new` whose sole argument is a string, which is never spread for its width
 
-Výchozí `[imports]` · standardy: perCs `[imports]`, psr12 `[imports]`, nette `[imports, '~^\s*throw new ~']`, symfony `[imports]` · pokrývá `Generic.Files.LineLength`, `SlevomatCodingStandard.Files.LineLength` .[decision-facts]
+Výchozí `[imports]` · standardy: perCs `[imports]`, psr12 `[imports]`, nette `[imports, message]`, symfony `[imports]` · pokrývá `Generic.Files.LineLength`, `SlevomatCodingStandard.Files.LineLength` .[decision-facts]
 
 Seznam bere dva druhy položek. Druh konstruktu, třeba `call` nebo `chain`, se podle šířky neláme a řádek, na kterém takový konstrukt začíná, se ani nehlásí; hodí se tam, kde projekt chce lámat jen některé konstrukty. Regulární výraz se porovná s textem řádku a řádek, který mu odpovídá, jen vynechá z hlášení, lámat se na něm dál může; hodí se pro řádky s URL nebo pro tabulky dat. S `array` v seznamu se pole přestane lámat kvůli šířce řádku, ale [`multiline.arrayMaxWidth` |multiline#multiline.arrayMaxWidth], který měří pole samo, platí dál. Seznam nahrazuje výchozí, takže kdo chce dál vynechávat importy, napíše i `imports`:
 
@@ -122,7 +124,7 @@ $roles = [
 $label = 'This account has been suspended for unusual activity';
 ```
 
-Volání na prvním řádku zůstane, jak je, a nehlásí se, protože `call` je v seznamu. Řádek s URL odpovídá regulárnímu výrazu, a tak se nehlásí, ačkoli zlomit nejde. Pole se rozloží, protože `array` v seznamu není, a poslední řádek se hlásí: řetězec zlomit nejde a žádná výjimka se na něj nevztahuje.
+Volání na prvním řádku zůstane, jak je, a nehlásí se, protože `call` je v seznamu. Řádek s URL odpovídá regulárnímu výrazu, a tak se nehlásí, ačkoli zlomit nejde. Pole se rozloží, protože `array` v seznamu není, a poslední řádek se hlásí: řetězec zlomit nejde a žádná výjimka se na něj nevztahuje. Slovo `message` nehlásí řádek s hláškou, voláním nebo `new`, jehož jediným argumentem je řetězec nebo spojení s řetězcem, ať stojí kdekoli: `throw new InvalidStateException('…')` jako příkaz, za `??` i v přiřazení, a stejně tak `$this->warn('…')`. Hláška se podle šířky nikdy neláme, takže `message` jen řekne, že se nemá ani hlásit.
 
 
 file.longLines
@@ -136,7 +138,7 @@ A line wider than `file.lineLength` that nothing could split is reported, unless
 
 Výchozí `keep` · standardy: perCs `warning`, psr12 `warning`, nette `forbidden`, symfony `keep` · pokrývá `Generic.Files.LineLength`, `SlevomatCodingStandard.Files.LineLength` .[decision-facts]
 
-Hlásí se až to, co nic nedokázalo zlomit: volání, signatury, podmínky, pole a další konstrukty rozloží rozhodnutí sekce [multiline |multiline] dřív, pokud tam jejich tvar není `keep`. Celý zůstane dlouhý řetězec, hláška (volání nebo `new` s jediným řetězcovým argumentem, typicky text výjimky) i řádek s komentářem za kódem, protože komentář by po zlomu zůstal na posledním řádku daleko od kódu, o kterém mluví. Co zbude, je na vás: rozdělit výraz, pojmenovat mezivýsledek, zkrátit řetězec. Protože takový nález `fix` neopraví, hodí se hodnota `warning`: řádek se hlásí stejně, ale jen jako [varování |/configuration#risky-fixes], které neshodí build. Tak to mají `perCs` a `psr12`, protože PSR-12 dává délce řádku jen měkký limit; `nette` dlouhé řádky zakazuje, jen z hlášení vynechává řádky začínající `throw new`, protože text výjimky má zůstat celý. Délka je tu kvůli místu na stránce snížená na 60 znaků:
+Hlásí se až to, co nic nedokázalo zlomit: volání, signatury, podmínky, pole a další konstrukty rozloží rozhodnutí sekce [multiline |multiline] dřív, pokud tam jejich tvar není `keep`. Celý zůstane dlouhý řetězec, hláška (volání nebo `new` s jediným řetězcovým argumentem, typicky text výjimky) i řádek s komentářem za kódem, protože komentář by po zlomu zůstal na posledním řádku daleko od kódu, o kterém mluví. Co zbude, je na vás: rozdělit výraz, pojmenovat mezivýsledek, zkrátit řetězec. Protože takový nález `fix` neopraví, hodí se hodnota `warning`: řádek se hlásí stejně, ale jen jako [varování |/configuration#risky-fixes], které neshodí build. Tak to mají `perCs` a `psr12`, protože PSR-12 dává délce řádku jen měkký limit; `nette` dlouhé řádky zakazuje, jen z hlášení vynechává hlášky (`lineLengthExcept: [imports, message]`), protože text výjimky má zůstat celý. Délka je tu kvůli místu na stránce snížená na 60 znaků:
 
 ```neon
 file:

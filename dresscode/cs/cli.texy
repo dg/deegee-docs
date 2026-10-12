@@ -85,7 +85,7 @@ dresscode check --use modernizations        # konfigurace a k ní sada moderniza
 dresscode check src --use psr12            # cizí projekt bez konfigurace
 ```
 
-Bez konfiguračního souboru je `--use` všechno, co běh má. Tak se dá DressCode vyzkoušet na cizím projektu, aniž byste do něj cokoli zapsali, viz [níže |#Zkontrolovat cizí projekt bez konfigurace]. Rozhodnutí `--use` nebere; na to je `--set`, a hláška to řekne: <code>''Option `--use` takes a preset or a plugin, `controlFlow.elseAfterReturn=forbidden` given; a decision is set by `--set path=value`.''</code>
+Bez konfiguračního souboru je `--use` všechno, co běh má. Tak se dá DressCode vyzkoušet na cizím projektu, aniž byste do něj cokoli zapsali, viz [níže |#Zkontrolovat cizí projekt bez konfigurace]. Rozhodnutí `--use` nebere; na to je `--set`, a hláška to řekne: <code>''Option `--use`: expects a preset or a plugin, `controlFlow.elseAfterReturn=forbidden` given; a decision is set by `--set path=value`.''</code>
 
 
 Jedno rozhodnutí na jeden běh: --set a --only
@@ -200,7 +200,7 @@ Names      certain, the namespaces declare no function and no constant
 Comments   silence decisions on their line
       ~\bintentionally\s+[!=]=~                               expressions.comparison.loose
       ~^//\s*@\s+\S~                                          correctness.errorSuppression
-Decisions  271 of 340 set by a layer, the others asking for nothing
+Decisions  278 of 344 set by a layer, the others asking for nothing
 
 file:
 	lineLength: 140                             # dresscode/nette
@@ -240,7 +240,7 @@ Cesta rozhodnutí ve výpisu je odkaz, ne vysvětlení. `dresscode explain <cest
 
 The space between `fn` and its parenthesis.
 
-A requirement, which turns its rule on where it is not `keep`.
+By default `keep`.
 
 Takes: compact "fn($x) => $x" (no space before the parenthesis); spaced "fn ($x) => $x" (a single space); `keep`
 
@@ -268,9 +268,11 @@ Katalog rozhodnutí: catalogue
 `dresscode catalogue` vypíše všechna rozhodnutí, která instalace zná, vestavěná i ta z pluginů a vlastních pravidel projektu, každé s popisem a se jmény pravidel jiných nástrojů, která pokrývá. Hvězdičkou označí ta, která vaše konfigurace dělá:
 
 /--pre .[terminal]
-* file.finalLineEndings         Exactly one line ending after the last line; a file ending in HTML is content  (covers single_blank_line_at_eof, PSR2.Files.EndFileNewline)
-* file.openingTag               The opening tag of PHP  (covers full_opening_tag, Generic.PHP.DisallowShortOpenTag)
-  file.longLines                A line wider than `file.lineLength` that nothing could split is reported, unless `file.lineLengthExcept` leaves a construct on it or the line itself as it is  (covers Generic.Files.LineLength, SlevomatCodingStandard.Files.LineLength)
+* file.finalLineEndings                              Exactly one line ending after the last line; a file ending in HTML is content  (covers single_blank_line_at_eof, PSR2.Files.EndFileNewline)
+* file.openingTag                                    The opening tag of PHP  (covers full_opening_tag, Generic.PHP.DisallowShortOpenTag)
+* file.lineEnding                                    The line ending of every line, which the code written new takes too; under `keep` that follows the file  (covers line_ending, Generic.Files.LineEndings)
+* file.lineLength                                    The widest line, by which what spreads over lines is split  (covers Generic.Files.LineLength, SlevomatCodingStandard.Classes.RequireMultiLineMethodSignature, SlevomatCodingStandard.ControlStructures.RequireMultiLineCondition, SlevomatCodingStandard.Files.LineLength)
+  file.lineLengthExcept                              What a line too wide leaves as it is: a construct named is not spread over lines for its width, and a line it stands on, or one a regular expression matches, is not reported  (covers Generic.Files.LineLength, SlevomatCodingStandard.Files.LineLength)
 ...
 \--
 
@@ -356,7 +358,7 @@ Přepínač `--format` volí celý tvar výstupu, ne jeho detail; formáty se ne
 /--pre .[terminal]
 src/Cart.php
   error      1  `declare(strict_types=1)` must be on the line of the opening tag.  file.strictTypes.position
-  error      2  Expected 1 blank line before the namespace, 2 found.               blankLines.beforeNamespace
+  error      3  Expected 1 blank line before the namespace, 2 found.               blankLines.beforeNamespace
   error      6  Expected 2 blank lines before the class, 1 found.                  blankLines.beforeDeclaration
   risky  14:10  The `in_array()` call must pass `$strict = true`.                  correctness.strictComparisonArgument
                 Risky because a strict search no longer finds a value of another type.
@@ -365,7 +367,7 @@ src/Cart.php
 
 1 risky fix waits, the type is unknown: set `typeAnalysis: phpstan`. See https://dresscode.run/types#enable
 
-FOUND  5 violations, 1 warning, a fix leaves 1 in 1 file
+FOUND  5 violations, 1 warning, a fix leaves none in 1 file
 \--
 
 Rizikové opravy, které čekají na svolení, spočítá nad shrnutím podle toho, co by je rozhodlo, a ke každé skupině dá radu s odkazem do dokumentace: typy (<code>''the type is unknown: set `typeAnalysis: phpstan`''</code>), jména funkcí ve jmenných prostorech (`a name may reach a function of the namespace`), nebo váš úsudek, kde oprava mění chování ze své podstaty (`changes what the code does`).
@@ -376,6 +378,8 @@ Porušení, které v souboru vzniklo až opravou jiného porušení z téhož b�
 src/Box.php
   error  6:11  Expected a line break before the opening brace.                braces.position.class
   error  6:11  Expected a line break after the opening brace.                 braces.position.class
+  error  6:33  Expected a line break before the opening brace.                braces.position.function
+  error  6:33  Expected a line break after the opening brace.                 braces.position.function
   error  6:36  Expected a line break before the method.                       classes.members.perLine
                Then also: Expected 2 blank lines before the method, 0 found.  blankLines.betweenMethods
   error  6:64  Expected a line break before the opening brace.                braces.position.function
@@ -383,7 +387,7 @@ src/Box.php
   error  6:86  Expected a line break before the closing brace.                braces.position.function
   error  6:88  Expected a line break before the closing brace.                braces.position.class
 
-FOUND  8 violations, 1 of them following from others, a fix leaves none in 1 file
+FOUND  10 violations, 1 of them following from others, a fix leaves none in 1 file
 \--
 
 `fix` vypíše každý soubor, který přepsal, s poznámkou `rewritten` a pod ním to, co opravený text pořád porušuje, s řádky a sloupci v opraveném souboru. Které porušení oprava odstranila, se z výsledného textu poznat nedá, a tak shrnutí počítá nalezená a zbylá porušení; co přesně se změnilo, ukáže `--diff`:
@@ -407,6 +411,7 @@ Barvy se vypnou samy, jakmile výstup nejde do terminálu. V terminálu je cesta
 /--pre .[terminal]
 src/Cart.php  rewritten
   risky  13:10  The `in_array()` call must pass `$strict = true`.  correctness.strictComparisonArgument
+                Risky because a strict search no longer finds a value of another type.
 
 src/Order.php  rewritten
   error  16:3  The line is 144 characters long, more than 140.  file.longLines
