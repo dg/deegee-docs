@@ -4,7 +4,7 @@ Soubor
 .[perex]
 Sekce `file` rozhoduje o souboru jako o textu: otevírací a zavírací tag, kódování, konec řádku, poslední řádek, mezery na koncích řádků, nejdelší řádek a deklarace `strict_types`.
 
-Většina klíčů sekce je pro všechny čtyři standardy stejná a projekt je přebírá, jak jsou. Dva si zaslouží pozornost. `lineEnding` říká, jakým koncem řádku končí každý řádek, a jeho hodnota `majority`, kterou mají všechny standardy, sjednotí každý soubor na konec řádku, který v něm převládá; projekt na Windows, kde konce řádků převádí Git, tak s Gitem nebojuje. A `lineLength` je nejdelší řádek, podle kterého se lámou dlouhé signatury, podmínky a skupinové importy v sekci [multiline |multiline]. Ohlásit řádek, který zlomit nejde, je samostatné rozhodnutí `longLines`.
+Většina klíčů sekce je pro všechny čtyři standardy stejná a projekt je přebírá, jak jsou. Dva si zaslouží pozornost. `lineEnding` říká, jakým koncem řádku končí každý řádek, a jeho hodnota `majority`, kterou mají všechny standardy, sjednotí každý soubor na konec řádku, který v něm převládá; projekt na Windows, kde konce řádků převádí Git, tak s Gitem nebojuje. A `lineLength` je nejdelší řádek a zároveň spínač lámání: každý konstrukt sekce [multiline |multiline], jehož tvar tam není `keep`, se na řádku širším než limit rozloží na víc řádků, ať je to volání, signatura, podmínka, řetěz metod, pole nebo seznam rozhraní, a to od vnějšího konstruktu k vnitřnímu. Řádek, který zlomit nejde, ohlásí samostatné rozhodnutí `longLines`, a co se podle šířky lámat ani hlásit nemá, vyjmenuje `lineLengthExcept`.
 
 ```neon
 file:
@@ -67,17 +67,76 @@ The widest line, by which what spreads over lines is split.
 Výchozí `none` · standardy: perCs `120`, psr12 `120`, nette `140`, symfony `none` · pokrývá `Generic.Files.LineLength`, `SlevomatCodingStandard.Classes.RequireMultiLineMethodSignature`, `SlevomatCodingStandard.ControlStructures.RequireMultiLineCondition`, `SlevomatCodingStandard.Files.LineLength` .[decision-facts]
 
 
+file.lineLengthExcept
+=====================
+
+What a line too wide leaves as it is: a construct named is not spread over lines for its width, and a line it stands on, or one a regular expression matches, is not reported.
+
+- seznam z těchto slov:
+	- `imports`: a `use` import, which cannot be split
+	- `call`: the arguments of a call
+	- `new`: the arguments of `new`
+	- `attribute`: the arguments of an attribute
+	- `signature`: the parameters of a function or a method
+	- `condition`: a condition of `if`, `elseif`, `while` and `do-while`
+	- `chain`: a chain of method calls
+	- `ternary`: a ternary
+	- `for`: the header of a `for`
+	- `binaryOperator`: the operands of a boolean operator or of concatenations
+	- `array`: the items of an array, which `multiline.arrayMaxWidth` spreads all the same
+	- `implements`: the interfaces a class implements or an interface extends
+
+Výchozí `[imports]` · standardy: perCs `[imports]`, psr12 `[imports]`, nette `[imports, '~^\s*throw new ~']`, symfony `[imports]` · pokrývá `Generic.Files.LineLength`, `SlevomatCodingStandard.Files.LineLength` .[decision-facts]
+
+Seznam bere dva druhy položek. Druh konstruktu, třeba `call` nebo `chain`, se podle šířky neláme a řádek, na kterém takový konstrukt začíná, se ani nehlásí; hodí se tam, kde projekt chce lámat jen některé konstrukty. Regulární výraz se porovná s textem řádku a řádek, který mu odpovídá, jen vynechá z hlášení, lámat se na něm dál může; hodí se pro řádky s URL nebo pro tabulky dat. S `array` v seznamu se pole přestane lámat kvůli šířce řádku, ale [`multiline.arrayMaxWidth` |multiline#multiline.arrayMaxWidth], který měří pole samo, platí dál. Seznam nahrazuje výchozí, takže kdo chce dál vynechávat importy, napíše i `imports`:
+
+```neon
+file:
+	lineLength: 60
+	longLines: forbidden
+	lineLengthExcept:
+		- imports
+		- call
+		- '~https?://~'
+multiline:
+	call: perLine
+	array: perLine
+```
+
+```php .[before]
+$user = $repository->findByEmailAndStatus($email, 'active', true);
+$docs = 'https://example.com/documentation/very/long/path/to/the/page';
+$roles = ['administrator', 'editor', 'author', 'contributor'];  // Expected a line break before the array item, because the line is 62 characters long, more than 60.
+$label = 'This account has been suspended for unusual activity';  // The line is 64 characters long, more than 60.
+```
+
+```php .[after]
+$user = $repository->findByEmailAndStatus($email, 'active', true);
+$docs = 'https://example.com/documentation/very/long/path/to/the/page';
+$roles = [
+	'administrator',
+	'editor',
+	'author',
+	'contributor'
+];
+$label = 'This account has been suspended for unusual activity';
+```
+
+Volání na prvním řádku zůstane, jak je, a nehlásí se, protože `call` je v seznamu. Řádek s URL odpovídá regulárnímu výrazu, a tak se nehlásí, ačkoli zlomit nejde. Pole se rozloží, protože `array` v seznamu není, a poslední řádek se hlásí: řetězec zlomit nejde a žádná výjimka se na něj nevztahuje.
+
+
 file.longLines
 ==============
 
-A line wider than `file.lineLength`, which nothing could split, is reported.
+A line wider than `file.lineLength` that nothing could split is reported, unless `file.lineLengthExcept` leaves a construct on it or the line itself as it is.
 
 - `forbidden`: never there
+- `warning`: as `forbidden`, its violations only warning
 - `keep`: nic se nevynucuje, kód zůstane, jak je
 
-Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep` · pokrývá `Generic.Files.LineLength`, `SlevomatCodingStandard.Files.LineLength` .[decision-facts]
+Výchozí `keep` · standardy: perCs `warning`, psr12 `warning`, nette `forbidden`, symfony `keep` · pokrývá `Generic.Files.LineLength`, `SlevomatCodingStandard.Files.LineLength` .[decision-facts]
 
-Hlásí se až to, co nic nedokázalo zlomit: dlouhé signatury, podmínky a skupinové importy zlomí rozhodnutí sekce [multiline |multiline] a [imports |imports] dřív. Co zbude, je na vás: rozdělit výraz, pojmenovat mezivýsledek, zkrátit řetězec. Protože takový nález `fix` neopraví, bývá `file.longLines` první, co projekt zapíše do klíče [`warnOnly` |/configuration#risky-fixes]. Délka je tu kvůli místu na stránce snížená na 60 znaků:
+Hlásí se až to, co nic nedokázalo zlomit: volání, signatury, podmínky, pole a další konstrukty rozloží rozhodnutí sekce [multiline |multiline] dřív, pokud tam jejich tvar není `keep`. Celý zůstane dlouhý řetězec, hláška (volání nebo `new` s jediným řetězcovým argumentem, typicky text výjimky) i řádek s komentářem za kódem, protože komentář by po zlomu zůstal na posledním řádku daleko od kódu, o kterém mluví. Co zbude, je na vás: rozdělit výraz, pojmenovat mezivýsledek, zkrátit řetězec. Protože takový nález `fix` neopraví, hodí se hodnota `warning`: řádek se hlásí stejně, ale jen jako [varování |/configuration#risky-fixes], které neshodí build. Tak to mají `perCs` a `psr12`, protože PSR-12 dává délce řádku jen měkký limit; `nette` dlouhé řádky zakazuje, jen z hlášení vynechává řádky začínající `throw new`, protože text výjimky má zůstat celý. Délka je tu kvůli místu na stránce snížená na 60 znaků:
 
 ```neon
 file:
@@ -92,33 +151,7 @@ $message = sprintf('%s has %d unread messages', $user->name, $count);  // The li
 $greeting = 'Hello';
 ```
 
-Import je širší než 60 znaků, ale nehlásí se: import jediného jména rozdělit na víc řádků nejde a `longLinesExcept` ho ve výchozím stavu vynechává.
-
-
-file.longLinesExcept
-====================
-
-The lines never reported: `imports` for a `use` import, which cannot be broken, and regular expressions of others.
-
-- seznam jmen
-
-Výchozí `[imports]` · standardy: perCs `[imports]`, psr12 `[imports]`, nette `[imports]`, symfony `[imports]` · pokrývá `Generic.Files.LineLength`, `SlevomatCodingStandard.Files.LineLength` .[decision-facts]
-
-Regulární výraz se hodí pro řádky s URL nebo pro tabulky dat, které by zalomením ztratily čitelnost. Seznam nahrazuje výchozí, takže kdo chce dál vynechávat importy, napíše i `imports`:
-
-```neon
-file:
-	longLines: forbidden
-	lineLength: 60
-	longLinesExcept:
-		- imports
-		- '~https?://~'
-```
-
-```php .[before]
-$docs = 'https://example.com/documentation/very/long/path/to/the/page';
-$data = ['alpha' => 1, 'beta' => 2, 'gamma' => 3, 'delta' => 4];  // The line is 64 characters long, more than 60.
-```
+Import je širší než 60 znaků, ale nehlásí se: import jediného jména rozdělit na víc řádků nejde a `file.lineLengthExcept` ho ve výchozím stavu vynechává.
 
 
 file.bom
@@ -127,6 +160,7 @@ file.bom
 The file starts without a byte order mark.
 
 - `forbidden`: never there
+- `warning`: as `forbidden`, its violations only warning
 - `keep`: nic se nevynucuje, kód zůstane, jak je
 
 Výchozí `keep` · standardy: perCs `forbidden`, psr12 `forbidden`, nette `forbidden`, symfony `forbidden` · pokrývá `encoding`, `Generic.Files.ByteOrderMark` .[decision-facts]
@@ -138,6 +172,7 @@ file.closingTagAtEnd
 A file of PHP only does not end with `?>`; a `?>` before HTML is content.
 
 - `forbidden`: never there
+- `warning`: as `forbidden`, its violations only warning
 - `keep`: nic se nevynucuje, kód zůstane, jak je
 
 Výchozí `keep` · standardy: perCs `forbidden`, psr12 `forbidden`, nette `forbidden`, symfony `forbidden` · pokrývá `no_closing_tag`, `PSR2.Files.ClosingTag` .[decision-facts]
@@ -149,6 +184,7 @@ file.trailingWhitespace
 No space or tab at the end of a line.
 
 - `forbidden`: never there
+- `warning`: as `forbidden`, its violations only warning
 - `keep`: nic se nevynucuje, kód zůstane, jak je
 
 Výchozí `keep` · standardy: perCs `forbidden`, psr12 `forbidden`, nette `forbidden`, symfony `forbidden` · pokrývá `no_trailing_whitespace`, `no_trailing_whitespace_in_comment`, `no_whitespace_in_blank_line`, `Squiz.WhiteSpace.SuperfluousWhitespace` .[decision-facts]
@@ -160,6 +196,7 @@ file.strictTypes.declaration
 Every file of PHP code declares `strict_types=1` as its first statement, a file starting with markup excepted.
 
 - `required`: always there
+- `warning`: as `required`, its violations only warning
 - `keep`: nic se nevynucuje, kód zůstane, jak je
 
 Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep` · pokrývá `declare_strict_types`, `Generic.PHP.RequireStrictTypes`, `SlevomatCodingStandard.TypeHints.DeclareStrictTypes` .[decision-facts]

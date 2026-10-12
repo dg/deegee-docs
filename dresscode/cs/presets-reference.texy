@@ -14,6 +14,8 @@ Standardy
 
 Čtyři standardy rozhodují o všem, co vidíte: o odsazení, závorkách, mezerách, prázdných řádcích i zalamování. `psr12` a `perCs` jsou psané podle textu specifikací, oddíl po oddílu, a nic vlastního nepřidávají. `nette` a `symfony` stojí na PER Coding Style a přidávají, co chtějí jejich projekty.
 
+Řádek delší než `file.lineLength` standard rozloží, kde to konstrukce na něm dovolí. Co rozložit nejde, třeba dlouhý řetězec nebo komentář, `psr12` a `perCs` jen hlásí varováním, protože PSR-12 bere limit 120 znaků jako měkký, `nette` chybou a `symfony` délku řádku nehlídá vůbec.
+
 
 `psr12`
 =======
@@ -32,7 +34,8 @@ file:
 	lineEnding: majority                      # as most lines of the file, LF on a tie
 	finalLineEndings: 1
 	trailingWhitespace: forbidden             # the text of a string stays
-	lineLength: 120                           # a signature or a condition wider is spread
+	lineLength: 120                           # what is wider is spread
+	longLines: warning                        # what nothing could spread only warns, the limit being soft
 	statementsPerLine: 1                      # `foo(); bar();` takes two lines
 
 indentation:
@@ -86,12 +89,13 @@ spacing:
 	switchCase: 'case 1:'
 
 multiline:
-	signature:
-		split: overMaxLength                  # a parameter per line
-		splitWithPromoted: asSignature        # spread only when too long
-		shape: perLine                        # a parameter per line once spread
+	signature: perLine                        # a parameter per line once spread or too wide
+	signaturePromoted: asSignature            # spread only when too wide
 	call: perLine                             # an argument per line once spread
 	condition: perLine                        # `if (` above `$a`, `) {` below the last part
+	for: perLine                              # a section of `for` per line
+	binaryOperator: perLine                   # `&& $b`, `. $b` opening a line each where the line is too wide
+	implements: perLine                       # an interface per line below `implements`
 	operatorPosition:
 		binary: lineStart                     # `+ $b` opens the line, not ends the one before
 		condition: lineStart                  # `&& $b` opens the line
@@ -245,6 +249,8 @@ file:
 		declaration: required         # risky, `'1'` passed to `int` then throws
 		position: openingTagLine
 	lineLength: 140                   # a tab counts as 4 columns
+	longLines: forbidden
+	lineLengthExcept: [imports, '~^\s*throw new ~']   # the message of an exception stays whole
 
 indentation:
 	unit: tab
@@ -295,8 +301,8 @@ spacing:
 multiline:
 	array: asWritten                          # items may share a line
 	arrayMaxWidth: 130
-	signature:
-		splitWithPromoted: always             # however short
+	callSoleArgument: hugged                  # `foo(bar(` above the arguments of `bar()`, `))` below them
+	signaturePromoted: always                 # however short
 	chainFirstLinks: sameLine                 # `$form->addText()` above `->setRequired()`
 	condition: [perLine, compact]             # `if (` above `$a`, or `if ($a` above `&& $b`
 	expressionBelowReturn: forbidden          # `return [`, not `return` above `[`
@@ -445,6 +451,7 @@ use: perCs
 
 file:
 	lineLength: none
+	longLines: keep
 
 indentation:
 	binaryOperator: keep
@@ -489,15 +496,16 @@ spacing:
 		afterCode: '$a; // text'              # at least one space
 
 multiline:
-	signature:
-		split: keep
-		shape: keep
+	signature: keep
 	# no fixer of the set breaks a chain, a condition, a ternary or an array
 	call: keep
 	chain: keep
 	condition: keep
+	for: keep
+	binaryOperator: keep
 	ternary: keep
 	array: keep
+	implements: keep
 	operatorPosition:
 		# operator_linebreak moves only a boolean operator, which no option here tells from the others
 		binary: keep

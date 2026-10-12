@@ -2,14 +2,13 @@ Víceřádkové konstrukce
 **********************
 
 .[perex]
-Sekce `multiline` rozhoduje o konstrukcích rozepsaných na víc řádků: signatuře, volání, poli, podmínce, řetězu volání a ternárním operátoru, o tom, kam se při zalomení řádku dává operátor, a o čárce za poslední položkou víceřádkového seznamu.
+Sekce `multiline` rozhoduje o konstrukcích rozepsaných na víc řádků: signatuře, volání, poli, podmínce, řetězu volání, ternárním operátoru a dalších, o tom, jak se rozloží příliš široký řádek, kam se při zalomení řádku dává operátor, a o čárce za poslední položkou víceřádkového seznamu.
 
-Konstrukce je rozepsaná, když se v ní láme řádek, ať ji tak napsal autor, nebo ji zlomila délka řádku. Jak rozepsaná konstrukce stojí, říká klíč pojmenovaný po ní (`array`, `call`, `condition`, `chain`, `ternary`), u signatury `signature.shape`. Hodnota `perLine` pak dá každé položce vlastní řádek a závorkám taky; PER Coding Style to chce u signatury, volání, podmínky, řetězu i pole. Kdy se konstrukce napsaná na jednom řádku rozepíše, říká u signatury `signature.split`, u pole `arrayMaxWidth` a u skupinového importu `groupUse`. Signaturu delší než [`file.lineLength` |file#file.lineLength] zlomí `signature.split`, podmínku na příliš širokém řádku `condition`. A každé místo, kde stojí seznam, má vlastní klíč pro čárku na konci: pole, argumenty, parametry, větve `match`, `use` u closure, skupinový import a `list()`.
+Konstrukce je rozepsaná, když se v ní láme řádek, ať ji tak napsal autor, nebo ji zlomila šířka řádku. Jak rozepsaná konstrukce stojí, říká klíč pojmenovaný po ní: `signature`, `call`, `array`, `condition`, `chain`, `ternary`, `for`, `binaryOperator` a `implements`. Hodnota `perLine` pak dá každé položce vlastní řádek a závorkám taky; PER Coding Style to chce u signatury, volání, podmínky, řetězu i pole. A každé místo, kde stojí seznam, má vlastní klíč pro čárku na konci: pole, argumenty, parametry, větve `match`, `use` u closure, skupinový import a `list()`.
 
 ```neon
 multiline:
-	signature:
-		shape: perLine
+	signature: perLine
 	call: perLine
 	array: perLine
 	condition: perLine
@@ -74,7 +73,40 @@ class Cart
 }
 ```
 
-Ukázka nastavuje jen sekci `multiline`, a proto `{` konstruktoru zůstala, kde byla; kam patří, rozhoduje [`braces.position.multilineSignature` |braces#braces.position.multilineSignature]. Řádky, které rozepsáním vzniknou, odsadí sekce [indentation |indentation].
+Ukázka nastavuje jen sekci `multiline`, a proto `{` konstruktoru zůstala, kde byla; kam patří, rozhoduje [`braces.position.multilineSignature` |braces#braces.position.multilineSignature]. Jak se odsadí řádky, které rozepsáním vzniknou, říká sekce [indentation |indentation].
+
+
+Příliš široký řádek
+===================
+
+Tvar konstrukce je zároveň spínač: konstrukce, jejíž klíč není `keep`, se rozloží do svého tvaru i tehdy, když ji autor napsal na jeden řádek, ale řádek je širší než [`file.lineLength` |file#file.lineLength]. Měří se kód řádku, komentář za ním se nepočítá. Láme se zvenku dovnitř: napřed vnější konstrukce, a vnitřní se pak měří na řádku, kde zůstala. Délka je tu kvůli místu na stránce snížená na 60 znaků:
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	call: perLine
+```
+
+```php .[before]
+$order = $this->orders->create($customer, new Address($street, $city), $items);  // Expected a line break before the argument, because the line is 79 characters long, more than 60.
+throw new InvalidArgumentException("Customer $customer->name has no address.");
+$this->mailer->send($order->customer->email, $order->invoice); // a copy goes to accounting
+```
+
+```php .[after]
+$order = $this->orders->create(
+	$customer,
+	new Address($street, $city),
+	$items
+);
+throw new InvalidArgumentException("Customer $customer->name has no address.");
+$this->mailer->send($order->customer->email, $order->invoice); // a copy goes to accounting
+```
+
+Volání `create()` je vnější, a tak se rozložilo první; `new Address(...)` se pak na svůj řádek vešlo a zůstalo celé. Celá zůstala i hláška výjimky: volání nebo `new`, jehož jediným argumentem je řetězec, i spojený s dalším výrazem, se podle šířky neláme. A celý zůstal řádek s komentářem za kódem, protože komentář by po rozložení zůstal na posledním řádku, daleko od kódu, o kterém mluví, a `dresscode:ignore` by přestal umlčovat řádek, ke kterému patří. Stejně zůstává řádek, který otevírá text (konec heredocu, HTML), klíč v hranatých závorkách přístupu do pole a konstrukce, za kterou je zbytek řádku sám širší než limit, protože ten by zůstal na jejím posledním řádku a pořád by se nevešel. Když na řádku stojí dvě konstrukce, které žádná společná nedrží, třeba klíč a hodnota přiřazení do prvku pole nebo podmínka a výsledek větve `match`, láme se napřed ta vpravo.
+
+Co zalomit nejde, třeba dlouhý řetězec, nahlásí [`file.longLines` |file#file.longLines]. Které konstrukce nechat i na příliš širokém řádku být, říká [`file.lineLengthExcept` |file#file.lineLengthExcept]: druh v seznamu (`call`, `array`, `chain`…) se podle šířky neláme a jeho řádek se nehlásí. Konstrukci napsanou na jednom řádku rozloží i bez ohledu na šířku řádku `arrayMaxWidth`, když je pole širší než daný počet znaků, a `signaturePromoted`, když signatura deklaruje vlastnost v konstruktoru.
 
 
 Čárka na konci seznamu
@@ -127,6 +159,27 @@ The items of an array spread over lines, by its author or for its width, the ope
 - `keep`: nic se nevynucuje, kód zůstane, jak je
 
 Výchozí `keep` · standardy: perCs `perLine`, psr12 `keep`, nette `asWritten`, symfony `keep` .[decision-facts]
+
+Pole aspoň o dvou položkách se rozloží, když se nevejde jeho řádek; šířku pole samotného od závorky k závorce k tomu přidává `multiline.arrayMaxWidth`. `file.lineLengthExcept: [array]` vypne jen to první.
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	array: perLine
+```
+
+```php .[before]
+$row = ['id' => $order->id, 'total' => $order->total, 'paid' => $order->paidAt];  // Expected a line break before the array item, because the line is 80 characters long, more than 60.
+```
+
+```php .[after]
+$row = [
+	'id' => $order->id,
+	'total' => $order->total,
+	'paid' => $order->paidAt
+];
+```
 
 
 multiline.arrayMaxWidth
@@ -249,6 +302,41 @@ The trailing comma of a `list()`, whose only effect is that any value but `keep`
 Výchozí `keep` · standardy: perCs `optional`, psr12 `keep`, nette `optional`, symfony `optional` · pokrývá `no_trailing_comma_in_singleline` .[decision-facts]
 
 
+multiline.implements
+====================
+
+The interfaces a class or an enum implements, or an interface extends, spread over lines by their author or for the width of their line.
+
+- `perLine`: every interface on a line of its own, the first on the line after the keyword
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `perLine`, psr12 `perLine`, nette `perLine`, symfony `keep` .[decision-facts]
+
+Podle šířky řádku se rozloží seznam aspoň dvou rozhraní, za `implements` i za `extends` rozhraní:
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	implements: perLine
+```
+
+```php .[before]
+class OrderCollection implements Countable, IteratorAggregate, JsonSerializable  // Expected a line break before the name, because the line is 79 characters long, more than 60.
+{
+}
+```
+
+```php .[after]
+class OrderCollection implements
+	Countable,
+	IteratorAggregate,
+	JsonSerializable
+{
+}
+```
+
+
 multiline.condition
 ===================
 
@@ -260,6 +348,37 @@ The shape of a condition of `if`, `elseif`, `while` and `do-while` joined by boo
 - `keep`: nic se nevynucuje, kód zůstane, jak je
 
 Výchozí `keep` · standardy: perCs `perLine`, psr12 `perLine`, nette `[perLine, compact]`, symfony `keep` · pokrývá `PSR12.ControlStructures.ControlStructureSpacing`, `SlevomatCodingStandard.ControlStructures.RequireMultiLineCondition` .[decision-facts]
+
+Podmínka napsaná na jednom řádku se rozloží, když je kód jejího řádku širší než `file.lineLength`. Komentář za kódem se do šířky nepočítá, a proto druhá podmínka zůstane, jak je:
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	condition: perLine
+```
+
+```php .[before]
+if ($order->isPaid() && $order->isShipped() && !$order->isReturned()) {  // Expected a line break before the expression, because the line is 71 characters long, more than 60.
+	archive($order);
+}
+if ($order->isPaid() && $order->isShipped()) { // kept for a year
+	archive($order);
+}
+```
+
+```php .[after]
+if (
+	$order->isPaid()
+	&& $order->isShipped()
+	&& !$order->isReturned()
+) {
+	archive($order);
+}
+if ($order->isPaid() && $order->isShipped()) { // kept for a year
+	archive($order);
+}
+```
 
 Nette Coding Standard připouští oba tvary, podmínku začínající na dalším řádku i tu, která začíná hned za závorkou:
 
@@ -295,6 +414,38 @@ Where a boolean operator chaining a condition of `if`, `elseif`, `while` and `do
 Výchozí `keep` · standardy: perCs `lineStart`, psr12 `lineStart`, nette `lineStart`, symfony `keep` · pokrývá `PSR12.ControlStructures.BooleanOperatorPlacement` .[decision-facts]
 
 
+multiline.for
+=============
+
+The sections of the header of a `for` spread over lines by its author or for the width of its line, the closing parenthesis then standing on a line of its own.
+
+- `perLine`: every section on a line of its own
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `perLine`, psr12 `perLine`, nette `perLine`, symfony `keep` .[decision-facts]
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	for: perLine
+```
+
+```php .[before]
+for ($i = 0, $count = count($this->items); $i < $count; $i++) {  // Expected a line break after the opening parenthesis, because the line is 63 characters long, more than 60.
+}
+```
+
+```php .[after]
+for (
+	$i = 0, $count = count($this->items);
+	$i < $count;
+	$i++
+) {
+}
+```
+
+
 multiline.operatorPosition.binary
 =================================
 
@@ -317,15 +468,69 @@ Where the concatenation operator stands at a line break.
 Výchozí `keep` · standardy: perCs `lineStart`, psr12 `keep`, nette `lineStart`, symfony `keep` .[decision-facts]
 
 
+multiline.binaryOperator
+========================
+
+The operands of `&&`, `||`, `and`, `or`, `xor` and `.` on a line wider than the line length, outside a condition.
+
+A family its author spread over lines stays as it is.
+
+- `perLine`: every operand on a line of its own, the operator opening it
+- `keep`: nic se nevynucuje, kód zůstane, jak je
+
+Výchozí `keep` · standardy: perCs `perLine`, psr12 `perLine`, nette `perLine`, symfony `keep` .[decision-facts]
+
+Rozkládá se celá rodina operátorů naráz. Závorky nebo jiný z těch operátorů začínají rodinu vnitřní, která se rozloží, až když se nevejde ani na svůj řádek. Aritmetika, porovnání a `??` se podle šířky nelámou. Podmínku `if` a `while` rozkládá `multiline.condition`.
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	binaryOperator: perLine
+```
+
+```php .[before]
+$visible = $user->isAdmin() || ($order->isPaid() && $order->ownerId === $user->id);  // Expected a line break before the `||` operator, because the line is 83 characters long, more than 60.
+$total = $order->subtotal + $order->shipping + $order->tax - $order->discountAmount;
+```
+
+```php .[after]
+$visible = $user->isAdmin()
+	|| ($order->isPaid() && $order->ownerId === $user->id);
+$total = $order->subtotal + $order->shipping + $order->tax - $order->discountAmount;
+```
+
+
 multiline.chain
 ===============
 
-The links of a chain of method calls and property accesses spread over lines.
+The links of a chain of method calls and property accesses spread over lines by its author, or for the width of its line where it has two method calls or more.
 
 - `perLine`: every link on a line of its own
 - `keep`: nic se nevynucuje, kód zůstane, jak je
 
 Výchozí `keep` · standardy: perCs `perLine`, psr12 `keep`, nette `perLine`, symfony `keep` .[decision-facts]
+
+Podle šířky se rozloží jen řetěz aspoň dvou volání metod; `$this->customer->getAddress()->city` zůstane celý. Kde stojí články před prvním zalomeným, říká `multiline.chainFirstLinks`.
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	chain: perLine
+```
+
+```php .[before]
+$orders = $repository->findPaid()->sortBy('date')->limit(10)->toArray();  // Expected a line break before the object operator, because the line is 72 characters long, more than 60.
+```
+
+```php .[after]
+$orders = $repository
+	->findPaid()
+	->sortBy('date')
+	->limit(10)
+	->toArray();
+```
 
 
 multiline.chainFirstLinks
@@ -342,12 +547,29 @@ Výchozí `ownLine` · standardy: perCs `ownLine`, psr12 `ownLine`, nette `sameL
 multiline.ternary
 =================
 
-A ternary spread over lines.
+A ternary spread over lines by its author, or for the width of its line.
 
 - `perLine`: `?` and `:` each opening a line of its own
 - `keep`: nic se nevynucuje, kód zůstane, jak je
 
 Výchozí `keep` · standardy: perCs `perLine`, psr12 `keep`, nette `perLine`, symfony `keep` .[decision-facts]
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	ternary: perLine
+```
+
+```php .[before]
+$label = $order->isPaid() ? $this->formatDate($order->paidAt) : 'unpaid';  // Expected a line break before the `?` operator, because the line is 73 characters long, more than 60.
+```
+
+```php .[after]
+$label = $order->isPaid()
+	? $this->formatDate($order->paidAt)
+	: 'unpaid';
+```
 
 
 multiline.operatorPosition.ternary
@@ -364,7 +586,9 @@ Výchozí `keep` · standardy: perCs `lineStart`, psr12 `keep`, nette `lineStart
 multiline.call
 ==============
 
-The arguments of a call spread over lines, which is one where an argument or the closing parenthesis begins a line, the closing parenthesis then standing on a line of its own and each comma on the line of its argument.
+The arguments of a call, of `new` or of an attribute spread over lines by its author, which is one where an argument or the closing parenthesis begins a line, or for the width of its line, the closing parenthesis then standing on a line of its own and each comma on the line of its argument.
+
+A sole argument that is a string, a message, is not spread for its width.
 
 - `perLine`: every argument on a line of its own
 - `frame`: only the parentheses on lines of their own
@@ -372,38 +596,140 @@ The arguments of a call spread over lines, which is one where an argument or the
 
 Výchozí `keep` · standardy: perCs `perLine`, psr12 `perLine`, nette `perLine`, symfony `keep` · pokrývá `method_argument_space`, `PSR2.Methods.FunctionCallSignature` .[decision-facts]
 
+Hodnota `frame` dá na příliš širokém řádku na vlastní řádky jen závorky a argumenty nechá pohromadě:
 
-multiline.signature.split
-=========================
+```neon
+file:
+	lineLength: 60
+multiline:
+	call: frame
+```
 
-When a signature written on one line is spread over lines.
+```php .[before]
+$invoice = $this->invoices->create($order, $customer, $dueDate);  // Expected a line break before the argument, because the line is 64 characters long, more than 60.
+```
 
-- `overMaxLength`: spread where its line is longer than the maximum
-- `keep`: nic se nevynucuje, kód zůstane, jak je
-
-Výchozí `keep` · standardy: perCs `overMaxLength`, psr12 `overMaxLength`, nette `overMaxLength`, symfony `keep` · pokrývá `SlevomatCodingStandard.Classes.RequireMultiLineMethodSignature` .[decision-facts]
-
-
-multiline.signature.splitWithPromoted
-=====================================
-
-When a signature declaring a promoted property is spread over lines.
-
-- `always`: spread over lines whatever its length
-- `asSignature`: spread only when its line is too long, as any signature
-
-Výchozí `always` · standardy: perCs `asSignature`, psr12 `asSignature`, nette `always`, symfony `asSignature` · pokrývá `multiline_promoted_properties`, `SlevomatCodingStandard.Classes.RequireMultiLineMethodSignature` .[decision-facts]
+```php .[after]
+$invoice = $this->invoices->create(
+	$order, $customer, $dueDate
+);
+```
 
 
-multiline.signature.shape
-=========================
+multiline.callSoleArgument
+==========================
 
-The parameters of a signature spread over lines, or with a parameter whose hooks span lines, each comma on the line of its parameter and the closing parenthesis on the next.
+Where a call too wide whose sole argument is a call, `new` or an array keeps it.
+
+- `hugged`: a sole argument that is a call, `new` or an array spreads in the parentheses, `foo(bar(` and `))` together
+- `ownLine`: a sole argument takes a line of its own as any argument
+
+Výchozí `ownLine` · standardy: perCs `ownLine`, psr12 `ownLine`, nette `hugged`, symfony `ownLine` .[decision-facts]
+
+Objímá se jen jediný argument; volání s víc argumenty se rozloží jako každé jiné:
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	call: perLine
+	callSoleArgument: hugged
+```
+
+```php .[before]
+throw new InvalidOrder(sprintf('Order %d cannot be shipped.', $id));  // Expected a line break before the argument, because the line is 68 characters long, more than 60.
+$this->logger->info(sprintf('Order %d shipped.', $id), ['id' => $id]);  // Expected a line break before the argument, because the line is 70 characters long, more than 60.
+```
+
+```php .[after]
+throw new InvalidOrder(sprintf(
+	'Order %d cannot be shipped.',
+	$id
+));
+$this->logger->info(
+	sprintf('Order %d shipped.', $id),
+	['id' => $id]
+);
+```
+
+
+multiline.signature
+===================
+
+The parameters of a signature spread over lines by its author or for its width, or with a parameter whose hooks span lines, each comma on the line of its parameter and the closing parenthesis on the next.
 
 - `perLine`: every parameter on a line of its own
 - `keep`: nic se nevynucuje, kód zůstane, jak je
 
 Výchozí `keep` · standardy: perCs `perLine`, psr12 `perLine`, nette `perLine`, symfony `keep` · pokrývá `SlevomatCodingStandard.Classes.RequireMultiLineMethodSignature`, `Squiz.Functions.MultiLineFunctionDeclaration` .[decision-facts]
+
+```neon
+file:
+	lineLength: 60
+multiline:
+	signature: perLine
+```
+
+```php .[before]
+class Shipping
+{
+	public function ship(Order $order, Address $address, bool $express): void  // Expected a line break before the parameter, because the line is 77 characters long, more than 60.
+	{
+	}
+}
+```
+
+```php .[after]
+class Shipping
+{
+	public function ship(
+		Order $order,
+		Address $address,
+		bool $express
+	): void
+	{
+	}
+}
+```
+
+
+multiline.signaturePromoted
+===========================
+
+When a signature declaring a promoted property is spread over lines.
+
+- `always`: spread over lines whatever its width
+- `asSignature`: spread only when its line is too wide, as any signature
+
+Výchozí `always` · standardy: perCs `asSignature`, psr12 `asSignature`, nette `always`, symfony `asSignature` · pokrývá `multiline_promoted_properties`, `SlevomatCodingStandard.Classes.RequireMultiLineMethodSignature` .[decision-facts]
+
+Rozkládá se do tvaru, který dává `multiline.signature`. Hodnota `always` rozloží i krátký konstruktor, který deklaruje vlastnost (promoted property):
+
+```neon
+multiline:
+	signature: perLine
+	signaturePromoted: always
+```
+
+```php .[before]
+class Shipping
+{
+	public function __construct(private Carrier $carrier)  // Expected a line break before the parameter, because the signature declares a promoted property.
+	{
+	}
+}
+```
+
+```php .[after]
+class Shipping
+{
+	public function __construct(
+		private Carrier $carrier
+	)
+	{
+	}
+}
+```
 
 
 multiline.groupUse
@@ -445,6 +771,7 @@ multiline.expressionBelowReturn
 An expression spanning several lines begins on the line of `return`, `throw`, `yield`, `print` or `echo`.
 
 - `forbidden`: never there
+- `warning`: as `forbidden`, its violations only warning
 - `keep`: nic se nevynucuje, kód zůstane, jak je
 
 Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` .[decision-facts]
@@ -456,6 +783,7 @@ multiline.semicolonOnOwnLine
 A semicolon standing on a line of its own below a statement spanning several lines, instead of closing its last line.
 
 - `forbidden`: never there
+- `warning`: as `forbidden`, its violations only warning
 - `keep`: nic se nevynucuje, kód zůstane, jak je
 
 Výchozí `keep` · standardy: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep` · pokrývá `Squiz.WhiteSpace.SemicolonSpacing` .[decision-facts]

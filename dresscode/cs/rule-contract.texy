@@ -80,7 +80,7 @@ new Decision('acme.debugMethods', new Names, 'The methods whose calls count as d
 
 | obor | co bere | příklad v konfiguraci |
 |---|---|---|
-| `Domain::state('forbidden')`, `state('required')` | stav, vždy, nebo nikdy | `acme.debugCalls: forbidden` |
+| `Domain::state('forbidden')`, `state('required')` | stav, vždy, nebo nikdy; stav o jednom slově bere i `warning`, totéž slovo s porušeními, která jen varují | `acme.debugCalls: forbidden` |
 | `Domain::placement()` | kde token stojí, `sameLine` a `nextLine` | `braces.position.class: nextLine` |
 | `Domain::adopted()` | konstrukce novějšího PHP nebo knihovny | `upgrading.functions.arrayFirstLast: adopted` |
 | `new Words([...])` | slovo z vlastního výčtu, každé s větou o tom, co znamená | `expressions.comparison.yoda: forbidden` |
@@ -211,7 +211,7 @@ $context->report($strict, 'The `in_array()` call must pass `$strict = true`.', f
 
 Na zapomenutou deklaraci upozorní `RuleTester`: hlášení bez `fixable: false`, které zůstane i po posledním průchodu, jenž už nic nezměnil, je porušený kontrakt a fixtura s ním selže. Stejně selže fixtura s `// risky`, po jejímž běhu zůstane rizikové porušení, protože oprava byla povolená a přesto se neudělala.
 
-Hlášení se váže na uzel nebo na token. Problém, který leží v bílých znacích nebo v komentáři, ohlaste s příslušnou položkou trivia, jak se říká bílým znakům a komentářům kolem tokenu (`report($token, $message, trivia: $trivia)`), aby porušení dostalo řádek té trivia a `dresscode:ignore` na tom řádku ho našel; jinak spadne na řádek tokenu. Závažnost pravidlo neurčuje: každé porušení je chyba, dokud ho projekt klíčem `warnOnly` v konfiguraci nezměkčí na varování.
+Hlášení se váže na uzel nebo na token. Problém, který leží v bílých znacích nebo v komentáři, ohlaste s příslušnou položkou trivia, jak se říká bílým znakům a komentářům kolem tokenu (`report($token, $message, trivia: $trivia)`), aby porušení dostalo řádek té trivia a `dresscode:ignore` na tom řádku ho našel; jinak spadne na řádek tokenu. Závažnost pravidlo neurčuje: každé porušení je chyba, dokud ho konfigurace nezměkčí na varování, hodnotou `warning` u rozhodnutí o jednom slově nebo klíčem `warnOnly`.
 
 Další dva parametry `report()` říkají, že porušení mohlo vzniknout opravou jiného porušení z téhož běhu. Pravidlo, které umisťuje řádek podle jiného řádku (tak to dělá odsazení), předá `follows:` s tokenem, který ten druhý řádek otevírá; pravidlo, které hlásí tvar řádku, na kterém token stojí, předá `byLine: true`. Když ten řádek oprava v tomtéž běhu otevřela nebo zavřela (u `follows:` i posunula), hlášení z ní [plyne |cli#Formáty výstupu] a konzole ho vypíše pod ní. Jestli by hlášení na daném místě umlčel komentář, zjistí `$context->isSilenced()`, aniž by cokoli zaznamenal.
 
@@ -221,7 +221,7 @@ Zpráva popisuje kód, ne čtenáře, a nikdy nerozkazuje. Je to věta a končí
 Bez stavu a idempotentní
 ========================
 
-Jedna instance pravidla slouží celému běhu a všem souborům. Stav vztažený k souboru patří do pole `$context->storage`, které jádro pro každý průchod souborem založí prázdné; vlastnosti třídy jsou jen na to, co spočítal `configure()`. Co pravidlo o souboru potřebuje vědět, najde ve vlastnostech kontextu: `$context->file` je jeho strom (`FileNode`), `$context->path` cesta, `$context->style` styl (odsazení, konec řádku, šířka tabulátoru, nejdelší řádek `maxLineLength` a podoba importů `imports`) a `$context->phpVersion` cílová verze PHP.
+Jedna instance pravidla slouží celému běhu a všem souborům. Stav vztažený k souboru patří do pole `$context->storage`, které jádro pro každý průchod souborem založí prázdné; vlastnosti třídy jsou jen na to, co spočítal `configure()`. Co pravidlo o souboru potřebuje vědět, najde ve vlastnostech kontextu: `$context->file` je jeho strom (`FileNode`), `$context->path` cesta, `$context->style` styl (odsazení, konec řádku, šířka tabulátoru, nejdelší řádek `maxLineLength`, druhy konstrukcí, které běh rozkládá kvůli šířce řádku, `lineSplits` a podoba importů `imports`) a `$context->phpVersion` cílová verze PHP.
 
 Pravidla se pouštějí opakovaně, dokud se strom mění, takže pravidlo musí být **idempotentní**: nad vlastním výstupem už nesmí nic změnit. A nesmí záviset na pořadí průchodu ani na tom, kolikátý průchod zrovna běží; kontext to schválně neprozradí. Dvě pravidla, která se přetahují, jádro pozná a soubor ohlásí jako selhání se jmény obou. Idempotenci ověřuje i `RuleTester`: pustí pravidlo nad jeho vlastním výstupem podruhé a selže, pokud ho pravidlo znovu změní.
 

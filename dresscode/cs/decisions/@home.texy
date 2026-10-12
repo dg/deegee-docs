@@ -51,7 +51,7 @@ Vyhrazený klíč není rozhodnutí o vzhledu kódu, ale fakt o projektu, rozsah
 | `rules`, `ruleUrl` | [vlastní pravidla |/custom-rule] projektu, jmenovaná třídou, a adresa jejich stránek |
 | `analyses` | vlastní [analýzy |/rule-contract#Analýzy] pro pravidla |
 | `fixRisky` | rozhodnutí, jejichž [rizikové opravy |/configuration#risky-fixes] projekt přijímá |
-| `warnOnly` | rozhodnutí, jejichž porušení jen varují |
+| `warnOnly` | rozhodnutí, jejichž porušení jen varují; rozhodnutí o jednom slově to řekne i hodnotou `warning` |
 | `suppressionComments` | [komentáře projektu |/suppressing#Potlačení na řádku], které umlčí rozhodnutí na svém řádku |
 | `overrides` | jiné hodnoty pro [část projektu |/configuration#Jiné hodnoty pro část projektu] |
 
@@ -72,7 +72,7 @@ Sekce třídí rozhodnutí tak, aby se dala najít: kde byste hledali mezeru za 
 | [qualification |qualification] | jak daleko se vypisuje jméno třídy, funkce a konstanty: holé, importované, nebo s lomítkem |
 | [imports |imports] | příkazy `use` na začátku souboru: tvar, skupiny, pořadí, nepoužité importy |
 | [spacing |spacing] | mezery na řádku: kolem operátorů, za čárkou, uvnitř závorek, za klíčovým slovem |
-| [multiline |multiline] | konstrukce rozepsané na řádky: signatura, volání, pole, podmínka, řetěz, čárka na konci |
+| [multiline |multiline] | konstrukce rozepsané na řádky a řádky delší než limit: signatura, volání, pole, podmínka, řetěz, ternární operátor, `for`, `&&` a `.`, `implements`, čárka na konci |
 | [braces |braces] | složené závorky: kde stojí, kdy jsou povinné, prázdné tělo |
 | [blankLines |blankLines] | prázdné řádky v hlavičce souboru, ve třídě, v bloku a kolem příkazů |
 | [classes |classes] | třídy a jejich členové: pořadí, viditelnost, modifikátory, prázdné závorky |
@@ -95,7 +95,7 @@ Hodnoty
 
 Co klíč bere, říká jeho popis na stránce sekce a vypíše to i `dresscode explain <cesta>`. Druhů hodnot je pár a opakují se:
 
-- **Slovo** pojmenuje tvar: `braces.position.class: nextLine`, `imports.order.names: alphabetical`, `literals.quotes: single`.
+- **Slovo** pojmenuje tvar: `braces.position.class: nextLine`, `imports.order.names: alphabetical`, `literals.quotes: single`. Rozhodnutí, které bere jediné slovo `forbidden` nebo `required`, bere i `warning`: znamená totéž slovo, jen jeho porušení pouze varují, třeba `file.longLines: warning`.
 - **Tvar s ukázkou.** U mezer a zápisu operátorů má každá hodnota slovo i ukázku kódu a do konfigurace můžete napsat kterékoli z nich: `spacing.concatenation: compact` je totéž co `spacing.concatenation: '$a.$b'`. Ukázka se jen porovná s ukázkami, které klíč zná, DressCode ji nečte jako kód, a neznámá je chyba, která vypíše ty známé.
 - **Počet** prázdných řádků, číslic nebo délky: `blankLines.betweenMethods: 2`. Kde to klíč dovolí, i rozsah `[0, 1]` nebo `0-1` a rozsah s otevřeným koncem `[1, null]` nebo `1+`. Některé počty berou i slovo, třeba `file.lineLength: none`.
 - **Seznam** jmen, vzorů nebo pořadí: `classes.members.order: [traitUse, constant, property]`, `phpdoc.forbiddenAnnotations: [@author, @package]`. Seznam napsaný ve vyšší vrstvě nahradí ten pod ním celý, i výchozí.
@@ -104,7 +104,7 @@ Co klíč bere, říká jeho popis na stránce sekce a vypíše to i `dresscode 
 - **Text** je jediný případ, kde hodnotou je prostá věta: text komentáře u propadnutí `case` (`controlFlow.switch.fallThroughComment: no break`).
 - **Ano, nebo ne** (`true`, `false`) mají jen klíče, které jinak odpovědět nejdou: `imports.order.caseSensitive: true`.
 
-Rozhodnutí, která k sobě patří, stojí ve skupině, a cesta se pak čte jako věta: sekce řekne oblast, skupina otázku nebo věc a poslední článek místo. Skupina sdruží buď místa, která odpovídají na tutéž otázku, jako `braces.position` polohu složené závorky u třídy, funkce nebo closure a `multiline.trailingComma` čárku na konci pole, argumentů nebo parametrů, anebo otázky k jedné věci, jako `file.strictTypes` deklaraci i místo, kde stojí. Rozhodnutí, které nemá jiné jméno než věc, o které rozhoduje, skupinu netvoří: stojí naplocho a klíče, které ho upřesňují, nesou vedle něj jeho jméno. `file.lineLength` je nejdelší řádek, `file.longLines` říká, jestli se delší řádek hlásí, a `file.longLinesExcept`, které řádky se nehlásí nikdy. Skupina se píše jako vnořená mapa a cesta k jejím klíčům má o článek víc. Slovo napsané u skupiny platí pro každý její požadavek, takže `multiline.operatorPosition: lineStart` posune na začátek řádku všechny operátory naráz a `qualification.function: imported` importuje funkce globální, optimalizované i z jiných jmenných prostorů.
+Rozhodnutí, která k sobě patří, stojí ve skupině, a cesta se pak čte jako věta: sekce řekne oblast, skupina otázku nebo věc a poslední článek místo. Skupina sdruží buď místa, která odpovídají na tutéž otázku, jako `braces.position` polohu složené závorky u třídy, funkce nebo closure a `multiline.trailingComma` čárku na konci pole, argumentů nebo parametrů, anebo otázky k jedné věci, jako `file.strictTypes` deklaraci i místo, kde stojí. Rozhodnutí, které nemá jiné jméno než věc, o které rozhoduje, skupinu netvoří: stojí naplocho a klíče, které ho upřesňují, nesou vedle něj jeho jméno. `file.lineLength` je nejdelší řádek, `file.longLines` říká, jestli se hlásí delší řádek, který nešlo rozložit, a `file.lineLengthExcept`, které konstrukce se kvůli šířce řádku nerozkládají a které řádky se nehlásí nikdy. Skupina se píše jako vnořená mapa a cesta k jejím klíčům má o článek víc. Slovo napsané u skupiny platí pro každý její požadavek, takže `multiline.operatorPosition: lineStart` posune na začátek řádku všechny operátory naráz a `qualification.function: imported` importuje funkce globální, optimalizované i z jiných jmenných prostorů.
 
 A pak je tu **`keep`**, které bere každé rozhodnutí, jež něco vyžaduje, mapa po položkách: "tady se nic nevynucuje, kód zůstane, jak je". Je to jediné slovo pro "nesahej na to" a neznamená žádný tvar. `keep` napsané u sekce nebo u klíče s podklíči platí pro všechno pod ním a pozdější vrstva pak oživí jen ty klíče, které sama jmenuje:
 

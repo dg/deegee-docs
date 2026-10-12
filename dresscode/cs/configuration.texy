@@ -249,11 +249,18 @@ Co pro konkrétní soubor nakonec platí, ukáže `dresscode config --file tests
 Varování a rizikové opravy .[#risky-fixes]
 ==========================================
 
-Každé porušení je chyba a shodí build, dokud ho konfigurace nezměkčí. Rozhodnutí v seznamu `warnOnly` dál hlásí a výpis je počítá zvlášť, ale exit kód zůstane `0`; práh dá přepínač `--max-warnings <n>`. Hodí se to u toho, co `fix` neopraví, hlavně u dlouhých řádků:
+Každé porušení je chyba a shodí build, dokud ho konfigurace nezměkčí. Rozhodnutí, které se zapíná jedním slovem, `forbidden` nebo `required`, bere místo něj i slovo `warning`: vynucuje totéž, jen jeho nálezy jsou varování. Výpis je počítá zvlášť, ale exit kód zůstane `0`; práh dá přepínač `--max-warnings <n>`. Hodí se to u toho, co `fix` neopraví, hlavně u dlouhých řádků:
+
+```neon
+file:
+	longLines: warning
+```
+
+Rozhodnutí, které volí mezi několika hodnotami, třeba `phpdoc.property.comment: phpdoc`, slovo `warning` nemá, protože by z něj nebylo poznat, co vynucovat. Jeho nálezy změkčí seznam `warnOnly`, ve kterém může místo rozhodnutí stát i sekce nebo preset a platí pak za všechno pod sebou. Pro rozhodnutí o jednom slově je `warning` totéž, jako by jeho cesta stála ve `warnOnly`:
 
 ```neon
 warnOnly:
-	- file.longLines
+	- phpdoc.property.comment
 ```
 
 Riziková oprava (risky fix) je taková, která může změnit, co kód dělá, a je to vždy vlastnost konkrétního místa. Z `in_array($role, $roles)` udělat `in_array($role, $roles, true)` je bezpečné tam, kde se hledají hodnoty jednoho typu, a jinde může kód přestat najít hodnotu, kterou dřív našel. DressCode tedy opraví, co bezpečně umí, a rizikový výskyt ohlásí i s tím, co by ho rozhodlo:
