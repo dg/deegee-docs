@@ -1,120 +1,231 @@
 Texy! je sexy!
 **************
 
-.[perex]
-Texy je **výkonný a bezpečný markup procesor** pro PHP, který převádí jednoduchý text do validního HTML. Na rozdíl od jiných markup jazyků není Texy jen další variantou Markdown - je to **plně konfigurovatelný systém**, který můžete přizpůsobit prakticky jakékoliv syntaxi.
+<div class="perex">
+Hledáte nástroj, který z Markdownu a dalších textů psaných lidmi udělá čisté a hezké HTML?
+
+- Sám vysází uvozovky, pomlčky a pevné mezery
+- Výstup je vždy správně uzavřené HTML, i z pokaženého vstupu
+- Bezpečně zpracuje komentáře a příspěvky od návštěvníků
+- Čte Markdown a nabízí i bohatší syntaxi Texy
+</div>
 
 
-Proč Texy?
+Instalace
+=========
+
+Knihovnu stáhnete a nainstalujete pomocí nástroje [Composer |https://getcomposer.org]:
+
+```shell
+composer require texy/markdown
+```
+
+Tím získáte Texy i podporu Markdownu. Pokud chcete psát jen v syntaxi Texy, stačí `composer require texy/texy`. Texy 4.0 potřebuje PHP 8.2 nebo novější.
+
+
+První článek
+============
+
+Představte si, že máte blog a články píšete v Markdownu. Začátek jednoho z nich může vypadat takhle:
+
+```
+# Jak jsme sušili švestky
+
+Letos jsme sklidili **přes 40 kg** švestek. Co s nimi? Babička říká: "Sušit, a pořádně."
+
+Sušárnu jsme koupili v [obchodě u nádraží](https://example.com/susarna), stála 1500-2000 Kč.
+```
+
+Kolik kódu je potřeba, aby z toho bylo HTML? Překvapivě málo:
+
+```php
+require __DIR__ . '/vendor/autoload.php';
+
+$texy = new Texy\Texy;
+$markdown = new Texy\Markdown\Markdown;
+$html = $markdown->toHtml($text, $texy); // $text obsahuje článek výše
+```
+
+Objekt `Texy\Texy` je samotný engine, který se postará o typografii a o výstup. Markdown mu jen dodá rozebraný dokument. A tohle je výsledek:
+
+```html
+<h1>Jak jsme sušili švestky</h1>
+
+<p>Letos jsme sklidili <strong>přes 40&nbsp;kg</strong> švestek. Co s&nbsp;nimi?
+Babička říká: „Sušit, a pořádně.“</p>
+
+<p>Sušárnu jsme koupili v&nbsp;<a href="https://example.com/susarna">obchodě
+u&nbsp;nádraží</a>, stála 1500–2000&nbsp;Kč.</p>
+```
+
+Nadpis, tučné písmo i odkaz jsou přesně takové, jaké od Markdownu čekáte. Všimněte si ale i toho, co jste vůbec nepsali: uvozovky jsou české, mezi cenami je pomlčka místo spojovníku a za `v`, `s` a `u` i mezi číslem a jednotkou stojí pevná mezera. Pro názornost ji tu ukazujeme jako `&nbsp;`, ve skutečném výstupu je to přímo znak.
+
+Texy čte Markdown podle specifikace CommonMark i s rozšířeními GitHub Flavored Markdown, jako jsou tabulky, úkolové seznamy nebo přeškrtnutý text. Projde všemi 652 příklady specifikace CommonMark a všemi 24 příklady rozšíření GFM. Co všechno můžete v Markdownu psát, najdete na stránce [Syntaxe Markdown |markdown].
+
+
+Typografie
 ==========
 
+Texy upravuje text tak, jak by to udělal sazeč, a vy přitom píšete jen znaky, které máte na klávesnici:
 
-Bezpečnost na prvním místě
---------------------------
+- rovné uvozovky `"…"` a `'…'` nahradí uvozovkami podle jazyka textu: v češtině „…“ a ‚…‘, v angličtině “…” a ‘…’
+- spojovník mezi čísly `9-17` nahradí pomlčkou `9–17`
+- tři tečky `...` nahradí výpustkou `…`
+- za předložky `k`, `s`, `v`, `z`, `o`, `u` a spojku `i` a mezi číslo a jednotku vloží pevnou mezeru, takže se na konci řádku neodtrhnou od slova, ke kterému patří
+- příliš dlouhá slova rozdělí podle slabik, aby v úzkém sloupci nezůstávaly díry
 
-Texy je navrženo s důrazem na bezpečnost. Automaticky **chrání před XSS útoky**, validuje URL adresy a filtruje nebezpečné HTML značky. Vestavěný `safeMode()` je ideální pro zpracování uživatelského obsahu v komentářích nebo na fórech.
-
-```php
-Texy\Configurator::safeMode($texy);
-// Nyní je Texy bezpečné pro obsah od uživatelů
-```
-
-
-Konfigurovatelnost bez kompromisů
----------------------------------
-
-Chcete používat Markdown syntaxi? Nebo potřebujete úplně vlastní markup? **Texy to zvládne.** Můžete:
-
-- Vypnout nebo zapnout libovolné části syntaxe
-- Změnit výchozí chování pomocí handlerů
-- Přidat zcela vlastní syntaktické prvky
-- Nakonfigurovat Texy tak, aby zpracovávalo Markdown nebo jakýkoliv jiný formát
+Texy zná uvozovky 17 jazyků a výchozí je čeština. Pro anglický text stačí jeden řádek:
 
 ```php
-$texy = new Texy;
-$texy->allowed['image'] = false; // vypnout obrázky
-$texy->allowed['phrase/strong'] = false; // vypnout tučné písmo
+$texy->typographyModule->locale = 'en';
 ```
 
-
-České typografické speciality
------------------------------
-
-Texy **dokonale rozumí češtině**. Automaticky:
-
-- Vkládá **pevné mezery** za jednopísmenné předložky a spojky: v autě, u okna, s kamarádem
-- Rozděluje **dlouhá slova** podle slabik: nejneobhospodařovávatelnějšími
-- Používá správné **typografické uvozovky**: „dvojité“ a ‚jednoduché‘
-- Zaměňuje **spojovník za pomlčku**: 10-15 vs. česko-slovenský
-- Přidává **nezalomitelné mezery** u telefonních čísel: +420 776 552 046
+Další úpravy, jako šipky `-->`, znak `×` v rozměrech `10x20` nebo `(C)`, popisuje [Syntaxe Texy |syntax#Typografie]. Platí stejně pro Markdown.
 
 
-Validní a wellformed HTML
--------------------------
+Rozbité HTML
+============
 
-Texy generuje **vždy validní HTML5 kód**. Automaticky opravuje chybně vnořené značky, uzavírá nezavřené elementy a dbá na správnou strukturu dokumentu. Výstup je nejen validní, ale i **pěkně naformátovaný** s odsazením.
+Markdown dovoluje psát do textu přímo HTML. Co když ho autor zapomene uzavřít, nebo uzavře značky v opačném pořadí?
+
+```
+Babičce to <b>určitě <i>chutnalo</b>.
+```
+
+Texy to opraví podle pravidel HTML:
+
+```html
+<p>Babičce to <b>určitě <i>chutnalo</i></b><i>.</i></p>
+```
+
+Dělá to vždy, takže jedna neuzavřená značka nikdy nerozbije zbytek stránky.
 
 
-Co je Texy?
-===========
+Komentáře od návštěvníků
+========================
 
-Texy je **obecný procesor markup textu**. To znamená, že má sice svou výchozí syntaxi (podobnou Markdown, ale mnohem bohatší), ale můžete ji kompletně změnit nebo rozšířit.
+Pod článkem chcete komentáře. Tam už píše kdokoli, a tak Texy přepnete do bezpečného režimu:
 
-**Není to jen parser** - Texy je komplexní systém s modulární architekturou, kde každý modul zpracovává konkrétní část syntaxe (nadpisy, odkazy, obrázky, tabulky...). Díky systému handlerů můžete zasáhnout do libovolného bodu zpracování a změnit výsledek podle svých potřeb.
+```php
+$texy = new Texy\Texy;
+$markdown = new Texy\Markdown\Markdown;
+Texy\Markdown\Configurator::safeMode($markdown, $texy);
+$html = $markdown->toHtml($comment, $texy);
+```
+
+Podívejme se, co udělá s komentářem, jehož autor zkouší podstrčit skript:
+
+```
+Skvělý recept! <script>alert(1)</script> Mrkněte na [můj web](https://example.org).
+```
+
+```html
+<p>Skvělý recept! &lt;script&gt;alert(1)&lt;/script&gt; Mrkněte na <a
+href="https://example.org" rel="nofollow">můj&nbsp;web</a>.</p>
+```
+
+Skript se nespustí, ale ani beze stopy nezmizí: čtenář uvidí přesně to, co autor napsal, jen jako neškodný text. Odkaz zůstal a dostal `rel="nofollow"`, takže vyhledávače nebudou brát reklamu v komentářích jako vaše doporučení. Odkazy na nebezpečné adresy, třeba `javascript:`, bezpečný režim vůbec nevytvoří.
+
+Co přesně bezpečný režim dělá a jak ho doladit, popisuje [konfigurace |configuration#safeMode()].
 
 
-Texy vs. Markdown
+Vlastní rozšíření
 =================
 
-Základní syntaxe je podobná, ale Texy nabízí mnohem více:
+Chcete do článku vložit video z YouTube? Texy se dá naučit nové věci, aniž byste sahali do jeho kódu. Stačí mu říct, jak vykreslit obrázek, jehož adresa začíná `youtube:`:
 
-|---------------------------
-| Funkce | Markdown | Texy
-|---------------------------
-| Tučné písmo | `**text**` | `**text**`
-| Kurzíva | `*text*` nebo `_text_` | `*text*` nebo `//text//`
-| Nadpisy | `# Nadpis` | `# Nadpis` nebo podtržení
-| Obrázky | `![alt](url)` | `[* url *]`
-| Tabulky | omezené | plná podpora včetně sloučení
-| Modifikátory | ne | ano - `.{color:red}[class]`
-| Typografie | ne | ano - uvozovky, pomlčky, mezery
-| Dělení slov | ne | ano - podle slabik
-| Konfigurovatelnost | omezená | úplná - vlastní syntaxe
-| Bezpečnost | závisí na impl. | vestavěná (safeMode)
+```php
+use Texy\Nodes\ImageNode;
+use Texy\Output\Html;
 
-**Příklad rozdílů:**
-
-```texy
-Markdown:
-![Obrázek](image.jpg)
-
-Texy:
-[* image.jpg 300x200 .(Popisek obrázku)[photo] <]
+$texy->htmlOutput->addRenderer(function (ImageNode $node, Html\Renderer $renderer, ?Closure $previous) {
+	if (!str_starts_with($node->url ?? '', 'youtube:')) {
+		return null; // ostatní obrázky vykreslí Texy jako obvykle
+	}
+	return new Html\Element('iframe', [
+		'src' => 'https://www.youtube.com/embed/' . substr($node->url, 8),
+		'width' => $node->width ?: 640,
+		'height' => $node->height ?: 360,
+		'allowfullscreen' => true,
+	]);
+});
 ```
 
-Texy umožňuje definovat rozměry, třídy, zarovnání a mnoho dalšího přímo v syntaxi.
+Funkci Texy zavolá pro každý obrázek v textu. Pokud jeho adresa nezačíná `youtube:`, vrátí `null` a obrázek se vykreslí obvyklým způsobem. Jinak vrátí `Html\Element`, tedy HTML značku, kterou Texy vypíše místo obrázku. Parametry `$renderer` a `$previous` tu nepotřebujeme, k čemu slouží, se dozvíte na odkazované stránce.
+
+Autor článku pak napíše jen `![Video o sušení](youtube:dQw4w9WgXcQ)`. Jak upravit vykreslení libovolného prvku, popisuje stránka [Úprava chování prvků |custom-handlers].
+
+Markdown jde rozšířit i o úplně nový zápis, stejně jako ho GitHub rozšířil o tabulky a úkolové seznamy. Třeba aby se `@@jana` v komentáři stalo odkazem na profil uživatelky, jak ukazuje stránka [Přidání vlastní syntaxe |custom-syntax].
 
 
-Kdy použít Texy?
-================
+Když Markdown nestačí
+=====================
 
-Texy je ideální pro:
+Obrázek s rozměry a popisem, zarovnaný doprava, s CSS třídou a s popiskem pod ním? V Markdownu byste museli psát HTML. Texy má proto i vlastní syntaxi, která je v základu stejně jednoduchá jako Markdown, ale s takovými věcmi počítá. Ten obrázek je v ní jeden řádek:
 
-**CMS systémy** Potřebujete bezpečně zpracovávat obsah od editorů? Texy nabízí granulární kontrolu nad tím, co mohou uživatelé použít.
+```texy
+[* susarna.jpg 300x200 .(Sušárna na půdě)[photo] >] *** Foto: Jana Nováková
+```
 
-**Blogy a dokumentace** Bohatá syntaxe pro tabulky, obrázky s popiskami, typografii a kód se syntax highlightingem.
+Text v syntaxi Texy převede metoda `process()`, žádný další balíček není potřeba:
 
-**Komentáře a diskuzní fóra** SafeMode zajistí, že uživatelé nemohou vložit nebezpečný kód, ale zároveň mají k dispozici formátování textu.
+```php
+$html = $texy->process($text);
+```
 
-**Projekty s vlastními požadavky** Potřebujete embed YouTube videí? Speciální syntax pro vaše makra? Vlastní markup jazyk? S Texy to vytvoříte snadno.
+```html
+<div style="float:right" class="figure"><img src="images/susarna.jpg"
+class="photo" alt="Sušárna na půdě" width="300" height="200">
+	<p>Foto: Jana Nováková</p>
+</div>
+```
+
+`300x200` jsou rozměry, text v kulatých závorkách popisuje obrázek pro ty, kdo ho nevidí, `[photo]` přidá třídu, `>` zarovná doprava a za `***` následuje viditelný popisek. Ta část s tečkou a závorkami se jmenuje modifikátor a stejně ji můžete připojit k odstavci, nadpisu, odkazu nebo buňce tabulky. Předponu `images/` přidalo Texy samo. Je výchozí a v [konfiguraci |configuration] ji změníte třeba na adresář s obrázky článků.
+
+Syntaxe Texy umí i tabulky se sloučenými buňkami, titulky tabulek nebo nadpisy, které se samy zařadí pod nadpis stránky: článek, ve kterém autor začne nadpisem první úrovně, dostane po nastavení `$texy->headingModule->top = 2` nadpisy od `<h2>`. Všechno najdete na stránce [Syntaxe Texy |syntax].
+
+
+Nástroje nad zdrojovým textem
+=============================
+
+Blog se přestěhoval na HTTPS a v desítkách článků uložených jako soubory `.md` zůstaly odkazy na `http://muj-blog.cz`. Hledat a nahrazovat napříč soubory je loterie: nahradíte i adresy v ukázkách kódu, které měnit nechcete.
+
+Texy vám dá strom dokumentu, ve kterém každý odkaz ví, kde přesně ve zdrojovém textu leží jeho adresa. Změníte jen ji a zbytek textu zůstane přesně takový, jaký byl:
+
+```php
+$source = Texy\Texy::normalize(file_get_contents($file));
+$document = $markdown->parse($source);
+$rewriter = new Texy\Rewriter($source);
+
+foreach (Texy\NodeHelpers::find($document, Texy\Nodes\LinkNode::class) as $link) {
+	if ($link->urlRange === null) {
+		continue; // odkaz, jehož adresa ve zdrojovém textu není zapsaná
+	}
+	$url = substr($source, $link->urlRange->offset, $link->urlRange->length);
+	if (str_starts_with($url, 'http://muj-blog.cz')) {
+		$rewriter->replace($link->urlRange, 'https://' . substr($url, 7));
+	}
+}
+
+file_put_contents($file, $rewriter->getResult());
+```
+
+Místo `toHtml()` tu voláme `parse()`, které text jen rozebere na strom a HTML nevyrábí. `normalize()` předtím sjednotí konce řádků a podobné drobnosti, aby pozice ve stromu přesně seděly na text. Adresa v ukázce kódu není odkaz, a proto zůstane, jak byla. Úplně stejně to funguje pro soubory v syntaxi Texy.
+
+Na stejném základu postavíte kontrolu dokumentace, která hlásí chyby i s číslem řádku, hromadné přepisy nebo podporu v editoru. A protože oba jazyky sdílejí jeden strom, převedete článek z Markdownu do syntaxe Texy jedním voláním `$markdown->toTexy($text)`. Jak na to, ukazuje stránka [Nástroje nad zdrojovým textem |source-tools].
+
+
+Napsané v Texy
+==============
+
+Tenhle manuál je napsaný v syntaxi Texy, stejně jako dokumentace Nette na [nette.org |https://nette.org]. Zdrojové texty stránek najdete na [GitHubu |https://github.com/dg/deegee-docs], takže se můžete podívat, jak která stránka vypadá před převodem do HTML.
 
 
 Historie
 ========
 
-Texy vytvořil David Grudl před **více než 20 lety** v roce 2004 jako jeden z prvních markup procesorů pro PHP. Původně bylo vyvinuto pro **PHP 4**, ale během své dlouhé historie prošlo mnoha aktualizacemi a dnes plně využívá všech možností **PHP 8**.
+Texy vytvořil David Grudl v roce 2004 jako jeden z prvních formátovačů textu pro PHP. Původně běželo na PHP 4, od té doby prošlo mnoha verzemi a dnes využívá možnosti PHP 8.
 
-Dvě dekády aktivního vývoje znamenají **vyzkoušenou a stabilní** knihovnu, které důvěřují stovky projektů. Texy je dnes **vyzrálé řešení** s velkou historií, ale stále aktivně udržované a moderní.
+Verze 4.0 z něj udělala engine: text se nejdřív rozebere na strom dokumentu a teprve z něj vzniká HTML, prostý text nebo zpětně zdrojový text. Markdown i syntaxe Texy jsou postavené na stejném jádru, a proto dostanou stejnou typografii, stejné opravy HTML i stejné nástroje. Jak to funguje uvnitř, popisuje stránka [Architektura a principy |architecture].
 
-{{maintitle: Texy – formátovač textů pro PHP}}
-{{description: Texy je výkonný a bezpečný markup procesor pro PHP, který převádí jednoduchý text do validního HTML. Na rozdíl od Markdownu jde o plně konfigurovatelný systém.}}
+{{maintitle: Texy – Markdown a texty do HTML s typografií pro PHP}}
