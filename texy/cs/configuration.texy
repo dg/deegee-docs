@@ -2,721 +2,507 @@ Konfigurace
 ***********
 
 .[perex]
-Kompletní průvodce konfigurací Texy. Naučíte se ovládat všechny moduly, nastavit bezpečnost a přizpůsobit Texy vašim potřebám.
+Kam vedou odkazy a obrázky, jak vypadá výstupní HTML, jaká typografie se použije, co smí návštěvníci v komentářích a které zápisy Markdownu a syntaxe Texy jsou zapnuté. Tady najdete všechna nastavení a jejich výchozí hodnoty.
 
-Texy se konfiguruje pomocí **public properties** hlavní třídy `Texy\Texy` a jejích **modulů**. Každý modul je zodpovědný za zpracování konkrétní části syntaxe (obrázky, odkazy, nadpisy...).
-
-Základní přístup:
+Všechno se nastavuje přes veřejné vlastnosti objektů. Pro blog z [úvodu |@home] je stačí připravit jednou, na jednom místě, a pak s nimi převádět všechny články:
 
 ```php
 $texy = new Texy\Texy;
+$texy->htmlOutput->imageRoot = '/images/clanky/';
+$texy->htmlOutput->linkRoot = '/blog/';
 
-// Konfigurace hlavní třídy
-$texy->allowedTags = Texy\Texy::NONE;
-
-// Konfigurace modulu
-$texy->imageModule->root = '/images/';
+$markdown = Texy\Markdown\Markdown::gfm();
+$html = $markdown->toHtml($text, $texy);
 ```
 
+Objekt `$texy` je engine. Nese nastavení výstupu HTML, typografie a bezpečnosti, a ta platí pro text v Markdownu i v syntaxi Texy. Objekt `$markdown` určuje, které zápisy Markdownu se čtou. Text v syntaxi Texy převádí přímo engine, `$texy->process($text)`, a které zápisy syntaxe Texy jsou zapnuté, nastavíte také na něm.
 
-Třída Texy\Texy .[#texy-class]
-==============================
-
-Hlavní třída obsahuje globální nastavení a vlastnosti ovlivňující celé zpracování.
+Stránka je proto rozdělená na tři části: [nastavení enginu |#Engine], [Markdown |#Markdown] a [syntaxi Texy |#Syntaxe Texy]. Na konci najdete, [kam se přestěhovala nastavení z verze 3 |#Přechod z verze 3].
 
 
-Povolené syntaxe ($allowed) .{toc: $allowed}
---------------------------------------------
-
-Pole `$allowed` kontroluje, které části syntaxe Texy jsou aktivní:
-
-```php
-// Výchozí: vše povoleno kromě emotikonů a frází ins/del/sup/sub
-$texy->allowed['image'] = true;
-$texy->allowed['emoticon'] = false;
-
-// Vypnout obrázky
-$texy->allowed['image'] = false;
-
-// Vypnout HTML značky ve vstupu
-$texy->allowed['html/tag'] = false;
-$texy->allowed['html/comment'] = false;
-
-// Vypnout různé typy odkazů
-$texy->allowed['link/reference'] = false;
-$texy->allowed['link/email'] = false;
-$texy->allowed['link/url'] = false;
-```
-
-**Kompletní seznam syntaxí:**
-
-|---
-| Klíč | Výchozí | Popis
-|---
-| `image` | `true` | Obrázky `[* img.jpg *]`
-| `figure` | `true` | Obrázky s popiskou
-| `link/reference` | `true` | Reference `[ref]`
-| `link/email` | `true` | E-mailové adresy
-| `link/url` | `true` | Automatické URL
-| `link/definition` | `true` | Definice referencí
-| `heading/underlined` | `true` | Podtržené nadpisy
-| `heading/surrounded` | `true` | Ohraničené nadpisy
-| `horizline` | `true` | Horizontální čáry
-| `blockquote` | `true` | Citace
-| `list` | `true` | Seznamy
-| `list/definition` | `true` | Definiční seznamy
-| `table` | `true` | Tabulky
-| `phrase/strong` | `true` | Tučné písmo `**text**`
-| `phrase/em` | `true` | Kurzíva `//text//`
-| `phrase/em-alt` | `true` | Kurzíva `*text*`
-| `phrase/code` | `true` | Kód ```text```
-| `phrase/ins` | `false` | Vložený text `++text++`
-| `phrase/del` | `false` | Smazaný text `--text--`
-| `phrase/sup` | `false` | Horní index `^^text^^`
-| `phrase/sub` | `false` | Dolní index `__text__`
-| `html/tag` | `true` | HTML značky ve vstupu
-| `html/comment` | `true` | HTML komentáře
-| `emoticon` | `false` | Emotikony `:-)`, `:-(`
-| `blocks` | `true` | Bloky `/-- \--`
-| `typography` | `true` | Typografické úpravy
-| `longwords` | `true` | Dělení dlouhých slov
-
-
-Povolené HTML značky ($allowedTags) .{toc: $allowedTags}
---------------------------------------------------------
-
-Kontroluje, které HTML značky mohou být ve výstupu (a na vstupu):
-
-```php
-// Výchozí je whitelist všech validních HTML5 značek; Texy::ALL povolí libovolnou značku
-$texy->allowedTags = Texy\Texy::ALL;
-
-// Zakázat všechny HTML značky
-$texy->allowedTags = Texy\Texy::NONE;
-
-// Povolit jen konkrétní značky
-$texy->allowedTags = [
-	'strong' => [],  // <strong> bez atributů
-	'a' => ['href', 'title'],  // <a> s atributy
-	'img' => Texy\Texy::ALL,  // <img> s jakýmikoliv atributy
-];
-```
-
-**Formáty:**
-- `Texy::ALL` - povoleny jsou všechny značky
-- `Texy::NONE` - povolena není žádná značka
-- Pole - povolené značky jako klíče, povolené atributy jako hodnoty
-
-
-Povolené CSS třídy ($allowedClasses) .{toc: $allowedClasses}
-------------------------------------------------------------
-
-Kontroluje, které CSS třídy a ID mohou být použity:
-
-```php
-// Výchozí: všechny třídy a ID povoleny
-$texy->allowedClasses = Texy\Texy::ALL;
-
-// Zakázat třídy a ID
-$texy->allowedClasses = Texy\Texy::NONE;
-
-// Povolit konkrétní třídy a ID
-$texy->allowedClasses = [
-	'highlight',
-	'important',
-	'#main',  // ID začínají #
-	'#sidebar',
-];
-```
-
-Použití:
-```texy
-Text s třídou .[highlight]
-
-Text s ID .[#main]
-```
-
-
-Povolené CSS styly ($allowedStyles) .{toc: $allowedStyles}
-----------------------------------------------------------
-
-Kontroluje, které inline CSS vlastnosti mohou být použity:
-
-```php
-// Výchozí: všechny styly povoleny
-$texy->allowedStyles = Texy\Texy::ALL;
-
-// Zakázat inline styly
-$texy->allowedStyles = Texy\Texy::NONE;
-
-// Povolit konkrétní CSS vlastnosti
-$texy->allowedStyles = [
-	'color',
-	'background-color',
-	'font-size',
-];
-```
-
-Použití:
-```texy
-Text s barvou .{color: red}
-```
-
-
-CSS třídy pro zarovnání ($alignClasses) .{toc: $alignClasses}
--------------------------------------------------------------
-
-Místo inline stylů `style="text-align:left"` můžete použít CSS třídy:
-
-```php
-// Výchozí: všechny hodnoty null (použijí se inline styly)
-$texy->alignClasses = [
-	'left' => null,
-	'right' => null,
-	'center' => null,
-	'justify' => null,
-	'top' => null,
-	'middle' => null,
-	'bottom' => null,
-];
-
-// Nastavit třídy
-$texy->alignClasses['left'] = 'text-left';
-$texy->alignClasses['right'] = 'text-right';
-$texy->alignClasses['center'] = 'text-center';
-```
-
-Použití:
-```texy
-Text zarovnaný doleva .<
-
-Text zarovnaný doprava .>
-```
-
-S nastaveným `alignClasses` vygeneruje `<p class="text-left">` místo `<p style="text-align:left">`.
-
-
-Další vlastnosti
-----------------
-
-```php
-// Spojování řádků do odstavců (výchozí: true)
-$texy->mergeLines = true;
-
-// Šířka tabulátoru (výchozí: 8)
-$texy->tabWidth = 8;
-
-// Maskování emailů před roboty (výchozí: true)
-$texy->obfuscateEmail = true;
-
-// Odstraňování měkkých spojovníků (výchozí: true)
-$texy->removeSoftHyphens = true;
-
-// Element pro netextové odstavce (výchozí: 'div')
-$texy->nontextParagraph = 'div';
-```
-
-
-Moduly
+Engine
 ======
 
-Každý modul zpracovává konkrétní část syntaxe. Moduly jsou přístupné jako public properties třídy `Texy\Texy`.
 
+Cesty k obrázkům a odkazům
+--------------------------
 
-HeadingModule
--------------
-
-Zpracovává nadpisy (podtržené i ohraničené).
+Autor v článku napíše jen `susarna.jpg` nebo `clanky/sklizen` a Texy před relativní adresu doplní předponu:
 
 ```php
-// Úroveň nejvyššího nadpisu (výchozí: 1)
-$texy->headingModule->top = 1;  // <h1>
-
-// Generovat automatická ID (výchozí: false)
-$texy->headingModule->generateID = true;
-
-// Prefix pro generovaná ID (výchozí: 'toc-')
-$texy->headingModule->idPrefix = 'section-';
-
-// Více znaků = vyšší nadpis? (výchozí: true)
-$texy->headingModule->moreMeansHigher = true;
-
-// Režim vyvažování (výchozí: DYNAMIC)
-$texy->headingModule->balancing = Texy\Modules\HeadingModule::DYNAMIC;
+$texy->htmlOutput->imageRoot = '/images/clanky/';  // výchozí 'images/'
+$texy->htmlOutput->linkRoot = '/blog/';            // výchozí null, bez předpony
 ```
 
-Po zpracování:
+Z `susarna.jpg` se tak stane `/images/clanky/susarna.jpg` a z odkazu na `clanky/sklizen` adresa `/blog/clanky/sklizen`. Adresy, které začínají lomítkem, schématem jako `https:` nebo `mailto:`, a odkazy na kotvu `#sekce` zůstanou, jak je autor napsal.
+
+Když Texy prozradíte, kde obrázky leží na disku, zjistí jejich rozměry a doplní je do HTML. Prohlížeč pak může stránku rozvrhnout dřív, než se obrázky načtou:
 
 ```php
-// První nadpis (pro <title>)
-echo $texy->headingModule->title;
-
-// Obsah (Table of Contents)
-print_r($texy->headingModule->TOC);
+$texy->htmlOutput->imageRoot = '/images/';
+$texy->htmlOutput->imageFileRoot = __DIR__ . '/www/images';
 ```
 
+```html
+<img src="/images/susarna.png" alt="Sušárna" width="300" height="200">
+```
 
-PhraseModule
-------------
+Rozměry, které autor napíše sám, mají přednost.
 
-Zpracovává inline formátování (tučné, kurzíva, odkazy v textu...).
+
+Odkazy
+------
 
 ```php
-// HTML značky pro jednotlivé fráze (výchozí: viz níže)
-$texy->phraseModule->tags = [
-	'phrase/strong' => 'strong',
-	'phrase/em' => 'em',
-	'phrase/code' => 'code',
-	// ... další
-];
-
-// Povolit odkazy ve frázích (výchozí: true)
-$texy->phraseModule->linksAllowed = true;
+$texy->htmlOutput->linkNoFollow = false;   // rel="nofollow" u absolutních odkazů
+$texy->htmlOutput->obfuscateEmail = true;  // e-mailové adresy zamaskovat před roboty
+$texy->htmlOutput->shortenUrls = true;     // dlouhé adresy zobrazit zkráceně
 ```
 
+S `linkNoFollow` dostanou `rel="nofollow"` odkazy na absolutní adresy, tedy na cizí weby. Odkazy v rámci webu, jako `/kontakt`, ho nedostanou.
 
-LinkModule
-----------
+`obfuscateEmail` vloží do zobrazené adresy HTML komentář, takže `jana@example.com` zůstane pro čtenáře stejná, ale jednoduchý robot sbírající adresy ji nepozná. `shortenUrls` zkrátí dlouhou adresu, která se v textu zobrazuje jako odkaz, na `https://example.com/…seni/svestek`. Obě nastavení platí jen pro syntaxi Texy, Markdown zobrazuje adresy přesně tak, jak je autor napsal.
 
-Zpracovává odkazy, reference a URL.
+
+Obrázky a obrázky s popiskem
+----------------------------
 
 ```php
-// Kořenová cesta pro odkazy (výchozí: null)
-$texy->linkModule->root = '/articles/';
-
-// CSS třída pro odkazy na obrázky (deprecated)
-$texy->linkModule->imageClass = 'image-link';
-
-// Vždy přidávat rel="nofollow" (výchozí: false)
-$texy->linkModule->forceNoFollow = false;
-
-// Zkracovat URL na čitelnější formu (výchozí: true)
-$texy->linkModule->shorten = true;
+$g = $texy->htmlOutput;
+$g->imageLeftClass = null;    // třída obrázku zarovnaného doleva, jinak inline styl float
+$g->imageRightClass = null;   // totéž doprava
+$g->figureTagName = 'div';    // 'figure' vytvoří <figure> a <figcaption>
+$g->figureClass = 'figure';   // třída obalu obrázku s popiskem
+$g->figureLeftClass = null;   // třída obalu zarovnaného doleva
+$g->figureRightClass = null;  // totéž doprava
+$g->nontextParagraph = 'div'; // obal odstavce, ve kterém jsou jen obrázky
 ```
 
-**Reference:**
+Obrázek s popiskem pod sebou je zápis syntaxe Texy. S nastavením `figureTagName = 'figure'` z něj vznikne sémantické HTML5:
 
-```php
-// Přidat referenci
-$link = new Texy\Link('https://example.com');
-$link->modifier->title = 'Ukázková stránka';
-$link->label = 'Příklad';
-$texy->linkModule->addReference('example', $link);
-```
-
-Použití:
 ```texy
-Odkaz na [example]
+[* susarna.jpg .(Sušárna na půdě) *] *** Foto: Jana Nováková
 ```
 
+```html
+<figure class="figure"><img src="images/susarna.jpg" alt="Sušárna na půdě">
+	<figcaption>Foto: Jana Nováková</figcaption>
+</figure>
+```
 
-ImageModule
------------
+Odstavec, ve kterém jsou jen obrázky, Texy neobalí do `<p>`, ale do prvku z `nontextParagraph`. Může to být název značky, nebo celý `Texy\Output\Html\Element` i s atributy.
 
-Zpracovává obrázky.
+
+Zarovnání
+---------
+
+Modifikátory zarovnání (`.<`, `.>`, `.<>`, `.=` a svislé `.^`, `.-`, `._`) i zarovnání sloupců tabulky v Markdownu vytvoří ve výchozím stavu inline styl, třeba `style="text-align:center"`. Pokud máte v CSS hotové třídy, přiřaďte je:
 
 ```php
-// Kořenová cesta pro obrázky (výchozí: 'images/')
-$texy->imageModule->root = '/assets/images/';
-
-// Kořenová cesta pro linkované obrázky (deprecated)
-$texy->imageModule->linkedRoot = '/assets/images/full/';
-
-// Fyzická cesta na disku (pro zjištění rozměrů)
-$texy->imageModule->fileRoot = __DIR__ . '/public/images/';
-
-// CSS třída pro plovoucí obrázky (výchozí: null)
-$texy->imageModule->leftClass = 'float-left';
-$texy->imageModule->rightClass = 'float-right';
-
-// Výchozí alternativní text (deprecated)
-$texy->imageModule->defaultAlt = 'Obrázek';
+$texy->htmlOutput->alignClasses['left'] = 'text-left';
+$texy->htmlOutput->alignClasses['right'] = 'text-right';
+$texy->htmlOutput->alignClasses['center'] = 'text-center';
 ```
 
-**Reference:**
+Klíče jsou `left`, `right`, `center`, `justify`, `top`, `middle` a `bottom`. Zarovnání, které třídu nemá, zůstane jako inline styl.
+
+
+Značky a třídy prvků
+--------------------
 
 ```php
-// Přidat referenci
-$image = new Texy\Image;
-$image->URL = 'photo.jpg';
-$image->modifier->title = 'Fotografie';
-$texy->imageModule->addReference('photo', $image);
+$g = $texy->htmlOutput;
+$g->phraseTags['phrase/strong'] = 'b';    // tučný text jako <b> místo <strong>
+$g->horizontalRuleClasses['-'] = 'cara';  // třída vodorovné čáry podle znaku, kterým je napsaná
+$g->emoticonClass = null;                 // třída <span> kolem emotikonů
+$g->passHtmlComments = true;              // HTML komentáře z textu zachovat ve výstupu
 ```
 
+`phraseTags` určuje, jakou značku dostane který druh zvýraznění. Klíče jsou názvy zápisů syntaxe Texy z [tabulky níže |#Které zápisy jsou zapnuté], tučný text a kurzíva platí i pro Markdown. Vodorovná čára napsaná pomlčkami `---` má klíč `-`, hvězdičkami klíč `*`.
 
-FigureModule
-------------
 
-Zpracovává obrázky s popiskou.
+Formátování HTML kódu
+---------------------
+
+Texy vypisuje HTML odsazené a zalomené, aby se v něm dalo číst:
 
 ```php
-// HTML element (výchozí: 'div')
-$texy->figureModule->tagName = 'figure';
-
-// CSS třída (výchozí: 'figure')
-$texy->figureModule->class = 'photo-figure';
-
-// Třídy pro plovoucí obrázky (výchozí: null)
-$texy->figureModule->leftClass = 'figure-left';
-$texy->figureModule->rightClass = 'figure-right';
-
-// Offset pro výpočet šířky (deprecated)
-$texy->figureModule->widthDelta = 20;
-
-// Vyžadovat popisku (deprecated)
-$texy->figureModule->requireCaption = true;
+$g = $texy->htmlOutput;
+$g->indent = true;       // odsazovat vnořené bloky
+$g->baseIndent = 0;      // počáteční úroveň odsazení, když HTML vkládáte do odsazené šablony
+$g->lineWrap = 80;       // zalamovat řádky delší než 80 znaků, 0 = nezalamovat
+$g->preserveSpaces = ['textarea', 'pre', 'script', 'code', 'samp', 'kbd'];  // značky, v nichž se mezery nemění
 ```
 
 
-ListModule
+Typografie
 ----------
 
-Zpracovává odrážkové, číslované a definiční seznamy.
+Jak typografie vypadá, ukazuje [úvod |@home#Typografie]. Jazyk textu, podle kterého Texy volí uvozovky, je výchozí `cs`:
 
 ```php
-// Definice odrážek a stylu (výchozí: viz zdrojový kód)
-$texy->listModule->bullets = [
-	'*' => ['\*[\ \t]', 0, ''],
-	'-' => ['[\x{2013}-](?![>-])', 0, ''],
-	// ... další
-];
-```
-
-
-TableModule
------------
-
-Zpracovává tabulky.
-
-```php
-// CSS třídy pro řádky (výchozí: null)
-$texy->tableModule->oddClass = 'odd';
-$texy->tableModule->evenClass = 'even';
-```
-
-*Poznámka: `oddClass` a `evenClass` jsou deprecated.*
-
-
-HorizLineModule
----------------
-
-Zpracovává horizontální čáry.
-
-```php
-// CSS třídy podle typu (výchozí: null)
-$texy->horizLineModule->classes = [
-	'-' => 'hr-line',
-	'*' => 'hr-star',
-];
-```
-
-
-TypographyModule
-----------------
-
-Zpracovává typografické úpravy.
-
-```php
-// Locale (výchozí: 'cs')
 $texy->typographyModule->locale = 'en';
 ```
 
-**Podporované locales:**
-- `cs` - české uvozovky „text“ a ‚text‘
-- `en` - anglické uvozovky “text” a ‘text’
-- `fr` - francouzské uvozovky «text» a ‹text›
-- `de` - německé uvozovky „text“ a ‚text‘
-- `pl` - polské uvozovky „text” a ‚text’
+Texy zná `bg`, `cs`, `de`, `el`, `en`, `es`, `fr`, `hu`, `it`, `ja`, `pl`, `pt`, `ro`, `ru`, `sl`, `tr` a `uk`. Pro neznámý jazyk použije angličtinu. Další jazyk přidáte do pole `locales`: hlavní uvozovky jsou v `doubleQuotes`, vnořené v `singleQuotes`, vždy dvojice otevírací a zavírací.
+
+```php
+$texy->typographyModule->locales['xx'] = [
+	'doubleQuotes' => ["\u{00AB}", "\u{00BB}"],
+	'singleQuotes' => ["\u{201E}", "\u{201C}"],
+];
+$texy->typographyModule->locale = 'xx';
+```
+
+Pevné mezery za jednopísmennými předložkami a spojkami Texy vkládá bez ohledu na jazyk.
+
+Dlouhá slova Texy rozdělí vložením měkkých spojovníků, neviditelných znaků, na kterých prohlížeč smí slovo zlomit:
+
+```php
+$texy->hyphenationModule->wordLimit = 20;  // dělit slova delší než 20 znaků
+```
+
+Typografii a dělení slov můžete vypnout, pro Markdown stejně jako pro syntaxi Texy:
+
+```php
+$texy->allowed['typography'] = false;
+$texy->allowed['longwords'] = false;
+```
 
 
-LongWordsModule
+Povolené HTML značky, třídy a styly
+-----------------------------------
+
+Tři seznamy na `$texy->htmlPolicy` určují, co z HTML a z modifikátorů se dostane do výstupu. Hodnota `Texy\Texy::All` povolí všechno, `Texy\Texy::None` nic.
+
+```php
+$texy->htmlPolicy->allowedTags = [
+	'b' => [],            // <b> bez atributů
+	'a' => ['href'],      // <a> jen s atributem href
+	'img' => Texy\Texy::All,  // <img> s jakýmikoli atributy
+];
+```
+
+Výchozí seznam značek obsahuje běžné značky HTML5, každou se všemi atributy. Klíč `'*'` vyjmenuje atributy povolené u všech značek. Značka, která na seznamu chybí, se ve výstupu zobrazí jako text, a nepovolený atribut zmizí:
+
+```texy
+<b class="x">tučně</b> <a href="https://example.com" onclick="x()">odkaz</a> <i>kurzíva</i>
+```
+
+```html
+<p><b>tučně</b> <a href="https://example.com">odkaz</a>
+&lt;i&gt;kurzíva&lt;/i&gt;</p>
+```
+
+Třídy a styly z modifikátorů hlídají další dva seznamy. ID se v seznamu tříd píše s mřížkou:
+
+```php
+$texy->htmlPolicy->allowedClasses = ['photo', '#main'];  // výchozí Texy::All
+$texy->htmlPolicy->allowedStyles = ['color'];            // výchozí Texy::All
+```
+
+Z `.[photo]` pak vznikne `class="photo"`, `.[reklama]` se zahodí.
+
+.[note]
+Seznamy platí pro HTML v syntaxi Texy a pro všechno, co Texy vykresluje samo. Surové HTML, které autor napíše do Markdownu, Texy podle specifikace CommonMark propustí přesně tak, jak je. Pro text od návštěvníků proto Markdown přepněte do [bezpečného režimu |#Bezpečný režim], který surové HTML vypne celé.
+
+Texy 3 kontrolovalo atributy podle definice HTML 4 a zahodilo každý, který k dané značce nepatřil. Texy 4 propustí, co povolí `allowedTags`, protože HTML5 žádný pevný seznam nemá a `data-*` nebo `aria-*` atributy by se musely vyjmenovat. Chcete-li atributy omezit, vyjmenujte je.
+
+
+Povolené adresy
 ---------------
 
-Rozděluje dlouhá slova pomocí `&shy;`.
+`$texy->urlPolicy` omezuje, na jaká schémata adres smějí vést odkazy a obrázky. Hodnotou je regulární výraz, `null` znamená bez omezení, což je výchozí stav:
 
 ```php
-// Maximální délka slova (výchozí: 20)
-$texy->longWordsModule->wordLimit = 25;
+$texy->urlPolicy->linkPattern = '~https?:|ftp:|mailto:~A';
+$texy->urlPolicy->imagePattern = '~https?:~A';
 ```
 
+Kontrolují se jen adresy se schématem. Relativní adresy jako `clanky/sklizen` projdou vždy. Odkaz na nepovolenou adresu nevznikne a zůstane po něm jen text.
 
-EmoticonModule
+
+Bezpečný režim
 --------------
 
-Nahrazuje emotikony za obrázky nebo Unicode znaky.
+Komentáře pod článkem píše kdokoli. Bezpečný režim zapne jedno volání. Pro Markdown:
 
 ```php
-// CSS třída (výchozí: null)
-$texy->emoticonModule->class = 'emoji';
-
-// Cesta k obrázkům (deprecated)
-$texy->emoticonModule->root = '/images/smilies/';
-$texy->emoticonModule->fileRoot = __DIR__ . '/public/smilies/';
-
-// Definice emotikonů (výchozí: základní sada)
-$texy->emoticonModule->icons = [
-	':-)' => '🙂',
-	':-(' => '☹',
-	';-)' => '😉',
-	// ... nebo cesty k obrázkům
-	':cool:' => 'cool.gif',
-];
+$texy = new Texy\Texy;
+$markdown = new Texy\Markdown\Markdown;
+Texy\Markdown\Configurator::safeMode($markdown, $texy);
+$html = $markdown->toHtml($comment, $texy);
 ```
 
-
-HtmlModule
-----------
-
-Zpracovává HTML značky a komentáře ve vstupním textu.
-
-```php
-// Zobrazit HTML komentáře na výstupu (výchozí: true)
-$texy->htmlModule->passComment = true;
-```
-
-
-HtmlOutputModule
-----------------
-
-Formátuje výstupní HTML.
-
-```php
-// Formátovat výstup (odsazení) (výchozí: true)
-$texy->htmlOutputModule->indent = true;
-
-// Základní odsazení (výchozí: 0)
-$texy->htmlOutputModule->baseIndent = 0;
-
-// Maximální šířka řádku (výchozí: 80)
-$texy->htmlOutputModule->lineWrap = 100;
-
-// Zachovat mezery v těchto elementech (výchozí: seznam)
-$texy->htmlOutputModule->preserveSpaces = [
-	'textarea', 'pre', 'script', 'code', 'samp', 'kbd',
-];
-```
-
-
-ScriptModule
-------------
-
-Zpracovává volání `{{makro}}`.
-
-```php
-// Oddělovač argumentů (výchozí: ',')
-$texy->scriptModule->separator = ';';
-```
-
-
-Třída Texy\Configurator .{toc: Texy\Configurator}
-=================================================
-
-Předpřipravené konfigurační sady pro časté případy použití.
-
-
-safeMode() - Bezpečný režim .{toc: safeMode()}
-----------------------------------------------
-
-Konfigurace pro zpracování **nedůvěryhodného obsahu** od uživatelů.
-
-```php
-Texy\Configurator::safeMode($texy);
-```
-
-**Co dělá:**
-- Zakáže třídy a ID (`$allowedClasses = NONE`)
-- Zakáže inline styly (`$allowedStyles = NONE`)
-- Povolí jen bezpečné HTML značky:
-
-```php
-[
-	'a' => ['href', 'title'],
-	'abbr' => ['title'],
-	'b' => [],
-	'br' => [],
-	'cite' => [],
-	'code' => [],
-	'em' => [],
-	'i' => [],
-	'strong' => [],
-	'sub' => [],
-	'sup' => [],
-	'q' => [],
-	'small' => [],
-]
-```
-
-- Filtruje URL schémata (jen `http:`, `https:`, `ftp:`, `mailto:`)
-- Zakáže obrázky
-- Zakáže definice referencí
-- Zakáže HTML komentáře
-- Přidá `rel="nofollow"` ke všem odkazům
-
-
-disableLinks() - Vypnout odkazy .{toc: disableLinks()}
-------------------------------------------------------
-
-Zakáže všechny typy odkazů.
-
-```php
-Texy\Configurator::disableLinks($texy);
-```
-
-**Co dělá:**
-- Zakáže všechny typy odkazů (`link/reference`, `link/email`, `link/url`, `link/definition`)
-- Zakáže odkazy ve frázích (`phraseModule->linksAllowed = false`)
-- Odebere `<a>` z povolených značek
-
-
-disableImages() - Vypnout obrázky .{toc: disableImages()}
----------------------------------------------------------
-
-Zakáže všechny typy obrázků.
-
-```php
-Texy\Configurator::disableImages($texy);
-```
-
-**Co dělá:**
-- Zakáže obrázky (`image`, `figure`, `image/definition`)
-- Odebere `<img>`, `<object>`, `<embed>`, `<applet>` z povolených značek
-
-
-Bezpečnost
-==========
-
-Texy bere bezpečnost vážně, ale jeho ochrany proti běžným útokům aktivuje bezpečný režim - zapněte ho přes `Configurator::safeMode()`, kdykoli zpracováváte nedůvěryhodný vstup.
-
-
-Ochrana proti XSS
------------------
-
-Cross-Site Scripting (XSS) je útok, kdy útočník vloží škodlivý JavaScript do stránky.
-
-**Příklad útoků, které bezpečný režim zablokuje:**
-
-```texy
-Pokus o útok: <script>alert('XSS')</script>
-
-Pokus o útok: <img src=x onerror="alert('XSS')">
-
-Pokus o útok: "klikni":javascript:alert('XSS')
-
-Pokus o útok: [* image.jpg onload="alert('XSS')" *]
-```
-
-V bezpečném režimu Texy:
-- **Validuje HTML** - odstraní nepovolené značky a atributy
-- **Filtruje URL** - povolí jen bezpečná schémata (`http:`, `https:`, `mailto:`, `ftp:`)
-- **Escapuje obsah** - správně escapuje text v atributech
-- **Sanitizuje atributy** - odstraní event handlery (`onclick`, `onerror`, ...)
+Pro syntaxi Texy:
 
 ```php
 $texy = new Texy\Texy;
 Texy\Configurator::safeMode($texy);
-
-$input = '<script>alert("XSS")</script>';
-$output = $texy->process($input);
-
-// Výstup: prázdný (script tag odstraněn)
+$html = $texy->process($comment);
 ```
 
+Bezpečný režim nastaví:
 
-Validace URL
-------------
+- třídy, ID a inline styly z modifikátorů zakázané (`allowedClasses` a `allowedStyles` na `Texy::None`)
+- jen bezpečné HTML značky: `a` s atributy `href` a `title`, `abbr` s `title`, `b`, `br`, `cite`, `code`, `em`, `i`, `strong`, `sub`, `sup`, `q`, `small`, a u všech atributy `title`, `lang` a `dir`
+- odkazy jen na `http:`, `https:`, `ftp:` a `mailto:`, obrázky jen na `http:` a `https:`
+- `rel="nofollow"` u odkazů na cizí weby
+- v syntaxi Texy vypnuté obrázky v textu, definice odkazů a HTML komentáře
 
-Texy kontroluje URL ve všech odkazech a obrázcích:
+Rozdíl mezi jazyky je v surovém HTML. Syntaxe Texy ho propustí přes seznam bezpečných značek, takže `<b>` v komentáři zůstane tučné. Markdown ho vypne celé a každá značka se zobrazí jako text.
+
+.[note]
+Bezpečný režim nevypne všechny obrázky. Obrázek, který v syntaxi Texy stojí v odstavci sám, je zápis obrázku s popiskem (`figure`), a v Markdownu zůstanou obrázky zapnuté. Pokud v komentářích nechcete obrázky vůbec, přidejte pro syntaxi Texy `Texy\Configurator::disableImages($texy)` a pro Markdown `$markdown->allowed[Texy\Markdown\Syntax::Image] = false`.
+
+Pro syntaxi Texy jsou ještě dvě předpřipravená nastavení:
+
+- `Texy\Configurator::disableImages($texy)` vypne všechny zápisy obrázků a z povolených značek odebere `img`, `object`, `embed` a `applet`
+- `Texy\Configurator::disableLinks($texy)` vypne odkazy, e-mailové adresy a definice odkazů a odebere značku `a`
+
+
+Markdown
+========
+
+`Texy\Markdown\Markdown` čte Markdown podle specifikace CommonMark. Rozšíření GitHub Flavored Markdown (tabulky, úkolové seznamy, přeškrtnutí, adresy bez závorek a filtr nebezpečných značek) zapne statická továrna:
 
 ```php
-$texy = new Texy\Texy;
-
-// Nastavit povolená schémata (výchozí v safeMode)
-$texy->urlSchemeFilters[Texy\Texy::FILTER_ANCHOR] =
-	'#https?:|ftp:|mailto:#Ai';
-$texy->urlSchemeFilters[Texy\Texy::FILTER_IMAGE] =
-	'#https?:#Ai';
+$markdown = Texy\Markdown\Markdown::gfm();   // CommonMark a všechna rozšíření GFM
+$markdown = new Texy\Markdown\Markdown;      // jen CommonMark
 ```
 
-**Příklady blokovaných URL:**
-
-```texy
-"útok":javascript:alert('XSS')  // blokováno
-"útok":data:text/html,<script>  // blokováno
-[* javascript:alert() *]  // blokováno
-```
-
-
-Filtrování HTML značek
-----------------------
-
-Kontrola přes `$allowedTags`:
+Každý zápis jde zapnout nebo vypnout zvlášť v poli `allowed`, třeba když v článcích nechcete tabulky nebo surové HTML:
 
 ```php
-$texy = new Texy\Texy;
+use Texy\Markdown\Syntax;
 
-// Povolit jen bezpečné značky
-$texy->allowedTags = [
-	'p' => [],
-	'strong' => [],
-	'em' => [],
-	'a' => ['href', 'title'],  // jen tyto atributy
-];
-
-$input = '<p>Text <script>alert()</script></p>';
-$output = $texy->process($input);
-
-// Výstup: <p>Text alert()</p>
-// (script tag odstraněn)
+$markdown->allowed[Syntax::Table] = false;
+$markdown->allowed[Syntax::HtmlBlock] = false;
+$markdown->allowed[Syntax::HtmlInline] = false;
 ```
 
+|---
+| Konstanta | Zápis
+|---
+| `Syntax::HeadingAtx` | nadpis `# Nadpis`
+| `Syntax::HeadingSetext` | nadpis podtržený `===` nebo `---`
+| `Syntax::BlockQuote` | citace `>`
+| `Syntax::List` | seznamy
+| `Syntax::CodeFenced` | blok kódu mezi <code>&#96;&#96;&#96;</code>
+| `Syntax::CodeIndented` | blok kódu odsazený čtyřmi mezerami
+| `Syntax::ThematicBreak` | vodorovná čára
+| `Syntax::HtmlBlock` | blok surového HTML
+| `Syntax::HtmlInline` | značka HTML v textu
+| `Syntax::LinkDefinition` | definice odkazu `[jméno]: adresa`
+| `Syntax::Link` | odkaz `[text](adresa)`
+| `Syntax::Image` | obrázek `![popis](adresa)`
+| `Syntax::Autolink` | adresa ve špičatých závorkách
+| `Syntax::AutolinkEmail` | e-mail ve špičatých závorkách
+| `Syntax::CodeSpan` | kód v textu
+| `Syntax::Escape` | zpětné lomítko před zvláštním znakem
+| `Syntax::Entity` | HTML entity jako `&amp;`
+| `Syntax::HardBreak` | zalomení řádku dvěma mezerami
+| `Syntax::EscapedBreak` | zalomení řádku zpětným lomítkem
+| `Syntax::Table` | tabulky (GFM)
+| `Syntax::TaskList` | úkolové seznamy (GFM)
+| `Syntax::Strikethrough` | přeškrtnutý text `~~` (GFM)
+| `Syntax::AutolinkExtended` | adresy bez závorek (GFM)
+| `Syntax::TagFilter` | zneškodnění nebezpečných značek jako `<script>` (GFM)
 
-Praktický příklad
------------------
+Nastavení vzhledu, typografie a bezpečnosti Markdown přebírá z enginu, který mu předáte jako druhý parametr `toHtml()`. Bez něj použije výchozí nastavení a typografii nepoužije.
+
+
+Syntaxe Texy
+============
+
+
+Které zápisy jsou zapnuté
+-------------------------
+
+Pole `$texy->allowed` zapíná a vypíná jednotlivé zápisy syntaxe Texy. Názvy jsou k dispozici i jako konstanty třídy `Texy\Syntax`:
 
 ```php
-function processComment(string $userInput): string
-{
-	$texy = new Texy\Texy;
+$texy->allowed['image'] = false;          // bez obrázků
+$texy->allowed['phrase/ins'] = true;      // zapnout ++vložený text++
+$texy->allowed[Texy\Syntax::Emoticon] = true;
+```
 
-	// Bezpečný režim
-	Texy\Configurator::safeMode($texy);
+Pole se čte jednou na začátku převodu, jeho změna během převodu se neprojeví.
 
-	// Dodatečná omezení
-	$texy->allowed['link/url'] = false;  // zakázat auto-linky
-	$texy->allowed['html/tag'] = false;  // zakázat HTML
+|---
+| Klíč | Výchozí | Zápis
+|---
+| `phrase/strong` | zapnuto | tučně `**text**`
+| `phrase/em` | zapnuto | kurzíva `//text//`
+| `phrase/em-alt`, `phrase/em-alt2` | zapnuto | kurzíva `*text*`
+| `phrase/strong+em` | zapnuto | tučná kurzíva `***text***`
+| `phrase/code` | zapnuto | kód <code>&#96;text&#96;</code>
+| `phrase/notexy` | zapnuto | text bez formátování `''text''`
+| `phrase/span`, `phrase/span-alt` | zapnuto | `"text .[třída]"` a `~text .[třída]~`
+| `phrase/quote` | zapnuto | citace v textu `>>text<<`
+| `phrase/acronym`, `phrase/acronym-alt` | zapnuto | zkratky `NBA((National Basketball Association))`
+| `phrase/sup-alt`, `phrase/sub-alt` | zapnuto | indexy `x^2`, `O_2`
+| `phrase/sup`, `phrase/sub` | vypnuto | indexy `x^^2^^`, `O__2__`
+| `phrase/ins` | vypnuto | vložený text `++text++`
+| `phrase/del` | vypnuto | smazaný text `--text--`
+| `phrase/quicklink` | zapnuto | odkaz na jedno slovo `slovo:[adresa]`
+| `phrase/wikilink` | zapnuto | odkaz `[text\|adresa]`
+| `phrase/markdown` | zapnuto | odkaz `[text](adresa)`
+| `phrase/escaped-asterix` | zapnuto | hvězdička zneplatněná zpětným lomítkem
+| `link/url` | zapnuto | adresa v textu jako odkaz
+| `link/email` | zapnuto | e-mail v textu jako odkaz
+| `link/definition` | zapnuto | definice odkazu `[jméno]: adresa`
+| `link/reference` | vypnuto | odkaz zapsaný jen jménem `[jméno]`
+| `image` | zapnuto | obrázek `[* foto.jpg *]`
+| `image/definition` | zapnuto | definice obrázku `[*jméno*]: foto.jpg`
+| `figure` | zapnuto | obrázek s popiskem
+| `emoticon` | vypnuto | emotikony `:-)`
+| `heading/underlined` | zapnuto | podtržené nadpisy
+| `heading/surrounded` | zapnuto | nadpisy `### Nadpis`
+| `list` | zapnuto | seznamy
+| `list/definition` | zapnuto | seznamy definic
+| `table` | zapnuto | tabulky
+| `blockquote` | zapnuto | citace `>`
+| `horizline` | zapnuto | vodorovná čára
+| `blocks` | zapnuto | všechny bloky `/--`
+| `block/code`, `block/pre`, `block/html`, `block/text`, `block/div`, `block/comment`, `block/texysource`, `block/default` | zapnuto | jednotlivé druhy bloků `/--`
+| `block/fenced` | zapnuto | blok kódu mezi <code>&#96;&#96;&#96;</code>
+| `html/tag` | zapnuto | HTML značky v textu
+| `html/comment` | zapnuto | HTML komentáře
+| `html/entity` | zapnuto | HTML entity jako `&amp;`
+| `script` | zapnuto | direktivy `{{jméno: hodnota}}`
+| `typography` | zapnuto | typografie
+| `longwords` | zapnuto | dělení dlouhých slov
 
-	// Zpracovat
-	return $texy->process($userInput);
+Klíče jsou stejné jako ve verzi 3, takže pole `allowed` ze starší konfigurace funguje beze změny.
+
+
+Odstavce
+--------
+
+```php
+$texy->paragraphModule->mergeLines = true;
+```
+
+Ve výchozím stavu Texy spojí řádky odstavce do jednoho souvislého textu a nový řádek vytvoří jen tam, kde řádek začíná mezerou. S `false` se zalomí každý řádek.
+
+
+Nadpisy
+-------
+
+Článek na blogu je pod nadpisem stránky, takže jeho nadpisy mají začínat od `<h2>`. Tohle zařídí `top`:
+
+```php
+$texy->headingModule->top = 2;           // nejvyšší nadpis bude <h2>, výchozí 1
+$texy->headingModule->generateID = true; // každý nadpis dostane id, výchozí false
+$texy->headingModule->idPrefix = 'toc-'; // předpona vygenerovaných id
+```
+
+Jak se úrovně počítají, určuje `balancing`. Ve výchozím režimu `HeadingModule::Dynamic` se nejdůležitější nadpis v článku stane úrovní `top` a ostatní se seřadí pod něj, ať autor začal kterýmkoli podtržením. V režimu `HeadingModule::Fixed` má každý znak podtržení pevnou úroveň podle pole `levels` (výchozí `#` 0, `*` 1, `=` 2, `-` 3), ke které se přičte `top`:
+
+```php
+$texy->headingModule->balancing = Texy\Modules\HeadingModule::Fixed;
+```
+
+U nadpisů zapsaných mřížkami na začátku řádku, jako `### Nadpis`, určuje `moreMeansHigher` (výchozí `true`), že víc mřížek znamená důležitější nadpis.
+
+Seznam nadpisů pro obsah článku nebo pro `<title>` stránky přečtete z dokumentu. Místo `process()` převedete text ve dvou krocích, abyste se k dokumentu dostali:
+
+```php
+$document = $texy->parse($text);
+$texy->transform($document);
+
+foreach (Texy\Nodes\HeadingNode::collectFrom($document) as $heading) {
+	echo $heading->level, ' ', $heading->getTitle(), ' ', $heading->id, "\n";
 }
 
-// Použití
-$comment = $_POST['comment'];
-$html = processComment($comment);
-echo $html;  // bezpečný výstup
+$html = $texy->renderHtml($document);
 ```
 
+```
+2 Jak jsme sušili švestky toc-jak-jsme-susili-svestky
+3 Sklizeň toc-sklizen
+3 Sušení toc-suseni
+```
 
-Best practices
---------------
+`parse()` text rozebere, `transform()` mimo jiné spočítá úrovně a id nadpisů a `renderHtml()` z dokumentu vytvoří HTML, stejné jako by vrátil `process()`. Titulek stránky je `getTitle()` prvního nadpisu. Co přesně se v jednotlivých krocích děje, popisuje [architektura |architecture].
 
-1. **Vždy použijte safeMode()** pro uživatelský obsah
-2. **Validujte vstup** před předáním Texy (délka, formát)
-3. **Limitujte HTML značky** podle potřeby
-4. **Kontrolujte výstup** - i když je Texy bezpečné, kontrola navíc nikdy neuškodí
-5. **Logujte podezřelé pokusy** - může vám to pomoci identifikovat útočníky
+.[note]
+Vyvažování nadpisů zatím platí jen pro syntaxi Texy.
+
+
+Odkazy a obrázky definované předem
+----------------------------------
+
+Adresy, na které články často odkazují, můžete definovat v kódu. Autoři pak píšou jen jméno:
 
 ```php
-$texy = new Texy\Texy;
-Texy\Configurator::safeMode($texy);
-
-// Logování
-$texy->addHandler('htmlTag', function($invocation, $el, $isStart) {
-	if ($el->getName() === 'script') {
-		error_log('XSS attempt detected!');
-	}
-	return $invocation->proceed();
-});
+$texy->linkModule->addDefinition('obchod', 'https://example.com/susarna');
+$texy->imageModule->addDefinition('logo', 'logo.png', 100, 50, 'Logo blogu');
 ```
+
+```texy
+Koupeno v "obchodě":[obchod]. [*logo*]
+```
+
+Definice platí pro všechny další převody. Definice se stejným jménem napsaná přímo v článku má přednost.
+
+
+Emotikony
+---------
+
+Emotikony jsou ve výchozím stavu vypnuté. Po zapnutí Texy nahradí `:-)` znakem 🙂 a podobně:
+
+```php
+$texy->allowed['emoticon'] = true;
+$texy->emoticonModule->icons[':-*'] = '😘';   // přidat vlastní
+```
+
+Výchozí sada je `:-)`, `:-(`, `;-)`, `:-D`, `8-O`, `8-)`, `:-?`, `:-x`, `:-P` a `:-|`. S nastavením `$texy->htmlOutput->emoticonClass` dostane každý emotikon obal `<span>` s touto třídou.
+
+
+Seznamy
+-------
+
+Pole `$texy->listModule->bullets` definuje znaky, kterými mohou začínat položky seznamů. Ve výchozím stavu jsou to `*`, `-` a `+` pro odrážkové seznamy a `1.`, `1)`, `I.`, `I)`, `a)` a `A)` pro číslované.
+
+
+Direktivy
+---------
+
+Zápis `{{jméno: hodnota}}` v textu je direktiva, kterou obslouží váš kód. Jak na to, popisuje stránka [Úprava chování prvků |custom-handlers].
+
+
+Přechod z verze 3
+=================
+
+Většina nastavení se ve verzi 4 přestěhovala k enginu. Staré cesty fungují dál, jen vyvolají upozornění `E_USER_DEPRECATED` s novým umístěním. Kde to nejde, třeba u nadpisů, upozornění řekne, čím starou vlastnost nahradit:
+
+|---
+| Texy 3 | Texy 4
+|---
+| `$texy->allowedTags`, `allowedClasses`, `allowedStyles` | `$texy->htmlPolicy->…`
+| `$texy->alignClasses`, `obfuscateEmail`, `nontextParagraph` | `$texy->htmlOutput->…`
+| `$texy->mergeLines` | `$texy->paragraphModule->mergeLines`
+| `$texy->longWordsModule` | `$texy->hyphenationModule`
+| `$texy->figureModule->tagName`, `class`, `leftClass`, `rightClass` | `$texy->htmlOutput->figureTagName`, `figureClass`, …
+| `$texy->horizLineModule->classes` | `$texy->htmlOutput->horizontalRuleClasses`
+| `$texy->htmlModule->passComment` | `$texy->htmlOutput->passHtmlComments`
+| `$texy->htmlOutputModule->indent`, `lineWrap`, … | `$texy->htmlOutput->indent`, `lineWrap`, …
+| `$texy->imageModule->root`, `fileRoot`, `leftClass`, `rightClass` | `$texy->htmlOutput->imageRoot`, `imageFileRoot`, …
+| `$texy->linkModule->root`, `forceNoFollow`, `shorten` | `$texy->htmlOutput->linkRoot`, `linkNoFollow`, `shortenUrls`
+| `$texy->phraseModule->tags` | `$texy->htmlOutput->phraseTags`
+| `$texy->emoticonModule->class` | `$texy->htmlOutput->emoticonClass`
+| `$texy->urlSchemeFilters` | `$texy->urlPolicy->linkPattern`, `imagePattern`
+| `$texy->headingModule->title`, `TOC` | `HeadingNode::collectFrom($document)`, viz [#Nadpisy]
+| `processLine($text)` | `process($text, singleLine: true)`
+| `processTypo($text)` | `applyTypography($text)`
+
+Bez náhrady zmizely `$tabWidth` (tabulátor je jeden znak mezery), `$removeSoftHyphens` (měkké spojovníky v textu zůstávají), `figureModule->widthDelta` a `requireCaption`, `tableModule->oddClass` a `evenClass`, `scriptModule->separator`, `linkModule->imageClass`, `imageModule->linkedRoot` a `defaultAlt` a obrázkové emotikony (`emoticonModule->root` a `fileRoot`). Přístup k nim vyvolá upozornění.
+
+Konstanty mají nové názvy: `Texy::ALL` a `NONE` jsou `Texy::All` a `None`, `HeadingModule::DYNAMIC` a `FIXED` jsou `Dynamic` a `Fixed`. Staré názvy zatím fungují.
+
+Úpravy chování přes `addHandler()` a vlastní syntaxe přes `registerLinePattern()` ve verzi 4 nefungují a vyhodí výjimku, která pojmenuje náhradu. Jak je přepsat, popisují [Úprava chování prvků |custom-handlers] a [Přidání vlastní syntaxe |custom-syntax].
 
 {{maintitle: Konfigurace Texy: moduly, bezpečnost a nastavení}}
 {{description: Kompletní průvodce konfigurací Texy v PHP: ovládání všech modulů, bezpečnost pro nedůvěryhodné vstupy pomocí safe mode a přizpůsobení vašim potřebám.}}
