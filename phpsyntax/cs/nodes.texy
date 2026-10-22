@@ -34,12 +34,13 @@ Node of the concrete syntax tree; every token of the source is reachable through
 - `getEndLine(): ?int` – Current line where the last token ends; null as for `getStartLine()`.
 - `isMultiLine(): bool` – Whether a line ends inside the text of the node, the trivia on its outer edges left out; unlike the lines, it needs no file.
 - `getOffsetRange(): ?array{int, int}` – Byte offsets of the node in the current text of the file, the end exclusive; null as for `getStartLine()`.
-- `getDocComment(): ?Trivia` – Doc comment before the node: the last one in the leading trivia of the first token, or in the trailing trivia of the previous token, where a doc comment stands between two declarations on one line.
+- `getDocComment(): ?Trivia` – Doc comment before the node: the last one in the leading trivia of the first token, or in the trailing trivia of the previous token, where a doc comment stands between two declarations on one line; one inside string interpolation is left out, documenting nothing there.
 - `replaceTrivia(Trivia $old, Trivia $new): void` – Replaces one trivia of the node, wherever among its tokens it stands, with another in place.
 - `removeTrivia(Trivia $trivia): void` – Removes one trivia of the node, wherever among its tokens it stands, tidying the whitespace around it the way `Token::removeTrivia()` does.
 - `replaceDocComment(Trivia $docComment): void` – Replaces the doc comment of the node (see `getDocComment()`) with the trivia given.
 - `removeDocComment(): void` – Removes the doc comment of the node (see `getDocComment()`) together with the line it stands on.
 - `findAncestor(class-string<T> $class): (T&Node)|null` – The innermost node of the class above this one, its parent first.
+- `findClassScope(): (ClassLikeNode&Node)|null` – The class whose scope the node stands in, the one `self`, `static` and `__CLASS__` name; null outside a class and in a function declared inside a method, which has no class scope. The arguments of `new class(...)` stand in the scope around it.
 - `findFirst(class-string<T> $class, ?callable $predicate = null): (T&Node)|null` – The first descendant of the class the predicate accepts, in pre-order; null when there is none.
 - `find(class-string<T> $class, ?callable $predicate = null): list<T&Node>` – Descendant nodes of the class the predicate accepts, in pre-order, as a snapshot safe to iterate while mutating the tree.
 - `getNextSibling(): ?Node` – The next item of the list the node is an item of; null for the last one.
@@ -95,8 +96,11 @@ Expression, which stands for a value; a destructuring stands where a target is w
 - `isWritable(): bool` – Whether the expression may stand where a place is assigned to: a variable, an element, a property, reached through a chain PHP writes through. A `?->` anywhere along it rules the write out, a call in the chain included, and so does a chain starting at a value of its own, a literal, a constant, `new` or `clone`, which has no place to write to. It says nothing about reading; that is `isRepeatableRead()`, and the two answer for the two sides of `=`.
 - `isInNullsafeChain(): bool` – Whether a `?->` stands in the chain the expression reads out of, its own access and parentheses included: PHP refuses to write there or to make a first-class callable of a call there, the `?->` possibly skipping the rest.
 - `isWritten(): bool` – Whether something writes the expression or an element of it, a variable, a property or an element alike: it is assigned, stepped, unset, bound, or taken by reference, either side of `=&` among them, the right one becoming a reference a write may later go through.
-- `isRepeatableRead(): bool` – Whether reading the expression again gives the same value with no side effects: variables, property, constant and offset fetches, literals, arrays of such items and what parentheses or a unary operator make of them, nothing that runs code of its own; an unpacked item may run a generator and one by reference creates the variable, so neither is repeatable. The answer is syntactic, so what the language runs behind such a read is out of sight and does not count: a magic getter or a property hook behind a fetch, an `ArrayAccess` behind an offset, a `__toString()` behind a string that interpolates. Whoever cannot assume that much has to know the types, which a syntax tree does not.
-- `hasEffect(): bool` – Whether evaluating the expression may do more than give its value: call code, create or clone an object, write, print, leave or run a command; a closure or an arrow function written in it counts by the expressions of its body, though making one runs nothing. The answer is syntactic as that of `isRepeatableRead()`, so a read an object answers through a magic method or a hook does not count.
+- `isRepeatableRead(): bool` – Whether reading the expression again gives the same value with no side effects: variables, property, constant and offset fetches, literals, arrays of such items and what parentheses or a unary operator make of them, nothing that runs code of its own; an unpacked item may run a generator and one by reference creates the variable, so neither is repeatable. The answer is syntactic, so what the language runs behind such a read is out of sight and does not count: a magic getter or a property hook behind a fetch, an `ArrayAccess` behind an offset, a `__toString()` behind a string that interpolates, and the error of a property read before it is initialized. Whoever cannot assume that much has to know the types, which a syntax tree does not. The same value holds only while nothing runs between the reads: a call evaluated between them may change a property or an offset, never a variable it is not given.
+- `hasEffect(): bool` – Whether evaluating the expression may do more than give its value: call code, create or clone an object, write, print, leave or run a command; a closure or an arrow function written in it counts by the expressions of its body, though making one runs nothing. The answer is syntactic as that of `isRepeatableRead()`, so a read an object answers through a magic method or a hook does not count, and neither does what may fail, an error a division by zero throws or a warning a read of a missing key gives.
+- `isConstantRead(): bool` – Whether the expression reads a constant, global or of a class named outright, the same whenever it is read.
+- `isConstantExpression(ConstantExpressionFeature ...$allowed): bool` – Whether the expression may stand where PHP asks for a constant expression, holding nothing beyond what every place and every version takes but the features allowed: literals, constants, `X::C` and `X::class` other than of `static`, the operators but the pipe, the ternary, arrays and offsets into them. What PHP takes in some versions and no feature names, a property of an enum case or a class constant named by an expression, counts as none.
+- `hasEarlyReads(): bool` – Whether PHP reads a part of the expression, the target of an assignment, before it evaluates the value: an offset or a name that is neither a plain variable, a literal nor a constant, or a class given by an expression, `$a[$o->i] = $o->next()` reading `$o->i` before the call.
 - `evaluatesToBoolean(): bool` – Whether the expression yields a boolean whatever its operands: a comparison, a logical operation, a negation, `instanceof`, `isset()`, `empty()`, a bool cast or a boolean literal.
 - `toValue(): mixed` – The value the expression is written as: a scalar, `null`, `true`, `false`, or an array of them. A name standing for a constant is not one, its value being a matter of what the code around it defines. Throws `LogicException` where the expression is written as no value; `hasValue()` tells beforehand.
 - `hasValue(): bool` – Whether the expression is written as a value, which is what `toValue()` gives.
@@ -173,6 +177,7 @@ Statement: what a file, a block and the body of a control structure consist of. 
 
 - `remove(CommentPolicy $comments = CommentPolicy::MoveToNextToken, bool $mergeBlankLines = false): void` – Removes the statement as `Node::remove()` does. A statement ended by a close tag leaves the tag behind as an empty statement, so that the text after it stays text. A statement that opens its code too, as `<?=` does, goes whole, and so does the empty statement of a close tag, whose removal is for the caller to decide.
 - `interruptsFlow(): bool` – Whether the code does not go on after the statement: `return`, `break`, `continue`, `goto`, `throw` or `exit`. It reads the statement itself, so an `if` whose every branch returns is no such statement; that is control flow.
+- `alwaysLeaves(): bool` – Whether the code never goes on past the statement: it interrupts the flow itself, or so does the last statement of a block, every branch of an `if` with an `else`, or every way through a `try`.
 
 
 TraitAdaptationNode
@@ -201,7 +206,7 @@ Kořen souboru, jména, seznamy, parametry, argumenty, atributy, části řídic
 NameNode
 --------
 
-Name of a class, function, constant or namespace: one token of any kind, including keywords the grammar accepts as names (`static`, `array`, `readonly`). Rozšiřuje `Node`.
+Name of a class, function, constant or namespace: one token of any kind, a keyword included (`static`, `array`, `readonly`). Rozšiřuje `Node`.
 
 - `token`: `Token`
 
@@ -241,6 +246,7 @@ Parenthesized arguments of a call, instantiation, attribute or `exit`. Rozšiřu
 - `closeParen`: `Token`
 
 - `isPartialApplication(): bool` – Whether the list leaves parameters unbound with `?` or `...`, which makes a closure of the call instead of calling it.
+- `getPlainValues(): ?list<ExpressionNode>` – The values of the arguments, in order; null where one is named, passed by reference, unpacked or a placeholder, which makes no plain list of values.
 - `findArgument(?string $name, ?int $position): ?ArgumentNode` – The argument the parameter of the name and the position gets: the one written with the name, else the one standing at the position, so that `get_class(object: $o)` reads as the call `get_class($o)` is. Null where the parameter gets none, and where the call does not say which it gets: a `?` placeholder holds a place without being an argument, and an unpacked array stands for as many arguments as it holds, so it takes the answer from a position after it, never from a name, which stands for itself. Whoever knows only one of the two asks with null for the other: the position alone finds no argument written with a name, the name alone none that is not.
 
 
@@ -658,6 +664,7 @@ Statements in braces. Rozšiřuje `StatementNode`.
 - `closeBrace`: `Token`
 
 - `interruptsFlow(): bool` – Whether the code does not go on after the last statement of the block, the empty statement a close tag leaves behind it aside; false for an empty block.
+- `alwaysLeaves(): bool` – Whether the code never goes on past the last statement of the block; false for an empty block.
 - `unwrap(): void` – Moves the statements of the block into the list the block stands in, in its place, and removes the braces the way `remove()` removes a node: a comment on the opening brace goes before the first statement, one on the closing brace after the last one, before what follows the block, both on lines of their own where the brace stood on one. The statements keep their trivia, the indentation included, which `Indentation::shift()` moves a level up. Throws `LogicException` for a block whose braces stand next to a close tag or inline HTML, where the whitespace is output of the script, before anything moves.
 
 
@@ -677,6 +684,8 @@ IfNode
 - `else`: `?ElseNode`
 - `endKeyword`: `?Token`
 - `semicolon`: `?Token`
+
+- `alwaysLeaves(): bool` – Whether the code never goes on past the `if`: it has an `else` and every branch leaves.
 
 
 WhileNode
@@ -868,6 +877,8 @@ TryNode
 - `catches`: `PlainNodeList<CatchNode>`
 - `finally`: `?FinallyNode`
 
+- `alwaysLeaves(): bool` – Whether the code never goes on past the `try`: its `finally` leaves, or its body and every `catch` do.
+
 
 GotoNode
 --------
@@ -988,6 +999,7 @@ Variable: `$a`, `$$a`, `${expr}`; inside a string also a bare name in `${name}`.
 
 - `$plainName: ?string` – The name without the dollar sign; null where the name is an expression (`$$a`, `${expr}`).
 - `isThis(): bool` – Whether the variable is `$this`, the object a method runs on.
+- `rename(string $name): static` – Writes the name of the variable, without the dollar sign: a plain name changes its text, and a name given by an expression is replaced by a variable token, the dollar and the braces around the expression gone and the trivia on its edges kept, so that `$plainName` reads the new name.
 
 
 ArrayAccessNode
@@ -1015,6 +1027,7 @@ Property access with `->` or `?->`; the name may be an identifier, a variable or
 - `$plainName: ?string` – The name of the property; null where the name is a variable or an expression (`$a->$b`, `$a->{expr}`).
 - `$nullsafe: bool` – Whether the fetch is written with `?->`, which skips it when the object is null.
 - `isOfThis(): bool` – Whether the property is one of `$this`, with either operator.
+- `rename(string $name): static` – Writes the name of the property, an identifier: a plain name changes its text, and a name given by an expression is replaced by the identifier, its braces gone and the trivia on its edges kept, so that `$plainName` reads the new name.
 
 
 StaticPropertyFetchNode
@@ -1030,6 +1043,7 @@ Static property access: `A::$b`, `A::$$b`, `A::${expr}`. The name is written the
 - `closeBrace`: `?Token`
 
 - `$plainName: ?string` – The name of the property without the dollar sign; null where the name is an expression (`$$b`, `${expr}`).
+- `rename(string $name): static` – Writes the name of the property, without the dollar sign: a plain name changes its text, and a name given by an expression is replaced by a variable token, the dollar and the braces around the expression gone and the trivia on its edges kept, so that `$plainName` reads the new name.
 
 
 ClassConstantFetchNode
@@ -1044,6 +1058,7 @@ Class constant access: `A::B`, `A::class`, `A::{expr}`. Rozšiřuje `ExpressionN
 - `closeBrace`: `?Token`
 
 - `$plainName: ?string` – The name of the constant; null where the name is an expression (`A::{expr}`).
+- `rename(string $name): static` – Writes the name of the constant, an identifier: a plain name changes its text, and a name given by an expression is replaced by the identifier, its braces gone and the trivia on its edges kept, so that `$plainName` reads the new name.
 
 
 ConstantFetchNode
@@ -1078,6 +1093,7 @@ Method call with `->` or `?->`. Rozšiřuje `ExpressionNode`.
 - `$plainName: ?string` – The name of the method; null where the name is a variable or an expression (`$a->$b()`, `$a->{expr}()`).
 - `$nullsafe: bool` – Whether the call is written with `?->`, which skips it when the object is null.
 - `isOfThis(): bool` – Whether the method is one of `$this`, with either operator.
+- `rename(string $name): static` – Writes the name of the method, an identifier: a plain name changes its text, and a name given by an expression is replaced by the identifier, its braces gone and the trivia on its edges kept, so that `$plainName` reads the new name.
 
 
 StaticMethodCallNode
@@ -1093,6 +1109,7 @@ Static method call: `A::b()`, `$a::b()`, `A::{expr}()`. Rozšiřuje `ExpressionN
 - `arguments`: `ArgumentListNode`
 
 - `$plainName: ?string` – The name of the method; null where the name is an expression (`A::{expr}()`).
+- `rename(string $name): static` – Writes the name of the method, an identifier: a plain name changes its text, and a name given by an expression is replaced by the identifier, its braces gone and the trivia on its edges kept, so that `$plainName` reads the new name.
 
 
 NewNode
@@ -1165,7 +1182,7 @@ Binary operation; the operator token tells which (arithmetic, comparison, logica
 UnaryOpNode
 -----------
 
-Unary operation written before its operand: `+`, `-`, `!`, `~`, `@`; `++` and `--` are a PrefixOpNode, the way the grammar tells them apart. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
+Unary operation written before its operand: `+`, `-`, `!`, `~`, `@`; `++` and `--` are a PrefixOpNode. Rozšiřuje `ExpressionNode`. Implementuje `OperatorNode`.
 
 - `operator`: `Token`
 - `expression`: `ExpressionNode`
@@ -1467,6 +1484,8 @@ Class constant declaration, optionally typed. Rozšiřuje `MemberNode`. Implemen
 - `items`: `SeparatedNodeList<ConstItemNode>`
 - `semicolon`: `Token`
 
+- `isOverridable(): bool` – Whether a descendant may declare the constant again: it is neither private nor final, and its class may be extended.
+
 
 MethodNode
 ----------
@@ -1488,6 +1507,8 @@ Method declaration; abstract and interface methods end with a semicolon instead 
 
 - `setReturnType(?TypeNode $type): static` – Writes the return type with its colon, or removes both, as `FunctionLikeNode::setReturnType()` says.
 - `isConstructor(): bool` – Whether the method is the constructor, whose name PHP compares without regard to letter case.
+- `isDestructor(): bool` – Whether the method is the destructor, whose name PHP compares without regard to letter case.
+- `isOverridable(): bool` – Whether a descendant may declare the method again: it is neither private nor final, and its class may be extended.
 
 
 TraitUseNode
