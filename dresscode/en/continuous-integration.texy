@@ -1,0 +1,82 @@
+Continuous Integration: GitHub Actions and GitLab
+*************************************************
+
+.[perex]
+PHP code style checks in continuous integration (CI): an output format that is chosen automatically, annotations right in the pull request, a cache between runs, and exit codes you can rely on.
+
+
+What to Run in CI
+=================
+
+`check`, not `fix`. CI should say whether the code is fine, and the exit code `1` on a violation fails the job; the developer makes the fix locally, where they can see it. If you want CI to offer the fix as well, run `fix` followed by `git diff --exit-code`. The diff in the output of the job is then exactly what the developer should commit.
+
+The exit codes are fixed. `0` means the code is clean. `1` means a violation, a file that cannot be parsed, or more warnings than `--max-warnings` allows. `2` means that a file failed (an exception in a rule, rules stuck in a loop). `3` means an error on the command line or in the configuration. On `2` and `3`, the job should fail more loudly than on `1`: `3` means that nothing was checked, and `2` means that some file was not checked.
+
+
+GitHub Actions
+==============
+
+```yaml
+name: Code style
+
+on: [push, pull_request]
+
+jobs:
+  dresscode:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+      - run: composer create-project dresscode/dresscode temp/dresscode --no-progress
+      - run: temp/dresscode/bin/dresscode check
+```
+
+Nothing else is needed: DressCode recognizes that it runs as a step of GitHub Actions and switches the output to the `github` format, in which every violation is an annotation. In the pull request, each annotation then appears right at its line, with the message and the decision path. In the output of the job, each violation comes with the file, the line and the decision, and a summary is at the end.
+
+Colors turn off automatically, because the output does not go to a terminal, so you do not have to write `--no-color`. And watch the PHP version on the runner: DressCode itself needs PHP 8.4 to 8.6, even when it checks a project written for an older version.
+
+
+GitLab, Jenkins and Others
+==========================
+
+Where there is no native format, use `checkstyle`, which Jenkins, the tool `cs2pr` and most converters to GitLab's Code Quality format understand, or [`json` |cli#Output for Tools: json] for your own processing:
+
+```yaml
+dresscode:
+  script:
+    - composer create-project dresscode/dresscode temp/dresscode --no-progress
+    - temp/dresscode/bin/dresscode check -f checkstyle > dresscode.xml
+  artifacts:
+    when: always
+    paths: [dresscode.xml]
+```
+
+Neither of these formats changes its structure in a minor version; the `json` document also carries the version of its format in the key `version` and the exit code of the run in `summary.exitCode`. The `console` and `github` formats, on the other hand, are for people and may change.
+
+
+Cache Between Runs
+==================
+
+DressCode remembers the fingerprints of files that passed clean, in the system temporary directory. In CI, where every run starts from scratch, this does not help. But when you point the cache into the project and let CI keep that directory, the second run checks only the changed files:
+
+```neon
+cacheDir: temp/dresscode-cache
+```
+
+```yaml
+      - uses: actions/cache@v4
+        with:
+          path: temp/dresscode-cache
+          key: dresscode-${{ github.sha }}
+          restore-keys: dresscode-
+```
+
+`actions/cache` does not save a cache again at the end of the job when its key already exists, so with a fixed key the cache would stay in the state of the first run. That is why the key contains the commit: every run saves a new cache, and `restore-keys` restores the newest one at the start of the next run. DressCode also has its own cache key. It includes a fingerprint of the configuration, of the versions of the installed packages, and of the modification times of the files with the project's own rules and presets. So after you change the configuration, update the tool or edit your own rule, the files are checked again automatically.
+
+
+Parallel Runs and Versions
+==========================
+
+The number of worker processes follows the number of CPUs of the runner, so on a two-core runner there is nothing to tune; on a machine with many cores, `--jobs 8` helps. Pin the version of DressCode, either through `composer.lock` or with a version number in `create-project`: a new decision of a set or a standard in a minor version can start reporting something that passed until now, and that should happen during an update you make on purpose, not in someone else's pull request.

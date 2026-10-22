@@ -1,0 +1,165 @@
+Traversing the Tree
+*******************
+
+.[perex]
+Searching for nodes by class, `Traverser` with control over the traversal, moving up to parents and sideways along tokens, positions in the source, and questions the tree answers for you.
+
+
+Searching
+=========
+
+The quickest way to find nodes of a given class is `find()` and `findFirst()`:
+
+```php
+foreach ($file->find(FunctionCallNode::class) as $call) {
+	// ...
+}
+
+$class = $file->findFirst(ClassNode::class);
+```
+
+When the class alone is not enough, add a condition after it. The class stays in its place, so both the condition and the result are typed, and your IDE and PHPStan know what they are working with:
+
+```php
+$long = $file->find(StringNode::class, fn(StringNode $s) => strlen($s->toValue()) > 80);
+```
+
+The filter may also be an interface, so `find(ClassLikeNode::class)` finds classes, interfaces, traits and enums at once. To get every node and decide only in the condition, write `find(Node::class, $condition)`.
+
+Both methods search only among the descendants and never return the node you call them on. They go through the descendants in source order, a parent before its children. `find()` returns an array, a snapshot taken in advance, so it is safe to change the tree while you go through it. They search nodes, not tokens; you reach a token through the node it sits in, through `getTokens()` of the whole subtree, or by walking from `getFirstToken()` with the `getNext()` method.
+
+
+Traverser
+=========
+
+When you need to see everything in source order, including tokens, or react both to entering and to leaving a node, use `Traverser`:
+
+```php
+use PhpSyntax\{TraverseAction, Traverser};
+
+Traverser::traverse($file, function (Node|Token $node) {
+	// enter
+}, function (Node|Token $node) {
+	// leave
+});
+```
+
+The callback may replace or remove the node it got; the traverser then does not descend into it or into its replacement, it skips siblings detached in the meantime, and it does not visit nodes inserted in the meantime; those are left for the next traversal. Thanks to this, you can change the tree during the traversal itself, without any special mode.
+
+**Every `enter` has its `leave`**, with the same object, even when the node has disappeared from the tree in the meantime. A callback that keeps a depth or a stack therefore never has to deal with a missing level. This also holds for `TraverseAction::Stop`: the traversal does not enter any more nodes, but on the way out it leaves those it has entered, including the one that stopped it. Watch out: a callback may get a node that is no longer in the tree. This applies not only to a node the callback removed itself, but also to the descendants of a removed ancestor: when `enter` removes the parent of a node, the traverser still enters its children, because they still have their parent set; only the parent is no longer in the file. When you traverse a file, `$node->getFile() === null` tells this reliably; if your callback changes the tree, check this first, otherwise you change only a detached subtree.
+
+The callback can control the traversal with its return value:
+
+```php
+Traverser::traverse($file, function ($node) {
+	if ($node instanceof ClosureNode) {
+		return TraverseAction::SkipChildren;   // we don't want to go into the closure body
+	} elseif ($node instanceof HaltCompilerNode) {
+		return TraverseAction::Stop;           // nothing interesting comes after this
+	}
+});
+```
+
+`TraverseAction::Stop` also works as the return value of `leave`. The traversal ignores anything else the callback returns, and because both answers are enum cases, an arrow function like `fn($node) => $this->visited++`, which returns the value of its expression, never controls the traversal. The callback may also start a traversal of its own, for example of the subtree it has just got.
+
+
+Up and Sideways
+===============
+
+Every node and token knows its parent (`$node->parent`), and from there you can go higher:
+
+```php
+$method = $call->findAncestor(MethodNode::class);         // the nearest ancestor of the given class, or null
+$function = $call->findAncestor(FunctionLikeNode::class); // the function, method, closure, arrow function or hook that contains the code
+$class = $token->findAncestor(ClassLikeNode::class);      // class, interface, trait, enum or anonymous class, even from a token
+```
+
+A token has `findAncestor()` too, and it starts at its parent, so you find the enclosing function or class the same way from a node and from a token. The filter may also be an interface, and the result is still a node you can search further in.
+
+To move sideways, use tokens: `$token->getNext()` and `getPrevious()` are the next and the previous token in the file, regardless of the structure. `$node->getFirstToken()` and `getLastToken()` are the edges of a node, so "the token before a node" is `$node->getFirstToken()->getPrevious()`. For a node that must have a token, that is, an expression, a statement, a class member and most others, they return a `Token`, never `null`. Only these can be empty: a list, `ModifiersNode`, `SkippedArrayItemNode`, and nodes whose tokens all stand in a list that a change can empty: `PropertyNode`, `UnionTypeNode` and `IntersectionTypeNode`, and therefore also `MemberNode` and `TypeNode` above them. A token answers both `getFirstToken()` and `getLastToken()` with itself, so you handle a value of type `Node|Token` with one call.
+
+You move between the items of a list with the methods `getNextSibling()` and `getPreviousSibling()`, see [Lists |tree#Lists].
+
+The text of a node is the property `$node->text`: everything from the first token to the last, without the trivia at the edges. It is useful in messages and in debugging, and it is the same as `$token->text`, only one level higher.
+
+
+Positions
+=========
+
+```php
+$token->getCurrentLine();         // the line in the current state of the tree, from 1
+$token->getCurrentColumn();       // the column from 1, in UTF-8 characters
+$token->getCurrentOffset();       // the byte offset
+$token->getVisualColumn($style);  // the column with tabs expanded according to the style
+$token->line;                     // the line in the parsed file; it never changes
+$token->pos;                      // the byte offset in the parsed file
+$node->getStartLine();            // the lines of the node
+$node->getEndLine();
+$node->isMultiLine();             // does a line end inside the text of the node? Works even without a file
+```
+
+The difference between `getCurrentLine()` and `line` matters as soon as you change the tree: the first follows the changes, the second is the position the user knows from their file, and that is the one that belongs in a report. `line` and `pos` are properties inherited from `PhpToken`; a token that did not come from the lexer, that is, one created by a constructor or parsed as a fragment, has `-1` in both. If you rewrite the text of a name or an identifier, the new token keeps the original position, so the report still points to the place in the file; a token you insert with `replaceWith()` has its own position. A source in an encoding other than UTF-8 passes through byte for byte, but columns are counted in UTF-8 characters, so for such a source they are only approximate. Only the tokens of a tree that hangs on a `FileNode` have a current position; in a detached subtree, `getCurrentLine()`, `getCurrentColumn()`, `getCurrentOffset()`, `getVisualColumn()`, `getStartLine()` and `getEndLine()` all return `null`.
+
+To go the other way, from a position to a node, use the file. This is useful when the position comes from another tool or an editor:
+
+```php
+$node->getOffsetRange();                               // [start, end) in bytes, the end is not included
+$file->findNode($start, $end, MethodCallNode::class);  // the largest node of the class whose text spans exactly those offsets
+$token->getFile() === $file;                           // does the token stand in this file?
+$a->isBefore($b);                                      // does token $a stand before token $b in the file?
+```
+
+`getFile()` returns the file in which a node or a token stands, and `null` for a detached subtree. Positions are computed by the token index, which is built lazily. After a change, it updates the order of tokens, lines, offsets and columns only where queries reach, so the cost of a position query right after a change depends on how far from that change it looks. Only `findNode()` needs the positions of the whole file. A structural change also has to shift the tokens after the changed place, which costs time in proportion to the size of the file.
+
+
+Questions Every Tool Asks
+=========================
+
+Everyone who modifies code asks a few questions about it, and answering them properly takes two days of work. So the tree answers them for you.
+
+```php
+$a->matches($b);             // are these two nodes the same, token by token, regardless of spaces?
+$node->getTokenTexts();      // and what the comparison is based on: the texts of the tokens, without trivia
+$expr->isRepeatableRead();   // can the expression be evaluated a second time without anything changing?
+$expr->getDereferenceKind(); // how does the parent access it: through ->, [], (...) or ::?
+$expr->isDereferenced();     // the same question without the kind: does the parent access it at all?
+$expr->isDereferenceable();  // and the other way: could you access its member even without parentheses?
+$expr->canNameClass();       // may it stand where a class is named?
+$expr->isWritable();         // may it stand where something is assigned to?
+$expr->canStandInString();   // may it stand in a string in the {$...} form?
+$expr->evaluatesToBoolean(); // is the result always a bool, whatever the operands are?
+$paren->isRedundant();       // can these parentheses go?
+$expr->hasValue();           // is this a written value, not a computation?
+$expr->toValue();            // and which one
+```
+
+`matches()` compares the texts of tokens, not trivia, so `$a->b` and `$a -> b` match. `isRepeatableRead()` returns `true` for variables, property and element accesses, constants and literals, arrays of such items, and what parentheses or a unary operator make of them. Everything else gets `false`: calls, `new`, assignments, `++` and anything else that can have a side effect, an array item with `...`, which can run a generator, or with `&`, which creates a variable, but also pure expressions the list does not cover, such as `$a + $b`, a cast, a ternary or `match`. So the answer `false` does not say that a side effect is likely, only that the method did not rule it out. Together, `matches()` and `isRepeatableRead()` answer the question "does this ternary repeat its condition, and may I evaluate it only once". But the answer is syntactic: the tree cannot see what the language itself runs behind such a read, whether it is a magic getter or a hook behind `->`, `ArrayAccess` behind `[]`, or `__toString()` behind an interpolated string. If that is a risk you cannot take, you need types, and syntax does not know them.
+
+`getTokenTexts()` gives you the texts that `matches()` compares. Use this form as a map key for code, or to compare two versions of code, because the layout does not matter in it. You cannot measure with it, though: read the length of code from `$node->text`, which keeps the code with its spaces, as it is in the file.
+
+`isRedundant()` on a `ParenthesizedNode` is the hardest of these questions, and the one most often answered wrong: it depends on the precedence and associativity of the operator inside and outside the parentheses, on whether the result is accessed as an object or an array, and on several special cases. So every node written with an operator implements the `OperatorNode` interface with the properties `$precedence` and `$associativity`, which tell how strongly the operator binds and to which side it leans; `isRedundant()` builds the answer from them. Where it is not sure, it answers `false`.
+
+Besides precedence, a node carries one more property. An operator that has no left operand and whose right operand reaches as far as the code allows implements the `RightExtendingNode` interface: an arrow function, `throw`, `print`, `yield`, `yield from` and `include`. Such an operator cannot swallow anything before it, so wherever nothing follows the parentheses, they are unnecessary, however loosely the expression binds. So `$f = (fn() => 1)` is the same as `$f = fn() => 1`, while `(fn() => 1) + 2` needs the parentheses, because without them the body of the function would swallow the two as well.
+
+"After the parentheses" does not mean right next to them, though. The method climbs to the nearest ancestor that does not end with those parentheses, and what follows them inside that ancestor decides. So `$a + (yield $b) + 1` keeps them, even though `yield` ends that addend: after the whole sum there is still `+ 1`. A prefix operator (`!`, `-`, `@`, a cast) takes nothing before it either, so it binds tightly from the left, and `(bool) (!$a)` and `$a ** (-$b)` drop the parentheses. And what could swallow what follows the parentheses is not only the expression in them, but any operator it ends with: `(@include $f) !== false` keeps them because of the `include` at the end inside them.
+
+Precedence is not the whole story, though. Here is the classic case that breaks hand-written implementations: `::` takes a **class name** on its left, so `FOO::class` is the string `'FOO'`, while `(FOO)::class` is the class of the object that the constant holds. So these parentheses are not unnecessary; they are what turns the name into an expression. The same holds for `(FOO)::BAR`, `(FOO)::m()`, `(FOO)::$p`, and for `true` and `null`, which are also written as names. Anything else on the left of `::` is an expression anyway, and neither `->` nor `[]` expects a name, so `(FOO)->x` and `(FOO)[0]` drop the parentheses. The pipe has a similar exception: on the right of `|>` it accepts an arrow function only in parentheses, so `$a |> (fn($b) => $b)` keeps them.
+
+That is exactly why `isDereferenceable()` asks **what** stands after the expression, and takes a `DereferenceKind`: `Fetch` for `->` and `[]` including a method call, `Call` for `(...)`, and `StaticAccess` for `::`. The answer differs from case to case, as you can see with `FOO`: `FOO->x` works, `FOO()` is a call of something completely different, and `FOO::class` is a class name.
+
+`getDereferenceKind()` returns the same `DereferenceKind`, only from the other side: it tells which of those three ways the parent of the expression uses to access it, and `null` when it does not access it at all. `isDereferenced()` is the same question asked without the kind.
+
+`isWritable()` is a question from the other side: may the expression stand on the left of `=`? A variable, an array element, a static property and a property through `->` may, through `?->` **may not**, because that one is only read. And it is not only about the last step: a single `?->` anywhere in the chain the write goes through is enough for the answer to be `false`, because even `$o?->p->q = 1` is an error for PHP. A method call in the chain counts too, so `$o?->m()->p` is not writable, and the same goes for a chain that starts with a value that has no place to write to: a literal, a constant, `new` or `clone`. So `(new Foo)->bar` is not writable, but `foo()->bar` and `Foo::create()->bar` are. What stands beside that chain, for example `$a[$b?->c]`, is only read and has no effect on writability. This question does not apply to destructuring: `DestructuringNode` is not an expression, because it stands only where something is assigned to, and it has no value of its own. The slots that hold the target of an assignment say so with the type `ExpressionNode|DestructuringNode`, so if you ask about an expression there, narrow the type first.
+
+```php
+$paren = $expr->findFirst(ParenthesizedNode::class);
+if ($paren->isRedundant()) {
+	$paren->replaceWith($paren->expression); // ($a * $b) + $c  →  $a * $b + $c
+}
+```
+
+[`replaceWithExpression()` |mutation#An Expression in Place of an Expression] asks the same question from the other side: when you put an expression in place of another one, it adds parentheses exactly where `isRedundant()` would not call them unnecessary, so you do not have to deal with precedence.
+
+`hasValue()` and `toValue()` answer "what value is written here": scalars, `null`, `true`, `false`, arrays including nesting and unpacking, unary plus and minus on a number, parentheses, and a heredoc without interpolation. A constant name **is not** a value, neither `PHP_INT_MAX` nor `self::FOO`: what it means depends on the code around it, and syntax does not know that. `toValue()` on an expression that has no value throws a `LogicException`, because `null` is a valid value and must be told apart from "none".
+
+`evaluatesToBoolean()` returns `true` for an expression that gives a `bool`, whatever its operands are: a comparison, a logical operation, a negation, `instanceof`, `isset()`, `empty()`, a cast to `bool`, and a boolean literal. `canStandInString()` tells whether an expression may be written into a string, a heredoc or a backtick command in the `{$...}` form. The grammar reads only a variable, an array element, a property, a static property, and a call of a function, method or static method there, and only when they start with a variable's dollar sign. [`replaceWithExpression()` |mutation#An Expression in a String] asks this when it inserts an expression into a string.

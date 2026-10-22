@@ -1,0 +1,210 @@
+Upgrading Laravel
+*****************
+
+{{description: Upgrade Laravel automatically: dresscode/upgrade-laravel carries the migrations of the Laravel framework from version 6 to today, plus Laravel 13 attributes, which DressCode rewrites or reports.}}
+
+.[perex]
+The package `dresscode/upgrade-laravel` carries the migrations of the Laravel framework from version 6 to the current one, that is, for code written for Laravel 5.8 and newer. It holds 179 items: the helpers `str_slug()` and `array_get()` to `Str::slug()` and `Arr::get()`, the renamed middleware `VerifyCsrfToken`, `Request::get()` to `input()`, the schema without Doctrine DBAL, migration columns that version 11 removed. DressCode fixes over a hundred of them right away and reports the rest, together with what to write instead. On top of that, it offers to write models, commands and jobs with attributes, the way Laravel 13 does.
+
+
+Installation
+============
+
+```shell
+composer require --dev dresscode/upgrade-laravel phpstan/phpstan
+vendor/bin/dresscode upgrade
+```
+
+That is all an upgrade needs: `upgrade` takes the data of the package by itself, with no configuration, and leaves the style of the code as it is. [Upgrading Code |upgrade] describes the procedure, one major version at a time, and what to do with what is left. The data applies only when the project has `laravel/framework`, and only for the versions the project reaches.
+
+If you want every check to catch the old API too, put the types and the set `deprecations` into the configuration, as described in [How Upgrading Libraries Works |upgrading-libraries#Enabling It in the Configuration]:
+
+```neon
+typeAnalysis: phpstan
+
+use:
+	- perCs           # your standard
+	- deprecations
+```
+
+Larastan in the project does no harm, quite the opposite: whether you have it in `phpstan.neon` or `phpstan/extension-installer` registered it, DressCode boots the application the same way PHPStan does and reads the facade call `Request::get()` as a method of the class behind it. If `bootstrap/app.php` fails during that, Larastan itself prints the message "Application bootstrap failed" together with the exception that stopped the application from starting, and ends the whole run. Watch out in CI: the run ends with a non-zero exit code, and when it runs in a single process, that code is 1, the same as when DressCode finds something in the code. No static analysis knows an alias from `config/app.php` written without a namespace, such as `\Request::get()`, so such a call goes unnoticed.
+
+
+What Gets Fixed
+===============
+
+This is a middleware, a provider and a controller written for Laravel 10, in a project on Laravel 13:
+
+```php .[before]
+use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken as Middleware;  // Class `Illuminate\Foundation\Http\Middleware\VerifyCsrfToken` is replaced by `Illuminate\Foundation\Http\Middleware\PreventRequestForgery`.
+
+class VerifyCsrfToken extends Middleware  // Class `Illuminate\Foundation\Http\Middleware\VerifyCsrfToken` is replaced by `Illuminate\Foundation\Http\Middleware\PreventRequestForgery`.
+{
+	protected $except = ['stripe/*'];
+}
+
+
+class AppServiceProvider extends ServiceProvider
+{
+	public function boot(): void
+	{
+		Schema::useNativeSchemaOperationsIfPossible();  // Static method `Illuminate\Support\Facades\Schema::useNativeSchemaOperationsIfPossible()` is forbidden: there is no replacement; the schema is always changed natively; drop the call.
+		URL::forceRootUrl(config('app.url'));  // Static method `Illuminate\Support\Facades\URL::forceRootUrl()` is replaced by `URL::useOrigin()`.
+	}
+}
+
+
+class ReportController
+{
+	public function show(Request $request): array
+	{
+		$limit = Limit::perMinute(60);
+		$limit->decayMinutes = 5;  // Property `Illuminate\Cache\RateLimiting\Limit::$decayMinutes` is replaced by `$this->decaySeconds = $value * 60`.
+		return [$request->get('day'), Schema::getAllTables()];  // Method `Illuminate\Http\Request::get()` is replaced by `Request::input()`.
+		                                                        // Static method `Illuminate\Support\Facades\Schema::getAllTables()` is forbidden: call `getTables()`, which returns arrays with the name and schema of each table, not rows of the database.
+	}
+}
+```
+
+After `dresscode upgrade`:
+
+```php .[after]
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery as Middleware;
+
+class VerifyCsrfToken extends Middleware
+{
+	protected $except = ['stripe/*'];
+}
+
+
+class AppServiceProvider extends ServiceProvider
+{
+	public function boot(): void
+	{
+		Schema::useNativeSchemaOperationsIfPossible();
+		URL::useOrigin(config('app.url'));
+	}
+}
+
+
+class ReportController
+{
+	public function show(Request $request): array
+	{
+		$limit = Limit::perMinute(60);
+		$limit->decaySeconds = 5 * 60;
+		return [$request->input('day'), Schema::getAllTables()];
+	}
+}
+```
+
+The minutes were converted to the seconds Laravel 11 stores in the property. `Schema::getAllTables()` stayed: `getTables()` returns arrays with the name and schema of each table, not rows of the database, and you have to decide what your code does with them.
+
+Examples of what the package fixes, by the kind of change:
+
+- **Laravel 5.8 helpers**: `str_slug()`, `str_limit()`, `array_get()`, `studly_case()` and 35 others to the methods of `Str` and `Arr` with the same arguments, import included,
+- **renamed classes**: `VerifyCsrfToken` and `ValidateCsrfToken` to `PreventRequestForgery`, the trait `HasVersion7Uuids` to `HasUuids`, the facade `Input` to `Request`, `Resource` to `JsonResource`, the testing `TestResponse` and `Assert` to the namespace `Illuminate\Testing`; the import, `extends`, `::class` and `withoutMiddleware()` are all rewritten,
+- **renamed members**: `Request::get()` to `input()`, also through the facade, `Lang::trans()` and `transChoice()` to `get()` and `choice()`, a job's `dispatchNow()` and the function `dispatch_now()` to `dispatchSync()` and `dispatch_sync()`, the kernel's `getRouteMiddleware()` to `getMiddlewareAliases()`, `validateCsrfTokens()` to `preventRequestForgery()`, `forceRootUrl()` to `useOrigin()`, the collection methods `containsOneItem()`, `containsManyItems()`, `reduceWithKeys()`, `reduceMany()` and `until()` to `hasSole()`, `hasMany()`, `reduce()`, `reduceSpread()` and `takeUntil()`, `Relation::getBaseQuery()` to `toBase()`, `PendingMail::sendNow()` to `send()`, the property `QueueBusy::$connection` to `$connectionName`,
+- **calls of a different shape**: `$limit->decayMinutes` to seconds, `$event->exceptionOccurred` to `$event->exception !== null`, `redirectTo()` of the exception `AuthenticationException` with the current request, `Redirect::home()` to `route('home')`, the tests' `assertDeleted()` to `assertModelMissing()` or `assertDatabaseMissing()`, `assertTimesSent($count, $notification)` to `assertSentTimes($notification, $count)`, a model's `addHidden()` and `addVisible()` to `makeHidden()` and `makeVisible()`, the migration columns `double('x', 8, 2)`, `unsignedDecimal()` and `unsignedDouble()` the way Laravel 11 writes them.
+
+The full list is in the data of the package, in the file `upgrading/framework.neon`.
+
+A helper called without a leading backslash inside a namespace, as is usual in an application, is rewritten by DressCode only with `--fix-risky`: the namespace could declare a function of the same name. The data leaves `str_contains()`, `array_first()` and `array_last()` alone, because today they are PHP functions.
+
+`Request::get()` and `input()` are not quite the same: `get()` reads the route attributes first, then the query, and finally the body of the request; `input()` does not read the attributes, puts the body before the query, and takes a key with a dot as a path into an array. Laravel itself advises `input()` for the deprecated `get()`, and DressCode writes it too; read a value that a middleware sets as a route attribute through `$request->attributes->get()`.
+
+Changes in signatures need no data: a method a contract added, or a return type a child class must declare. `mistakes.unimplementedAbstractMethod` and `classes.overridingMethod.signature` from the same set report and write them, from the declarations of the installed version. Adding a return type is a risky fix: the body of the method may return something else, so it is made only with `--fix-risky` or with the decision in the key [`fixRisky` |configuration#risky-fixes].
+
+
+What Is Left to You
+===================
+
+Where there is no replacement, where the replacement returns something else, or where it depends on the database, DressCode reports the place and says what to write. For example Doctrine DBAL, which Laravel 11 dropped, or the spatial columns of migrations:
+
+```
+Method `Illuminate\Database\Connection::getDoctrineSchemaManager()` is forbidden: read the schema by the schema builder, such as `Schema::getTables()`, `getColumns()` or `getIndexes()`.
+Method `Illuminate\Database\Schema\Blueprint::point()` is forbidden: call `geometry()` or `geography()` with the subtype, such as `geography($column, 'point')`; the column type it creates depends on the database.
+```
+
+Other places are reported in the same way, for example these:
+
+- **mail**: the move from Swift Mailer to Symfony Mailer (`getSwiftMessage()`, `withSwiftMessage()`, `TransportManager`), and the Mandrill and SparkPost drivers the framework no longer has,
+- **tests**: model factories written before Laravel 8, including the helper `factory()`, and the trait `MocksApplicationServices`,
+- **queue**: a job's `retryAfter()`, `$retryAfter` and `$timeoutAt`, instead of which the queue reads `backoff()`, `$backoff` and `$retryUntil`,
+- **database**: the constructors of grammars and of `Blueprint`, which Laravel 12 wants with a connection, `withTablePrefix()`, the column `float()` with the parameters `$total` and `$places`, and the trait `DetectsDeadlocks`,
+- **other**: the helper `elixir()`, password validation in `PasswordBroker`, the Rackspace filesystem driver and the trait `DetectsApplicationNamespace`.
+
+Again, the full list, together with what to write instead, is in the data of the package.
+
+When the framework only marks something as deprecated and notes a replacement, it is often not in the data; with types, DressCode reports it, and where the annotation names the replacement, it also rewrites it through `upgrading.declarations.deprecatedMember`. The data does not capture changes in behavior and configuration at all; you will find them in the Laravel upgrade guide.
+
+
+Laravel 13 Attributes
+=====================
+
+Laravel 13 reads from class attributes what it used to read from properties: `#[Table('posts')]` instead of `protected $table = 'posts'`, `#[Tries(3)]` instead of `public $tries = 3`. The properties keep working, so this part is an offer, not a fix. Its data applies with the rest of the package data as soon as the configuration uses the set `deprecations` or `modernizations`. The data itself turns on the decisions of the section `laravel`, `laravel.castsMethod` from `laravel/framework` 11 and `laravel.scopeAttribute` from 12.4, and the name of the package in `use` lets in its plugin, which checks them:
+
+```neon
+use:
+	- perCs           # your standard
+	- deprecations
+	- modernizations
+	- upgrade-laravel
+```
+
+```php .[before]
+class Post extends Model
+{
+	protected $table = 'blog_posts';  // Property `Illuminate\Database\Eloquent\Model::$table` is replaced by the attribute `#[Illuminate\Database\Eloquent\Attributes\Table]`.
+
+	public $timestamps = false;  // Property `Illuminate\Database\Eloquent\Model::$timestamps` is replaced by the attribute `#[Illuminate\Database\Eloquent\Attributes\WithoutTimestamps]`.
+
+	protected $fillable = ['title', 'body'];  // Property `Illuminate\Database\Eloquent\Model::$fillable` is replaced by the attribute `#[Illuminate\Database\Eloquent\Attributes\Fillable]`.
+
+	protected $casts = ['published_at' => 'datetime'];  // Property `Illuminate\Database\Eloquent\Model::$casts` is replaced by the method `casts()`.
+
+
+	public function scopePublished(Builder $query): void  // Method `scopePublished()` is replaced by the method `published()` with the attribute `#[Illuminate\Database\Eloquent\Attributes\Scope]`.
+	{
+		$query->whereNotNull('published_at');
+	}
+}
+```
+
+After `dresscode fix --fix-risky`:
+
+```php .[after]
+#[WithoutTimestamps]
+#[Table(name: 'blog_posts')]
+#[Fillable(['title', 'body'])]
+class Post extends Model
+{
+	protected function casts(): array
+	{
+		return ['published_at' => 'datetime'];
+	}
+
+
+	#[Scope]
+	protected function published(Builder $query): void
+	{
+		$query->whereNotNull('published_at');
+	}
+}
+```
+
+The attributes come from the data of the map `upgrading.api.attributeForMember` for models, commands, form requests, API resources, and for queued jobs, listeners, mailables and notifications; properties of the same attribute class, `$table`, `$primaryKey` and `$keyType`, are merged into a single `#[Table]`. DressCode reports and leaves alone a class that reads the property itself, an abstract class, and a method `getRouteKeyName()` with logic. The method `casts()` is written by the decision `laravel.castsMethod`, and a scope with an attribute by `laravel.scopeAttribute`, both from the section of the package; if you do not want one of them, turn it off in the section `laravel` with the value `keep`. The second fix is risky: DressCode cannot see a call of `scopePublished()` by its old name in another file, so the fix is made only with `--fix-risky`. The rule makes the method protected, because otherwise the static call `Post::published()` would not reach it.
+
+
+What the Package Covers
+=======================
+
+| what | versions |
+|---|---|
+| helpers `str_*` and `array_*` | 6 |
+| deprecated and removed API of the framework | 6 to 13 |
+| attributes instead of properties | 13 |
+| `casts()` instead of `$casts` | 11 |
+| `#[Scope]` instead of the prefix `scope` | 12.4 |
+
+The package starts with Laravel 6, so it upgrades code written for Laravel 5.8. An application on an older version is upgraded one major version at a time, as described in [Upgrading Code |upgrade#One Major Version at a Time], but for versions up to 5.8 the package has no data.

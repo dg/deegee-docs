@@ -1,0 +1,155 @@
+Trivia: Whitespace and Comments
+*******************************
+
+.[perex]
+Spaces, line endings and comments are not nodes of the tree; they hang on tokens as so-called trivia. This page explains which rule decides how they are split between neighboring tokens, and how to read and change them without breaking the rest of the file.
+
+
+Who Owns a Space
+================
+
+Many things can stand between two tokens: spaces, line endings, blank lines, comments. To describe this precisely, every token has two arrays of trivia, and one rule says what goes where:
+
+The **trailing trivia** of a token is everything after it up to and including the first line ending. The **leading trivia** of the next token is the rest: blank lines, indentation, comments on their own lines, doc comments.
+
+```php
+$sum = 0; // running total
+		return $sum;
+```
+
+The semicolon after `0` has the trailing trivia `[Whitespace " ", Comment "// running total", LineEnding "\n"]`; `return` has the leading trivia `[Whitespace "\t\t"]`. A comment on a line belongs to the line it is on, and a doc comment above a method belongs to the method, which is exactly what you would expect when the method is moved.
+
+Each trivia is a `PhpToken`, just one that PHP ignores. Its kind is its `id`, which you compare with the constants `Trivia::Whitespace`, `LineEnding`, `Comment`, `DocComment` and `OpenTag`; `line` and `pos` tell where it was in the parsed file, and they are `-1` for trivia not created by the lexer. Whitespace is split into runs of spaces and single line endings. The line ending of the previous token's line belongs to that token, so in leading trivia each `LineEnding` is one blank line or the end of a line with a comment: an indented token under two blank lines has the leading trivia `[LineEnding, LineEnding, Whitespace]`, an unindented one only `[LineEnding, LineEnding]`.
+
+Three special cases worth remembering:
+
+- **`<?php` is not a token**, but a trivia of the kind `OpenTag`, including the required space or line ending after it; it is always part of the leading trivia of the next token.
+- **`?>` is a token** (`Token::CloseTag`), which also carries the line ending that PHP swallows after it; the parser sees it as a semicolon.
+- **Whitespace that PHP counts as part of a token stays in the text of the token**: inline HTML, the content of a heredoc including the indentation of the closing label, `( int )`. Trivia inside an interpolated string (`"{$a /* c */}"`) have the flag `inInterpolation` set, because inside a string a space can change what PHP reads: `"${a}"` inserts the variable `$a`, while `"${a }"` inserts the variable whose name is the value of the constant `a`. The methods that adjust spaces by rules (`setTrailingSpace()`, `setIndentation()`, `ensureStartsLine()`, `setBlankLinesBefore()`, `removeTrailingWhitespace()`, `removeTrivia()`) reject such a token or trivia; `replaceTrivia()` and the direct writes `setLeadingTrivia()` and `setTrailingTrivia()` accept them, and the result is your responsibility.
+
+
+Reading
+=======
+
+The most common questions have ready-made answers, so you do not have to go through the trivia arrays by hand:
+
+```php
+$token->getTrailingSpace();       // horizontal space after the token on the same line, null when the line ends or a comment is there
+$token->startsLine();             // starts a line
+$token->getIndentation();         // the indentation of the line the token starts, otherwise ''
+$token->getLineIndentation();     // the indentation of the line the token stands on, whether it starts it or not
+$token->countBlankLinesBefore();  // blank lines above the token, above the comment that belongs to it
+$token->hasComment();             // a comment in its trivia, before it or after it
+$token->getComments();            // those comments as an array of Trivia
+$token->hasCommentUpTo($other);   // a comment anywhere between two tokens of the same file, $token first
+$node->hasInnerComment();         // a comment inside the node, except at its edges
+$node->getInnerComments();
+$node->hasLeadingComment();       // a comment before the node, in the leading trivia of its first token
+$node->getLeadingComments();
+$node->hasTrailingComment();      // a comment after the node, up to the end of its line
+$node->getTrailingComments();
+$node->getDocComment();           // the doc comment of the node as Trivia; for a parameter, the one after it is tried first
+$token->getDocComments();         // doc comments in the trivia of the token, without those inside an interpolation
+$node->leadingTrivia;             // the trivia at the outer edge of the node, that is, the leading trivia of its first token
+$node->trailingTrivia;            // and the trailing trivia of the last one; a node without tokens has both empty
+Indentation::measureLineWidth($token, $style); // the width of the physical line as you see it, a tab according to the style
+```
+
+So a comment is inside a node, before it, or after it, and if you want all three, you combine three queries. A token has `hasLeadingComment()`, `hasTrailingComment()` and the matching `get*Comments()` too; `hasComment()` and `getComments()` ask a token about both sides at once.
+
+Comment queries look only at the node's own tokens, so they give the same answer for a detached subtree, a clone and a fragment. There are three exceptions, and all of them need a file, because they reach beyond the node: `hasCommentUpTo()`, which spans two tokens, `getDocComment()` for a doc comment that hangs on a neighboring token, and `removeTrivia()`, `replaceTrivia()` and `removeDocComment()` of a node, which look for such a comment in the same place. A doc comment hangs on a neighboring token when it stands on the line of the previous declaration after its last token, and, for a parameter, when it stands after the parameter on its own line before the comma or the closing parenthesis. A parameter first reads the doc comment after itself, because that is where PHP 8.6 reads the documentation of a parameter, and only if there is none, it takes the one before it. `hasCommentUpTo()` checks its arguments: tokens from different files, or a second token before the first one, throw an `InvalidArgumentException`, and a token without a file throws a `LogicException`. If it answered "no comment" to a question that cannot be asked, a tool that protects comments would delete them. Passing the same token twice gives an empty range.
+
+In the line width, a tab counts up to the next tab stop of the style anywhere on the line, not only in the indentation, and `getVisualColumn()` counts the same way; any other character counts as one, even a wide or combining one. A line is physical, so it ends at every line ending, even inside a multiline string or comment, and a token that starts such a string is measured on the line where it starts.
+
+A trivia tells you what it is, and a comment can return its text without the comment markers:
+
+```php
+$trivia->id;                  // Trivia::Comment and others
+$trivia->text;
+$trivia->line;                // the line in the parsed file; it never changes
+$trivia->inInterpolation;
+$trivia->isWhitespace();      // spaces and line endings
+$trivia->isLineEnding();      // a line ending, or <?php whose text ends with one
+$trivia->isComment();         // any comment, doc comments included
+$comment->isLineComment();    // // or #
+$comment->isDocComment();     // /** */
+$comment->isMultiLineComment();
+$comment->getCommentText();   // 'running total'
+```
+
+
+Writing
+=======
+
+The trivia of a token are `private(set)`, so only methods can change them. The text is a property inherited from `PhpToken`, and the language does not protect it, but still change it only with the `setText()` method: it tells the position index how many line endings the token gained or lost, while after a direct write, the line numbers after the token would be wrong. These changes are made by methods, not by assignment, because the `?->` operator cannot be used on the left side of an assignment, and the form `$node->getFirstToken()?->setText('x')` is used all the time. You can also rewrite the trivia as a whole (`setLeadingTrivia()`, `setTrailingTrivia()`), but you almost never need to: common changes have their own methods, which follow the rule about who owns which space on their own.
+
+```php
+$token->setTrailingSpace(' ');        // a space after the token; rejected when the line ends or a comment follows
+$token->ensureStartsLine("\n");     // puts the token on its own line; the line ending goes to the trailing trivia of the previous token
+$token->setBlankLinesBefore(2, "\n"); // exactly two blank lines above the token, above the comment that belongs to it
+$token->setIndentation("\t\t");       // the indentation of the token's line; the token must start the line
+$token->removeTrailingWhitespace();   // spaces at the end of the line the token ends; the comment and the line ending stay
+$token->removeTrivia($comment);       // one trivia, usually a comment, together with the space or line it would leave behind
+$token->replaceTrivia($old, $new);    // a swap in place
+$node->removeTrivia($comment);        // the same from a node: it searches among its tokens and the tokens before and after it
+$node->replaceTrivia($old, $new);
+$node->setEdgeTrivia(leading: []);    // the trivia at the outer edges of the node; a node without tokens does not accept them
+$node->replaceDocComment($trivia);    // the doc comment of the node
+$node->removeDocComment();
+```
+
+`ensureStartsLine()` and `setBlankLinesBefore()` write the line ending they get as the last argument, for example `$style->lineEnding` of the file; they have no default, so that a file with `"\r\n"` does not get a different line ending.
+
+These methods check their input before they write anything, and so do `Indentation::set()`, which also indents comments, and everything else that formats spaces. A space and an indentation may consist only of spaces and tabs, a line ending must be `"\n"`, `"\r\n"` or `"\r"`, and the number of blank lines must not be negative; otherwise they throw an `InvalidArgumentException`. They reject a token inside string interpolation with a `LogicException`, because there a space can change what the string means (`"${a}"` and `"${a }"` are not the same). A rejected change leaves nothing behind, neither changed trivia nor a raised revision. `setLeadingTrivia()` and `setTrailingTrivia()`, on the other hand, write what they get, even into an interpolation; it is then up to you to make sure the trivia are where the lexer would put them, that is, that the line ending belongs to the token that ends the line.
+
+The node has its own `removeTrivia()` and `replaceTrivia()` because you find a comment through `$node->getInnerComments()`, and then you want to remove it through the node again, without looking up which token it actually belongs to. The methods `removeDocComment()` and `replaceDocComment()` are special cases of this pair.
+
+Once created, a `Trivia` never changes, so several tokens may share it. A method that takes a trivia as an argument looks for it among the others by object identity; if you want a different one, create a new one and swap it in. `Trivia::fromText('// fixed')` creates a new comment; it recognizes the kind of trivia from the text (a space within a line, a line ending, a comment, a doc comment and `<?php`) and rejects anything else. To edit the text of an existing one, use `$comment->withText('// fixed')`, which gives a copy that keeps the kind and the place where the comment was: `$token->replaceTrivia($comment, $comment->withText('// fixed'))`.
+
+There is one rule behind all of this: **the line ending that closes the line of a token belongs to its trailing trivia, never to the leading trivia of the next token.** If you put it elsewhere, you break `getTrailingSpace()` and everything built on it; if you rely on `ensureStartsLine()` and `setBlankLinesBefore()`, this is solved for you.
+
+Trivia arrays cannot be modified indirectly (on a token because of `private(set)`, on a node because of the property hook), so `end($token->trailingTrivia)` fails with an error; pass a copy to functions that take an array by reference.
+
+
+Style and Indentation
+=====================
+
+`Style` holds the indentation unit, the line ending and the tab width of a file: `new Style(indent: '    ', lineEnding: "\r\n", tabWidth: 4)`; the default is a tab, `"\n"` and 4. `Style::detectLineEnding($code)` tells whether `"\r\n"` or `"\n"` prevails in the code; it does not detect a lone `"\r"`. `withIndent()` and `withLineEnding()` derive a new style, and `indent($level)` returns the indentation of the given level.
+
+`Indentation` is a set of static methods for the indentation of a whole line, including the comments that stand above the token on their own lines. They set, check and recompute indentation:
+
+```php
+Indentation::set($token, "\t\t", "\t\t");   // the indentation of the token's line and the comments above it; the token must start the line
+Indentation::matches($token, "\t\t", "\t\t"); // do the line and the comments already have this indentation, so set() would change nothing?
+Indentation::shift($node, 1, $style);      // the whole subtree by one level, see Modifying the Tree
+```
+
+`set()` aligns a multiline comment whose following lines start with an asterisk into the shape of a doc comment, with the asterisks one space further than the opening `/*`; any other comment is shifted as a whole, and its following lines lose their old indentation and get the new one.
+
+These methods compute and answer questions:
+
+```php
+Indentation::normalize("        ", $style);   // indentation in the characters of the style: spaces the width of a tab into a tab, or a tab into the style unit
+Indentation::measure("\t  ", $style);         // the visual width, a tab to the next tab stop of the style
+Indentation::advance($column, $text, $style); // the column where the text ends when it starts at $column
+Indentation::opensLine($token);               // is the line ending above the token a trivia, so the indentation may change?
+Indentation::opensStatement($token);          // does the token start the statement it stands in?
+Indentation::findTrivia($token);              // the trivia that stands for the indentation of the token: its space, otherwise the first trivia
+```
+
+`opensLine()` returns `false` where the line ending above the token is the text of the previous token (inline HTML, a heredoc body, the data after `__halt_compiler()`); there the indentation is part of the content. `Token::startsLine()` returns `true` in such a case, which is why they are two separate questions.
+
+And finally, the basis for laying out code by the tree: what a line continues, and what indentation it should conventionally have:
+
+```php
+$owner = Indentation::findOwner($token);   // LineOwner, or null
+$owner->node;                              // the lowest ancestor that the token does not start
+$owner->child;                             // its child the token stands in: the value of a slot, or a list
+$owner->role;                              // the LayoutRole of that slot
+$owner->item;                              // what the token starts: the child itself, or a list item
+Indentation::infer($token, $style);        // the indentation a line starting with the token should conventionally have
+```
+
+A token that starts everything up to the root, for example the first statement of a file, continues no ancestor: `findOwner()` returns `null` for it, and `infer()` an empty indentation.
+
+`LayoutRole` says what role a slot plays in indenting the lines that a construct spans: `Content` (content, indented by one level), `Anchor` (stands where the construct does), `Closer` (closes it), `Body` (the body of a structure), `Operator`, `Branch` (the branches of a ternary), `Link` (a link of a method chain) and `Case` (the branches of a `switch`). `LayoutData::Roles` lists the roles of the individual slots; the only exception is `findOwner()` for the `|>` operator, whose operands get the role `Link` instead of `Operator`, because a `|>` chain is indented like a method chain.

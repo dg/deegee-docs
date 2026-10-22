@@ -1,0 +1,225 @@
+Expressions
+***********
+
+.[perex]
+The `expressions` section decides on operators and expressions: strict comparison with `===`, `!=` instead of `<>`, `&&` instead of `and`, `(int)` instead of `(integer)`, Yoda conditions, parentheses where operator precedence is easy to get wrong, and ternary operators that can be written shorter with `??` or `?:`, or not at all.
+
+Most decisions of this section make the code shorter and keep its meaning. The exception is `comparison.loose: forbidden`: it turns `==` into `===`, and code that relied on the loose comparison then behaves differently, so the fix is a risky fix. With [types from PHPStan |/types], DressCode makes the fix by itself where the code compares values for which loose and strict comparison give the same result; elsewhere it waits for your permission in the [`fixRisky` |/configuration#risky-fixes] key.
+
+```neon
+expressions:
+	comparison:
+		loose: forbidden
+		notEquals: '!='
+	wordLogicalOperator: forbidden
+	assignment:
+		targetInValue: forbidden
+	coalesce: required
+	ternary:
+		short: required
+		ofTrueFalse: forbidden
+	doubleNegation: forbidden
+```
+
+```php .[before]
+if ($status == 'paid' and $total <> 0) {  // The `==` comparison must be written `===`. // The `and` operator must be written `&&`. // The `<>` comparison must be written `!==`.
+	$count = $count + 1;  // The assignment must be written `+=` instead of repeating its target.
+	$name = isset($input) ? $input : 'anonymous';  // The ternary testing for null must be written with `??`.
+	$title = $this->title ? $this->title : $default;  // The ternary repeating its condition must be written `?:`.
+	$valid = $total > 0 ? true : false;  // Useless ternary operator, because the condition itself is the result.
+	$flag = !!$value;  // The double negation `!!` must be written as a `(bool)` cast.
+}
+```
+
+```php .[after]
+if ($status === 'paid' && $total !== 0) {
+	$count += 1;
+	$name = $input ?? 'anonymous';
+	$title = $this->title ?: $default;
+	$valid = $total > 0;
+	$flag = (bool) $value;
+}
+```
+
+Here the `<>` is changed twice: `notEquals` turns it into `!=`, and `loose` then turns that into `!==`.
+
+
+expressions.cast
+================
+
+The type name of a cast.
+
+- `canonical`: `(int)`, `(bool)`, `(float)`, `(string)` in lowercase, never `(integer)`, `(Boolean)`, `(double)`, `(binary)`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `canonical`, psr12 `canonical`, nette `canonical`, symfony `canonical`, laravel `canonical` · covers `lowercase_cast`, `short_scalar_cast`, `Generic.PHP.LowerCaseType`, `PSR12.Keywords.ShortFormTypeKeywords`, `SlevomatCodingStandard.PHP.TypeCast`, `Squiz.WhiteSpace.CastSpacing` .[decision-facts]
+
+
+expressions.assignment.targetInValue
+====================================
+
+`$a = $a + $b` is `$a += $b`.
+
+Not about the `$a += 1` it may write, which `expressions.assignment.addingOne` writes as an increment.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `assign_null_coalescing_to_coalesce_equal`, `long_to_shorthand_operator`, `SlevomatCodingStandard.ControlStructures.RequireNullCoalesceEqualOperator`, `SlevomatCodingStandard.Operators.RequireCombinedAssignmentOperator` .[decision-facts]
+
+
+expressions.explicitPrecedence
+==============================
+
+An operand where logical or bitwise operators are easy to misread is parenthesized.
+
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` · covers `Generic.CodeAnalysis.RequireExplicitBooleanOperatorPrecedence` .[decision-facts]
+
+
+expressions.assignment.increment
+================================
+
+An increment or a decrement whose value is not read, a statement or a step of `for`; inside an expression it stays as it is.
+
+- `prefix`: `++$i`, `--$i`
+- `postfix`: `$i++`, `$i--`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `postfix`, symfony `prefix`, laravel `postfix` · covers `increment_style` .[decision-facts]
+
+
+expressions.assignment.addingOne
+================================
+
+`$i += 1`, which is `$i++`, or `++$i` by `expressions.assignment.increment`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `forbidden`, laravel `keep` · covers `standardize_increment` .[decision-facts]
+
+
+expressions.wordLogicalOperator
+===============================
+
+`and`, `or` bind weaker than `=` and are written `&&`, `||`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `logical_operators`, `Squiz.Operators.ValidLogicalOperators` .[decision-facts]
+
+
+expressions.doubleNegation
+==========================
+
+`!!$a` is `(bool) $a`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `forbidden`, laravel `forbidden` · covers `no_short_bool_cast` .[decision-facts]
+
+
+expressions.comparison.loose
+============================
+
+A loose comparison, `==`, `!=` or `<>`, is written `===` or `!==`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `strict_comparison`, `SlevomatCodingStandard.Operators.DisallowEqualOperators` .[decision-facts]
+
+
+expressions.comparison.notEquals
+================================
+
+The operator of inequality.
+
+Not about whether the comparison is loose, which `expressions.comparison.loose` decides.
+
+- `'!='`: `!=`, never `<>`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `'!='`, symfony `'!='`, laravel `'!='` · covers `standardize_not_equals` .[decision-facts]
+
+
+expressions.coalesce
+====================
+
+`$a ?? $b` written for `isset($a) ? $a : $b` and `$a !== null ? $a : $b`.
+
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` · covers `ternary_to_null_coalescing`, `SlevomatCodingStandard.ControlStructures.RequireNullCoalesceOperator` .[decision-facts]
+
+
+expressions.ternary.short
+=========================
+
+`$a ?: $b`, written for `$a ? $a : $b` or the other way round where the condition can be read twice.
+
+- `required`: always there
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` · covers `ternary_to_elvis_operator`, `SlevomatCodingStandard.ControlStructures.DisallowShortTernaryOperator`, `SlevomatCodingStandard.ControlStructures.RequireShortTernaryOperator` .[decision-facts]
+
+Shortening changes how many times the condition is evaluated, and that is not always harmless: `array_shift($queue) ? array_shift($queue) : null` removes two items from the queue, while the short form removes only one. So only expressions that can be read twice without a side effect are shortened: variables, array items, properties, constants and scalar values. This is where the syntax tree shows its value: PHP CS Fixer marks its counterpart `ternary_to_elvis_operator` as risky, because in a flat array of tokens it cannot tell a call from a variable; here the tree decides.
+
+```neon
+expressions:
+	ternary:
+		short: required
+```
+
+```php .[before]
+$name = $input ? $input : 'anonymous';  // The ternary repeating its condition must be written `?:`.
+$size = $options['size'] ? $options['size'] : 10;  // The ternary repeating its condition must be written `?:`.
+$next = array_shift($queue) ? array_shift($queue) : null;
+```
+
+```php .[after]
+$name = $input ?: 'anonymous';
+$size = $options['size'] ?: 10;
+$next = array_shift($queue) ? array_shift($queue) : null;
+```
+
+
+expressions.parenthesesAfterConstruct
+=====================================
+
+`return ($x);` is `return $x;`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `forbidden`, laravel `forbidden` · covers `include`, `no_unneeded_control_parentheses`, `SlevomatCodingStandard.ControlStructures.LanguageConstructWithParentheses`, `Squiz.Strings.EchoedStrings` .[decision-facts]
+
+
+expressions.ternary.ofTrueFalse
+===============================
+
+`$a > 1 ? true : false` is the condition itself, where it is a boolean.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `SlevomatCodingStandard.ControlStructures.UselessTernaryOperator` .[decision-facts]
+
+
+expressions.comparison.yoda
+===========================
+
+A Yoda comparison, the constant on its left side, a comparison of two variables or calls staying as it is.
+
+- `forbidden`: never there, the variable on the left and the constant on the right, `$a === 1`
+- `required`: always there, the constant on the left, `1 === $a`, so that an accidental assignment does not compile
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `required`, laravel `forbidden` · covers `yoda_style`, `SlevomatCodingStandard.ControlStructures.DisallowYodaComparison`, `SlevomatCodingStandard.ControlStructures.RequireYodaComparison` .[decision-facts]

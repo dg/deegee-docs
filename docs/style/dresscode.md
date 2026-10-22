@@ -4,7 +4,7 @@ How the pages in `dresscode/` are written where they depart from the Writing Sty
 
 ## Languages
 
-The pages are written in Czech and English only; they are not translated into the other languages. The Czech version exists alone for now. Write every Czech paragraph as a single line, so that the English version can later be aligned with it line by line. The English version is written anew from the meaning, not translated sentence by sentence: English carried over from Czech keeps the Czech shape of the sentence and it shows.
+The pages are written in Czech and English only; they are not translated into the other languages. Every paragraph is a single line, so that both versions stay aligned line by line. The English version is written anew from the meaning, not translated sentence by sentence: English carried over from Czech keeps the Czech shape of the sentence and it shows. Its wording follows [English wording](#english-wording).
 
 ## Who speaks
 
@@ -102,6 +102,63 @@ An example meant to win the reader over (the home page, the readme, the opening 
 | property hook | property hook | never a bare "hook", which is confused with Git hooks |
 | closure | closure | at first mention "(anonymní funkce)" |
 | lossless CST | bezztrátový strom | |
+
+## English wording
+
+The English pages are read by many developers whose first language is not English, and they are the face of the tool for search engines. So:
+
+- **Plain international English.** Short sentences, common words, no idioms or phrasal verbs a non-native reader has to guess (`set up` is fine, `iron out` is not). One thought per sentence. American spelling (`behavior`, `color`, `license`).
+- **The words people search for.** Titles, `maintitle`, `description`, perexes and headings use the terms a developer types into a search engine: "PHP code style checker and fixer", "coding standard", "migrate from PHP CS Fixer", "upgrade to PHP 8.5", "lossless syntax tree". The name of the tool is not enough on its own.
+- **Headings are in Title Case**, as on the other English pages of the site.
+- **The terms of the table above, always the same word.** A reader who meets "violation" in one paragraph and "issue" in the next assumes two things. Beyond the table:
+
+| Czech | English | note |
+|---|---|---|
+| nález | finding | one reported violation; never "error" or "issue" in prose (`error` is a severity) |
+| závažnost | severity | `error`, `warning`, `risky` |
+| hláška, zpráva | message | |
+| přepínač | option | `--fix-risky`; never "switch" or "flag" in prose |
+| výchozí hodnota | default | |
+| fakt projektu | project fact | a decision measured from the project, not chosen |
+| vrstva | layer | of the configuration |
+| cesta rozhodnutí | path of a decision, decision path | `braces.position.class` |
+| upgrade kódu, aktualizace kódu | upgrading code | the page `upgrade`; "code upgrade" as a noun |
+| přechod na novější PHP | upgrading to a newer PHP | |
+| přechod na DressCode, z … | migrating to DressCode, from … | the words people search for |
+| mapy náhrad | replacement maps | |
+| zastaralé API | deprecated API | |
+| cílová verze PHP | target PHP version | |
+| bílé znaky | whitespace | uncountable: "the whitespace", never "whitespaces" |
+| odsazení | indentation | |
+| zalomení řádku, zalomit | line break, break (a line), split (onto lines) | |
+| víceřádkový | multiline | |
+| složená / kulatá / hranatá závorka | brace / parenthesis / square bracket | |
+| jmenný prostor, plně kvalifikované jméno | namespace, fully qualified name | |
+| ustálení | settling | the run repeats "until the code settles" |
+| průběžná integrace | continuous integration (CI) | |
+| pracovní strom | working tree | of Git |
+| vývojová závislost | development dependency | `--dev` |
+| sada se pokládá vedle standardu | a set is added on top of the standard | |
+| jádro | engine | |
+| riziková oprava | risky fix | |
+| Struktura konfigurace | Configuration Reference | the page `decisions/@home` |
+| přepis kódu, přepsat | rewrite | "override" is only the key `overrides` and its profiles, and a method overriding another |
+| balíček pro upgrade, data pro upgrade | upgrade package, upgrade data | |
+| zastaralé, zavržené | deprecated | both |
+| holé jméno, nekvalifikované jméno | bare name (the value `bare`), unqualified name (in prose about PHP) | |
+| řetěz volání, jeho článek | method chain, link | |
+| ukázka (druh hodnoty) | sample | |
+| odstup (prázdné řádky) | blank lines, spacing | never "gap", which is the place between two tokens |
+| hlídač | check | never "watcher" |
+| otisk | fingerprint | of the baseline and the cache |
+| pracovní proces | worker process | |
+| standardní výstup, chybový výstup | standard output, standard error | never "error output" |
+| formátování při uložení | format on save | |
+| svolení k rizikové opravě | permission | |
+| Kam dál, Kudy dál | Where to Go Next | |
+
+- **Quoted output of the tool stays exactly as the tool prints it**, it is already English.
+- **The metaphor of the name** (dress code, tailor, made to measure) works in English the same way and follows the same rules as in Czech.
 
 ## What does not exist yet
 

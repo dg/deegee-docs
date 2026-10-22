@@ -1,0 +1,136 @@
+Analyses: NameResolver and Scope
+********************************
+
+.[perex]
+Two built-in analyses answer two questions every code tool asks: what a given name really means, and whether `$this` is available at a given place in the code.
+
+
+What an Analysis Is
+===================
+
+The tree tells you what the code looks like. An analysis is information derived from the whole file that the tree itself does not carry: what the name `Order` means in this file, or whether `$this` is available. It is an ordinary class built on top of `FileNode`; you do not register anything or implement any interface.
+
+```php
+$resolver = new PhpSyntax\Analyses\NameResolver($file);
+$scope = new PhpSyntax\Analyses\Scope;
+```
+
+An analysis that remembers derived information reads the tree as it was when the analysis was created; after the tree changes, create the analysis again. You can tell that the tree has changed from `FileNode::$revision`. This applies to `NameResolver`. `Scope` remembers nothing and does not even take the file: it finds the answer by walking up the parents of the node it gets, so no change can make it stale.
+
+
+NameResolver
+============
+
+`NameResolver` resolves names using the namespace and the imports, including what PHP does at runtime: an unqualified function or constant that does not exist in the namespace falls back to the global one.
+
+Imports apply in the block where they are written, while declarations belong to the whole namespace. So a second `namespace A { }` block in the same file sees a function declared by the first block, but not what the first block imported. On its own, the resolver knows nothing about symbols the file does not declare: the fallback to the global namespace is then a guess based on what is visible in the file, not knowledge of the symbol. The guess becomes knowledge if you pass a `NamespacedSymbols` object to the resolver's constructor: a list of functions and constants that namespaces declare outside the file, and a `complete` flag saying there are no others. The lists may also be empty, and that is exactly what a project with no functions or constants in namespaces looks like. `getUnqualifiedResolution()` tells you whether a particular answer rests only on a guess.
+
+```php
+$symbols = new PhpSyntax\Analyses\NamespacedSymbols(
+	functions: ['App\Utils\format'],
+	constants: ['App\VERSION'],
+	complete: true,
+);
+$resolver = new PhpSyntax\Analyses\NameResolver($file, $symbols);
+$symbols->hasFunction('App\Utils\format');   // true
+$symbols->hasConstant('app\VERSION');        // true: namespace regardless of case, constant name exactly
+```
+
+Names in `NamespacedSymbols` must be the full names of symbols in a namespace; the constructor rejects a bare `format` with an `InvalidArgumentException`, because global functions do not belong in the list.
+
+```php
+$resolver->getNamespace($node);         // 'App\Model', '' in the global namespace
+$resolver->getImports(PhpSyntax\SymbolKind::ClassLike, $node);   // alias => full name, valid at the place of the node
+$resolver->getImports(PhpSyntax\SymbolKind::Function, $node);
+$resolver->getImports(PhpSyntax\SymbolKind::Constant, $node);
+
+$resolver->resolve($name);              // 'App\Model\Order' from a NameNode, as a class, function or constant, depending on where the name stands
+$resolver->resolveClass($name);         // the same with the kind of symbol chosen in advance
+$resolver->resolveFunction($name);
+$resolver->resolveConstant($name);
+
+$resolver->isGlobalFunctionCall($node, 'sizeof');            // a call of a global function, or of that particular one
+$resolver->findGlobalFunction($call, ['count', 'sizeof']);   // which of these global functions the call calls, or null
+$resolver->getUnqualifiedResolution($call->name);            // Global, Namespaced, or Uncertain when the global fallback is only a guess
+$resolver->getUnqualifiedResolution('count', PhpSyntax\SymbolKind::Function, $node); // the same for a name given as text
+```
+
+The keys of the imports array are the aliases in the form PHP compares them: in lowercase for classes and functions, where case does not matter (`'strings' => 'Nette\Utils\Strings'`), and as written for constants. The answer of `getUnqualifiedResolution()` is the enum `PhpSyntax\UnqualifiedResolution`. A name given as a `NameNode` carries both the kind of symbol and the place where it stands; a name given as text needs both as two more arguments.
+
+`resolve()` chooses between `resolveClass()`, `resolveFunction()` and `resolveConstant()` by the `$symbolKind` property of the name, that is, by where the name stands; a detached name is read as a class. All four need a name that really refers to some symbol, and not every `NameNode` does: `int` in a type names a built-in type, `Foo` in `use Foo;` only introduces a symbol, and `self` stands for a class only where it is written. For such a name, the resolver throws an `InvalidArgumentException` instead of silently reading it as a class of the namespace and returning nonsense like `App\int`. So if you go through all the names in a file, ask [isReference() |tree#Names] first:
+
+```php
+foreach ($file->find(NameNode::class) as $name) {
+	if ($name->isReference()) {
+		echo $resolver->resolve($name);
+	}
+}
+```
+
+There is one exception: `resolveClass()` does not fail on `self`, `static` and `parent`, but returns them as written.
+
+`isGlobalFunctionCall()` answers a question every tool used to answer on its own, usually worse: the node must be a call of a function by name (not `$f()` or `$obj->f()`), the name must not be a keyword, and after resolving, it must be global. This is how you know that `count($a)` inside `namespace App` calls `count` and not `App\count`, unless such a function is imported, declared in the file or listed in `NamespacedSymbols`. Without a complete `NamespacedSymbols`, however, it is a guess: `App\count()` may be declared by another file of the project that the resolver does not see, and PHP would then call that one. When you care about several functions at once, `findGlobalFunction()` returns the one the call calls, written as in the list, regardless of the case used in the code; it counts a call as global the same way `isGlobalFunctionCall()` does.
+
+A tool that changes code based on the answer should therefore also ask `getUnqualifiedResolution()`. This is how [DressCode |dresscode:namespaces] decides whether a fix is risky: with the answer `Uncertain` it is, with `Global` or `Namespaced` it is not. The method accepts only an unqualified name, because a name with a backslash never falls back to the global namespace, and for any other name it throws an `InvalidArgumentException`. The answer `Global` says that the name points to the global namespace, not necessarily to the symbol of that name: an import with an alias can redirect it elsewhere.
+
+A name you have just parsed, which is not in the tree yet, does not know where it will be; the second argument tells where you want it resolved:
+
+```php
+$name = $builder->name('Strings');
+$resolver->resolveClass($name, $at);    // resolved as it would be at the place of $at
+```
+
+The resolver rejects a node from another tree with an exception, instead of answering as if the node were in the global namespace. A quiet, valid-looking answer to a question that was never properly asked is worse than an error.
+
+The opposite direction is just as useful: how to **write** a full name at the place where a node stands.
+
+```php
+$kind = PhpSyntax\SymbolKind::ClassLike;
+
+$resolver->shortenName('Nette\Utils\Strings', $kind, $at);   // 'Strings', it is imported
+$resolver->shortenName('App\Model\Order', $kind, $at);       // 'Order' in namespace App\Model
+$resolver->shortenName('Other\Thing', $kind, $at);           // '\Other\Thing', otherwise it would be looked up in the namespace
+$resolver->isAliasFree('Strings', $kind, $at);                // false, that alias already means something
+```
+
+`shortenName()` takes into account aliases, prefix imports and the namespace, and returns the shortest form that means the same thing at that place. "Means the same thing" is a strict condition: where the name is taken by an import, it returns a longer form instead. So with `use function X\count;` in the file, the global `count` gets `'\count'`, because a bare `count` would mean `X\count` at that place. For the same reason, a global function or constant inside a namespace gets a bare name only when the resolver got `NamespacedSymbols` with the `complete` flag; without that knowledge, a bare `count` could mean `App\count` from another file. So when you read the result back with `resolveFunction()` and the others, you always get back to the symbol you asked about. `isAliasFree()` answers the question anyone who wants to add an import asks: is this name still free here?
+
+And three more methods, this time about the declarations in the file:
+
+```php
+$resolver->getDeclaredName($class);              // 'App\Cart' from a declaration node
+$resolver->findDeclaration('App\Cart', $kind);   // ClassLikeNode, or null
+$resolver->findNamespacedDeclarations($file);    // functions and constants the node declares into a namespace
+```
+
+`findDeclaration()` searches among symbols of one kind, because PHP keeps a class, a function and a constant of the same name apart: `SymbolKind::ClassLike` finds a class, interface, trait or enum, `Function` a function, and `Constant` an item of a `const` statement. It treats case the way PHP does, so for a constant it is case-sensitive only in the constant's own name, and a leading backslash does not matter. Declarations nested in a condition or in a function body count too, and when the file declares the same name more than once, for example under `if (!function_exists(...))`, you get the first one. `getDeclaredName()` returns the name even for such a constant; a class constant introduces nothing into a namespace, so it gets `null`.
+
+`findNamespacedDeclarations()` returns the functions and constants that a node declares into a namespace, as a list of `Declaration` objects with the kind of symbol (`$kind`), the full name (`$name`) and the node that names it (`$node`), in the order they are written. It also counts declarations in a condition or in a function body, and constants named by a string in `define()`; what is declared into the global namespace is not among them. It is exactly what belongs in `NamespacedSymbols`: run it over the files of the project and build from the results the complete list for the resolver of each file.
+
+
+Scope
+=====
+
+`Scope` tells you whether `$this` is available at the place of a node or a token:
+
+```php
+$scope->hasThis($node);   // in a non-static method or hook, and in a closure inside them
+```
+
+`hasThis()` also takes into account that a closure and an arrow function take `$this` from their surroundings by themselves, without `use`, while `static function` and `static fn` do not. A property hook always has it, because it belongs to the object.
+
+Finding the function and the class that contain the code needs no analysis; going up the parents is enough:
+
+```php
+$node->findAncestor(FunctionLikeNode::class);   // function, method, closure, arrow function or hook, or null
+$node->findAncestor(ClassLikeNode::class);      // class, interface, trait, enum or anonymous class, or null
+$closure->getCapturedVariableNames();           // variables from use (...), without the dollar: ['a', 'b']
+```
+
+The same works from a token too, see [Up and Sideways |traversal#Up and Sideways].
+
+
+Your Own Analysis
+=================
+
+When several places need the same information about a file, write it as a class whose constructor takes a `FileNode`. A tool built on PhpSyntax usually creates such an analysis itself and throws it away when the revision of the tree changes; [DressCode |dresscode:rule-contract#Analyses] does this for its rules, and besides the two built-in analyses it adds `PhpDoc` for doc comments, because that one needs a phpDoc parser, which does not belong in PhpSyntax.

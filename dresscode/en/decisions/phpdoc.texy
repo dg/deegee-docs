@@ -1,0 +1,353 @@
+PhpDoc
+******
+
+.[perex]
+The `phpdoc` section decides on doc comments (`/** */`): what should not be in them (annotations like `@author`, an annotation that only repeats the native type, an empty comment), how types are written in them, when a property comment fits on one line, and what in them is most likely a mistake.
+
+PHPStan and your editor both read doc comments, so their content matters more than the content of an ordinary comment. The keys `forbiddenAnnotations` and `forbiddenLines` remove what the project does not want in comments, `annotation.nativeTypeOnly` removes an annotation that only repeats the native type of the signature, and the keys under `types` unify how types are written. A comment that is left empty after these removals disappears completely. Other keys under `annotation`, such as `extraParam`, `duplicateReturn`, `duplicateVar` and `empty`, report what contradicts the signature or the comment itself: a `@param` for a parameter that does not exist, a second `@return`, or an annotation with no content.
+
+```neon
+phpdoc:
+	forbiddenAnnotations: ['@author']
+	empty: forbidden
+	annotation:
+		nativeTypeOnly: forbidden
+	property:
+		lineSpan: collapsed
+	types:
+		builtin: canonical
+```
+
+```php .[before]
+class Cart
+{
+	/**
+	 * @author John
+	 * @var integer[]
+	 */
+	private array $items = [];  // Annotation `@author` is forbidden. // The doc comment with a single annotation must be written on one line. // The type `integer` in a doc comment must be written `int`.
+
+	/**
+	 * @param string $name
+	 * @return void
+	 */
+	public function add(string $name): void  // Useless `@param` annotation for the parameter `$name`, because the native type says the same. // Useless `@return` annotation, because the native return type says the same.
+	{
+	}
+}
+```
+
+```php .[after]
+class Cart
+{
+	/** @var int[] */
+	private array $items = [];
+
+	public function add(string $name): void
+	{
+	}
+}
+```
+
+The [types |types] section decides on the types that the code itself declares. A class name mentioned in a comment always keeps its import in use, so cleaning up the imports does not remove that import.
+
+
+phpdoc.empty
+============
+
+An empty doc comment, which is removed.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `forbidden`, laravel `forbidden` · covers `no_empty_phpdoc` .[decision-facts]
+
+
+phpdoc.annotation.casing
+========================
+
+The letter case of a known annotation.
+
+- `canonical`: as it is known, `@inheritDoc`, `@phpstan-var`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `canonical`, symfony `keep`, laravel `keep` · covers `phpdoc_tag_casing`, `SlevomatCodingStandard.Commenting.AnnotationName` .[decision-facts]
+
+
+phpdoc.annotation.inlineVar
+===========================
+
+An inline `@var` says what `assert($x instanceof Foo)` checks.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `SlevomatCodingStandard.PHP.RequireExplicitAssertion` .[decision-facts]
+
+
+phpdoc.forbiddenAnnotations
+===========================
+
+The annotations removed from doc comments, written with the `@`, such as `@author` and `@package`.
+
+- a list of names
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `[@access, @author, @copyright, @created, @license, @package, @since, @subpackage, @todo, @version]`, symfony `keep`, laravel `[@access, @package, @subpackage]` · covers `general_phpdoc_annotation_remove`, `phpdoc_no_access`, `phpdoc_no_package`, `SlevomatCodingStandard.Commenting.ForbiddenAnnotations` .[decision-facts]
+
+
+phpdoc.forbiddenLines
+=====================
+
+The patterns of the lines of a description removed from doc comments, such as `~^Created by \S+\.\z~i`, what a pattern matches going and the line with it where nothing else is left.
+
+- a list of regular expressions
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `['~^(?:(?!private|protected|static)\S+ )?(?:con|de)structor\.\z~i', '~^\S+ [gs]etter\.\z~i']`, symfony `keep`, laravel `keep` · covers `SlevomatCodingStandard.Commenting.ForbiddenComments` .[decision-facts]
+
+
+phpdoc.annotation.extraParam
+============================
+
+A `@param` naming a parameter the function does not have.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `Squiz.Commenting.FunctionComment.ExtraParamComment` .[decision-facts]
+
+
+phpdoc.annotation.duplicateParam
+================================
+
+A second `@param` of one parameter.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+phpdoc.annotation.duplicateReturn
+=================================
+
+A second `@return` of a function.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `Squiz.Commenting.FunctionComment.DuplicateReturn` .[decision-facts]
+
+
+phpdoc.annotation.duplicateVar
+==============================
+
+A second `@var` of a property.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `Squiz.Commenting.VariableComment` .[decision-facts]
+
+
+phpdoc.annotation.empty
+=======================
+
+A `@param`, `@return`, `@var` or `@see` without content.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `Squiz.Commenting.VariableComment` .[decision-facts]
+
+
+phpdoc.annotation.plainComment
+==============================
+
+An annotation in a plain comment, `/* @var */` or `/**@var` without the blank, where a doc comment means it: any annotation above a declaration, an inline `@var` above another statement.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `SlevomatCodingStandard.Commenting.InlineDocCommentDeclaration.InvalidCommentType` .[decision-facts]
+
+
+phpdoc.property.plainComment
+============================
+
+A plain comment describing a property, `//` or `/* */` where `/** */` belongs, reported.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `Squiz.Commenting.VariableComment` .[decision-facts]
+
+
+phpdoc.aboveAttributes
+======================
+
+The doc comment stands above the attributes.
+
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `required`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` · covers `SlevomatCodingStandard.Attributes.RequireAttributeAfterDocComment` .[decision-facts]
+
+
+phpdoc.stars
+============
+
+The `*` opening each line of a doc comment.
+
+- `aligned`: each `*` below the first `*` of the opening `/**`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `aligned`, symfony `keep`, laravel `aligned` · covers `align_multiline_comment`, `phpdoc_indent`, `Squiz.Commenting.DocCommentAlignment` .[decision-facts]
+
+
+phpdoc.blankLines
+=================
+
+The blank lines inside a doc comment.
+
+- `trimmed`: none at the start or the end, at most one in a row inside
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `trimmed`, symfony `trimmed`, laravel `trimmed` · covers `phpdoc_trim`, `phpdoc_trim_consecutive_blank_line_separation` .[decision-facts]
+
+
+phpdoc.types.builtin
+====================
+
+How a built-in type in a doc comment is written, `int` and never `integer` or `Int`.
+
+- `canonical`: the short lowercase name of a built-in type, `never` for `no-return`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `canonical`, symfony `canonical`, laravel `canonical` · covers `PhpCsFixerCustomFixers/phpdoc_type_list`, `phpdoc_list_type`, `phpdoc_scalar`, `phpdoc_types`, `SlevomatCodingStandard.TypeHints.LongTypeHints` .[decision-facts]
+
+
+phpdoc.types.duplicate
+======================
+
+A type a union of a doc comment names twice, `int|integer`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `forbidden`, laravel `keep` · covers `phpdoc_no_duplicate_types`, `phpdoc_types_no_duplicates` .[decision-facts]
+
+
+phpdoc.types.nullable
+=====================
+
+How a type of a doc comment of one type and `null` is written.
+
+- `'?T'`: a single type with `null` written with `?`
+- `'T|null'`: a union with `null`, which `phpdoc.types.nullPosition` places
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+phpdoc.types.nullPosition
+=========================
+
+Where `null` stands in a union type of a doc comment.
+
+- `last`: `int|string|null`
+- `first`: `null|int|string`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `last`, symfony `last`, laravel `keep` · covers `phpdoc_types_order`, `SlevomatCodingStandard.TypeHints.NullTypeHintOnLastPosition` .[decision-facts]
+
+
+phpdoc.types.unionOrder
+=======================
+
+The order of the types of a union type of a doc comment.
+
+- `alphabetical`: the types beside `null` sorted by name, case-insensitively
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` · covers `phpdoc_types_order` .[decision-facts]
+
+
+phpdoc.types.array
+==================
+
+How an array type of a doc comment is written; `list<T>` is a different type and stays.
+
+- `'array<T>'`: the generic notation
+- `'T[]'`: the brackets
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` · covers `PhpCsFixerCustomFixers/phpdoc_array_style`, `PhpCsFixerCustomFixers/phpdoc_type_list`, `phpdoc_array_type`, `phpdoc_list_type`, `SlevomatCodingStandard.TypeHints.DisallowArrayTypeHintSyntax` .[decision-facts]
+
+
+phpdoc.property.promoted
+========================
+
+The annotation of a promoted property.
+
+- `'@var'`: a `@var` at the property, not a `@param` of the constructor
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `@var`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+phpdoc.property.lineSpan
+========================
+
+A property doc comment with a single annotation and no description.
+
+- `collapsed`: on one line, `/** @var int */`
+- `expanded`: over three lines, the annotation on the one in the middle
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `collapsed`, symfony `keep`, laravel `keep` · covers `phpdoc_line_span`, `SlevomatCodingStandard.Commenting.DisallowOneLinePropertyDocComment`, `SlevomatCodingStandard.Commenting.RequireOneLinePropertyDocComment` .[decision-facts]
+
+
+phpdoc.annotation.constantVar
+=============================
+
+A `@var` on a class constant that says nothing.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `SlevomatCodingStandard.TypeHints.UselessConstantTypeHint` .[decision-facts]
+
+
+phpdoc.inheritdocOnly
+=====================
+
+A doc comment of `@inheritDoc` alone.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `phpdoc_no_useless_inheritdoc`, `SlevomatCodingStandard.Commenting.UselessInheritDocComment` .[decision-facts]
+
+
+phpdoc.annotation.itemTypes
+===========================
+
+An array, iterable or traversable declaration has an annotation saying what its items are, reported.
+
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` · covers `SlevomatCodingStandard.TypeHints.ParameterTypeHint`, `SlevomatCodingStandard.TypeHints.PropertyTypeHint`, `SlevomatCodingStandard.TypeHints.ReturnTypeHint` .[decision-facts]
+
+
+phpdoc.annotation.nativeTypeOnly
+================================
+
+A `@param`, `@return` or `@var` without a description that says only the native type.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `forbidden` · covers `no_superfluous_phpdoc_tags`, `SlevomatCodingStandard.Commenting.UselessFunctionDocComment`, `SlevomatCodingStandard.TypeHints.ParameterTypeHint`, `SlevomatCodingStandard.TypeHints.PropertyTypeHint`, `SlevomatCodingStandard.TypeHints.ReturnTypeHint` .[decision-facts]

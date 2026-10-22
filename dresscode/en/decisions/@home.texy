@@ -1,0 +1,132 @@
+Configuration Reference
+***********************
+
+{{description: The whole DressCode configuration on one map: reserved keys, the sections of coding standard decisions from spacing to code upgrades, the kinds of values, and what keep means.}}
+
+.[perex]
+A DressCode configuration is a tree. At the top are a few reserved keys that say what is checked and under which conditions, and below them are the sections of decisions. Each key of a section names one thing in the code, and its value says how that thing is written. This page is a map of the whole tree; each section has its own page with all its keys, their values and examples.
+
+```neon
+use:
+	- perCs
+	- cleanup
+
+paths:
+	- src
+	- tests
+
+braces:
+	position:
+		class: nextLine
+spacing:
+	concatenation: '$a.$b'
+blankLines:
+	aroundMethods: 1
+	beforeStatement:
+		return: 1
+qualification:
+	function:
+		global: bare
+		optimized: imported
+```
+
+The first five lines are reserved keys: what the configuration is based on and what is checked. The rest are decisions, and you can read them aloud: the brace of a class goes on the next line, the dot is written without spaces, there is one blank line between methods and one before `return` too, global functions stay bare names, and the ones PHP optimizes are imported. You will see the whole path of a decision, such as `blankLines.aroundMethods`, next to every finding in the output, and you write it into a `dresscode:ignore` comment, into `fixRisky` or after the `--only` option. The [Configuration |/configuration] page describes how a configuration is put together from presets, overrides and the command line.
+
+
+Reserved Keys
+=============
+
+A reserved key is not a decision about how the code looks. It is a fact about the project, the scope of the run, or what the run does with what it finds.
+
+| key | what it says |
+|---|---|
+| `use` | which [presets |/configuration#Standards and Sets] the configuration is based on (the standard and the sets), and which [plugins |/configuration#Plugins] the project adds |
+| `targets` | which [PHP and package versions |/configuration#PHP and Package Versions] the code is written for, when it should not follow `composer.json` |
+| `typeAnalysis` | where the [types of the code |/types] come from; the only value is `phpstan` |
+| `namespaces` | the [functions and constants |/namespaces] that the namespaces of the project declare |
+| `nameResolution` | whether the lists in `namespaces` are complete: `certain` or `uncertain` |
+| `paths`, `excludePaths`, `fileExtensions`, `skipWhen` | what is [checked |/configuration#Paths] and what is skipped |
+| `baseline` | the [baseline |/suppressing#baseline] file with violations that are not reported for now |
+| `cacheDir` | where DressCode stores the list of files that passed clean |
+| `rules`, `ruleUrl` | the project's [own rules |/custom-rule], named by class, and the URL of their pages |
+| `analyses` | custom [analyses |/rule-contract#Analyses] for rules |
+| `fixRisky` | the decisions whose [risky fixes |/configuration#risky-fixes] the project accepts |
+| `severity` | how strictly violations are reported: a map of decisions, groups, sections or presets to `warning` or `error` |
+| `suppressionComments` | the project's [own comments |/suppressing#Suppressing on a Line] that silence a decision on their line |
+| `overrides` | different values for [a part of the project |/configuration#Different Values for Part of the Project] |
+
+Not every key is allowed everywhere. A preset carries only decisions, `use` with presets, `suppressionComments` and `severity`, because it knows the standard but not your project. An override for a part of the project may also hold `targets` with the PHP version, `namespaces`, `nameResolution` and `fixRisky`. The rest belongs only to the configuration of the whole project.
+
+
+Sections of Decisions
+=====================
+
+Sections only sort the decisions so that you can find them: the space after a comma is where you would look for it. Nothing else follows from the section. How strictly a violation is reported is set by the `severity` key. Whether DressCode may make the fix on its own, or when a decision applies, depends on the value and the properties of the decision, not on the name of the section.
+
+| section | what it decides |
+|---|---|
+| [file |file] | the file as text: the opening tag, line endings, line length, `declare(strict_types=1)` |
+| [indentation |indentation] | indentation: the unit, the tab width, the indentation of continuation lines |
+| [naming |naming] | letter case in names of classes, methods, constants and variables |
+| [casing |casing] | letter case in what belongs to PHP: keywords, `true`, `null`, built-in classes, functions and types |
+| [qualification |qualification] | how fully the name of a class, function or constant is written: bare, imported, or with a leading backslash |
+| [imports |imports] | `use` statements at the top of the file: shape, groups, order, unused imports |
+| [spacing |spacing] | spaces within a line: around operators, after a comma, inside parentheses, after a keyword |
+| [multiline |multiline] | constructs split onto lines and lines longer than the limit: the placement of the items and edges of parameters, arguments, arrays, conditions, method chains, the ternary operator, `for`, operators and `implements`; the trailing comma |
+| [braces |braces] | braces: where they stand, when they are required, the empty body |
+| [blankLines |blankLines] | blank lines in the file header, in a class, in a block and around statements |
+| [classes |classes] | classes and their members: order, visibility, modifiers, empty parentheses |
+| [types |types] | types in declarations: required types, the `?int` form, the order in a union |
+| [functions |functions] | functions and closures: arrow functions, `static`, a needless `return` |
+| [hygiene |hygiene] | code that can be written more simply with the same meaning: aliases, `is_null()`, `intval()`, `get_class()`, `call_user_func()` |
+| [controlFlow |controlFlow] | control structures: `elseif`, a needless `else`, fall-through in `switch` |
+| [expressions |expressions] | operators and expressions: strict comparison, `!=`, the ternary operator, `$a += 1` |
+| [literals |literals] | how strings, numbers and arrays are written: quotes, `[]`, digit separators |
+| [comments |comments] | ordinary comments: `//` instead of `#`, empty comments |
+| [phpdoc |phpdoc] | doc comments: annotations, the types in them, what does not belong in them |
+| [mistakes |mistakes] | what is most likely a bug, whatever the style |
+| [upgrading |upgrading] | upgrading to a newer PHP and to new versions of libraries |
+
+A plugin that brings its own rules has its own section named after it: the decisions of the `dresscode/upgrade-nette` package live under the `nette` key, for example `nette.linkArguments`. The rules a project writes for itself put their decisions under the `project` key. Both are written into the configuration the same way as the sections of the engine; `dresscode catalogue` lists what a plugin or the project has in its section.
+
+
+Values
+======
+
+The description of a key on the page of its section says what values the key takes, and `dresscode explain <path>` prints it too. There are only a few kinds of values, and they repeat:
+
+- **Presence** says whether a thing must or must not be in the code: `required` or `forbidden`, for example `hygiene.is_null: forbidden` or `functions.arrowFunction.oneExpression: required`. The key names the thing, and the word says what to do with it: `forbidden` removes or rewrites it, `required` adds it. In the `upgrading` section, `required` writes a construct that a newer PHP brought, and `forbidden` replaces what PHP deprecated. Where a thing may be there or not, like the comma at the end of a multiline list, the key also takes `optional`.
+- **A word** names a shape that has no single fixed form: `braces.position.class: nextLine`, `imports.order.names: alphabetical`, `literals.quotes: single`.
+- **A sample** is a shape written as a piece of example code in single quotes: `spacing.call: 'foo($a, $b)'`, `types.nullable: '?int'`. The quotes are needed because NEON would read `foo($a, $b)` as an entity. DressCode does not read a sample as code; it only compares it with the samples the key knows. An unknown sample is an error, and the message lists the known ones.
+- **A count** of blank lines, digits or length: `blankLines.aroundMethods: 2`. Where the key allows it, also a range `0-1` and an open range `1+`. Some counts also take a word, for example `file.lineLength: none`. A list is never a count; DressCode rejects `[0, 1]`.
+- **A list** of names, patterns or an order: `classes.members.order: [traitUse, constant, property]`, `phpdoc.forbiddenAnnotations: ['@author', '@package']`. A list written in a higher layer replaces the whole list below it, the default included. To add to it, write `...` into the list, which stands for the list of the layer below: `['...', '@package']`.
+- **A tolerance** is a list of words or samples where a key accepts several shapes at once: `multiline.edges.condition: [apart, closingApart]` lets both shapes pass, and rewrites a condition that matches neither into the first shape.
+- **A map** of names or kinds to a value: `blankLines.beforeStatement: {return: 1, throw: 1}`, or the replacement maps in `upgrading.api`. A map is merged with the layer below it item by item. An item with the value `keep` removes that name from all layers below it, `keep` in place of the whole map removes all of it, and an exclamation mark after the key (`replacedClasses!:`) replaces the maps of the lower layers with what you write.
+- **A text** is the only case where the value is a plain sentence: the text of the comment at a fall-through `case` (`controlFlow.switch.fallThroughComment: no break`). A list of texts lets every one of them pass and writes the first.
+- **Yes or no** (`yes`, `no`) is taken only by parameters whose question has no other answer, for example `imports.order.caseSensitive: yes`, and by `upgrading.packages`, which adds the data of packages beneath the maps of the project.
+
+Decisions that belong together stand in a group, and the path then reads like a sentence: the section gives the area, the group the question or the thing, and the last part the place. A group brings together either places that answer the same question, like `braces.position` for the position of the brace at a class, a function or a closure, and `multiline.trailingComma` for the comma at the end of an array, arguments or parameters, or questions about one thing, like `file.strictTypes` for the declaration and the place where it stands. A decision that has no other name than the thing it decides about does not form a group: it stands flat, and the keys that refine it stand next to it and carry its name. `file.lineLength` is the longest allowed line, `file.longLines` says whether a longer line that could not be split is reported, and `file.lineLengthExcept` says which constructs are not split because of the line width and which lines are never reported. A group is written as a nested map, and the path to its keys has one more part. A word, count or list written on a group applies to each of its keys that takes it, so `multiline.operatorPosition: lineStart` moves all operators to the start of the line at once, and `qualification.function: imported` imports functions that are global, optimized and from other namespaces alike. A key that does not take the word is skipped, and a value written directly for a single place wins over the value of the group; a word that no key of the group takes is an error. A presence word written on a group must be taken by every key of the group, and a group that names one thing with several questions, like `expressions.ternary`, takes `keep` as its only presence word. In the `multiline` section, the kinds of places `lists` and `operators` stand between the group and the place, as described on [the page of the section |multiline#A Whole Group at Once].
+
+And then there is **`keep`**. Every decision that requires something takes it, and so does a map, both per item and as a whole: "nothing is enforced here, the code stays as it is". It is the only word for "do not touch this", and it means no shape. `keep` written on a section or on a key with subkeys applies to everything under it, and a later layer then brings back only the keys it names itself:
+
+```neon
+blankLines: keep        # nothing decides about blank lines
+```
+
+
+The Default and the Fact
+========================
+
+A decision that nobody writes has a default, and the page of the section shows it. For most decisions it is `keep`, so they require nothing. A parameter, that is, a key that only refines another key, has a real default, does not take `keep` and turns nothing on by itself: `controlFlow.trailingIfMinStatements` sets the number of statements from which an `if` at the end of a function becomes an early return, but this is checked only once `controlFlow.trailingIf: forbidden` is set. That is also why a list the project writes into `types.traversableClasses` never turns on required types by itself.
+
+**A project fact** is not a decision about how the code looks but a statement of what the project contains: `namespaces.functions` and `namespaces.constants` list the functions and constants in namespaces. They are written into the reserved key `namespaces`, and the check that reports a declaration missing from the list is turned on by the key `nameResolution: certain`; the details are on the [Functions and Constants in Namespaces |/namespaces] page.
+
+
+Where to Learn More
+===================
+
+- `dresscode explain spacing.call` prints the description of the decision, the values with their meanings, the value in your project together with the layer that set it, and what each standard says. `dresscode explain spacing` does the same for the whole section.
+- `dresscode config` prints the resolved configuration in the shape of the file, with a comment at each value saying where it came from.
+- `dresscode catalogue` lists all decisions your installation knows, plugins included, and marks with an asterisk the ones the configuration sets; with `--format json` it gives the same as data.
+
+The details of all three commands are on the [Command Line |/cli] page.

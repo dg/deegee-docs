@@ -1,0 +1,176 @@
+Building New Nodes
+******************
+
+.[perex]
+How to create code to insert into the tree: from a string, from a template into which you put nodes you already have, or with a method when the data decides the shape of the code. One class does all of it: `PhpSyntax\Builder`.
+
+
+Code from a String
+==================
+
+You do not build new code from tokens; you write it as text. `Parser` reads only a whole file, with the `parse()` method; the builder reads anything smaller:
+
+```php
+use PhpSyntax\Builder;
+
+$builder = new Builder;
+$expr = $builder->expression('$this->items[] = $item');
+$stmt = $builder->statement('return null;');
+$type = $builder->type('?array');
+$name = $builder->name('Nette\Utils\Strings');
+```
+
+These four methods are shortcuts with an exact return type. For anything else that does not stand on its own in source code, use `fragment()` and tell it which node you want; the library knows what code to wrap it in so that it makes sense:
+
+```php
+use PhpSyntax\Nodes\{ArrayItemNode, MatchArmNode, ParameterNode};
+
+$param = $builder->fragment(ParameterNode::class, 'int $x = 1');
+$arm = $builder->fragment(MatchArmNode::class, '1, 2 => true');
+$item = $builder->fragment(ArrayItemNode::class, "'key' => \$value");
+```
+
+It works for an expression, a statement, a type, a name, a class member, a parameter, an argument, an array item, an import item, a match arm, an attribute group, `catch`, `elseif`, a closure `use` item, a static variable, a constant item and a hook; for a class derived from one of them, the builder uses the same wrapping code.
+
+The result is a detached node with no parent and no original positions, with empty trivia at its edges, so you can insert it right away; the page [Modifying the Tree |mutation] explains where and how. The builder rejects input that has something left over, and it says why: `$a, $b` given as one parameter throws a `ParseException` with the message `The code is not a single parameter.` It rejects a class for which no such code exists, for example `FileNode`, with an `InvalidArgumentException`.
+
+The constructors of nodes are `@internal`, because their parameters copy the slots of the grammar, and the next PHP version may add new ones. So build a new node with the builder, not with a constructor.
+
+
+A Template with Nodes
+=====================
+
+But a string cannot carry nodes you already have: an operand you want to keep, a call you want to wrap in something. That is what a template is for. In the code you give the builder, you name a variable and pass the node for it as a named argument of the same name:
+
+```php
+// $sum is the expression $a + $b
+$builder->expression('$x * 2', x: $sum);   // ($a + $b) * 2
+```
+
+Each variable `$x` of the template is replaced by the passed node, in the same way as [`replaceWithExpression()` |mutation#An Expression in Place of an Expression]: in parentheses wherever the expression would mean something else without them. For the same reason, a placeholder that stands as a bare member or variable name puts anything other than a variable into curly braces: `'$order->$name'` with the expression `$a . "b"` gives `$order->{$a . "b"}`. `statement()` and `fragment()` are templates too:
+
+```php
+$return->replaceWith($builder->statement(
+	'return $result ?? $fallback;',
+	result: $return->expression,
+	fallback: $builder->value(''),
+));
+```
+
+A few rules you can rely on:
+
+- Variables you do not name as placeholders stay as written: in `'$this->set($x)'` only `$x` is replaced.
+- The variables of the template are found before any of them is replaced, so a variable inside an inserted node is never taken for a placeholder.
+- A placeholder used twice in the template gets a copy the second time: `'isset($v) ? $v : null'` with `v:` set to `$items[0]` gives `isset($items[0]) ? $items[0] : null`.
+- The builder rejects a placeholder that is not in the template, and a node passed without a name. It also rejects a node whose type does not fit the slot of the placeholder, and destructuring anywhere other than where something is assigned to.
+
+Everything is checked before anything moves, so a rejected template leaves the trees the nodes came from exactly as they were.
+
+
+Methods for What the Data Decides
+=================================
+
+A template is for a shape you know in advance. When the data decides the shape (the name is in a variable, the operator comes as a string, or the number of arguments varies), there is a method for each construct. The comments in the example show the result for nodes whose text matches the name of the variable, so `$order` is the expression `$order` and so on:
+
+```php
+$builder->value(['port' => 3306]);                // ['port' => 3306]
+$builder->variable('total');                      // $total
+$builder->constant('PHP_EOL');                    // PHP_EOL
+$builder->propertyFetch($order, 'items');         // $order->items
+$builder->staticPropertyFetch('Cache', 'store');  // Cache::$store
+$builder->classConstantFetch('Order', 'Paid');    // Order::Paid
+$builder->arrayAccess($items, 0);                 // $items[0]
+$builder->call('strlen', [$name]);                // strlen($name)
+$builder->methodCall($order, 'pay', [100, 'currency' => 'EUR']);  // $order->pay(100, currency: 'EUR')
+$builder->staticMethodCall('Order', 'create');    // Order::create()
+$builder->new('DateTime');                        // new DateTime
+$builder->arguments([1, 'flags' => 2]);           // (1, flags: 2)
+$builder->binary($price, '*', $qty);              // $price * $qty
+$builder->unary('!', $paid);                      // !$paid
+$builder->cast('int', $count);                    // (int) $count
+$builder->ternary($paid, 'yes', 'no');            // $paid ? 'yes' : 'no'
+$builder->shortTernary($name, 'anonymous');       // $name ?: 'anonymous'
+$builder->assign($total, 0);                      // $total = 0
+$builder->combinedAssign($total, '+=', $vat);     // $total += $vat
+$builder->parenthesize($sum);                     // ($a + $b)
+```
+
+`value()` writes a value as a literal: an integer, a float written so that it reads back as the same number, `true`, `false`, `null`, a string, and an array on one line, with keys where they are not sequential from zero. A negative number is the `-` operator before a literal, because that is how the parser reads it too. It takes an expression as it is, and rejects what cannot be written as a literal, for example an object, with an `InvalidArgumentException`. All methods that take an operand or an argument behave the same way: a value that is not a node goes through `value()`, so `$builder->binary($a, '===', 1)` writes `$a === 1`.
+
+The name of a function, class, method, property or constant can be passed as a string, as a name node, or as an expression. An expression other than a variable is written in curly braces after `->` and `::`: `propertyFetch($a, $builder->expression('$x . $y'))` gives `$a->{$x . $y}`. `propertyFetch()` and `methodCall()` also take `nullsafe: true`, and then they write `?->`.
+
+Several methods check what they get:
+
+- `constant()` rejects `true`, `false` and `null`, because these are literals, and `value()` writes those.
+- `arrayAccess()` without an index writes `$items[]`; a `null` literal as the index is passed as `value(null)` and gives `$items[null]`.
+- `ternary()` with `null` instead of `$then` writes the literal `null`, so `$paid ? null : 'no'`; for the short form `?:`, use `shortTernary()`.
+- `binary()` accepts only a binary operator, so it rejects `=`, and `combinedAssign()` only a compound assignment operator. `unary()` knows `!`, `-`, `+`, `~` and `@`, and `cast()` takes the type without parentheses, `int` for `(int)`.
+- `assign()` and `combinedAssign()` reject a target that cannot be assigned to, for example `A::B`. A short array as the target of `assign()` is written as destructuring: `[$a, $b] = $pair`.
+- `arguments()` takes values and expressions, an `ArgumentNode` as it is (for example `...$rest`), and a named argument under a string key. It rejects an `ArgumentNode` under a string key, because the node carries its name itself. `call()`, `methodCall()`, `staticMethodCall()` and `new()` take arguments in the same form; `new()` without arguments writes no parentheses.
+
+
+What the Builder Does with the Nodes It Gets
+============================================
+
+The builder creates the tokens of operators and separators itself, with one space around a binary operator, after `=` and after a comma. It treats the nodes it gets according to where they stand:
+
+- **A node that stands in a tree is taken as a copy** without the trivia at its edges, every time it is passed. So the file does not change until you insert the result yourself, and you may pass the same node more than once.
+- **A detached node is taken as it is**, only its edges are cleaned. If a detached node is passed twice, the builder throws a `LogicException` before anything moves, because the second time it would have to take the node from the place where it has just put it.
+
+It adds parentheses by itself wherever the code would mean something else at the new place without them, following the answer of [`isRedundant()` |traversal#Questions Every Tool Asks]:
+
+```php
+$builder->methodCall($builder->new('Foo'), 'bar');   // (new Foo)->bar()
+$builder->binary($coalesce, '.', $c);                 // ($x ?? $y) . $c, when $coalesce is $x ?? $y
+$builder->call($builder->expression('$a->b'), [1]);   // ($a->b)(1)
+```
+
+Parentheses already present in the passed node stay. The result is exactly the tree the parser would return for the same text.
+
+Here is all of it together in a rewrite that turns `$a = $a + $b` into `$a += $b`, wraps a call in another call, and calls a method on a new object:
+
+```php
+foreach ($file->find(AssignmentNode::class) as $assign) {
+	[$target, $sum] = [$assign->target, $assign->expression];
+	if ($target instanceof ExpressionNode && $sum instanceof BinaryOpNode && $sum->operator->is('+') && $target->matches($sum->left)) {
+		$assign->replaceWith($builder->combinedAssign($target, '+=', $sum->right));
+	}
+}
+
+$trim = $file->findFirst(FunctionCallNode::class);
+$trim->replaceWith($builder->call('htmlspecialchars', [$trim]));
+
+$format = $file->findFirst(MethodCallNode::class);
+$format->replaceWith($builder->methodCall(
+	$builder->new('Receipt', [$builder->variable('label')]),
+	'render',
+	[$builder->variable('total'), 'precision' => 2],
+));
+```
+
+```
+- 	$total = $total + $vat;   // VAT is always added last
++ 	$total += $vat;   // VAT is always added last
+- 	$label = trim($cart['label']);
++ 	$label = htmlspecialchars(trim($cart['label']));
+- 	return new Invoice($label)->format($total);
++ 	return (new Receipt($label))->render($total, precision: 2);
+```
+
+The operands of the original `+` and the `trim()` call still stand in the file, so the builder took them as copies, and `replaceWith()` put the new node where the old one was, including the comment after the statement. The section [Questions Every Tool Asks |traversal#Questions Every Tool Asks] describes the checks without which such a rewrite would not be safe.
+
+
+Names, Strings and Tokens
+=========================
+
+The smallest pieces of code do not need the builder; the classes themselves create them:
+
+```php
+NameNode::fromText('Nette\Utils\Strings');   // a name
+IdentifierNode::fromText('render');          // a member name
+StringNode::fromValue("it's", '"');          // a string literal: "it's"
+Token::fromText('!==');                      // a token, its kind is set by the lexer: Token::IsNotIdentical
+Trivia::fromText('// fixed');                // a comment, a space, a line ending or <?php
+```
+
+`Token::fromText()` runs the lexer on the text, so the token has exactly the kind PHP gives it; it rejects text that is not a single token. `Trivia::fromText()` recognizes a space within a line, a single line ending, a comment, a doc comment and `<?php` with a space after it, and rejects anything else. A token and trivia can also be created with a constructor from a kind and a text, `new Token(Token::Final, 'final')`, but then it is up to you to make sure the kind matches the text.

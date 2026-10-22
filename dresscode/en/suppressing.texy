@@ -1,0 +1,199 @@
+Suppressions and the Baseline
+*****************************
+
+.[perex]
+How to silence a decision on one line, in a block or in a whole file, why a suppression stops the fix as well, and how a baseline lets you turn on a decision that your code does not meet yet.
+
+
+Four Levels
+===========
+
+Personally, I don't like exceptions to rules and I don't write them into code; if I must, then in the configuration, for a whole path. But there are places where a decision is simply wrong, and there you want a precise tool, not a hammer. Suppression has four levels, from the narrowest to the widest:
+
+| level | how | where |
+|---|---|---|
+| one line or statement | `// dresscode:ignore` | in the code |
+| block | `dresscode:disable` and `dresscode:enable` | in the code |
+| whole file | `dresscode:ignoreFile` | in the code |
+| path | `keep` in an override, `excludePaths` | in the configuration |
+
+Alongside them there is the **baseline**: an exception not to a decision but to time. It records the violations you cannot fix today and reports only the new ones.
+
+Whichever level you choose, one thing holds: **a suppressed violation is not fixed.** A rule may change the code only after it has reported the violation and the report was not suppressed, and it is the engine of the tool that enforces this, not the author of the rule. So a suppression is not just silence in the output; it really turns the decision off. The baseline is a different case and never prevents a fix, as [its section |#baseline] describes.
+
+
+Suppressing on a Line
+=====================
+
+A `dresscode:ignore` comment at the end of a line suppresses the violations on that line. Without a name, it suppresses everything; with a decision path, only that decision; several paths are separated by commas:
+
+```php
+$isEmpty = $value == null; // dresscode:ignore expressions.comparison.loose
+```
+
+Instead of the whole path, you can also give a section, which covers all decisions under it: `// dresscode:ignore spacing` silences all spacing on the line.
+
+A comment on a line of its own applies to what starts on the line below it, even if it spans several lines. It can be a statement or a class member, but also a single array item or an argument: a comment above the first item of an array covers only that item, not the whole array. Here it covers the whole statement:
+
+```php
+// dresscode:ignore multiline.edges.array, multiline.trailingComma.array
+$matrix = [[1, 0, 0],
+	[0, 1, 0],
+	[0, 0, 1]];
+```
+
+After two dashes, write why the exception applies. DressCode does not read that text; it is for whoever opens the code after you. ESLint and PHP_CodeSniffer use the same form:
+
+```php
+// dresscode:ignore upgrading.functions.arraySearchFunctions -- a loop is faster than array_any() on this hot path
+foreach ($kinds as $kind) {
+	if ($this->kind === $kind) {
+		return true;
+	}
+}
+```
+
+`//`, `#` and `/* */` all work. You copy the path from the output, where it stands next to every finding. Instead of the path, DressCode also accepts the name of a PHP CS Fixer or PHP_CodeSniffer rule that its decision covers, and it understands the comments `phpcs:ignore`, `phpcs:disable`, `phpcs:enable`, `phpcs:ignoreFile` and the annotation `@phpcsSuppress`, so if you are migrating from another tool, you do not have to touch the code at all. [dresscode migrate-suppressions |migration#3. Rewrite the Comments] then rewrites them to DressCode paths; it also rewrites a comment with a rule name from an older version of DressCode.
+
+A name that matches no decision suppresses nothing, and the run warns about it, so that the code does not keep a comment that only looks as if it does something:
+
+/--pre .[terminal]
+  Comment `dresscode:ignore noIsNull` names `noIsNull`, which is no decision, section or rule, so it silences nothing.
+\--
+
+Where the project already has its own comment to mark intent, for example `// intentionally ==` at a comparison that should not be made strict, you do not have to rewrite it. The `suppressionComments` key maps a comment pattern to the decisions that stay silent on its line, just as if `dresscode:ignore` were there:
+
+```neon
+suppressionComments:
+	'~\bintentionally\s+[!=]=~': expressions.comparison.loose
+```
+
+The pattern is a regular expression including its delimiters, and it is matched against the text of one comment, so `^` means the start of the comment. The value is a path, a section or a list of them. A comment at the end of a line applies to that line, a comment on a line of its own to the statement below it. The `nette` standard carries such a map: `// intentionally ==` silences `expressions.comparison.loose` and `// @` silences `mistakes.errorSuppression`.
+
+An item can also carry an example of a comment the pattern accepts, and then it is written as a map:
+
+```neon
+suppressionComments:
+	'~^//\s*@\s+\S~':
+		decisions: mistakes.errorSuppression
+		example: '// @ <why>'
+```
+
+DressCode verifies the example: it puts a word in place of `<why>`, and the comment must match the pattern. For a violation of that decision, the `agent` format offers it to the agent as a way to keep a justified exception, with the real reason in place of `<why>`; `dresscode config` prints it next to the pattern. A higher layer that writes the same pattern replaces the whole item, including the example.
+
+
+Suppressing in a Block
+======================
+
+```php
+// dresscode:disable file.longLines
+$expired = 'Your subscription has expired. Renew it in the account settings to keep access to every premium feature of the shop.';
+$declined = 'Your card was declined by the bank. Check the card details or choose another payment method to complete the order.';
+// dresscode:enable
+```
+
+`disable` without a name turns off everything until `enable`; `enable` without a name turns on everything that `disable` turned off. Without `enable`, `disable` applies until the end of the file.
+
+
+Suppressing in a Whole File
+===========================
+
+```php
+<?php // dresscode:ignoreFile
+```
+
+This comment, anywhere in the file, turns off everything for the whole file. It is useful for generated code that lives among hand-written code. When there are several such files, it is cleaner to exclude them by path or by content, see `skipWhen` in the [configuration |configuration#Paths].
+
+
+Turning Off for a Path
+======================
+
+An exception that applies to a whole directory belongs in the configuration, not in a hundred files. An [override |configuration#Different Values for Part of the Project] with the value `keep` turns off a decision for such a path:
+
+```neon
+overrides:
+	-
+		paths: [legacy]
+		expressions:
+			comparison: keep
+	-
+		paths: [tests/fixtures]
+		file:
+			longLines: keep
+```
+
+The rest of the configuration checks such a file normally. `excludePaths` skips whole paths; both are described on the page [Configuration |configuration#Paths].
+
+Often, though, the decision should not disappear for that path, only apply with a different value: tests use different spacing between methods than the source code, not no spacing at all. An override can do this too, giving its own values to the files that match the path:
+
+```neon
+overrides:
+	-
+		paths: [tests/**.phpt]
+		blankLines:
+			afterImports: 2
+```
+
+
+Baseline .[#baseline]
+=====================
+
+You introduce a new standard in one commit: `dresscode fix` fixes what can be fixed, and you commit the result separately, as described in [Getting Started |getting-started#Automatic Fixing]. But after such a commit, something may remain that no tool can do for you. The decision `types.declaration.parameter: required` wants a type on every parameter, and you have three hundred functions without one. For each of them you need to think about which type belongs there, and that is weeks of work. Until you turn the decision on, more of them appear with every commit.
+
+This is exactly what a baseline is for: a list of the violations you cannot fix today. With it, you can turn the decision on right away, the old violations wait until you get to them, and every new one is reported. The same goes for a risky fix that the project has not accepted yet, or for a line that is longer than `file.lineLength` allows and that DressCode cannot break for you.
+
+In static analysis, a baseline is a matter of course; PHPStan has had one for years. But neither PHP CS Fixer nor PHP_CodeSniffer has one, and in both projects the request for one got stuck on the same question: what should automatic fixing do with it? DressCode answers simply: **the baseline contains only what the fix leaves.** What can be fixed is fixed, and the baseline keeps track of the rest.
+
+That is why the `baseline` command writes it for code where `fix` has nothing left to do. Both commands take the paths from the `paths` key in the configuration; you can also list them after the command:
+
+```shell
+dresscode fix
+dresscode baseline
+```
+
+/--pre .[terminal]
+Baseline with 312 violations written to `dresscode-baseline.neon`.
+Name it under `baseline` in the configuration to make it apply.
+\--
+
+The order matters. If `fix` would still change something, `baseline` writes nothing, lists the files that would change, and ends with exit code `1`; nothing that can be fixed belongs in the baseline:
+
+/--pre .[terminal]
+Error: The baseline is generated over code a fix leaves alone: a fix would change 3 files. Run `fix` first.
+  src/Cart.php
+  src/Order.php
+  tests/CartTest.php
+See https://dresscode.run/suppressing#baseline
+\--
+
+Risky fixes that change the behavior of the code and that the project has not accepted in the [`fixRisky` |configuration#risky-fixes] key belong in the baseline, because the tool does not make them without your permission. Risky fixes that types or `nameResolution` would decide do not belong in it: they are only warnings, and they disappear as soon as you give DressCode what it is missing. The `baseline` command has no `--only` option, because a baseline comes from the whole configuration, not from a few decisions.
+
+The file is created next to the configuration and in the same format (`.neon` next to `dresscode.neon`, `.php` next to `dresscode.php`). It starts to apply once the configuration names it; after that, the next `dresscode baseline` writes into the file it names:
+
+```neon
+baseline: dresscode-baseline.neon
+```
+
+Inside, there is the version of the format and, for each file, a list of violations with the path of the decision, the message and a fingerprint:
+
+```neon
+version: 2
+files:
+	src/Order.php:
+		-
+			decision: naming.method
+			message: The method `get_total` must be written in camelCase.
+			fingerprint: ea4c48c2e21d2b35
+```
+
+The fingerprint is computed from the decision, the content of the line and the order of the violations of that decision on the line, not from the line number, so the baseline survives edits elsewhere in the file. The message is not part of it: it is in the entry for people to read, so they can see what it is about, and when a new version of DressCode words it differently, the baseline still recognizes the violation. Violations the baseline knows are not reported, and the summary of the run admits them, so that nobody ends up praising the emperor's new clothes:
+
+/--pre .[terminal]
+OK  312 violations in the baseline in 214 files
+\--
+
+A baseline never prevents a fix. A `dresscode:ignore` comment says "the decision is wrong here", and that is why it stops the fix too. A baseline says "we can't do this yet", and there is no reason to leave alone what we already can fix. When a violation from the baseline becomes fixable, for example because the project has accepted the risky fixes of that decision, `fix` fixes it like any other.
+
+When a violation listed in the baseline disappears from the code, because someone fixed it or `fix` fixed it as soon as it could, the run points out that the entry no longer matches anything (<code>''1 entry of the baseline no longer matches a violation; regenerate it with `dresscode baseline`.''</code>). Run `fix` and generate the baseline again. The run points out only the entries of the files it processed, and with `--only` only the entries of the decisions that ran, so a check of part of the project does not report as stale what it did not ask about. A baseline should shrink, and once it is empty, delete the line from the configuration and the file with it.
+
+The new version cannot read a baseline from the time when DressCode reported findings per rule: the fingerprints are computed differently, so it rejects the file and advises you to generate it again. Just run `fix` and `dresscode baseline`.

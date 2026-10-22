@@ -8,3 +8,23 @@ How the pages in `phpsyntax/` are written where they depart from the Writing Sty
 - **What nikic/PHP-Parser does better is said on the home page**, before the reader finds it alone: it recovers from a syntax error and returns a partial tree, and it evaluates constant expressions. A page that stays silent about it loses the trust of the reader for every other claim.
 - **Only the public API is documented.** A class or method marked `@internal` is not described on any page, because a documented one becomes a promise the library then has to keep.
 - **The reference of the nodes is generated from the code.** Its descriptions are the doc comments of the library, in English on every page, and only the title, the perex and the introductions of its sections are written by hand. A description that is wrong is fixed in the doc comment, not on the page.
+- **English wording.** The English pages follow the plain international English of [dresscode.md](dresscode.md#english-wording): short sentences, common words, Title Case headings, and the words people search for in the title, description and perex ("PHP parser", "lossless syntax tree", "concrete syntax tree", "format-preserving code changes"). The terms stay the same word everywhere:
+
+| Czech | English |
+|---|---|
+| bezztrátový syntaktický strom | lossless syntax tree |
+| konkrétní syntaktický strom | concrete syntax tree (CST) |
+| abstraktní syntaktický strom | abstract syntax tree (AST) |
+| uzel, slot, token, trivia | node, slot, token, trivia |
+| bílé znaky | whitespace |
+| parsovat, parsování | parse, parsing |
+| tisk, vytisknout | printing, print |
+| procházení stromu | traversing the tree, traversal |
+| úpravy stromu | modifying the tree |
+| rodič, předek, potomek, sourozenec | parent, ancestor, descendant (child for a direct one), sibling |
+| analýza | analysis |
+| příkaz (jazyka) | statement |
+| výraz | expression |
+| člen třídy | class member |
+| bázová třída | base class |
+| round trip | round trip, always with "the printed tree is the original file byte for byte" |

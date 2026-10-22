@@ -1,0 +1,428 @@
+Configuration
+*************
+
+{{description: How to configure the DressCode PHP coding standard fixer: each key names one thing in your code and its value says how it is written. Standards, sets, layers, keep, overrides, risky fixes and paths.}}
+
+.[perex]
+The configuration is a single file in the root of your project: `dresscode.neon`, or `dresscode.php` if you prefer PHP. You don't assemble rules in it. You write down how your code looks: each key names one thing in the code, and its value says how that thing is written. A standard provides the base, sets add intents on top of it, and anything you want different you write key by key, for the whole project or just a part of it.
+
+
+The Configuration File
+======================
+
+This is the whole configuration of a project that builds on PER Coding Style, wants to clean up needless code and does a few things its own way:
+
+```neon
+use:
+	- perCs
+	- cleanup
+
+paths:
+	- src
+	- tests
+
+excludePaths:
+	- tests/fixtures
+
+braces:
+	position:
+		class: nextLine
+blankLines:
+	aroundMethods: 1
+	beforeStatement:
+		return: 1
+spacing:
+	concatenation: '$a.$b'
+```
+
+The same in PHP, where each NEON key is a named argument of the `DressCode\Config` constructor, and the sections of decisions go together into the `decisions` argument:
+
+```php
+<?php declare(strict_types=1);
+
+use DressCode\Config;
+
+return new Config(
+	use: ['perCs', 'cleanup'],
+	paths: ['src', 'tests'],
+	excludePaths: ['tests/fixtures'],
+	decisions: [
+		'braces' => ['position' => ['class' => 'nextLine']],
+		'blankLines' => ['aroundMethods' => 1, 'beforeStatement' => ['return' => 1]],
+		'spacing' => ['concatenation' => '$a.$b'],
+	],
+);
+```
+
+The rest of this page uses NEON, because it is easier to read. All names in the configuration (keys, values and preset names) are written in camelCase. In NEON, a list with a single item may also be written as a plain value, so `paths: src` is the same as `paths: [src]`. This works for `use`, `paths`, `excludePaths`, `fileExtensions`, `fixRisky`, `reportOnly` and for the paths in `overrides`.
+
+DressCode looks for the file from the current directory upward, and the directory where it finds it becomes the root of the project; all paths in the configuration are relative to it. When there is no configuration and the run gets a standard with the `--use` option, the root is the directory of the nearest `composer.json`, or the current directory if there is none, so a run from any subdirectory of the project has the same relative paths and the same cache. Next to the configuration there may be a template `dresscode.neon.dist` (or `.php.dist`) that you commit; a file without `.dist` then replaces it completely, for example for local changes. Having both NEON and PHP side by side is an error; neither of them takes precedence. You can force another file with the `--config` option.
+
+A typo is not silently skipped; it is an error when the configuration loads, and the message offers what you most likely meant: <code>''Key `spacing.cal` is unknown; write `spacing.call`.''</code> The same happens with a value the key does not take, and the message lists the values it does take. Without a configuration file, DressCode refuses to run and recommends [`dresscode init` |cli#init], because it has no style of its own; it runs only with a preset from the `--use` option: `dresscode check src --use perCs`.
+
+
+Decisions: What a Key Names and How It Is Written
+=================================================
+
+A key of the configuration names a thing in the code, not the rule that checks it. The space between a function name and its parenthesis is `spacing.call`, the brace of a class is `braces.position.class`, the blank lines around methods are `blankLines.aroundMethods`. The value then says how the thing is written: that it must or must not be in the code (`required`, `forbidden`), or a word (`nextLine`), a code sample (`'$a.$b'`), a count (`1`), a list or a map. We call such a key with its value a **decision**, and you will see its whole path next to every finding in the output:
+
+/--pre .[terminal]
+src/Cart.php
+  error   9:52  Expected a line break before the opening brace.  braces.position.class
+\--
+
+You write the path into the configuration when you want a different value, into a `dresscode:ignore` comment when one place should stay as it is, and after `dresscode explain` when you want to know what the key is for and what it takes. There are about twenty sections, from `file` to `upgrading`, and each has a page with all its keys; the map of the whole tree is on the page [Configuration Reference |decisions/@home].
+
+Why this matters is easy to see with blank lines. These are six lines of one section:
+
+```neon
+blankLines:
+	afterNamespace: 1
+	afterImports: 1
+	aroundMethods: 1
+	bodyStart: 0
+	bodyEnd: 0
+	beforeStatement:
+		return: 1
+```
+
+In PHP CS Fixer, the same takes six rules: `blank_line_after_namespace`, `single_line_after_imports`, `no_blank_lines_after_class_opening`, `class_attributes_separation`, `no_extra_blank_lines` with the token list `curly_brace_block`, and `blank_line_before_statement`. In PHP_CodeSniffer with Slevomat, it takes nine sniffs, one of them with five properties. All three configurations do the same thing to the same file; they differ in how quickly you can see what they say.
+
+A key that neither you nor any preset writes requires nothing. And where even what a preset says should not apply, you write `keep`: "nothing is enforced here, the code stays as it is". `keep` is the one word for "don't touch this". Every decision that requires something accepts it, and on a whole section it applies to everything under it:
+
+```neon
+blankLines: keep           # nothing decides about blank lines
+expressions:
+	comparison:
+		yoda: keep         # Yoda conditions may stay as they are
+```
+
+[Configuration Reference |decisions/@home#Values] describes which values each key takes, from a word through a range to a map.
+
+
+Standards and Sets
+==================
+
+You don't have to write hundreds of keys, because the configuration rests on two questions you can answer right away.
+
+**How should the code look?** That is the **standard**, a preset that decides how the code looks, and you choose one:
+
+| standard | what it is |
+|---|---|
+| `psr12` | [PSR-12 |https://www.php-fig.org/psr/psr-12/], section by section |
+| `perCs` | [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/], the successor of PSR-12 |
+| `nette` | [Nette Coding Standard |https://doc.nette.org/en/contributing/coding-standard], PER Coding Style with tabs and the layout of the Nette libraries |
+| `symfony` | Symfony Coding Standards, following the `@Symfony` set of PHP CS Fixer |
+| `laravel` | the style [Laravel Pint |https://laravel.com/docs/pint] writes by default, its `laravel` preset |
+
+**What else do you want from the code besides its looks?** Those are the **sets**, presets of one intent that decide nothing about the looks, and so they never conflict with the standard:
+
+| set | what it decides |
+|---|---|
+| `modernizations` | constructs of newer PHP where an older form says the same thing |
+| `deprecations` | what a newer PHP or a library has deprecated or removed |
+| `cleanup` | code that serves no purpose |
+| `correctness` | what is most likely a bug |
+| `types` | types written where PHP reads them |
+| `compilerOptimizations` | global names in the form PHP optimizes already at compile time |
+
+Both go into the `use` key, the standard first and the sets after it; a single preset can be written without a list (`use: perCs`):
+
+```neon
+use:
+	- perCs
+	- cleanup
+	- modernizations
+```
+
+A set names an intent, not a list of keys. Instead of twenty decisions you write `modernizations`, and when DressCode learns a new modernization in the next version, the set brings it without a single line in your configuration. A decision that writes newer PHP than the project allows simply waits until the target version allows it. The `nette` standard also decides about code hygiene, because it is part of Nette: it uses the `cleanup`, `types` and `correctness` sets itself and sets a few of their decisions back to `keep`, for example native types of parameters, properties and return values. No standard carries the `modernizations` and `deprecations` sets, because upgrading to a newer PHP is something you run when you want it.
+
+A preset is a file of the same shape as your configuration. The page [Standards and Sets |presets-reference] shows exactly what each one decides, with comments explaining why. Built-in presets are written short, as in the examples: the full name has the form `vendor/name`, and the vendor of the built-in ones is `dresscode`, so `perCs` is short for `dresscode/perCs`. `dresscode config` and `dresscode explain` print names in the full form. A package of the vendor `dresscode` is written short too, for example `upgrade-nette` instead of `dresscode/upgrade-nette`; a preset from a plugin of another vendor is always written in full. And the `use` key also takes a path to a file, for example `use: [perCs, ../shared/house.neon]`, relative to the file that contains it.
+
+
+Layers
+======
+
+For each file, the values are composed from layers, from the lowest to the highest:
+
+1. the presets from the `use` key in the order they are written, each on top of the presets it builds on,
+2. the decisions of your configuration,
+3. the [overrides for a part of the project |#Different Values for Part of the Project] that the file matches, in the order they are written,
+4. the command line (`--use`, `--set`).
+
+A higher layer changes only what it says itself, and how it changes it depends on the kind of value:
+
+- **a word, a code sample, a count** and yes or no replace the value from below;
+- **a list** replaces the whole list from below, even the default one: `hygiene.aliasFunctions: [core, mysqli]` means only these two groups of aliases, whatever the preset said. If you want to add to it, write `...` into the list, which stands for the list from below: `hygiene.aliasFunctions: [..., mysqli]`;
+- **a map** of names merges item by item, and an item with the value `keep` removes that name from all layers below it, even from package data; an exact item takes precedence over a pattern with an asterisk, whichever layer wrote it, and an exclamation mark after the map's key (`replacedClasses!:`) replaces the maps from below completely;
+- **a section** and a key with subkeys merge key by key, so changing one number from a preset means writing one number;
+- **`keep`** written on a section or on a key with subkeys cancels everything under it, and a later layer brings back only the keys it names itself.
+
+Each preset is applied only once, at the place where something first names it. When you list it again, it changes nothing, and the run says so:
+
+/--pre .[terminal]
+Warning: The configuration uses preset `dresscode/perCs`, which preset `dresscode/nette` already brings; the entry does nothing.
+\--
+
+The same holds for the sets a standard uses. `nette` builds on `cleanup`, `types` and `correctness` and turns some of their decisions off, for example `types.declaration.parameter`. When you write `use: [nette, types]`, the `types` set is applied only once, under `nette`, so you don't get the turned-off decisions back, and the run prints the same warning. If you want them, write them yourself:
+
+```neon
+use: nette
+
+types:
+	declaration:
+		parameter: required
+		property: required
+		return: required
+```
+
+The order of keys in the file has no effect on the run; DressCode itself decides the order in which rules run. [`dresscode config` |cli#What the Configuration Means: config] prints where each value came from, in the shape of the file, with the layer in a comment next to each key.
+
+
+PHP and Package Versions
+========================
+
+The PHP version the code is written for is a property of the project, and it is read from `composer.json`, from the constraint in `require.php`. A decision that writes syntax of a newer PHP applies only when every version the constraint allows knows that syntax, so with `^8.1` PHP 8.1 decides, even if the project runs on a newer one. The lower bound is raised by `config.platform.php` in `composer.json`, a value Composer never changes by itself: with `^8.1` and the platform `8.3`, PHP 8.3 decides. A constraint without a lower bound, such as `<8.4` or `*`, does not give a lowest version, so the default PHP 8.0 applies. DressCode does not support versions older than PHP 8.0: it checks the code as PHP 8.0 and warns that a fix may write syntax the older PHP does not know. The `Target` line in the header of every command's output shows where the target version came from.
+
+You write a different version into the `targets` key when it differs from `composer.json` or when DressCode cannot read it from there, and into an override when a part of the project runs on a different PHP:
+
+```neon
+targets:
+	php: '8.2'
+```
+
+Just like a PHP version, a decision may also require a **package** in some version, when it checks the API of that package. The version of the package is read from `composer.json` and from the installed packages next to it, and what counts is the version the project builds on: for a package the project requires itself, that is the lowest version its constraint allows, not the installed one. A package that the project requires without a lower bound (`*`), or does not require at all and gets only as a dependency of another package, may be in any version: a decision that wants a certain version of such a package therefore does not apply, and its upgrade data is only reported; nothing is rewritten according to it. You can also give the version the code should be written for in the `targets` key, for example when [upgrading libraries |upgrading-libraries#One Version at a Time, or All at Once] you convert the code to a new version before you install it. The version is written in quotes, because NEON would read `3.10` as the number 3.1:
+
+```neon
+targets:
+	php: '8.2'
+	nette/forms: '3.3'
+```
+
+
+Different Values for Part of the Project
+========================================
+
+A project rarely looks the same everywhere. You want library code as fast as possible, tests have their own helper functions, and generator templates use a different indentation. An override in the `overrides` key applies to the files that match its `paths`, and it may contain decisions, presets in `use`, the PHP version in `targets`, `namespaces`, `nameResolution`, `fixRisky`, `reportOnly`, `severity` and `suppressionComments`:
+
+```neon
+use: nette
+
+nameResolution: certain
+
+overrides:
+	# the library writes global names the way PHP can optimize them
+	-
+		paths: [src]
+		use: [compilerOptimizations]
+
+	# tests declare helper functions in their own namespace
+	-
+		paths: [tests]
+		nameResolution: uncertain
+		blankLines:
+			aroundMethods: 1
+		severity:
+			phpdoc.property.plainComment: warning
+
+	# generator templates are indented with two spaces
+	-
+		paths: [resources/stubs]
+		indentation:
+			unit: '2 spaces'
+```
+
+The result:
+
+- Files in `src` get the `compilerOptimizations` set on top of the `nette` standard. The set writes global functions and constants so that PHP can [optimize |optimizations] them.
+- In `tests`, `nameResolution: uncertain` says that the lists of functions from the configuration are not complete there, and fixes that depend on a function being global are only reported there as risky; the details are on the page [Functions and Constants in Namespaces |namespaces#Helper Functions in Tests]. There is one blank line between methods there instead of two, and a plain comment above a property, where a doc comment belongs, only warns.
+- Templates in `resources/stubs` are indented with two spaces, and everything else is the same as in the rest of the project.
+
+Paths have the same syntax as `excludePaths` and are relative to the root of the project. A file that matches several overrides gets their layers in the order they are written. A decision that should not apply to a part of the project gets `keep` in the override, and a later override can turn it on again for the files that match both. DressCode goes through every override right at the start of the run, even when no file matches it, so it reports a typo right away, together with the override it is in:
+
+/--pre .[terminal]
+Error: The override for `tests`: Key `expresions` is unknown; write `expressions`.
+\--
+
+`dresscode config --file tests/CartTest.php` shows what finally applies to a particular file.
+
+
+Warnings and Risky Fixes .[#risky-fixes]
+========================================
+
+Every violation is an error and fails the build, unless the configuration softens it. The `severity` key does that: a map of names to `warning` or `error`. A name is a decision, a group, a section or a preset, and it applies to everything under it; within one layer, the most specific name wins. A warning enforces the same as an error, and `fix` fixes it the same way, but the output counts it separately and the exit code stays `0`; the `--max-warnings <n>` option sets a threshold. This is useful for what `fix` does not fix, mainly long lines:
+
+```neon
+severity:
+	file.longLines: warning
+	phpdoc: warning
+```
+
+The severity is not part of the value of a decision, so a new value does not carry it along: a severity applies to the value written in the same layer or in a layer below it. The `psr12` and `perCs` standards soften long lines this way. When a project writes `file.longLines: forbidden` itself and gives no severity with it, long lines are an error again, because now the project has decided about them.
+
+A risky fix is one that can change what the code does, and it is always a property of a particular place. Turning `in_array($role, $roles)` into `in_array($role, $roles, true)` is safe where values of a single type are searched; elsewhere the code may stop finding a value it found before. So DressCode fixes what it can fix safely and reports a risky occurrence, together with what would decide it:
+
+- **The type of a value.** The [types |types] DressCode takes from your project's PHPStan would decide it.
+- **The name of a function.** An unqualified `is_null()` in a namespace may be your own function `App\is_null()`. The line [`nameResolution: certain` |namespaces#name-resolution] decides that.
+- **Your judgment.** `file.strictTypes.declaration` turns on strict types, which by its nature changes how the code behaves; `functions.staticClosure` cannot see whether you bind the closure to an object somewhere else. No extra information helps here; the choice is yours.
+
+In the output, a risky place has the status `risky`, and under the message there is a sentence about what can go wrong at that place:
+
+/--pre .[terminal]
+src/Users.php
+  risky  17:16  The `in_array()` call must pass `$strict = true`.  mistakes.strictArgument
+                Risky because a strict search no longer finds a value of another type.
+\--
+
+Writing a decision into the configuration, yourself or through a preset, does not yet mean agreeing to its risky fixes. The project gives its consent with the `fixRisky` key, a list of decisions whose risky fixes it accepts; instead of a decision, there may be a section or a preset, which applies to everything under it. The only section with the same name as a set is `types`: you write the section as `types.*` and the set by its full name `dresscode/types`, because the bare name `types` could mean either, and DressCode refuses it. A preset cannot give this consent. That is why a Git hook or an editor needs no option: it fixes what the project has accepted and reports the rest. The `--fix-risky` option allows the risky fixes of all decisions for a single run, `--fix-risky=mistakes.strictArgument` only those of that one decision:
+
+```neon
+fixRisky:
+	- mistakes.strictArgument
+	- hygiene.classNameNotation
+```
+
+The `fixRisky` list adds up across layers, so an override can accept, for its part of the project only, risky fixes you don't want to accept elsewhere. Without consent, the risky place is reported, and its severity follows what would decide it. Where types or `nameResolution` would be enough, it is a warning, because forcing such a place through the exit code would push you to consent blindly. Where the fix changes behavior by its nature, it is an error like any other violation. The summary counts risky fixes by their cause and says for each what to do about it:
+
+/--pre .[terminal]
+2 risky fixes wait, the type is unknown: set `typeAnalysis: phpstan`. See https://dresscode.run/types#enable
+1 risky fix waits, a name may reach a function of the namespace: run `dresscode init`, which lists what the namespaces declare, or set `nameResolution: certain` if they declare nothing. See https://dresscode.run/namespaces#name-resolution
+\--
+
+The opposite case is handled by the `reportOnly` key: decisions, sections or presets whose violations are reported but never fixed. This is useful when you introduce the tool and want to see first what would change, or for a decision whose fix the project does by hand. The names are read the same way as in `fixRisky`, the list adds up across layers, and an override may have one for its part of the project; a preset cannot write it. A decision in `reportOnly` does not wait for consent to a risky fix either, because it offers no fix:
+
+```neon
+reportOnly:
+	- multiline
+	- mistakes.strictArgument
+```
+
+Where your judgment decides, run `dresscode fix --ask-risky`: it makes the safe fixes as usual, then asks about each remaining risky fix separately, shows its diff and makes only those you accept. Accept in `fixRisky` what is fine for the whole decision, and mark a place that should stay as it is with a [`dresscode:ignore` |suppressing] comment.
+
+
+Paths
+=====
+
+`paths` says what is checked: files and directories relative to the root of the project. Paths given on the command line take precedence; but a directory that contains some of the paths from `paths` is narrowed to just those, see [Command Line |cli#Commands].
+
+`excludePaths` leaves paths out, and it **only adds**: it adds yours to the default list (`vendor`, `node_modules`, `temp`, `tmp`, `log`, and all directories and files starting with a dot), and every plugin does the same. Nobody can bring back what another one excluded.
+
+```neon
+paths:
+	- src
+	- tests
+
+excludePaths:
+	- tests/fixtures
+	- '*.generated.php'
+```
+
+A pattern with a slash is anchored to the root, so `tests/fixtures` is exactly that one directory. A pattern without a slash matches the name of a file or directory at any depth. An asterisk stands for anything except a slash, two asterisks also for slashes, so `tests/**.phpt` matches all tests at any depth. Two asterisks with a slash mean zero or any number of directories, the same as in `.gitignore`, so `src/**/Test.php` also finds `src/Test.php`. A question mark stands for one character except a slash, `[abc]` for one of the listed characters and `[!abc]` for any other one. DressCode refuses an invalid pattern, for example one with an unclosed square bracket, right when it reads the configuration.
+
+`fileExtensions` says which extensions are taken as PHP (the default is only `php`); a project with Nette Tester tests adds `phpt`. To skip a file by its content, for example generated code by its header, use `skipWhen` and pass it a callback as an [entity |#Objects and Callbacks]; it gets the content of the file and its path, and returns `true` when the file should be skipped:
+
+```neon
+skipWhen: App\CodeStyle\GeneratedFilter::isGenerated(...)
+```
+
+
+Types and Namespaces
+====================
+
+There are two things about a project DressCode cannot learn from a single file, so you tell it with keys.
+
+`typeAnalysis: phpstan` says that the types of the code are taken from the PHPStan installed in the project, with its `phpstan.neon` and extensions. Only with types do the decisions that make no sense without them apply, for example rewriting the deprecated API of libraries. It is a decision of the whole project; neither a preset nor an override can set it. The page [Types from PHPStan |types] describes what types make possible and what they cost.
+
+`namespaces` lists the functions and constants that the namespaces of the project declare, and `nameResolution: certain` says that there are no others. DressCode then knows whether an unqualified `strlen()` in a namespace means the global function, and the fixes that depend on it stop being risky. The page [Functions and Constants in Namespaces |namespaces] explains why this matters so much.
+
+```neon
+typeAnalysis: phpstan
+nameResolution: certain
+namespaces:
+	constants:
+		- 'App\{VERSION, DEBUG}'
+```
+
+
+Plugins
+=======
+
+A plugin is a class implementing the `DressCode\Plugin` interface. Through it, a package brings a project its own rules and presets, analyses, excluded paths and a file filter. A package announces its plugin in `composer.json` under the key `extra.dresscode.plugin`, and after installation DressCode finds it in `vendor/composer/installed.json`. But DressCode loads it only when the project lets it in: by writing the name of the package or the class of the plugin into the `use` key. A plugin brings code that runs on every check, and the project lets it in the same way Composer lets in its own plugins. The plugin of an installed package that `use` does not name is not loaded, and the run warns about it. Only two kinds of plugins do not need to be named: a plugin announced by the `composer.json` of the project itself, and the plugins of upgrade packages, which `dresscode upgrade` loads by itself. If the plugin of a package had the same name as some preset, `use` could not tell which one you mean, and DressCode refuses it with an error. A plugin that lives right in the project is listed in the `use` key next to the presets, by its class, or by an [entity |#Objects and Callbacks] with arguments:
+
+```neon
+use:
+	- acme/coding-rules
+	- Acme\CodeStyle\Plugin
+	- perCs
+	- acme/house
+```
+
+The first line lets in the plugin of the package `acme/coding-rules`; the package name itself is not a preset. A plugin does not decide how the code is written. Its rules have their decisions in their own section, named after the plugin, and its presets only become available; the project itself writes what it wants from them into `use` and into the plugin's section. That is why the style of a project can always be read in its own file. A plugin belongs to the whole project, so only the configuration lists it. DressCode refuses a plugin in the `use` of an override or a preset with the error <code>''Plugin `Acme\CodeStyle\Plugin` is used by the configuration of the project, never by a preset or an override.''</code> How to write a plugin is described in [Your Own Preset and Plugin |presets-and-extensions].
+
+A package may also carry upgrade data: files describing what versions of libraries renamed or removed. The package announces their directory under `extra.dresscode.upgrading-dir`. The data turns on no decision by itself: it applies only when the project says `upgrading.packages: yes`, which both the `deprecations` and `modernizations` sets do. Only then does it also turn on the rewrites of the package's plugin that its files name; the plugin itself is loaded during `check` and `fix` only where `use` names it. DressCode itself carries data of the same form about what PHP has deprecated, and the requirement `upgrading.php.deprecatedApi: forbidden` applies it. More in [How Upgrading Libraries Works |upgrading-libraries].
+
+
+Objects and Callbacks
+=====================
+
+Where the PHP configuration passes an object or a callback, in NEON you write an entity. It looks like a call in PHP, and you may know it from the configuration of Nette DI:
+
+- `App\CodeStyle\Filter(8.1, strict: true)` creates an object; the arguments may be named,
+- `App\CodeStyle\Filter::create(8.1)` calls a static method and uses what it returns,
+- `App\CodeStyle\Filter::isGenerated(...)` passes the method itself as a callback,
+- `App\CodeStyle\Filter(8.1)::withLimit(100)` calls a method on what the previous link of the chain returned.
+
+Only three places take an entity: a plugin in the `use` key, the `skipWhen` key and an analysis factory in the `analyses` key, written as a pair of a class and an entity:
+
+```neon
+use:
+	- App\CodeStyle\Plugin(strict: true)
+	- perCs
+
+skipWhen: App\CodeStyle\GeneratedFilter::isGenerated(...)
+
+rules:
+	- App\CodeStyle\ExceptionMessagePeriodRule
+
+analyses:
+	- App\CodeStyle\Analyses\Imports
+	App\CodeStyle\Analyses\Calls: App\CodeStyle\Analyses\Calls::create(...)
+```
+
+`skipWhen` and the factory of an analysis are evaluated right when the configuration loads, while a plugin from `use` is created only once it is certain that its class really is a plugin. So the configuration of a repository that you only download and check cannot run any other code through a class name. In NEON, a project rule is named only by its class. A rule with its own dependencies is built by a factory every time DressCode needs it, for example separately for the files of each override, and such a factory is a plain closure in `dresscode.php`:
+
+```php
+return new Config(
+	use: ['perCs'],
+	rules: [
+		App\CodeStyle\ExceptionMessagePeriodRule::class,
+		App\CodeStyle\CacheKeyRule::class => fn() => new App\CodeStyle\CacheKeyRule(App\CodeStyle\Keys::load()),
+	],
+);
+```
+
+
+Command Line
+============
+
+The command line is the highest layer and lies above the configuration and above all overrides. `--use` adds a preset or a plugin, `--set` gives one decision a value in NEON, and `--only` narrows the run to the decisions, sections or presets it names, without changing values:
+
+```shell
+dresscode fix --set hygiene.is_null=forbidden   # the configuration plus this decision
+dresscode fix --only cleanup                    # only the decisions of the cleanup set
+dresscode check src --use psr12                 # someone else's project without a configuration
+```
+
+These options are not keys of the configuration file: they decide one run, not the project. The page [Command Line |cli#One Decision for One Run: --set and --only] describes how to use them to try a decision, introduce it in one commit or clean up code step by step.
+
+
+Other Keys
+==========
+
+- `baseline`: a file listing violations that cannot be fixed yet and should not be reported; the command `dresscode baseline` writes it, see [Suppressions and the Baseline |suppressing#baseline].
+- `suppressionComments`: the project's own comments that silence a decision on their line, see [Suppressions and the Baseline |suppressing#Suppressing on a Line].
+- `cacheDir`: where DressCode stores which files passed clean, and with `typeAnalysis: phpstan` also PHPStan's cache; the default is the directory `dresscode` in the system temporary directory.
+- `rules` and `ruleUrl`: the project's [own rules |custom-rule], named by class, and the address of their pages with the placeholder `{slug}`, which every finding of theirs links to in the terminal.
+- `analyses`: registers your own analysis for [your own rules |rule-contract#Analyses]; an analysis of the same class from the configuration takes precedence over the one from a plugin.
+
+`dresscode config` shows what finally applies from all of this: the resolved configuration in the shape of the file, with the layer that set each value, and for a decision that does not apply, the reason. With `--file`, the same for one file, including overrides, and with `--format json` the same as data.

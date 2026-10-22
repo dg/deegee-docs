@@ -1,0 +1,44 @@
+Git Hooks
+*********
+
+.[perex]
+A pre-commit hook for PHP code style that stays silent while everything is clean and checks only what goes into the commit. For AI agents, see the page [AI Agents |agents].
+
+
+Pre-commit
+==========
+
+A hook should be fast and quiet: check only the files that go into the commit, and print nothing when everything is fine. That is exactly what the `lines` format is for: one line per finding. The `--stdin` option also lets the hook check the content staged in the index, which may differ from the file in the working tree:
+
+```shell
+#!/bin/sh
+status=0
+for file in $(git diff --cached --name-only --diff-filter=ACM -- '*.php'); do
+	git show ":$file" | dresscode check --stdin "$file" -f lines --skip-excluded || status=1
+done
+exit $status
+```
+
+Save it as `.git/hooks/pre-commit` and make it executable. When everything is fine, the hook prints nothing and the commit goes through; otherwise it prints each violation on one line with the path, the line, the message and the decision path, and stops the commit:
+
+/--pre .[terminal]
+src/Cart.php:5:5: error: The import of `Gateway` is unused. [imports.unused]
+src/Cart.php:15:21: error: A plain string must be written with single quotes. [literals.quotes]
+\--
+
+Thanks to `--skip-excluded`, the hook skips a file that the configuration excludes in `excludePaths` or that is outside its `paths`; without it, `--stdin` would check that file too.
+
+If you want a hook that fixes right away, run `fix` over the working tree and add the fixed files to the index. It is convenient, but it means the commit contains changes the developer has not seen. I prefer the first variant: the hook only reports, and I run the fix on purpose.
+
+With the `pre-commit` tool, it is one entry in the configuration. The tool passes file names to DressCode, so the entry needs `--skip-excluded`, otherwise it would also check a file that the configuration excludes in `excludePaths`:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: dresscode
+        name: DressCode
+        entry: dresscode check -f lines --skip-excluded
+        language: system
+        types: [php]
+```

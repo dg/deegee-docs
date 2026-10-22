@@ -1,0 +1,232 @@
+Imports
+*******
+
+.[perex]
+The `imports` section decides on the `use` statements at the top of a file: whether each name has its own statement or several names share one, when a group use `use App\{A, B}` is written, how the imports are ordered, and what happens to an import that nothing uses.
+
+The [qualification |qualification] section decides which names are imported and which are written with a backslash; this section decides how the imports look. The keys under `grouping` say, separately for classes, functions and constants, whether each name has its own `use` (`separated`), all names of one kind share one (`combined`), or the names of one namespace share a group use (`grouped`). A list, such as `[separated, grouped]`, accepts each of its shapes, and only a statement that matches none of them is rewritten to the first one: a group use stays, and `use A, B;` is split. `order.kinds` sets the order of the kinds, `order.names` the sorting of names, and the [blankLines |blankLines] section the blank lines between the imports and after them.
+
+```neon
+imports:
+	grouping:
+		class: separated
+		function: combined
+	order:
+		kinds: [class, function, constant]
+		names: alphabetical
+	unused: forbidden
+	fromCurrentNamespace: forbidden
+```
+
+```php .[before]
+namespace App\Model;
+
+use App\Model\Order;  // Useless import of `Order`, because it is in the current namespace.
+use App\Util\Clock, App\Util\Money;  // Expected one import per `use` statement, 2 found.
+use function count;
+use function strlen;  // Expected all imports of functions in one `use` statement. // The import of `strlen()` is unused.
+use function trim;  // Expected all imports of functions in one `use` statement.
+
+class Cart
+{
+	public function total(Order $order, Clock $clock): Money
+	{
+		return new Money(count($order->items), trim($order->note));
+	}
+}
+```
+
+```php .[after]
+namespace App\Model;
+
+use App\Util\Clock;
+use App\Util\Money;
+use function count, trim;
+
+class Cart
+{
+	public function total(Order $order, Clock $clock): Money
+	{
+		return new Money(count($order->items), trim($order->note));
+	}
+}
+```
+
+A name mentioned only in a doc comment (`@var Address[]`) counts as used, because PHPStan and the editor both read it.
+
+
+imports.grouping.class
+======================
+
+How the imports of classes are put into `use` statements, a name of the global namespace never grouped.
+
+- `separated`: a `use` of its own for every name, `use Foo; use Bar;`
+- `combined`: all names of the kind in one `use`, `use Foo, Bar;`, one per namespace declaration
+- `grouped`: the names of one namespace in one group use, `use Acme\Shop\{Order, Cart};`, from `imports.groupMinNames` of them on
+- a list of these words, where each one passes and code matching none of them is written like the first
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `[separated, grouped]`, symfony `separated`, laravel `separated` · covers `group_import`, `single_import_per_statement`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Namespaces.DisallowGroupUse`, `SlevomatCodingStandard.Namespaces.MultipleUsesPerLine` .[decision-facts]
+
+
+imports.grouping.function
+=========================
+
+How the imports of functions are put into `use` statements, a name of the global namespace never grouped.
+
+- `separated`: a `use` of its own for every name, `use Foo; use Bar;`
+- `combined`: all names of the kind in one `use`, `use Foo, Bar;`, one per namespace declaration
+- `grouped`: the names of one namespace in one group use, `use Acme\Shop\{Order, Cart};`, from `imports.groupMinNames` of them on
+- a list of these words, where each one passes and code matching none of them is written like the first
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `[combined, grouped]`, symfony `separated`, laravel `separated` · covers `group_import`, `single_import_per_statement`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Namespaces.DisallowGroupUse`, `SlevomatCodingStandard.Namespaces.MultipleUsesPerLine` .[decision-facts]
+
+
+imports.grouping.constant
+=========================
+
+How the imports of constants are put into `use` statements, a name of the global namespace never grouped.
+
+- `separated`: a `use` of its own for every name, `use Foo; use Bar;`
+- `combined`: all names of the kind in one `use`, `use Foo, Bar;`, one per namespace declaration
+- `grouped`: the names of one namespace in one group use, `use Acme\Shop\{Order, Cart};`, from `imports.groupMinNames` of them on
+- a list of these words, where each one passes and code matching none of them is written like the first
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `[combined, grouped]`, symfony `separated`, laravel `separated` · covers `group_import`, `single_import_per_statement`, `PSR2.Namespaces.UseDeclaration`, `SlevomatCodingStandard.Namespaces.DisallowGroupUse`, `SlevomatCodingStandard.Namespaces.MultipleUsesPerLine` .[decision-facts]
+
+
+imports.groupMinNames
+=====================
+
+How many names of one namespace make a group use where `grouped` is written, fewer written in the next shape of the list, as imports of their own where it names none.
+
+- a number from 2
+
+Default `2` · standards: perCs `2`, psr12 `2`, nette `2`, symfony `2`, laravel `2` .[decision-facts]
+
+
+imports.order.kinds
+===================
+
+The order of the kinds among consecutive imports, a kind not listed following in the order classes, functions, constants.
+
+- a list of these words, in the order they should come in:
+	- `class`: the imports of classes
+	- `function`: the imports of functions
+	- `constant`: the imports of constants
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `[class, function, constant]`, psr12 `[class, function, constant]`, nette `[class, function, constant]`, symfony `[class, function, constant]`, laravel `[constant, class, function]` · covers `ordered_imports`, `SlevomatCodingStandard.Namespaces.AlphabeticallySortedUses` .[decision-facts]
+
+
+imports.order.names
+===================
+
+The order of the names of one kind among consecutive imports, the names of a statement poured back into statements of the shapes written.
+
+- `alphabetical`: the names of a kind sorted alphabetically
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `alphabetical`, symfony `alphabetical`, laravel `alphabetical` · covers `ordered_imports`, `SlevomatCodingStandard.Namespaces.AlphabeticallySortedUses` .[decision-facts]
+
+
+imports.order.caseSensitive
+===========================
+
+Whether `Acme` sorts before `acme` rather than with it.
+
+- `yes` or `no`
+
+Default `no` · standards: perCs `no`, psr12 `no`, nette `no`, symfony `no`, laravel `no` · covers `ordered_imports`, `SlevomatCodingStandard.Namespaces.AlphabeticallySortedUses` .[decision-facts]
+
+
+imports.unused
+==============
+
+An import nothing uses is removed, a class name in a doc comment using the import too.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `forbidden`, laravel `forbidden` · covers `no_unused_imports`, `SlevomatCodingStandard.Namespaces.UnusedUses` .[decision-facts]
+
+From an import with several names (`use A, B;`) and from a group use (`use App\{A, B};`), only the unused item is removed.
+
+```neon
+imports:
+	unused: forbidden
+```
+
+```php .[before]
+namespace App;
+
+use App\Model\User;
+use App\Model\Order;  // The import of `Order` is unused.
+use App\Model\Address;
+
+class Profile
+{
+	/** @var Address[] */
+	private array $addresses = [];
+
+	public function __construct(
+		private User $user,
+	) {
+	}
+}
+```
+
+```php .[after]
+namespace App;
+
+use App\Model\User;
+use App\Model\Address;
+
+class Profile
+{
+	/** @var Address[] */
+	private array $addresses = [];
+
+	public function __construct(
+		private User $user,
+	) {
+	}
+}
+```
+
+`Address` stays, because it appears in the `@var` annotation; if the import disappeared, PHPStan would no longer understand the type.
+
+
+imports.aliasEqualToName
+========================
+
+`use Foo as Foo;` is `use Foo;`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `forbidden`, laravel `forbidden` · covers `no_unneeded_import_alias`, `SlevomatCodingStandard.Namespaces.UselessAlias` .[decision-facts]
+
+
+imports.fromCurrentNamespace
+============================
+
+An import of a class of the namespace it stands in, `use Acme\Shop\Order;` inside `namespace Acme\Shop`, and in the global namespace a function or a constant too.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `SlevomatCodingStandard.Namespaces.UseFromSameNamespace` .[decision-facts]
+
+
+imports.leadingBackslash
+========================
+
+The leading backslash of an import, which changes nothing, `use \Foo\Bar;`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `forbidden`, psr12 `forbidden`, nette `forbidden`, symfony `forbidden`, laravel `forbidden` · covers `PhpCsFixerCustomFixers/no_leading_slash_in_global_namespace`, `no_leading_import_slash`, `PSR12.Files.ImportStatement`, `SlevomatCodingStandard.Namespaces.UseDoesNotStartWithBackslash` .[decision-facts]

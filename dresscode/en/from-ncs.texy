@@ -1,0 +1,107 @@
+Migrating from Nette Coding Standard
+************************************
+
+.[perex]
+Nette Coding Standard 4 is a DressCode standard. It is called `nette` and is part of DressCode; the `nette/coding-standard` package adds a file filter and the `ecs` command for the migration. Here is what `ecs migrate` does, and why the first fix reformats more files than you expect.
+
+
+What Has Changed
+================
+
+Up to version 3, Nette Coding Standard was a thin wrapper around PHP CS Fixer and PHP_CodeSniffer with a bundle of rules from Slevomat: two tools, two configurations (`ncs.php` for the fixer, `ncs.xml` for the sniffer) and the `ecs` command that ran it all.
+
+From version 4, the standard is a **DressCode preset**. It is called `nette` and is part of DressCode, so every project has it available, whether it uses Nette or not. It is based on PER Coding Style, which it adjusts to the layout of the Nette libraries (tabs, two blank lines between methods and more), and it also uses the [sets |configuration#Standards and Sets] `cleanup`, `types` and `correctness`, turning off a few of their decisions; exactly what it contains is shown in the [overview of standards and sets |presets-reference]. The `nette/coding-standard` package adds what a project built on Nette needs on top of that:
+
+- a plugin with a filter that skips files with a `@phpVersion` annotation above the running PHP version, as the tests of the Nette libraries need, and with the paths that version 3 excluded (`expected`, `tmp`, `fixtures*`);
+- the `ecs` command from version 3, so that a project on version 3 keeps working until it migrates.
+
+
+Installation and Configuration
+==============================
+
+```shell
+composer require --dev dresscode/dresscode
+```
+
+Keep in mind that DressCode requires PHP 8.4 to 8.6, and because it is a development dependency, your project must run on one of these versions too. The PHP version the tool runs on and the version your code is written for are two different numbers, though: DressCode reads the target version from the `composer.json` of the project, see [Installation |getting-started#Installation].
+
+Put a `dresscode.neon` with the standard and the extra sets you want into the root of the project:
+
+```neon
+use:
+	- nette
+	- compilerOptimizations   # optional
+
+nameResolution: certain
+
+# optional: native types wherever PHP reads them
+types:
+	declaration:
+		parameter: required
+		property: required
+		return: required
+
+paths:
+	- src
+	- tests
+```
+
+If you also want the `@phpVersion` filter and the excluded paths of version 3, add `nette/coding-standard` and name its plugin in the `use` key next to the standard: `use: [Nette\CodingStandard\Plugin, nette]`. The style is still set by the `nette` preset, not by the plugin, because the style is the project's decision, not the package's.
+
+Some fixes rely on a function being global, including what the [`compilerOptimizations` |optimizations] set does. DressCode makes them without your permission only when it knows what is in your namespaces. That is why the configuration says `nameResolution: certain`, and if you really have some functions or constants in namespaces, you also list them in the `namespaces` key; without that, such fixes are only reported. The page [Functions and Constants in Namespaces |namespaces] explains why.
+
+Then you check and fix with DressCode itself:
+
+```shell
+dresscode check
+dresscode fix
+```
+
+A setting that differs from version 3 only in its value is written as a decision. A project that wants one blank line between methods instead of two, and does not want `===` everywhere there is `==`, adds:
+
+```neon
+blankLines:
+	aroundMethods: 1
+
+expressions:
+	comparison:
+		loose: keep
+```
+
+
+Converting the Configuration
+============================
+
+A project with `ncs.php` or `ncs.xml` converts them with one command from the package:
+
+```shell
+vendor/bin/ecs migrate
+```
+
+It reads `ncs.php` and `ncs.xml` in the current directory and writes `dresscode.neon`; it does not overwrite an existing `dresscode.neon`. The fixer names and sniff codes from version 3 are translated to DressCode decisions, and anything no decision covers is listed and left out.
+
+| version 3 | version 4 |
+|---|---|
+| `ncs.php` with `'fixer' => false` | the decision the fixer covers, with the value `keep` |
+| `ncs.php` with `'Nette/optimize_global_calls' => true` | the `compilerOptimizations` set in the `use` key |
+| `ncs.xml` with `<exclude-pattern>` | the `excludePaths` key |
+| `ncs.xml` with `<exclude-pattern>` inside `<rule>` | an override in the `overrides` key that gives the decision `keep` for those paths |
+| `--config-file overrides.php` | `dresscode.neon` in the root of the project |
+| `--preset php81`, `--preset php` | nothing; DressCode takes the target PHP version from your `composer.json` |
+
+The `ecs` command stays and accepts the old command line (`ecs check`, `ecs fix`, the default paths `src` and `tests`), so you do not have to touch your CI or your editor right away. Version presets are ignored, because the target PHP version is now read from the project. But the command is only meant for the transition: once `dresscode.neon` is in place, call `dresscode` directly.
+
+
+The First Fix Reformats More Than You Expect
+============================================
+
+Version 4 is not the same as version 3 line by line, and that is on purpose. Some differences fix what version 3 left alone: a capital letter at the start of a comment `// Comment`, a `/* enum */` comment before `case`, `declare(strict_types=1)` on the line of the opening tag, a non-breaking space written literally in a string. Across the Nette packages, this was more than a hundred files out of almost three thousand.
+
+Make it a separate commit: `dresscode fix`, a commit with no other changes, done. Going through it line by line is not worth it; what is worth it is knowing that the commit contains nothing else.
+
+
+What Has Stayed
+===============
+
+- The `phpcs:ignore` comments and the like keep working; [dresscode migrate-suppressions |migration#3. Rewrite the Comments] rewrites them to `dresscode:ignore`.
+- Custom sniffs and fixers, if there were any, are rewritten following the [guide |porting-rules]; a rewritten sniff is usually several times shorter.

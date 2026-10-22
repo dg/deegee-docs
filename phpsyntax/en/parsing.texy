@@ -1,0 +1,136 @@
+Parsing and Printing
+********************
+
+.[perex]
+How to parse PHP source code, what to do with a syntax error, how newer PHP syntax is read even on an older runtime, how to read a code fragment on its own, how to print the tree back, and what the command-line tool tells you about code.
+
+
+Parsing a File
+==============
+
+```php
+use PhpSyntax\Parser;
+
+$parser = new Parser;
+$file = $parser->parse($code);
+```
+
+The result is `FileNode`, the root of the tree, with the statements in `$file->statements`. You can use one parser instance for any number of files, one after another. It handles anything PHP accepts: files with inline HTML, with several `<?php` blocks, with a BOM and a hashbang at the start, with `__halt_compiler()` and data after it.
+
+When the lexer or the grammar rejects the code, the parser throws a `ParseException`. Its properties `sourceLine`, `sourceColumn` and `sourceOffset` tell you where in the source the problem is. The methods `getLine()` and `getFile()`, which every exception has, point somewhere else: to the place in the library where the exception was created:
+
+```php
+try {
+	$file = $parser->parse($code);
+} catch (PhpSyntax\ParseException $e) {
+	echo "$e->sourceLine:$e->sourceColumn: {$e->getMessage()}";   // 2:8: Unexpected `{`
+}
+```
+
+There is no partial tree: either the whole file is parsed, or nothing is. For a tool that changes code, this is the right property, because changes on an incomplete tree would not be safe. For an editor that wants to show something even for code that is still being written, it is a limitation, and it is good to know about it in advance.
+
+A successful parse also does not guarantee that PHP will compile the code. The parser accepts code that only the compiler rejects: `break;` outside a loop is parsed and printed back unchanged, yet `php -l` rejects it. The tree checks the syntax, not everything the compiler checks.
+
+
+Newer Syntax on Older PHP
+=========================
+
+The parser understands PHP 8.5 syntax even when it runs on PHP 8.4 itself. The tokenizer of the older version does not know the new syntax, so the lexer emulates it: it rewrites tokens where newer PHP would produce them differently (the `|>` operator, the `(void)` cast). This happens automatically, based on the version of the interpreter, and there is nothing to configure. The emulators are part of the library, and you cannot add your own. If you want just the tokens with their trivia, without a tree, ask the lexer:
+
+```php
+use PhpSyntax\Lexer;
+
+new Lexer()->tokenize($code);
+```
+
+Emulation does not convert anything between versions: code with PHP 8.5 syntax is still code that needs PHP 8.5, in the tree too. Which PHP version the project should run on is not the parser's concern.
+
+
+Printing a Node
+===============
+
+Besides the whole file, you can print any single node. There are two ways to do it, and they are easy to confuse:
+
+```php
+use PhpSyntax\Printer;
+
+Printer::print($node);       // including the trivia at the edges, so also the indentation and the comment above the node
+Printer::printText($node);   // only the text of the node, from the first token to the last
+$node->text;                 // the same, written shorter
+```
+
+`Printer::print()` is what keeps the round trip, the guarantee that the printed tree is the original file byte for byte. That is why, for the first statement of a file, it also prints `<?php`, which hangs as trivia before it. `printText()` is the node alone: `return sizeof($this->orders) > 0 ? $sum : 0;` without the indentation before it and without the line ending after it. Use `text` for messages and debugging, and `print()` for writing a file.
+
+Both methods can also print a token with a different text than it carries, without changing the tree. The second argument is a function that gets a token and returns the text to print, or `null` to keep the original text. The trivia are always printed as they are.
+
+```php
+use PhpSyntax\Token;
+
+$code = Printer::print($file, fn(Token $token) => $token->text === 'sizeof' ? 'count' : null);
+```
+
+The function sees only the token, so this one replaces every token with the text `sizeof`, even the method name in `$o->sizeof()`. Where that matters, ask about the parent: `$token->parent?->parent instanceof PhpSyntax\Nodes\Expression\FunctionCallNode`.
+
+This is useful for anything that should only show a change, not make it: a preview of a fix, a diff, a message with a suggestion. To make the change for real, modify the tree, see [Modifying the Tree |mutation].
+
+
+Fragments
+=========
+
+`Parser` reads only a whole file. For code that is not a whole file, such as an expression, a statement, a type, a name or a single parameter, use `Builder`. It returns a detached node, ready to be inserted into the tree:
+
+```php
+use PhpSyntax\Builder;
+use PhpSyntax\Nodes\ParameterNode;
+
+$builder = new Builder;
+$expr = $builder->expression('$this->items[] = $item');
+$param = $builder->fragment(ParameterNode::class, 'int $x = 1');
+```
+
+An error in a fragment is a `ParseException`, the same as for a file, only the position is counted within the fragment. The page [Building New Nodes |builder] describes everything the builder can do, including templates into which you insert nodes you already have.
+
+
+Printing
+========
+
+```php
+use PhpSyntax\Printer;
+
+$code = Printer::print($file);
+$code = (string) $file;
+```
+
+Printing has no logic: it walks the tree and joins the texts of the tokens with their trivia. That is why the printed unchanged tree is the original file byte for byte, and why, after a change, everything you did not touch stays exactly where it was. How to print a single node is explained in the section [Printing a Node |#Printing a Node].
+
+The first test worth running with PhpSyntax is a round trip over your own code:
+
+```php
+foreach ($files as $path) {
+	$code = file_get_contents($path);
+	if (Printer::print($parser->parse($code)) !== $code) {
+		echo "$path\n";
+	}
+}
+```
+
+On the `vendor/` directory of an ordinary project, it prints nothing. If it does print a file, that is a bug in the parser, and it is worth reporting. The command `vendor/bin/phpsyntax check` does the same without writing any code, see below.
+
+
+Command Line
+============
+
+The library comes with the tool `vendor/bin/phpsyntax`. It uses the library the same way your code does, and it is useful mainly for seeing what the tree looks like before you start writing code for it:
+
+```shell
+vendor/bin/phpsyntax check src                        # round trip over every file
+vendor/bin/phpsyntax dump -e '$a?->b(1)' --as=expression   # the tree of an expression: nodes, slots, tokens and trivia
+vendor/bin/phpsyntax dump src/Foo.php --at=12:5       # only the innermost node at line 12, column 5
+vendor/bin/phpsyntax tokens src/Foo.php               # what the lexer makes of the code, emulated kinds included
+vendor/bin/phpsyntax resolve src/Foo.php              # what each name refers to
+vendor/bin/phpsyntax find MethodCallNode src          # every occurrence of a node class with its position and code
+```
+
+The input is a file, a directory (read recursively, files with an extension from `--ext`, by default `php,phpt,inc`), `-` for standard input, or code directly in `-e`. `dump` and `find` can also read the code as a fragment (`--as=expression`, `statement`, `type`, `name`, or the name of a node class like `--as=ParameterNode`). For `dump`, `--no-trivia`, `--depth=N` and `--filter=ClassName` narrow the output, and `-p` adds the positions of tokens. Lines and columns in `--at` are counted as for tokens: a line ending is `\n`, `\r\n` or a lone `\r`, the column is counted in UTF-8 characters, and the tool rejects a column past the end of the line. For an unqualified function or constant in a namespace, `resolve` notes that the fallback to the global namespace is a guess: it holds only if no other file of the project declares that name. With `--lint`, `check` does not count a file as an error when both the parser and `php -l` reject it; files that the parser accepts are not passed to `php -l` at all. With `-q`, it prints only errors and the summary line. `--help` prints the full list of options.
+
+The exit code is 0 when everything is fine, 1 on an error or when `find` found nothing, and 2 on invalid usage.

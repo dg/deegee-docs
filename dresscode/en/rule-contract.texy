@@ -1,0 +1,305 @@
+A Rule in Detail
+****************
+
+.[perex]
+What every custom rule must follow: declare its decisions, fix only after reporting, be stateless and idempotent, pick the right stage, fill in the `RuleInfo` attribute, and report problems in whitespace too.
+
+
+Two Forms of a Rule
+===================
+
+Every rule is based on the class `DressCode\Rule`, which comes in two forms. Which one you choose depends on what the rule does:
+
+- **`NodeRule`** visits the nodes and tokens it asks for and works with them in the methods `enter()` and `leave()`. Most rules are written this way, and this whole page is about them.
+- **`GapRule`** visits nothing. It only states a claim about what the whitespace between tokens should contain, and the engine evaluates the claim for it. It is written differently and has [its own page |whitespace-rules].
+
+A class is always one or the other. A rule that would need both is in fact two rules, each with its own decisions.
+
+
+The Shape of a Rule
+===================
+
+A rule extends `DressCode\NodeRule` and carries the attribute `#[RuleInfo]`:
+
+```php
+#[RuleInfo(
+	Stage::Structure,
+	modifiesComments: false,
+	requires: [],
+	typesRequired: false,
+	decisions: [],
+)]
+final class NoDebugCallsRule extends NodeRule
+{
+	// ...
+}
+```
+
+The attribute holds neither a name nor a description. A rule is identified by its class, and users never write a rule, only its [decisions |#Decisions]; each decision has its own description.
+
+- The **stage** (`Stage`) says in which of the three stages of a pass the rule runs. `Structure` is for changes to the code (rewriting an expression, removing an import), `Formatting` for whitespace and line breaks, `Finishing` for the final cleanup (indentation, line endings, trailing whitespace, line length, comments and phpDoc). The stages run in this order, so formatting already sees the code after the structural changes.
+- Set **`modifiesComments`** to `true` only when the rule really changes the text of comments. Otherwise `RuleTester` checks that no comment disappeared or changed, which is the most common bug in fixes.
+- **`requires`** says what the rule needs from the project, and it is written like `require` in `composer.json`: `['php' => '>=8.1']` for a rule that writes syntax available only from some PHP version (such as `0o755` from PHP 8.1), `['acme/mailer' => '>=3.3']` for a rule about the API of a library, `['acme/mailer' => '*']` when it is enough that the library is in the project, and `['acme/mailer' => '>=3.3 <5.0']` for a rule that writes something a later version removed again. The attribute rejects a bare version without an operator, because it would turn the rule off for every other release. Every version the project is written for must meet the requirement, that is, the whole range from its `composer.json`. Where the project does not meet it, the rule skips itself, and no preset or set has to check for it. PHP 8.0 is the lowest supported version, so you never need to require anything that PHP 8.0 already had.
+- Set **`typesRequired`** to `true` for a rule that makes no sense without the [types of the code |types], that is, without the analysis `Analyses\Types`, which a run has only with `typeAnalysis: phpstan`. Where the run has no types, a decision written by a preset silently does not apply; a project that writes the decision itself gets a configuration error. A rule that only benefits from types does not set this parameter and asks `findAnalysis()` instead, see [below |#Types of the Code].
+- **`analyses`** names every [analysis |#Analyses] the rule asks for, including one asked for by a helper it calls, for example `[Types::class, NameResolver::class]`; a rule with `typesRequired` lists `Analyses\Types` among them. `RuleTester` runs fixtures in strict mode and rejects an analysis the rule does not name, so what the rule depends on is visible in its attribute.
+- **`decisions`** names the paths of decisions that the rule does not declare itself but follows: they turn the rule on just like its own decisions, and the rule reports under them. They are decisions of the engine, such as `file.lineLength`, so that the rule breaks its construct at the same line width as all the other rules, or a decision that the manifest of a plugin declares for several of its rules, see [Shared Decision |presets-and-extensions#Plugin].
+- **`reads`** names decisions of the decision tree that the rule only reads and does not enforce: they do not turn the rule on and it does not report under them, but the rule finds them among its values in `configure()`. This way a rule can leave an occurrence to the map of another rule. For example, `NoDeprecatedMembersRule` stays silent about a member that the map `upgrading.api.replacedMembers` contains, whether the rule of that map runs or not.
+
+The risk of a fix does not belong in `RuleInfo`. It is always a property of the occurrence, and the rule states it when it calls `report()`, even when every one of its fixes is risky, see [below |#Report First, Fix Second].
+
+
+Decisions
+=========
+
+The rule declares what it enforces in the static method `getDecisions()`, as a list of `DressCode\Decision` objects. It must have at least one decision, either its own or one named in the attribute's `decisions`: every violation is reported under a decision, and DressCode rejects a rule that has none with the message <code>''Rule `Acme\CodeStyle\NoDebugCallsRule` declares no decision.''</code> The decisions of all rules, of the engine, of plugins and of the project, form the catalogue. The configuration is read against it, `dresscode explain` and `dresscode catalogue` take their data from it, and when a user makes a typo in a key, the closest path is looked up in it.
+
+```php
+public static function getDecisions(): array
+{
+	return [
+		new Decision('acme.debugCalls', Domain::state('forbidden'), 'A statement calling a debugging function is removed'),
+	];
+}
+```
+
+The **path** identifies the decision everywhere the user will ever meet it: the configuration key, the label of a finding, the name in `dresscode:ignore`, in `fixRisky`, in `severity` and in the baseline. Its first part is the section. Rules of a project put their decisions in the section `project`, rules of a plugin in a section that its manifest names after the plugin (`PluginManifest::$section`), and the engine in its own sections. The catalogue rejects a path outside the rule's section, and also a path declared by two rules. A decision that several rules should share is declared by the manifest of the plugin, and each of the rules names it in `decisions`. The path names a thing in the code, not a step of the fix, and the value says how the thing is written: `acme.debugCalls: forbidden`, not `acme.removeDebugCalls: true`.
+
+The **description** is an English sentence without a period at the end, saying what the rule does where the key is not `keep`, with code in backticks. The parameter `notes` adds sentences about what the decision does not cover; `dresscode explain` prints them under the description.
+
+A decision is one of three kinds:
+
+- A **requirement** turns the rule on: the rule runs where one of its requirements has a value other than `keep`. Every requirement takes `keep`, and where neither the project nor any preset writes it, it requires nothing. So it has no default, and `Decision` rejects one.
+- A **parameter** (`parameter: true`) only refines a requirement, turns nothing on and does not take `keep`; it has a default instead (`default:`). A list of exceptions or a threshold is a parameter, so that a list written in the configuration never turns a rule on by itself.
+- A **fact** (`fact: true`) is a key of the environment that the rule watches, for example what the namespaces of the project declare. `--only` never narrows it.
+
+```php
+new Decision('acme.debugMethods', new Names, 'The methods whose calls count as debugging calls, as `Class::method`', parameter: true, default: []);
+```
+
+The **domain** (`Domain`) says what values the key takes, how a value written in a layer is normalized, and how the values of two layers are merged:
+
+| domain | what it takes | example in the configuration |
+|---|---|---|
+| `Domain::state('forbidden')`, `state('required')`, `state('required', 'forbidden')` | presence: the thing must or must not be in the code; in the section `upgrading`, `required` writes a construct of a newer PHP or library | `acme.debugCalls: forbidden` |
+| `Domain::placement()` | where a token stands, `sameLine` and `nextLine` | `braces.position.class: nextLine` |
+| `new Words([...])` | a word from the domain's own list, each with a sentence saying what it means; with `tolerance: true` also a list of words: each of them passes, and the first one is used when writing | `literals.quotes: single` |
+| `new Shapes([...])` | the shape of a construct written as a code sample in single quotes; only the rule reads the word that names the shape | `spacing.call: 'foo($a, $b)'` |
+| `new Count`, `Domain::blankLines()` | a number, a range `1-2`, an open range `1+`, or a word such as `none` | `blankLines.aroundMethods: 2` |
+| `new Names` | a list of names, patterns or an order; `...` in it stands for the list of the lower layer | `mistakes.debugOutputFunctions: [..., dump, bdump]` |
+| `new Map($domain)` | a map of names or patterns with `*` to values of another domain | `blankLines.beforeStatement: {return: 1}` |
+| `new Flag`, `new Text` | `yes` and `no`, which only a parameter takes, and free text | |
+
+No domain lists `keep` among its values: every requirement takes it on its own, a map also takes it per item, and on a section or a group it applies to everything below. The domain says nothing at all about how strictly a violation is reported; that is the key `severity` of the configuration. So do not invent a word for "leave it alone" in your rule; there is only one.
+
+
+Values in the Rule
+------------------
+
+The rule gets the values for a file in the method `configure()`, as a `Values` object. The engine calls it once for every combination of layers that files belong to, so the rule computes there what it will need and stores it in properties:
+
+```php
+public function configure(Values $values): void
+{
+	$names = $values->get('mistakes.debugOutputFunctions')->getNames();
+	$this->functions = array_fill_keys(array_map(strtolower(...), $names), true);
+}
+```
+
+`$values->get($path)` returns a `Value`, that is, the value the project ended up with for the decision, and for a parameter its default when nobody changed it. A `Value` is read with the method that fits the domain: `getWord()`, `getShape()`, `getCountRange()`, `getNames()`, `getEntries()`, `getFlag()`, `getText()`. A decision that can be `keep` is read with `$values->find($path)`: it returns `null` where the project left the decision alone, so the rule writes `$values->find($path)?->getWord()`. `$values->isKept($path)` gives the same answer as a yes or no. `$values->has($path)` says whether the catalogue knows the decision at all, which in a run narrowed to a few rules is true only for their decisions. A path the catalogue does not know is an error for both `get()` and `find()`, never `null`.
+
+A rule may also read a key that is not its own. The example takes the list of debugging functions from the engine parameter `mistakes.debugOutputFunctions`, which the project may already have set, instead of adding its own; this way the project tells all rules at once, with one list, what a debugging function is. In the same way, a rule that writes new code asks how to write it, for example which quotes the project wants.
+
+`$values->isSelected($path)` answers a different question: whether the requirement is reported and fixed in this run. The difference comes from `--only`, which narrows the run and changes no value. So the code a rule writes always follows `get()`, that is, the whole configuration, and `isSelected()` is only for a rule that wants to save work on a requirement that is not reported in the run.
+
+A rule with a single requirement reports under it and does not pass the path to `report()`. A rule with several requirements passes the path with every report:
+
+```php
+$context->report($node, 'The `dd()` call must not stay in the code.', decision: 'acme.debugCalls');
+```
+
+A report under a requirement that is `keep`, or that `--only` left out, records nothing and returns `false`, so the rule does not have to check the values before every `report()`. A report under a path the rule did not declare, or under a parameter, breaks the contract.
+
+A rule for which the PHP version decides what it may write (not whether it runs at all) reads it from `$context->phpVersion`. It is a string in the form `major.minor`, and you compare it with a function, not with operators, because `'8.10' > '8.9'` is not true for strings:
+
+```php
+if (version_compare($context->phpVersion, '8.4', '>=')) {
+	// ...
+}
+```
+
+
+A Map with Data
+---------------
+
+A rule that rewrites code according to a list from the project or from a library gets a map: the domain `Map` with values `Data` and a grammar by which the items are read once the layers are merged. This is how `nette.flagsAsNamedArguments` from the package `dresscode/upgrade-nette` does it; its key is a call and its value the flags converted to named arguments:
+
+```php
+public static function getDecisions(): array
+{
+	return [new Decision('nette.flagsAsNamedArguments', new Map(new Data, grammar: self::createGrammar()), 'A call passing the named arguments its method takes for the flags of an integer')];
+}
+
+
+public function configure(Values $values): void
+{
+	$this->map = MemberMap::fromValues($values, 'nette.flagsAsNamedArguments', self::readFlags(...));
+}
+```
+
+The grammar is a schema from the library [nette/schema |https://doc.nette.org/en/schema]; for keys with members and the shape of arguments, `Upgrading\MemberMapGrammar::createMapSchema()` builds it, so the map of a plugin reads keys the same way as the maps of the engine. `$values->readMap()` returns the items read by the grammar, and `Upgrading\MemberMap::fromValues()` turns them into a map looked up by the name of a member: `getEntries()` returns the items of a name, `has()` answers whether the map knows an access, and `findCall()` finds the item of a call by the shape of its arguments. Such a map is filled not only by the project, but also by the [data files |upgrading-data] of packages, which name it by its full path.
+
+
+Which Nodes and When
+====================
+
+```php
+public function getVisitedNodes(): array
+{
+	return [FunctionCallNode::class];
+}
+```
+
+This is a list of node classes (or `Token::class`) for which the engine calls `enter()` and `leave()`. They are compared with `instanceof`, so `StatementNode::class` catches every statement and `Node::class` absolutely everything; the narrower the list, the faster the run. An empty list means the rule works only in `beforePass()` and `afterPass()`, which the engine calls at the start and at the end of every pass over a file; rules that work on the whole file do it this way.
+
+`enter()` is called when entering a node, that is, before its children, and `leave()` after them. When a rule replaces or removes a node in `enter()`, the engine no longer descends into it and does not call `leave()` for it.
+
+
+Report First, Fix Second
+========================
+
+This is the most important rule of the whole contract: **the tree may change only after `report()` has returned `true`.**
+
+```php
+$statement = $node->parent;
+if (
+	$statement instanceof ExpressionStatementNode
+	&& $statement->parent instanceof NodeList
+	&& $context->report($node, 'The `var_dump()` call must not stay in the code.')
+) {
+	$statement->remove();
+}
+```
+
+The example removes the whole statement around the call, because `remove()` can only remove an item of a list. It checks that this is possible before it calls `report()`: a call inside another expression, or a statement in a slot (for example after an `if` without braces), stays as it is.
+
+`report()` returns `false` if the violation is suppressed on its line by a comment, or if the fix is risky and the run did not allow it; then nothing may change. `report()` does not refuse a violation the baseline knows: it is not reported, but the rule may fix it. The engine does not rely on good will here: the tree counts its changes, and the engine pairs every change with a report from the same call. A change without a report, or after a report that returned `false`, breaks the contract. During a run this is a warning; with the option `--strict-rules` and in `RuleTester` it is an error.
+
+A fix that can change the behavior of the code is reported with the parameter `risk` at exactly that occurrence. Its value says what would decide whether the fix is safe: for `Risk::TypeUnknown`, the type of a value that neither the declarations nor the [types |types] know; for `Risk::NameUncertain`, the name of a function, which [`nameResolution: certain` |namespaces#name-resolution] would decide; for `Risk::BehaviorChanges`, a person's judgment, because the fix changes behavior by its nature or depends on code the run does not see. The parameter `because` adds a sentence about what can go wrong at that place, when the cause itself does not say it; without `risk`, a strict run rejects it, because there is nothing to explain. This sentence goes next to the message, never into it: the message describes the violation and must not change depending on whether the run has types.
+
+```php
+if ($context->report($foreach, 'The loop must be written with `array_any()`.', risk: Risk::TypeUnknown,
+	because: 'the loop may go through an object, which `array_any()` does not take')) {
+	// ...
+}
+```
+
+Such a report returns `false` until the project lists the decision in the key `fixRisky` or the run gets `--fix-risky`. The rule then leaves the code as it is, and the violation stays among those `fix` did not fix: as a warning for `TypeUnknown` and `NameUncertain`, as an error for `BehaviorChanges`. The same rule in the same pass fixes a safe occurrence and only reports a risky one; even a rule whose every fix is risky passes `risk` with every report. A fixture with `// risky` in its header shows how the rule fixes code when it is allowed to, and it is also proof for the reference that the rule has such fixes.
+
+A risky fix may change the behavior of the code, but it must never write code that PHP cannot compile. Where that would depend on a file the project may not know, such as a subclass in another package, the rule stays completely silent: there is no way to ask for permission here.
+
+A fix protects the behavior of working code. So a fix that only avoids an error or a warning is not risky, if the original code would raise it only after the point where it already knows the answer: `array_any()` instead of `count(array_filter())` stops at the first element that meets the condition and does not evaluate the rest of the array. Nor is a fix risky for code that relies on something PHP marks as deprecated in every target PHP version.
+
+Where the safety of a fix depends on the type of a value, the rule answers with one of the three states of the enum `Tristate`: surely yes, then the fix is safe; surely no, then the rule stays silent, because a risky fix must not be advice the rule knows is wrong; and don't know, then the fix is risky with `Risk::TypeUnknown`. The answer comes first from the declarations in view (the type of a parameter or a property, or the return type of a method), and the [types |#Types of the Code] narrow down what they leave open.
+
+When the rule has no fix for an occurrence and only reports it, pass `fixable: false`. `report()` then always returns `false`, and the report is never risky. Otherwise a risky report without a fix would look like a fix waiting for permission, and the summary would suggest `--fix-risky` although nothing would be fixed. For example, `mistakes.strictArgument` only reports an explicit `false` in `in_array()`, because the author of the code wrote it on purpose:
+
+```php
+$context->report($strict, 'The `in_array()` call must pass `$strict = true`.', fixable: false);
+```
+
+`RuleTester` catches a forgotten declaration: a report without `fixable: false` that is still there after the last pass, the one that changed nothing, breaks the contract, and its fixture fails. In the same way, a fixture with `// risky` fails if a risky violation remains after its run, because the fix was allowed and still was not made.
+
+A report is bound to a node or a token. When a problem lies in whitespace or in a comment, report it with the matching trivia item (trivia is the name for the whitespace and comments around a token): `report($token, $message, trivia: $trivia)`. The violation then gets the line of that trivia, and `dresscode:ignore` on that line finds it; otherwise it is reported on the line of the token. The rule does not set the severity: every violation is an error until the configuration softens it to a warning with the key [`severity` |configuration#risky-fixes].
+
+Two more parameters of `report()` say that the violation may have been caused by the fix of another violation in the same run. A rule that places a line according to another line (as indentation does) passes `follows:` with the token that opens that other line; a rule that reports the shape of the line a token stands on passes `byLine: true`. When a fix in the same run opened or closed that line (for `follows:`, also shifted it), the report [follows from it |cli#Output Formats] and the console prints it under the fix. `$context->isSilenced()` tells whether a comment would silence a report at a given place, without recording anything; it takes the same arguments as `report()`, `isSilenced($at, $decision, trivia: $trivia)`.
+
+A message describes the code, not the reader, and it never gives orders. It is a sentence and ends with a period. It has one of three shapes: the expected state (`Expected a single space after the comma.`), a norm (`The opening brace must be on its own line.`), or a finding (<code>''Function `foo()` is deprecated.''</code>). Specific names and values belong in the message; the path of the decision does not, the output adds it. Anything in the message that is code (the name of a class, function or variable, the spelling of an operator, or a value) goes in backticks as in Markdown; the console colors it and the other outputs print it as it is. A name cannot contain a backtick, but an expression, a string or a comment from the code can, so insert those with `Violation::formatCode($code)`, which wraps the code in a longer run of backticks.
+
+
+Stateless and Idempotent
+========================
+
+One instance of a rule serves the whole run and all files. The state of one pass over a file belongs in the array `$context->passStorage`, which the engine creates empty for every pass; the properties of the class are only for what `configure()` computed. Whatever the rule needs to know about the file is in the properties of the context: `$context->file` is its tree (`FileNode`), `$context->path` the path, `$context->style` the style (indentation, line ending, tab width, the longest line `maxLineLength`, the kinds of constructs the run splits to fit the line width `lineSplits`, and the shape of imports `imports`), and `$context->phpVersion` the target PHP version.
+
+Rules run repeatedly as long as the tree changes, so a rule must be **idempotent**: running it again on its own output must change nothing. And it must not depend on the order of the passes or on which pass is running; the context deliberately does not tell. When two rules keep undoing each other's changes, the engine detects it and reports the file as a failure, naming both rules. `RuleTester` also verifies idempotence: it runs the rule a second time on its own output and fails if the rule changes it again.
+
+
+What the Tree Allows
+====================
+
+You write a slot of a node by assignment (`$if->condition = $expression`), replace a node with the method `replaceWith()`, remove it with the method `remove()`, and change the text and trivia of a token with its own methods. The tree takes care of the parents and the index of tokens by itself, and where it has no property hook for that, the visibility of the property guards the write; so you cannot break the tree even by writing outside the API. The details are on the page [Modifying the Tree |phpsyntax:mutation]; rules must also follow these points:
+
+- Change siblings from the callback of their owner (`FileNode`, `BlockNode`, `ClassNode`) or from `afterPass()`, not from `enter()` of the item you are currently visiting. The engine does not recompute the list it is walking through.
+- A rule replaces the node it got or something inside it, never its ancestor.
+- Do not build a new construct from tokens. Parse it (`Parser::parseExpression()`, `parseStatement()`, `parseType()`, `parseName()`), or compose it from the nodes you have at hand with the factory `of()` of its class (`FunctionCallNode::of()`, `NewNode::of()` and others). To put an expression in place of another one, use `ExpressionNode::replaceWithExpression()`, which decides about parentheses by itself.
+- A comment must not disappear unless the rule says `modifiesComments`. Before a change, ask `Token::hasComment()`, `Token::hasCommentUpTo()` or `Node::hasInnerComment()`; remove a comment only with `removeTrivia()`.
+- The line ending that closes the line of a token belongs to its trailing trivia, not to the leading trivia of the next token. The methods `ensureStartsLine()` and `setBlankLinesBefore()` do this correctly, so build on them.
+- The questions "is this expression the same as that one" and "can it be safely evaluated twice" are answered by `Node::matches()` and `ExpressionNode::isRepeatableRead()`. Do not implement them again.
+
+
+Analyses
+========
+
+Information about a file that several rules need belongs in an analysis. It is a plain class whose constructor takes a `FileNode` (or nothing). A rule asks for it:
+
+```php
+$resolver = $context->getAnalysis(NameResolver::class);
+if ($resolver->isGlobalFunctionCall($node, 'var_dump')) {
+	// ...
+}
+```
+
+The engine creates the analysis the first time a rule asks for it and keeps it until the tree changes; after a change it throws it away and creates a new one on the next question. But an instance that a rule keeps answers about the tree as it was, so after changing the tree, the rule calls `getAnalysis()` again, or takes what it needs from the analysis before the first change. The exception is an analysis implementing `Analyses\PassAnalysis`: the engine computes it at the first question in a pass and keeps it until the end of the pass, even across changes of the tree, because computing it again after every change would cost more than a little staleness. So it has no answer for a node inserted during the pass, and the rule asks about such a node with `?->`. The built-in ones are `PhpSyntax\Analyses\NameResolver` (namespace, imports, resolving names), `PhpSyntax\Analyses\Scope` (function, class, whether `$this` is available), `DressCode\Analyses\PhpDoc` (doc comments as a tree from a phpDoc parser), `PhpSymbols` (functions, classes and constants that PHP itself declares), `PhpSignatures` (the parameters of its functions) and `Types` (the types of the code from the PHPStan of the project, the only built-in `PassAnalysis`). Your own analysis with a constructor taking a `FileNode` is not registered anywhere. Only one that the engine cannot build by itself needs a factory, which gets the tree and the path of the file; a plugin lists it in `analyses` of its manifest, a project in the key `analyses` of the configuration.
+
+`getAnalysis()` fails for an analysis the run does not have. A run has the types of the code only with `typeAnalysis: phpstan`, and so a rule that only benefits from types asks `$context->findAnalysis(Types::class)`, which returns `null` in that case.
+
+Rules do not ask each other questions. What two rules of the same plugin share is a decision from the decision tree of its manifest: the rule that enforces it names it in `decisions`, and the rule that only reads it names it in `reads`. The methods of the built-in rules are not public API; what rules need from them, `CodeWriter` offers, see [below |#Names of Functions and Classes].
+
+
+Types of the Code
+-----------------
+
+The analysis `Types` answers questions the tree cannot answer by itself. The types themselves, as PHPStan describes them, stay inside it; the rule asks:
+
+- `findMember($node)` returns an `Analyses\Member`, that is, the constant, method, property or constructor the expression refers to, with the class that declares it. The declaration decides, not the spelling, so `$order::STATUS_PAID`, `Order::STATUS_PAID` and `self::STATUS_PAID` are the same `Member`.
+- `findMemberAccess($node)` returns an `Analyses\MemberAccess`: the access by the type of the object it is called on, even to a member that no class declares anymore. Rules that fix API a library has removed ask this way. A value in callable form (`[$order, 'paid']`) is resolved by `findCallableMethodAccess()`.
+- `findDeprecation($member)` returns an `Analyses\Deprecation`, what the `@deprecated` of the member says, or `null`.
+- `isOfType($expression, 'array')` returns a `Tristate` saying whether the expression is of the given type; the type is written in phpDoc syntax (`int|string`, `list<int>`), with fully qualified classes. Ask this way only about what no other question covers.
+
+```php
+$types = $context->getAnalysis(Types::class);
+$member = $types->findMember($node);
+$deprecation = $member === null ? null : $types->findDeprecation($member);
+if ($deprecation !== null) {
+	$context->report($node, $member->describe() . ' is deprecated' . $deprecation->formatDescription() . '.', fixable: false);
+}
+```
+
+For the class `Acme\Shop\Order`, whose constant has `@deprecated use Order::StatusPaid`, this example reports the message <code>''Constant `Acme\Shop\Order::STATUS_PAID` is deprecated: use Order::StatusPaid.''</code> at `$order::STATUS_PAID`. A rule for which types only add precision asks `findAnalysis()` instead of `getAnalysis()` and fills in the uncertainty itself: `$context->findAnalysis(Types::class)?->isOfType($expression, 'array') ?? Tristate::Maybe`. Without types it then breaks nothing; it only reports more occurrences as risky or leaves them alone.
+
+
+Names of Functions and Classes
+------------------------------
+
+`NameResolver` also knows what cannot be seen in a single file: which functions and constants the project declares in namespaces, as the keys `namespaces` and `nameResolution` say. An unqualified call in a namespace can therefore target a function of that namespace, and where the project has not ruled this out with the key `nameResolution: certain`, every fix of such a call rests on an assumption. `GlobalCalls` tells you both things: which global function a call calls, and why it could be a different one:
+
+```php
+if (!$node instanceof FunctionCallNode || GlobalCalls::findFunction($node, ['sizeof' => true], $context) === null) {
+	return;
+}
+
+$because = GlobalCalls::findUncertainty($node, $context);
+if ($context->report($node, 'The `sizeof()` call must be written `count()`.', risk: $because === null ? null : Risk::NameUncertain, because: $because)) {
+	$node->name->text = CodeWriter::spellFunction('count', $node->name, $context);
+}
+```
+
+`findFunction()` gets the names of functions as the keys of a map whose values it does not read, so the rule can pass the map of its data directly. It returns the name of the called function in lowercase, or `null`. `findUncertainty()` returns the reason for the risk (<code>''the namespace may declare `sizeof()`''</code>), or `null` when the call is certain. Do not build the new name from a string: `CodeWriter::spellFunction()` writes it unqualified when the original was unqualified, nothing else can take that name, and the new name is no less certain; otherwise it writes it with a leading backslash. The page [Functions and Constants in Namespaces |namespaces] explains why this matters.
+
+`CodeWriter::writeClass($class, $node, $context)` writes the name of a class in the shortest form the file can use, and where needed it adds an import in the shape the decisions `imports.*` set (the style of the run, `$context->style->imports`), even in a run that does not run the import rules. Because it can change the tree, call it only after `report()` has returned `true`, never while building the message. For a name that replaces nothing and only needs to be as short as possible, use `NameResolver::shortenName()`.
+
+
+Testing
+=======
+
+Every rule has fixtures and `RuleTester`, which uses them to verify the output, the reports and everything described above: [Testing Rules |testing-rules].

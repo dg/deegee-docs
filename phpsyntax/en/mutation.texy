@@ -1,0 +1,317 @@
+Modifying the Tree
+******************
+
+.[perex]
+How to change the tree so that it stays consistent and the printed file changes only where you touched it: writing to a slot, replacing and removing a node, an expression between operators and inside a string, working with lists, inserting new code, tokens and types.
+
+
+Writing to a Slot
+=================
+
+A slot is a property with a property hook, so you write to it with an ordinary assignment:
+
+```php
+$if->condition = $builder->expression('$order->isPaid()');
+$node->replaceChild($old, $new);
+```
+
+In this and the following examples, `$builder`, an instance of `PhpSyntax\Builder`, creates the new code; the page [Building New Nodes |builder] explains how.
+
+The hook takes care of what you would otherwise have to check yourself: it rejects a value that already has a parent, adopts the new one, releases the old one, and reports the change to the token index, which keeps the order, lines and columns. A value that does not belong in the slot at all is rejected even earlier, by the type of the property.
+
+If a write rejects something, it does so before anything in the tree moves. When a write handles several values at once, for example items together with a separator, it checks all of them in advance. It also rejects a separator taken out of the inserted item, because that separator would stand in two lists at the same time. So after an exception, both the target tree and the fragment the value came from look exactly as before, including the trivia around them, and you do not have to recover from a failed change.
+
+A node belongs to exactly one tree, so inserting a node that already has a parent throws an exception; `clone` gives a deep copy without a parent, which you can insert. The same happens when you try to write a node into itself or into something it holds, because that would create a cycle.
+
+There are two exceptions to this rule, though, and they save a lot of cloning. The first: **the written value may have a parent if it is inside the value that the write is releasing.** Such a subtree leaves the tree anyway, so you may pick a piece out of it:
+
+```php
+$paren->replaceWith($paren->expression); // the parentheses go, the expression stays; isRedundant() tells whether that is allowed
+$assign->expression = $binary->right;    // from the expression, I keep only the right side
+```
+
+And the second: **the value may have a parent even when the whole tree it stands in does not have its root in `FileNode`.** This applies to a parsed fragment, and also to a node you have already taken out of the file. There is no index there that could get out of sync, so you can take parts of such a subtree:
+
+```php
+$call->replaceWith($replacement);      // the old call is now outside the file
+$replacement->object = $call->object;  // so I take from it what I need
+```
+
+What is left of such a subtree is waste, not material: it still points to the node you took, so do not insert it anywhere again. If it got into the file anyway, the index reports it on the first query for a position or a neighboring token with the exception `<Class> stands in the file twice: a write took it out of a subtree that entered the file afterwards; a clone keeps it in both places.` Printing does not ask the index, so it prints such a file with the node twice. In rare cases the exception comes only after the write: after the swap, `replaceWith()` asks for the neighboring tokens to check the seams, so when it inserts such waste, `replaceWith()` itself throws, but by then the tree has already changed.
+
+A node you picked out carries the trivia from the place it came from, exactly like a clone. When you insert it elsewhere, clean its edges: `$node->setEdgeTrivia([], [])`.
+
+Where there is no hook, the language mostly does the guarding: the trivia of a token are `private(set)` and are changed with its methods ([Trivia |trivia#Writing]); the items of a list are the list's own storage, you read them by index, with `foreach` or `getItems()`, and change them only with the methods of the list; and the `parent` of a node is `protected(set)`, so only the tree writes it. Two things the language does not guard: the text of a token is a public property inherited from `PhpToken` and is changed only with the `setText()` method, and the `parent` of a token is public so that a node can write it without calling a method, but only the tree writes it. PHP does not check the type of a list item either; the type exists only in the phpDoc: `append()` accepts any node, so the arguments of a call should get an `ArgumentNode`, not a bare expression, and only PHPStan checks that.
+
+
+Replacing and Removing
+======================
+
+```php
+$node->replaceWith($other);
+$node->remove();
+$node->remove(CommentPolicy::Drop);
+$node->remove(mergeBlankLines: true);
+$block->unwrap();
+```
+
+There is a difference between an assignment to a slot and `replaceWith()` that you only notice in the diff: **`replaceWith()` keeps the trivia around the old node, an assignment does not.**
+
+```php
+$ternary->condition = $builder->expression('$a !== []');
+// $x = $a !== []? 'yes' : 'no';
+
+$ternary->condition->replaceWith($builder->expression('$a !== []'));
+// $x = $a !== [] ? 'yes' : 'no';
+```
+
+A node from the builder has empty edges, so an assignment loses the space that belonged to the old node. Use an assignment where you fill a slot for the first time or where you handle the trivia yourself; everywhere else, use `replaceWith()`.
+
+If you replace a node with a node that has no tokens, for example the statements of a file with an empty list, the trivia around the old node do not disappear. They go to the tokens on both sides, the way the lexer would place them: the previous token gets what belongs to the end of its line, the next one gets everything else, including `<?php`. Where there is no token on either side and the trivia would have nowhere to go, `replaceWith()` rejects the change with an exception before it writes anything.
+
+Writing a value that is already there does nothing. The same text, the same trivia, the same name or operator do not change the tree, so a general transformation that just returns the node invalidates nothing.
+
+`replaceWith()` also watches the seams. When the new node ends right next to a token that the lexer would merge with it into one token, it inserts a space between them:
+
+```php
+// echo 'a'.$n;
+$var->replaceWith($builder->expression('119'));
+// echo 'a'. 119;     without that space, '.' and '119' would become the number .119
+```
+
+It checks this with `Lexer::canAdjoin($left, $right)`, which tells whether two token texts may be written right next to each other. Ask it yourself whenever you remove a space between tokens: without the space, `- -$a` becomes `--$a`, that is, a decrement. A write to a slot by assignment does not check the seams, because there you handle the trivia yourself.
+
+`remove()` removes a list item together with its separator and what hangs on it: a node that stood alone on its lines takes the lines with it, otherwise the surrounding space stays and no extra space is left after a comma. Comments inside the removed node are moved, according to `CommentPolicy`, to the next token (the default), to the previous one, or dropped; a comment cannot be lost silently. A comment that stood at the start of a line also takes its indentation, so `Drop` does not leave a line with only a tab.
+
+By default, the blank lines above and below the removed node both stay, so they add up. To keep the spacing as it was, pass `mergeBlankLines: true`:
+
+```php
+class A
+{
+	public $a;
+
+	public $b;
+
+
+	// c
+	public $c;
+}
+```
+
+Removing `public $b;` leaves three blank lines between `public $a;` and the comment, with `mergeBlankLines` only one. Of the two runs of blank lines the node stood between, the smaller one stays, counted above the comments the node left to the next token. For the first and the last item of a list, the blank lines toward the edge stay, that is, those after the opening brace or `<?php`, or those before the closing brace, so removing a member does not change how the class starts and ends. Blank lines between a comment above the removed node and the node itself stay below the comment, so a comment separated from the node by a blank line stays separated in the same way from what follows; below the last item, though, no more stay than the merged spacing has. Merging happens only where both the node and the token after it start a line: a node that shares a line with another has no blank lines of its own. The line ending is written the same as in the nearest trivia, so a file with CRLF stays CRLF.
+
+`BlockNode::unwrap()` takes the statements out of a block that stands among statements and puts them in its place. It removes the curly braces the same way as `remove()`, and a comment that hung on them goes to the next token. From this code:
+
+```php
+$a;
+{ // start
+	$b;
+	$c;
+}
+$d;
+```
+
+`$block->unwrap()` produces this:
+
+```php
+$a;
+// start
+	$b;
+	$c;
+$d;
+```
+
+The statements keep their trivia, including the indentation; [`Indentation::shift()` |#Shifting Indentation] moves them one level back. `unwrap()` rejects a block that is the body of a control structure with an exception, because a body is changed by writing to the slot. It also rejects a block whose brace is next to a closing tag `?>` or to inline HTML: what stands after them is the output of the script, and the space the braces would leave behind would be printed.
+
+`remove()` removes an import item together with the whole `use` statement when the item is the only one in it, see [Imports |tree#Imports].
+
+
+An Expression in Place of an Expression
+=======================================
+
+An expression inserted between operators is a special case, because operators have precedence, and both an assignment to a slot and `replaceWith()` write what they get literally. The tree then holds what you gave it, but after printing and parsing again it would come out differently: `$binary->right = $builder->expression('$c + $d')` under `*` prints `$a * $c + $d`, and PHP reads that as a sum with the product on the left. Only `replaceWithExpression()` promises that the expression parses back into the same tree after printing. Without it, you get a whole class of silent bugs that change the meaning of the code:
+
+```php
+// $s = ucfirst($a ?? $b) . 'x';   and from that call we want only its argument
+$call->replaceWith($operand);
+// $s = $a ?? $b . 'x';            which PHP reads as $a ?? ($b . 'x')
+```
+
+`ExpressionNode::replaceWithExpression()` does the same, but keeps parentheses around the new expression everywhere that [`isRedundant()` |traversal#Questions Every Tool Asks] does not mark them as unnecessary:
+
+```php
+$call->replaceWithExpression($operand);
+// $s = ($a ?? $b) . 'x';
+```
+
+How to choose between them: use `replaceWith()` where the place is bounded by separators, that is, a call argument, a `match` arm or the operand of `return`. Use `replaceWithExpression()` everywhere the place is an operand of an operator or is accessed through `->`, `[]`, `()` or `::`.
+
+This hurts most when you fill an expression into a template with an operator, because the wrong result is still valid PHP and nobody notices it. Putting `$a ?? $b` into `0 |> ucfirst(...)` with a plain `replaceWith()` gives `$a ?? $b |> ucfirst(...)`, and PHP reads that as `$a ?? ($b |> ucfirst(...))`.
+
+The decision depends on the place where the node is, so `replaceWithExpression()` works in a detached fragment too. But it is always a decision about that one place. A place whose slot has a narrower type and does not accept parentheses gets the expression without them.
+
+A member or variable name written as a bare variable, that is, `$m` in `$o->$m`, `$$m` or `A::$m()`, accepts a variable bare again and puts any other expression in curly braces, because only then does the grammar read it as an expression there:
+
+```php
+// $o->$m;
+$fetch->name->replaceWithExpression($builder->expression('$a . "b"'));
+// $o->{$a . "b"};
+```
+
+If the method rejects something, it does so before it changes anything. To check in advance without changing anything, use the method `checkReplaceWithExpression()`: it is a dry run of `replaceWithExpression()` that throws exactly the exception the write would throw. The write itself runs it first, so the two answers cannot differ.
+
+
+An Expression in a String
+=========================
+
+Inside a double-quoted string, a heredoc or a backtick command, it is not operator precedence that decides, but the grammar of interpolation, and `replaceWithExpression()` follows it. The bare part of a string (`"x $a y"`) and the start of an expression in curly braces `{$...}` accept only an expression for which [`canStandInString()` |traversal#Questions Every Tool Asks] returns `true`, that is, a variable and what leads from it through `[]`, `->`, `::` and calls. The method rejects any other expression with an `InvalidArgumentException` before it changes anything.
+
+In curly braces it writes the expression as it is. In a bare place it writes it bare where the string reads it the same way, and otherwise it puts it into new curly braces:
+
+```php
+// "x $a y", each line applied to the original code
+$a->replaceWithExpression($builder->expression('$b->c'));    // "x $b->c y"
+$a->replaceWithExpression($builder->expression('$b[0]'));    // "x {$b[0]} y"
+$a->replaceWithExpression($builder->expression('$x + 1'));   // InvalidArgumentException
+```
+
+`$b[$i]` would stay bare, `$b[0]` would not: a number or a word as an index is written differently in the bare form than in an expression, for example `"$row[label]"` without quotes. A place inside the bare part, for example `$a` in `"$a->b"`, keeps the bare form only for a plain variable; anything else turns the whole part into the `{$...}` form, so `$x[0]` put in place of `$a` gives `"{$x[0]->b}"`. Elsewhere in curly braces and in the `${expression}` form, any expression may stand, in parentheses where needed, like anywhere else.
+
+The method always rejects two places: a name in the `${name}` form, because an expression there would name a variable variable, and curly braces right after an unescaped dollar of the text (`"$$a"`), which would be read as `${`. Trivia that an expression brings into a string get the `inInterpolation` flag, so the methods that format spaces leave them alone, see [Trivia |trivia#Who Owns a Space].
+
+
+Lists
+=====
+
+```php
+$stmts->append($stmt);
+$stmts->insert($index, $stmt);
+$stmts->insertAfter($return, $stmt);  // right after an item that is in the list
+$stmts->insertBefore($return, $stmt);
+$stmts->removeItem($stmt);
+
+$args = $call->arguments->items;      // SeparatedNodeList, not the ArgumentListNode with parentheses
+$arg = $builder->fragment(ArgumentNode::class, '$c');
+$args->append($arg);                  // the separator is derived from the existing ones, or ', '
+$args->insert(0, $builder->fragment(ArgumentNode::class, '$first'));
+$args->setTrailingSeparator(null);    // remove the trailing comma
+$args->setTrailingSeparator(Token::fromText(','));   // and add it back
+```
+
+`SeparatedNodeList` takes care of its separators by itself: on insert, it derives the missing comma from those in the list (or uses `, ` in a single-line list), and in a multiline list it gives the item the indentation of its neighbor. A separator with a comment is not used as a pattern, though, because the comment is content and a copy would duplicate it, so the format is taken from the next separator. The trailing comma of a single-line list is not a pattern either, because it stands right next to the bracket. The separator inserted with an item is the one that belongs to it: the one after it, and for the last item the one before it. A comment after the previous item thus stays with that item. Removal works the same way: the comma after the item goes with it, for the last item the one before it.
+
+`getTrailingSeparator()` reads the trailing separator, and `setTrailingSeparator()` sets or removes it; an empty list does not accept one. The separator is placed where the last item ended, that is, before the comment and the line ending that follow it:
+
+```php
+// [
+// 	1,
+// 	2 // two
+// ]
+$items->setTrailingSeparator(Token::fromText(','));
+// 	2, // two
+```
+
+The exception is a doc comment right after the last item. It belongs to the item (`getDocComment()` of a parameter reads it that way too), so the separator is placed after it: `int $b /** the b */,`.
+
+A separator without trivia of its own takes over the trailing trivia of the last item, or the trivia of the separator it replaces. A removed separator leaves its comments and the end of its line to the last item, so a comment does not disappear with it. A separator with trivia of its own keeps them, and the comments and the line ending of the replaced separator follow after them.
+
+`removeItem()` and `remove()` differ in what they do with the surroundings. `removeItem()` takes out the item with its trivia and separator and cleans up nothing else, so a comment on its line goes with it. `remove()` on a node takes with it the whole lines on which the node stood alone, and moves comments according to `CommentPolicy`, as described above. When unsure, use `remove()`.
+
+A `PlainNodeList` of statements, where there is no separator, behaves the same way: if the list stands in a file, it gives an item without trivia of its own the indentation of its neighbor and the same line ending as the neighbor; in a detached fragment it inserts the item as it is. So inserting a statement is one line, and nothing around it needs fixing:
+
+```php
+$stmt = $builder->statement('$this->log("total");');
+$return->parent->insertBefore($return, $stmt);
+```
+
+A blank line that was in the list (for example after the imports) stays where it was. An item that ends a line with its own text, that is, a closing tag or inline HTML, gets nothing, because it carries its line ending itself.
+
+
+A New Node
+==========
+
+You do not build new code from tokens; the builder creates it: from text, from a template into which it puts nodes you already have, or with a method for a specific construct. It returns a detached node with empty edges, ready to be inserted:
+
+```php
+// trim($name)  →  htmlspecialchars(trim($name))
+$call->replaceWith($builder->call('htmlspecialchars', [$call]));
+```
+
+The `trim()` call still stands in the file, so the builder takes it as a copy without edges, and `replaceWith()` then puts the new call in its place. The page [Building New Nodes |builder] describes how the builder writes operators, where it adds parentheses by itself and what it rejects. `$builder->parenthesize($expr)` writes parentheses that you want in the code for the reader; [`replaceWithExpression()` |#An Expression in Place of an Expression] adds for you the ones that precedence requires.
+
+To copy an existing node for another place, use the method `withoutEdgeTrivia()`, which gives a deep copy without a parent and with empty edges. A plain `clone`, like a node picked out of a subtree, carries the leading trivia from the place it came from, and for the first statement of a file these include `<?php`, which would appear twice in the output.
+
+
+Token Text and Modifiers
+========================
+
+The smallest possible change is usually changing the text of one token, and that is often enough:
+
+```php
+$call->name->text = 'count';                  // a name; the hook re-tokenizes it
+$string->setValue('Hello', "'");              // the value of a literal, including the quote
+$token->setText('(int)');                     // another spelling of the same kind of token: from '(integer)'
+```
+
+`setText()` accepts only another spelling of the same kind of token, that is, different case, `(integer)` as `(int)`, a different number, string or name. It rejects text that the lexer would read as a different kind with an `InvalidArgumentException`: `!=` as `!==` would leave the token with the kind of one and the text of the other. To put in a token of a different kind, use `Token::replaceWith()`; for an operator, use `replaceOperator()` of its node, which also adds the parentheses the new precedence requires:
+
+```php
+$token->replaceWith(Token::fromText('!=='));
+$binary->replaceOperator('!==');
+```
+
+`Token::fromText()` runs the lexer on the text, so the token gets the kind PHP would give it. Modifiers are not slots but tokens in `ModifiersNode`, and they are changed with its methods:
+
+```php
+$modifiers = $class->modifiers;
+if (!$modifiers->has(Token::Final)) {
+	$modifiers->append(Token::fromText('final'));
+}
+
+if ($readonly = $modifiers->findToken(Token::Readonly)) {
+	$modifiers->removeToken($readonly);
+}
+```
+
+You do not have to take care of spaces and lines. The first modifier opens the declaration, so it takes over the leading trivia of the token it is placed before, that is, the indentation, the doc comment and, for the first class of a file, also `<?php`; a token without trailing trivia gets a space after it. A removed modifier passes its leading trivia to the token after it, and a comment after it stays in the code.
+
+
+Types
+=====
+
+The type of a parameter, the type of a property and the return type are not written by an assignment to a slot, because something extra comes with them: the colon for a return type, a space after the type for a parameter and a property. That is why you set them with a method:
+
+```php
+$function->setReturnType($builder->type('void'));   // function f(): void
+$function->setReturnType(null);                     // remove the type and the colon
+$parameter->setType($builder->type('string'));      // string $name
+$property->setType($builder->type('?int'));         // public ?int $count;
+$property->setType(null);
+```
+
+`setReturnType()` is a method of the `FunctionLikeNode` interface, so functions, methods, closures and arrow functions have it; it writes the type with the colon, or removes both, and the space before the body stays as it was. A hook implements that interface too, but cannot have a return type, so its `setReturnType()` throws a `LogicException`. `ParameterNode::setType()` and `PropertyNode::setType()` write the type with one space after it, or remove it together with the space. Comments of a removed type stay in the code, and a type that stood alone on its line takes the line with it. If the type you pass already stands in a tree, all three methods take a copy of it without the trivia at its edges, just like the builder does.
+
+
+Shifting Indentation
+====================
+
+When a construct moves one level deeper or shallower, it is not enough to rewrite the indentation of the first line:
+
+```php
+Indentation::shift($method, 1, $style);   // the whole method one level to the right
+```
+
+`shift()` shifts every line that the node opens, and with the body of a heredoc also its closing label, so the value of the heredoc stays the same (PHP subtracts the indentation of the label from it). It does not touch inline HTML and the content of strings.
+
+
+What the Tree Guards by Itself and What It Doesn't
+==================================================
+
+The tree itself guards the parents, the index and `FileNode::$revision`, which increases with every change; if you need to know whether something changed, compare the revision before and after, but do not count on one change being one increment, because a compound change like `remove()` makes several. Writing a value that is already there does not raise the revision, so a pass that changed nothing leaves it the same.
+
+Two things it does not guard, and they are up to you:
+
+- **Canonical trivia.** The line ending that closes the line of a token belongs to its trailing trivia, not to the leading trivia of the next token. `ensureStartsLine()` and `setBlankLinesBefore()` do it right; if you put trivia together by hand, follow this rule, otherwise `getTrailingSpace()` will not see the line break.
+- **Meaning.** The tree lets you replace a condition with anything and remove a `return`; whether you may do so is a question for `isRepeatableRead()`, `matches()` and you.
+
+After the change, print with `Printer::print($file)` or `(string) $file`, and the output is the original file with changes exactly where you made them.

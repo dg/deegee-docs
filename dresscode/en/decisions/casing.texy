@@ -1,0 +1,122 @@
+Letter Casing
+*************
+
+.[perex]
+The `casing` section decides on letter case wherever PHP ignores it: in keywords, in `true`, `false` and `null`, in magic constants like `__DIR__`, in built-in types, and in the names of classes, functions and methods.
+
+PHP ignores letter case in keywords and in the names of functions and classes, so `NULL`, `StrLen()` and `new datetime` all work. But they are harder to read, and every project writes them a little differently. The keys of this section make the spelling match the declaration: `strlen`, `DateTime`, `stdClass`. Without type analysis, DressCode knows only the declarations of PHP and of the extensions that come with it, so the names from your project and its packages keep the spelling they have. With `typeAnalysis: phpstan` it asks PHPStan. Then it also changes `new orderitem` to `new OrderItem` to match the declaration in the project, the call `$order->gettotal()` to `$order->getTotal()`, and a method that overrides a parent method to the spelling of the parent. Without types, the only methods it fixes are the magic methods of PHP, such as `__toString()`, because only the types tell which method a call actually calls.
+
+```neon
+casing:
+	keyword: lowercase
+	trueFalseNull: lowercase
+	class: declared
+	function: declared
+```
+
+```php .[before]
+$items = Array();  // The keyword `Array` must be written `array`.
+if ($value === NULL) {  // The literal `NULL` must be written `null`.
+	$date = new datetime();  // The class name `datetime` must be written `DateTime`.
+	$length = StrLen($name);  // The function `StrLen()` must be written `strlen()`.
+}
+```
+
+```php .[after]
+$items = array();
+if ($value === null) {
+	$date = new DateTime();
+	$length = strlen($name);
+}
+```
+
+
+casing.method
+=============
+
+The case of the name of a method called, as its declaration writes it, and of a method overriding another, as the overridden one writes it; a magic method of PHP as PHP writes it, the others only with the types of the code.
+
+- `declared`: `$order->getTotal()`, never `$order->gettotal()`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `declared`, symfony `declared`, laravel `keep` .[decision-facts]
+
+
+casing.keyword
+==============
+
+The case of keywords, `self` and `parent` included.
+
+- `lowercase`: `if`, `function`, `self`, `parent`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `lowercase`, psr12 `lowercase`, nette `lowercase`, symfony `lowercase`, laravel `lowercase` · covers `lowercase_keywords`, `lowercase_static_reference`, `Generic.PHP.LowerCaseKeyword`, `Generic.PHP.LowerCaseType`, `PSR2.ControlStructures.SwitchDeclaration`, `Squiz.ControlStructures.ForEachLoopDeclaration`, `Squiz.ControlStructures.LowercaseDeclaration`, `Squiz.Functions.LowercaseFunctionKeywords` .[decision-facts]
+
+
+casing.trueFalseNull
+====================
+
+The case of `true`, `false` and `null`, a leading backslash staying.
+
+- `lowercase`: `true`, `false`, `null`
+- `uppercase`: `TRUE`, `FALSE`, `NULL`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `lowercase`, psr12 `lowercase`, nette `lowercase`, symfony `lowercase`, laravel `lowercase` · covers `constant_case`, `Generic.PHP.LowerCaseConstant` .[decision-facts]
+
+
+casing.magicConstant
+====================
+
+The case of the magic constants such as `__DIR__`.
+
+- `uppercase`: `__DIR__`, `__CLASS__`
+- `lowercase`: `__dir__`, `__class__`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `uppercase`, symfony `uppercase`, laravel `uppercase` · covers `magic_constant_casing` .[decision-facts]
+
+
+casing.hexDigit
+===============
+
+The digits `A` to `F` of a hexadecimal number; the prefixes `0x`, `0b` and `0o` stand in lowercase either way.
+
+- `uppercase`: `0xFF`
+- `lowercase`: `0xff`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `uppercase` · covers `integer_literal_case` .[decision-facts]
+
+
+casing.class
+============
+
+The case of a class, an interface, a trait or an enum as its declaration writes it, of one PHP declares only where the configuration sets no `typeAnalysis`.
+
+- `declared`: `stdClass`, `DateTime`, never `datetime`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `declared`, symfony `declared`, laravel `keep` · covers `class_reference_name_casing` .[decision-facts]
+
+
+casing.function
+===============
+
+The case of a function as its declaration writes it, of one PHP declares only where the configuration sets no `typeAnalysis`.
+
+- `declared`: `strlen`, never `StrLen`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `declared`, symfony `declared`, laravel `declared` · covers `native_function_casing`, `Squiz.PHP.LowercasePHPFunctions` .[decision-facts]
+
+
+casing.type
+===========
+
+The case of the built-in types of a declaration; `array`, `callable`, `static`, `self` and `parent` are keywords.
+
+- `lowercase`: `int`, `string`, `void`
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `lowercase`, psr12 `lowercase`, nette `lowercase`, symfony `lowercase`, laravel `lowercase` · covers `native_type_declaration_casing`, `Generic.PHP.LowerCaseType` .[decision-facts]

@@ -1,0 +1,183 @@
+Migrating from PHP CS Fixer
+***************************
+
+.[perex]
+How to migrate from PHP CS Fixer to DressCode: converting `.php-cs-fixer.dist.php` to a DressCode configuration, the `@PSR12`, `@PER-CS` and `@Symfony` sets to standards and fixers to decisions, a table of matching commands, and what a risky rule means here.
+
+
+Before You Start
+================
+
+Go through the [common steps |migration] first: you can leave the code and the comments as they are, `import` converts the configuration, and `migrate-suppressions` rewrites the comments. This page adds what is specific to PHP CS Fixer.
+
+The most important thing first: **the configuration of PHP CS Fixer is a PHP file that has to be executed**, and it returns an object of its library. So the `dresscode import` command reads it only when it runs as `vendor/bin/dresscode` in a project where `friendsofphp/php-cs-fixer` is still installed. DressCode installed outside the project (globally or with `create-project`) does not load the project's autoloader, cannot find the classes of PHP CS Fixer, and stops with a configuration error and exit code `3`:
+
+/--pre .[terminal]
+Error: File `.php-cs-fixer.dist.php` needs the classes of PHP CS Fixer, which this dresscode cannot load; run the `vendor/bin/dresscode` of the project that has PHP CS Fixer installed: Class "PhpCsFixer\Finder" not found.
+\--
+
+So for the conversion, add DressCode to your project as a development dependency, see [Installation |getting-started#Installation], and convert the configuration before you remove PHP CS Fixer.
+
+
+Converting the Configuration
+============================
+
+```shell
+dresscode import .php-cs-fixer.dist.php dresscode.neon
+```
+
+Sets are translated to standards: `@PSR1`, `@PSR2` and `@PSR12` to `psr12`; `@PER`, `@PER-CS` and their numbered variants to `perCs`, which matches [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/]; and `@Symfony` to `symfony`, which does not have most of the phpDoc rules yet. `import` reports sets with no counterpart and tells you where to start; for `@PhpCsFixer` it is `symfony`. Sets with the `:risky` suffix have no counterpart, because here risky fixes are not turned on by a set, but by the project for individual decisions (see below).
+
+Fixers are translated to decisions, together with their options where an option has a counterpart. A configuration with the `@PER-CS` standard, the `no_unused_imports` fixer and `trailing_comma_in_multiline` with `elements` for arrays, arguments and parameters gives this `dresscode.neon`:
+
+```neon
+use: [perCs]
+imports:
+	unused: forbidden
+
+multiline:
+	trailingComma:
+		array: required
+		argument: required
+		parameter: required
+		matchArm: optional
+		closureUse: optional
+		import: optional
+		list: optional
+
+classes:
+	instantiationWrapping: keep
+```
+
+`no_unused_imports` is [`imports.unused` |decisions/imports], which, like the fixer, also counts a name in phpDoc as a use. `trailing_comma_in_multiline` was split into the [`multiline.trailingComma` |decisions/multiline] keys, one for each place where a comma can go; what `elements` did not list got `optional`, which means the comma is left as the author wrote it. `import` added `classes.instantiationWrapping: keep` by itself: from PHP 8.4, the `perCs` standard writes `new Foo()->bar()` without parentheses around `new`, while the `@PER-CS` set leaves them as they are. A fixer with no counterpart is listed on standard error, and that gives you a list of things you need to decide about. Custom fixers from the `kubawerlos/php-cs-fixer-custom-fixers` package are translated too, as long as DressCode knows the construct they deal with.
+
+What `import` does not carry over, because in the Fixer configuration these are not rules:
+
+- **Finder.** Rewrite the paths, `exclude()` and `notPath()` to the `paths` and `excludePaths` keys; the patterns are described in [Configuration |configuration#Paths].
+- **Indentation and line endings** (`setIndent()`, `setLineEnding()`). The standard sets them. If you use none, add the decisions `indentation.unit` and `file.lineEnding`; without a standard, `import` reminds you of them by itself.
+- **`setRiskyAllowed(true)`**. DressCode does not give permission for risky fixes to the whole configuration, but to individual decisions: their paths go in the `fixRisky` list. Without that list, risky fixes are only reported.
+
+
+One Thing, One Key
+==================
+
+In PHP CS Fixer, several rules share one construct, and the result comes from how they work together. A project using PER Coding Style that wants to write global classes with a backslash, `\Exception`, and functions without one, except those PHP can optimize, needs two fixers and five options, and one of the options means the opposite of what it seems to say: `import_classes => false` does not mean "do not import", but "rewrite imported classes to the fully qualified name". On top of that, it needs `no_unused_imports`, so that the imports left over after the rewrite disappear:
+
+```php
+$config->setRules([
+	'@PER-CS' => true,
+	'native_function_invocation' => [
+		'include' => ['@compiler_optimized'],
+		'scope' => 'namespaced',
+		'strict' => true,
+	],
+	'global_namespace_import' => [
+		'import_classes' => false,
+		'import_constants' => false,
+		'import_functions' => false,
+	],
+	'no_unused_imports' => true,
+]);
+```
+
+In DressCode, these are keys of one section, [`qualification` |decisions/qualification], and each one names what it wants; `imports.unused` removes the unused imports:
+
+```neon
+use: perCs
+
+qualification:
+	class:
+		global: backslashed
+	function:
+		global: bare
+		optimized: backslashed
+
+imports:
+	unused: forbidden
+```
+
+From this code:
+
+```php .[before]
+<?php
+
+namespace App\Model;
+
+use DateTimeImmutable;
+use InvalidArgumentException;
+
+class Cart
+{
+    public function add(array $items, string $sku): DateTimeImmutable
+    {
+        if (strlen($sku) === 0 || in_array($sku, $items, true)) {
+            throw new InvalidArgumentException('Invalid SKU');
+        }
+        return new DateTimeImmutable(\date('Y-m-d'));
+    }
+}
+```
+
+both tools make this:
+
+```php .[after]
+<?php
+
+namespace App\Model;
+
+class Cart
+{
+    public function add(array $items, string $sku): \DateTimeImmutable
+    {
+        if (\strlen($sku) === 0 || in_array($sku, $items, true)) {
+            throw new \InvalidArgumentException('Invalid SKU');
+        }
+        return new \DateTimeImmutable(date('Y-m-d'));
+    }
+}
+```
+
+Except for one place: PHP CS Fixer qualifies `in_array($sku, $items, true)`, because `in_array` is in the `@compiler_optimized` list, while DressCode leaves it bare, because the compiler speeds up only a search in an array written directly in the code, not in a variable. DressCode decides by the call, not by the name. It removes the backslash from `date()` without risk when the configuration says `nameResolution: certain`; otherwise it is a risky fix, just as `native_function_invocation` is a risky fixer. The rest of the section, constants and imports of global names, is described in [How Global Names Are Written |namespaces#How Global Names Are Written].
+
+
+Risky Rules
+===========
+
+PHP CS Fixer marks a rule as risky when, on an array of tokens, it cannot tell a safe case from a dangerous one, and it leaves the decision to you. A typical example is `ternary_to_elvis_operator`: it cannot tell whether the condition of a ternary operator is a variable or a function call with a side effect, so it watches only for `++` and `--`, and the rest is up to you.
+
+DressCode does not have this split, because the tree answers the question: the decision [`expressions.ternary.short` |decisions/expressions] shortens a ternary operator only when the condition is safe to evaluate twice, and it leaves a function call alone. The same goes for other rules that were risky for the same reason.
+
+Fixes that can change the behavior of the program are a different thing. DressCode does not turn them on with a special set. It reports them as risky, place by place, and for each one it says what would decide it: `mistakes.strictArgument` adds the parameter `$strict = true` to `in_array()` right away where the [types |types] from PHPStan say an integer is searched for among integers, and elsewhere it only reports the fix as risky. A risky fix is made only when you list its decision in the `fixRisky` list in the configuration, or for one run with `--fix-risky`; until then it is a warning where types would decide it, and an error where it changes behavior by its nature, like adding `declare(strict_types=1)`. Writing a decision that changes the meaning of code, like `expressions.comparison.loose: forbidden`, does not yet mean you agree with its fixes; you agree only by listing it in `fixRisky`.
+
+Some fixers form a special group: PHP CS Fixer marks them as risky because someone could declare a function of the same name in a namespace: `is_null`, `no_alias_functions`, `dir_constant` and others. In DressCode, the configuration settles this doubt. With the `nameResolution: certain` key and the lists in the `namespaces` key, it knows what is in your namespaces, and the corresponding fixes are safe; see [Functions and Constants in Namespaces |namespaces].
+
+
+Commands
+========
+
+| PHP CS Fixer | DressCode |
+|---|---|
+| `php-cs-fixer fix --dry-run` | `dresscode check` |
+| `php-cs-fixer fix --dry-run --diff` | `dresscode check --diff` |
+| `php-cs-fixer fix` | `dresscode fix` |
+| `php-cs-fixer fix --config=file` | `dresscode fix --config file` |
+| `php-cs-fixer fix --rules=name` | `dresscode fix --set path=value`, which adds the decision to the configuration, or `dresscode fix --only path`, which runs only the ones you name |
+| `php-cs-fixer fix src --rules=@PSR12` | `dresscode fix src --use psr12` in a project without a configuration |
+| `php-cs-fixer fix --format=checkstyle` | `dresscode check -f checkstyle` |
+| `php-cs-fixer fix --allow-risky=yes` | `dresscode fix --fix-risky`; permanently, a list of decisions in the `fixRisky` key |
+| `php-cs-fixer describe name` | `dresscode explain path` |
+| `.php-cs-fixer.cache` | the cache is on by itself; `--no-cache` bypasses it |
+
+The exit code of PHP CS Fixer is a bit mask (8 means violations found, 16 a configuration error, and so on), while DressCode returns `0` for clean, `1` for violations, `2` for a failure on some file and `3` for an error on the command line or in the configuration. A CI script that evaluated the mask needs one change.
+
+
+What PHP CS Fixer Did Not Have
+==============================
+
+- **PER Coding Style 3.1.** PHP CS Fixer implements version 3.0 (the `@PER-CS3x0` set), while the `perCs` standard implements version 3.1. After PHP CS Fixer, DressCode still finds 1,201 places in Laravel and 7,497 in Symfony 3.4; these are places where PER Coding Style wants one item per line, a heredoc indented with the surrounding code, or a comma after a multiline list, see [the comparison |how-it-works#PER Coding Style and PSR-12 Compared to PHP CS Fixer and PHP_CodeSniffer].
+- **A message at every place, including what the fix can change.** For a file, `php-cs-fixer fix --dry-run -v` prints the names of the fixers that would change it, and with `--diff` the change itself; the `checkstyle` format has one entry per fixer and file, with no line number. `php-cs-fixer describe` explains why a fixer is risky, once for all places; for `strict_param`, it says `Risky when the fixed function is overridden or if the code relies on non-strict usage.` With `--allow-risky=yes` it then adds `true` to every `in_array()`, without it to none. DressCode with [types from PHPStan |types] judges each call separately: where an `int` is searched for in a `list<int>`, it adds `true` by itself, and where the value searched for is `mixed`, it reports the fix with the reason `Risky because a strict search no longer finds a value of another type.` and waits for your consent. The same output also shows an overriding method whose parameter is named differently than in the parent, and a call to a method the library marked as deprecated; PHP CS Fixer reports neither of them, not even with the `@PhpCsFixer:risky` and `@Symfony:risky` sets. The full output is shown in [Getting Started |getting-started#Checking Code].
+- **Suppressing on a line.** PHP CS Fixer cannot turn off a rule for one line or for a block, only for a whole file through Finder. Here you have `// dresscode:ignore path` for that, and the pair `dresscode:disable` and `dresscode:enable`, see [Suppressions and the Baseline |suppressing].
+- **Different values for part of the project** are written as an override in the `overrides` key, with no second configuration file; a decision there gets a different value, or `keep`, see [Configuration |configuration#Different Values for Part of the Project].
+- **Trying a decision without losing your configuration.** In PHP CS Fixer, `--rules` replaces the rules from the configuration file, so a fixer you try runs without the rest of your set and with default options, unless you spell out others in JSON. In DressCode, `dresscode fix --set path=value` adds the decision to the rest of the configuration, so its changes come out already formatted by your standard, ready for one commit, and `--only path` also narrows the output to them, see [Command Line |cli#One Decision for One Run: --set and --only].
+- **Baseline.** A decision that your code does not meet yet, and that cannot be fixed for you, can be turned on right away: the `dresscode baseline` command records today's violations, and only new ones will be reported. PHP CS Fixer does not have one; how DressCode combines it with fixes is described in [Baseline |suppressing#baseline].
+- **Your own rule** is written against the tree, not against tokens. The [tutorial |custom-rule] takes one afternoon, and if you have a custom fixer, a [separate page |porting-rules] shows how to port it.

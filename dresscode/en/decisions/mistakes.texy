@@ -1,0 +1,284 @@
+Mistakes
+********
+
+.[perex]
+The `mistakes` section decides what to do with code that is most likely a mistake, whatever the style: `$this` in a static method, a `catch` that can never be reached, a loose search in `in_array()`, the `@` operator, an invisible character in the code, two doc comments in a row when reflection sees only one of them, the `global` statement, and a forgotten debug output.
+
+Most of these findings cannot be fixed, because the code does not show what the author had in mind: DressCode reports them and leaves them to you. Where a fix is possible, it is usually a risky fix. Adding the argument `true` to `in_array()` is safe only when all the values searched are of one type. With [types from PHPStan |/types], DressCode can tell this and makes the fix on its own; elsewhere it waits for your permission.
+
+```neon
+mistakes:
+	thisOutsideObject: forbidden
+	unreachableCatch: forbidden
+	strictArgument: required
+	errorSuppression: forbidden
+```
+
+```php .[before]
+class Mailer
+{
+	public static function create(): static
+	{
+		$this->connect();  // The `$this` stands in a static context, which has no object.
+		return new static;
+	}
+
+	public function send(array $to): void
+	{
+		try {
+			$this->transport->send($to);
+		} catch (\Throwable $e) {
+			throw $e;
+		} catch (\RuntimeException $e) {  // Unreachable catch block, because a previous one catches `Throwable`.
+			$this->log($e);
+		}
+		$found = in_array('admin', $to);  // The `in_array()` call must pass `$strict = true`.
+		$data = @file_get_contents($this->path);  // The `@` operator must not be used.
+	}
+}
+```
+
+A project that uses the `@` operator on purpose for some calls can say so with a comment and the [`suppressionComments` |/suppressing#Suppressing on a Line] key; the `nette` standard comes with such a pattern.
+
+Two decisions of this section do not look for a mistake. Instead, they make explicit a guarantee that the code already keeps, but only silently: `mistakes.readonlyProperty` adds `readonly` to a property that only the constructor writes, and the group `mistakes.neverReturnType` adds the return type `never` to a function, a method or a closure that always throws an exception or exits. Once PHP knows the guarantee, every later write to such a property and every return from such a function ends with an error. The `types` set turns on `mistakes.neverReturnType.function` and `mistakes.neverReturnType.method`; no set turns on `mistakes.readonlyProperty` or `never` on closures, so a project turns them on itself.
+
+
+mistakes.finalParent
+====================
+
+A class extending a final one, which is only reported.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · needs types · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.__debugInfoReturningNull
+=================================
+
+The `null` that `__debugInfo()` returns, which becomes `[]`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.thisOutsideObject
+==========================
+
+`$this` in a static method, a static closure or a function outside a class, which is only reported.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `Squiz.Scope.StaticThisUsage` .[decision-facts]
+
+
+mistakes.unimplementedAbstractMethod
+====================================
+
+An inherited abstract method a class that is not abstract leaves unimplemented, typically after a library added it, which is only reported.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · needs types · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.readonlyProperty
+=========================
+
+A property written only in the constructor, or not at all.
+
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · PHP 8.1 · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.__serialize
+====================
+
+`__serialize()` and `__unserialize()` in a class implementing `Serializable`, whose absence is only reported.
+
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.staticSetState
+=======================
+
+`__set_state()` declared static, as PHP calls it.
+
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.continueInSwitch
+=========================
+
+A `continue` that only leaves a `switch`, where `break` is meant, which is only reported.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `forbidden`, laravel `keep` · covers `switch_continue_to_break`, `SlevomatCodingStandard.ControlStructures.DisallowContinueWithoutIntegerOperandInSwitch` .[decision-facts]
+
+
+mistakes.unreachableCatch
+=========================
+
+A `catch` after one catching `Throwable` or a class it catches, which is only reported.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `SlevomatCodingStandard.Exceptions.DeadCatch` .[decision-facts]
+
+
+mistakes.exceptionWhereThrowableBelongs
+=======================================
+
+`catch (Exception)` and a parameter of the type `Exception` where `Throwable` is meant, which is only reported.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `SlevomatCodingStandard.Exceptions.ReferenceThrowableOnly` .[decision-facts]
+
+
+mistakes.errorSuppression
+=========================
+
+The `@` operator, which silences errors and is only reported.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.invisibleCharacter
+===========================
+
+Non-breaking, zero-width and bidi characters, replaced in comments and escaped in strings, which changes their text, and reported in names.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `non_printable_character` .[decision-facts]
+
+
+mistakes.debugOutput
+====================
+
+A statement calling a debugging function to print, changed into a comment, `// var_dump($a);`; a call that may return its output instead, `print_r($a, true)`, stays.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` · covers `PhpCsFixerCustomFixers/commented_out_function` .[decision-facts]
+
+
+mistakes.debugOutputFunctions
+=============================
+
+The debugging functions whose calls print.
+
+- a list of names
+
+Default `[print_r, var_dump, var_export]` · standards: perCs `[print_r, var_dump, var_export]`, psr12 `[print_r, var_dump, var_export]`, nette `[print_r, var_dump, var_export]`, symfony `[print_r, var_dump, var_export]`, laravel `[print_r, var_dump, var_export]` · covers `PhpCsFixerCustomFixers/commented_out_function` .[decision-facts]
+
+
+mistakes.strictArgument
+=======================
+
+`in_array()`, `array_search()`, `array_keys()`, `base64_decode()`, `mb_detect_encoding()` pass `strict: true`; an explicit `false` is reported.
+
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` · covers `strict_param`, `SlevomatCodingStandard.Functions.StrictCall` .[decision-facts]
+
+
+mistakes.trailingWhitespaceInString
+===================================
+
+At the end of the lines of a multi-line string or inline HTML, which changes their value.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `no_trailing_whitespace_in_string` .[decision-facts]
+
+
+mistakes.consecutivePhpdocs
+===========================
+
+A doc comment followed by another one, the first lost to reflection, which is only reported.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.neverReturnType.function
+=================================
+
+The return type `never` of PHP 8.1 on a function that always throws or exits.
+
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · PHP 8.1 · standards: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.neverReturnType.method
+===============================
+
+The return type `never` on a method that always throws or exits, only where no descendant can declare it again.
+
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · PHP 8.1 · standards: perCs `keep`, psr12 `keep`, nette `required`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.neverReturnType.anonymousFunction
+==========================================
+
+The return type `never` on a closure that always throws or exits, though its signature usually belongs to the call it is passed to.
+
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · PHP 8.1 · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` .[decision-facts]
+
+
+mistakes.globalStatement
+========================
+
+The `global` statement, which is only reported.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `Squiz.PHP.GlobalKeyword` .[decision-facts]
+
+
+mistakes.repeatedAssignment
+===========================
+
+A variable assigned twice in one expression, `$a = $a = 1`.
+
+- `forbidden`: never there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `SlevomatCodingStandard.Variables.DuplicateAssignmentToVariable` .[decision-facts]
