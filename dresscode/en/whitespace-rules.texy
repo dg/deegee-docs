@@ -2,54 +2,54 @@ Whitespace Rules
 ****************
 
 .[perex]
-Rules that check spaces, line breaks and blank lines work differently from all other rules: they never touch the code. They only say what should be between two tokens, and the engine does the rest.
+Rules governing spaces, line breaks, and empty lines work fundamentally differently from all other rules: they never modify source code directly. Instead, they declare what should exist in the space between two adjacent tokens, leaving conflict resolution and formatting to the engine.
 
 
 What a Gap Is
 =============
 
-A **gap** here means everything in the source code between two neighboring tokens: nothing at all, one or more spaces, or a line break, blank lines and comments. In the API, such a place is called `Gap`.
+In DressCode, a **gap** refers to everything in source code that sits between two adjacent tokens: whether that space is completely empty, contains one or more spaces, or spans line breaks, blank lines, and comments. In the internal API, this space is represented by the `Gap` class.
 
 ```php
 $sum = $a + $b;
 ```
 
-This line has five gaps in this sense: between `$sum` and `=`, between `=` and `$a`, between `$a` and `+`, between `+` and `$b`, and finally between `$b` and `;`. The last one is a gap too, just an empty one, and a rule can say something about it as well: that it should stay empty.
+This short line contains exactly five gaps: between `$sum` and `=`, between `=` and `$a`, between `$a` and `+`, between `+` and `$b`, and finally between `$b` and `;`. That final gap is just as real as the others, even though it currently holds nothing—and a rule can assert a requirement over it just the same: that it must remain empty.
 
-A whitespace rule (the class `GapRule`) says what such a place should look like. It does not write into it, does not delete anything from it and does not search it.
+A whitespace rule (derived from `DressCode\GapRule`) states what such a gap should look like. It never appends, deletes, or searches within token text directly.
 
 
 Why Rules Don't Rewrite Whitespace
 ==================================
 
-If the rule for the space after a comma wrote the space itself, and the rule for breaking a long list wrote the line ending itself, two rules would act on the same place, and the one that happened to run later would win. The next run could end the other way round.
+If a rule enforcing spaces after commas inserted spaces directly into the syntax tree, and a rule wrapping long lists inserted newlines, both rules would collide at the exact same location. Whichever ran last would win, and a subsequent pass might flip the result back.
 
-That is why whitespace rules do not touch the code. Each one only states a **claim** (`Claim` in the API) about what should be at a given place. The engine sees all claims at once: it decides, fixes the code, and reports the violation under the decision of the claim that won.
+That is why whitespace rules never touch the code directly. Each rule merely submits a declarative **claim** (the `Claim` class in the API) describing how a specific gap should appear. The engine evaluates all submitted claims simultaneously, settles conflicts centrally, formats the whitespace, and attributes any reported violation to the decision whose claim won.
 
-For the user, this means that every gap has exactly one owner, and two rules that would claim the same place are a configuration error. Two fixed claims are rejected right at startup; claims returned by two closures (anonymous functions) only at the gap where they clash (see [below |#who-wins]).
+For developers, this architecture guarantees that every gap has exactly one owner, and that two rules claiming the same gap in incompatible ways represent an engine bug. Statically conflicting claims are caught and rejected at startup; conflicting claims returned dynamically by closures are caught at the exact gap where they collide (see [Who Wins |#who-wins] below).
 
 
 What a Claim Says
 =================
 
-A `Claim` has four parts, and a rule fills in only those it cares about:
+A `Claim` consists of four independent components, and a rule specifies only those it cares about in a given context:
 
 | part | what it says | values |
 |---|---|---|
-| `space` | the horizontal space when both tokens are on one line | `Space::None`, `Single`, `AtLeastOne` and the variants `SingleOrTabs`, `AtLeastOneOrTabs`, which also accept a tab that aligns columns |
-| `line` | whether the second token stands on the line of the first one, or on the next one | `Line::Same`, `Line::Next` |
-| `blankLines` | how many blank lines, when there is a line break | a number, or a range `[min, max]` with `null` as an open end |
-| `blankLinesBelowComment` | blank lines between a comment in the gap and the token | the same |
+| `space` | Horizontal spacing when both tokens share the same line | `Space::None`, `Single`, `AtLeastOne`, and variants `SingleOrTabs` and `AtLeastOneOrTabs` that tolerate column-aligning tabs |
+| `line` | Whether the second token sits on the same line as the first, or breaks to the next line | `Line::Same`, `Line::Next` |
+| `blankLines` | The exact number of empty lines when a line break is present | An integer, or a range `[min, max]` (`null` indicates an open-ended range) |
+| `blankLinesBelowComment` | Empty lines between an inline comment in the gap and the subsequent token | An integer or range matching `blankLines` |
 
-The most common claims have factories: `Claim::noSpace()`, `singleSpace()`, `singleSpaceOrTabs()`, `atLeastOneSpace()`, `atLeastOneSpaceOrTabs()`, `sameLine()`, `nextLine()` and `blankLines()`, which takes a number (`blankLines(1)`) as well as a range (`blankLines([1, 2])`). Except for `blankLines()` with a range, they return shared instances. A claim on several parts at once, or a claim with a reason, is built with the constructor: `new Claim(Space::None, line: Line::Same)` or `new Claim(line: Line::Next, because: 'the line is 135 characters long')`. The engine appends the reason to the message after a comma.
+The most common claims have dedicated factory methods: `Claim::noSpace()`, `singleSpace()`, `singleSpaceOrTabs()`, `atLeastOneSpace()`, `atLeastOneSpaceOrTabs()`, `sameLine()`, `nextLine()`, and `blankLines()`, which accepts both fixed integers (`blankLines(1)`) and ranges (`blankLines([1, 2])`). Except for `blankLines()` with a range, these methods return shared immutable instances. Compound claims spanning multiple properties or claims with textual reasons are created via the constructor: `new Claim(Space::None, line: Line::Same)` or `new Claim(line: Line::Next, because: 'the line is 135 characters long')`. The engine automatically appends the reason to the report message after a comma.
 
-Blank lines are counted **above** a comment that stands on its own lines above the token, because a comment belongs to the code below it. The exception is a comment before a closing brace or before the end of the file: such a comment belongs to the code above it. The lines between the last comment and the token form a separate part, `blankLinesBelowComment`; for example, the rule for the blank lines between a doc comment and a declaration claims it.
+Blank lines are measured **above** comments that occupy their own lines preceding a token, because comments logically belong to the code that follows them. The sole exception is a comment immediately preceding a block closing brace or EOF: such comments bind to the code above. Empty lines between the final comment and the token are governed by `blankLinesBelowComment`, which is used, for example, by rules enforcing spacing between docblocks and declarations.
 
 
 Where a Claim Applies
 =====================
 
-The rule extends `GapRule`, carries the attribute `#[RuleInfo]` like any other rule, and in the method `getClaims()` it says which slots of which nodes it has a claim on, separately for the gap before the value of the slot and the gap after it:
+A whitespace rule extends `GapRule`, carries the `#[RuleInfo]` attribute like any other rule, and in `getClaims()` declares which slots across which nodes it claims—specifying claims independently for the gap before and after the slot value:
 
 ```php
 #[RuleInfo(Stage::Formatting)]
@@ -86,13 +86,13 @@ final class ReturnBlankLinesRule extends GapRule
 }
 ```
 
-The first-level key is a node class, or `*` for every node that has such a slot. The second-level key is the name of a slot (`'body'`), or `slot:item` for every item of a list (`'statements:item'`, `'items:item'`), or `slot:separator` for its separators (`'items:separator'`). Under the key `*`, `'*:item'` means the items and `'*:separator'` the separators of every list; this is how `spacing.comma` claims the spaces around all commas. The value is a pair of claims, before and after, each of them either a `Claim`, `null` when the rule wants nothing, or a closure that gets a `Gap` and returns a claim or `null`. A claim at a slot that holds a node applies to its first token (before) or its last token (after).
+The first-level key is a node class, or the wildcard `*` to match any node containing that slot. The second-level key is the slot name (`'body'`), or `slot:item` for every element of a list (`'statements:item'`, `'items:item'`), or `slot:separator` for list delimiters (`'items:separator'`). Under `*`, `'*:item'` matches elements and `'*:separator'` matches delimiters across every list in the entire language—which is how `spacing.comma` claims whitespace around all commas. The value is a two-element array `[before, after]`, where each element is a static `Claim`, `null` (if unconstrained), or a closure accepting a `Gap` and returning a claim or `null`. A claim on a slot containing an AST node applies to the gap before its first token or after its final token.
 
-The name of a slot is a string, so when a refactoring renames the slot, the string stays as it was. But a mistake does not go unnoticed: when the engine assembles the rules, it rejects a claim on a slot the node does not have, for example the typo `'statemnts:item'`, with a `ConfigurationException` (<code>''Rule `Acme\CodeStyle\ReturnBlankLinesRule` claims the whitespace of `*.statemnts:item`, but no node has a slot `statemnts`.''</code>). The [node reference |phpsyntax:nodes] lists the names of the slots.
+Slot names are strings, meaning an IDE refactoring won't automatically rename them if an internal property changes. However, typos are caught immediately: a claim referencing an invalid slot (like `'statemnts:item'`) triggers a `ConfigurationException` when rules are assembled (<code>''Rule `Acme\CodeStyle\ReturnBlankLinesRule` claims the whitespace of `*.statemnts:item`, but no node has a slot `statemnts`.''</code>). See the [node reference |phpsyntax:nodes] for all slot names.
 
-The example above says: before every statement of a list that is a `return` and is not the first one, there should be as many blank lines as the decision `acme.blankLinesBeforeReturn` says. The rule builds the claim once in `configure()` from the value of its decision and only returns it in the closure; it does not build it again for every gap. The rule does not visit any nodes, because a `GapRule` never visits anything; the engine does all the work from the claims during the `Formatting` stage. That is why the `RuleInfo` of a whitespace rule must state exactly `Stage::Formatting`; the engine rejects any other stage with a configuration error. With the value `1`, the report reads `Expected 1 blank line before the return, 0 found.`; the engine composes it from the place the claim is attached to, and the output adds the path `acme.blankLinesBeforeReturn`. Messages like <code>''Expected a single space before the `=` operator.''</code> or `Expected a line break before the opening brace.` are created the same way. The author of the rule never writes the text of a message.
+The example above states: before every `return` statement in a statements list that is not the first statement in its block, there must be as many blank lines as specified by `acme.blankLinesBeforeReturn`. The rule builds its claim instance once in `configure()` from the configured value and returns it from the closure without reallocating it per gap. The rule never visits nodes directly because `GapRule` has no traversal methods; the engine handles all whitespace formatting from claims during the `Formatting` stage. This is why the `RuleInfo` attribute for a whitespace rule must specify `Stage::Formatting` exclusively (any other stage is rejected as an error). Given the value `1`, the generated report reads `Expected 1 blank line before the return, 0 found.`—the engine composes the message automatically from the context, appending the path `acme.blankLinesBeforeReturn`. Messages like <code>''Expected a single space before the `=` operator.''</code> or `Expected a line break before the opening brace.` are assembled identically. Rule authors never write error strings manually.
 
-In the `Gap` object, the closure gets the token at the edge of the gap, the value of the slot or the item the claim is about, its index in the list, and the style of the file including the line length. The closure decides based on these, for example treating the dot differently from the other operators:
+The closure receives a `Gap` object providing the boundary token, the slot value or list item, its index in the list, and the file's style configuration (including line length limits). Closures can evaluate conditions dynamically—for example, treating concatenation dots differently from other binary operators:
 
 ```php
 public function getClaims(): array
@@ -105,15 +105,15 @@ public function getClaims(): array
 }
 ```
 
-With the method `findAnalysis()`, the closure can also ask for an analysis of the file, just like [`RuleContext::findAnalysis()` |rule-contract#Analyses]. This is how a rule that breaks lines by their width asks `Analyses\IndentationSnapshot` (the indentation plan as it stood when it was first asked for in the pass) whether a line already has the indentation the run will give it. Until it does, the rule does not decide.
+Closures can also query file analyses via `findAnalysis()`, just like [`RuleContext::findAnalysis()` |rule-contract#Analyses]. A rule that wraps lines by character width can query `Analyses\IndentationSnapshot` (a snapshot of indentation from the start of the pass) to check whether a line already has its final indentation before deciding whether to wrap.
 
-A rule with a single requirement reports under it. A rule with several requirements names, with each claim, the decision the violation is reported under: `new Claim(Space::Single, decision: 'acme.operatorSpacing')`, or for an existing claim `$claim->withDecision('acme.operatorSpacing')`. The blank lines below a comment can belong to another decision, which the claim gets as `decisionBelowComment`.
+Rules with a single requirement report under it automatically. Rules governing multiple requirements associate each claim with its decision: `new Claim(Space::Single, decision: 'acme.operatorSpacing')`, or over an existing instance via `$claim->withDecision('acme.operatorSpacing')`. Empty lines below comments can belong to a distinct decision passed via `decisionBelowComment`.
 
 
 A Decision That Must Be the Same Every Time
 ===========================================
 
-A claim that depends on the shape of the code (the list is already split onto lines, the line is too long) must give every gap of the same construct the same answer, whatever the engine has done with the previous gaps in the meantime. Otherwise the first comma would split the list and the second one would join it again. So such a decision is made only once:
+Claims that depend on the overall layout of code (such as whether an argument list is multiline, or whether a line exceeds length limits) must return the identical answer for every gap across that construct—regardless of how the engine modified earlier gaps in the meantime. Otherwise, the first comma might wrap the list and the second comma would immediately collapse it back onto one line. Such evaluations are therefore computed once per construct:
 
 ```php
 public function getClaims(): array
@@ -132,30 +132,30 @@ public function getClaims(): array
 }
 ```
 
-The method `once()` evaluates the function at the first gap of the given node and then returns the same answer for all the other gaps until the end of the pass. You write the helper `isBroken()` yourself. In it, treat the list as split as soon as any item or the closing parenthesis starts a line, so that the decision to split applies to the rest of the list. For `foo($a, $b,` with `$c)` on the next line, the rule therefore puts each argument on its own line and reports a single violation `Expected a line break before the argument.`, while it leaves `bar($a, $b)`, written on one line, alone.
+The `once()` method evaluates the supplied closure at the first gap of the specified node and caches the answer, returning that identical value for all other gaps in that node until the pass concludes. You write the helper `isBroken()` yourself: treat a list as multiline as soon as any element or the closing parenthesis begins on a new line, ensuring the decision to wrap applies consistently across the rest of the list. Given `foo($a, $b,` with `$c)` on the next line, the rule breaks every argument onto its own line and reports a single combined violation: `Expected a line break before the argument.`, while leaving single-line calls like `bar($a, $b)` untouched.
 
-A decision made with `once()` whose answer is not `null`, `false` or an empty array also counts as one violation, not one per gap: what is wrong is the shape of the construct, not each of its breaks. So a condition on five lines gives one finding, placed where it is first reported. A `dresscode:ignore` comment there silences it, and the baseline remembers it under one fingerprint. The fixes are the same as if every gap were reported separately.
+A decision recorded via `once()` that returns an active result (not `null`, `false`, or an empty array) is reported as a single violation for the entire construct, rather than generating separate errors for every gap: the defect is the shape of the construct, not each individual break. A multiline condition spanning five lines produces one finding positioned at the first problem, meaning a single inline `dresscode:ignore` comment can suppress it and the baseline records it under a single fingerprint. Code repairs occur across all gaps identically to reporting them individually.
 
 
 Who Wins .[#who-wins]
 =====================
 
-The engine combines the claims of both sides of a gap part by part, by fixed rules, not by the order in the configuration:
+The engine merges claims from both sides of a gap component by component, using strict precedence rules rather than configuration file ordering:
 
-- the claim of a specific class wins over the claim of `*`,
-- the claim of an inner slot wins over the claim of an ancestor,
-- for the horizontal space, the stricter one wins over the looser one, so at `return;` the claim `Expected no whitespace` wins over `Expected at least one space`,
-- for line breaks, `Line::Next` wins over `Line::Same`,
-- for blank lines, what both sides allow applies (their intersection), and when the ranges do not overlap, the narrower one.
+- A claim targeting a specific node class takes precedence over a wildcard `*` claim,
+- A claim on an inner child slot takes precedence over an ancestor slot claim,
+- For horizontal spacing, the stricter requirement wins over the looser one—for `return;`, `Expected no whitespace` wins over `Expected at least one space`,
+- For line breaks, `Line::Next` always takes precedence over `Line::Same`,
+- For blank line counts, the intersection of both allowed ranges applies; if the ranges are mutually exclusive, the narrower range wins.
 
-Two fixed claims on the same part of the same side of the same slot cause a `ConfigurationException` as soon as the rules are assembled. Two closures may share a slot, because each of them can return `null` where the other one decides. But when both decide about the same part at one gap, the `ConfigurationException` is thrown only during the run, exactly at that gap (<code>''Rules `Acme\CodeStyle\ARule` and `Acme\CodeStyle\BRule` both govern the whitespace before `PhpSyntax\Nodes\Expression\BinaryOpNode.operator`.''</code>). The built-in rules do not overlap. A plugin that wants to handle a gap differently from the engine needs the project to leave the engine's decision for that place at `keep`, or it has to ask for a new value of that decision.
+Two static claims on the same component of the same side of a slot trigger a `ConfigurationException` at startup. Two closures may share a slot because each can return `null` where the other decides. If both closures return claims for the same component at a specific gap, the engine throws a `ConfigurationException` at runtime at that exact gap (<code>''Rules `Acme\CodeStyle\ARule` and `Acme\CodeStyle\BRule` both govern the whitespace before `PhpSyntax\Nodes\Expression\BinaryOpNode.operator`.''</code>). Built-in rules are designed never to conflict; if a plugin rule needs to handle a gap differently from core, the project must set the core decision for that gap to `keep`.
 
-The engine inserts a required line break right away and adjusts the blank lines only in the next pass. By contrast, it removes a forbidden line break only when the gap contains nothing but whitespace. The indentation of a line created by a line break is not part of the claim: the engine gives the line the usual indentation, and the indentation rule then places it exactly.
+Required line breaks are inserted immediately, with exact blank line counts adjusted in the subsequent pass. Forbidden line breaks, by contrast, are removed only when the gap contains pure whitespace and no comments. The indentation of newly wrapped lines is not governed by claims: the engine assigns them default indentation, and the `indentation.unit` rule places them at their exact level during final cleanup.
 
 
 Testing a Whitespace Rule
 =========================
 
-A whitespace rule is tested like any other, with `RuleTester` on [fixtures |testing-rules]; the printed messages are the ones the engine composed.
+Whitespace rules are tested like any other rule using `RuleTester` against [fixtures |testing-rules]; verified reports in `.violations` are those composed automatically by the engine.
 
-What a `GapRule` cannot do is touch tokens: it consists of claims and does nothing else. When one construct needs both claims and changes to its tokens, that makes two rules, each with its own decision, one `GapRule` and one [`NodeRule` |rule-contract]. Attributes are exactly this case: `spacing.attribute` claims the whitespace inside `#[...]`, and `classes.emptyParentheses.attribute` writes or removes empty parentheses after the name of an attribute. It looks like a needless complication until someone wants to leave only one of those two things at `keep`.
+What a `GapRule` cannot do by design is mutate tokens: it consists entirely of claims and does nothing else. When a construct requires both whitespace claims and token transformations, implement them as two collaborating rules (each with its own decision): one `GapRule` and one [`NodeRule` |rule-contract]. Attributes are a prime example: `spacing.attribute` claims whitespace inside `#[...]`, while `classes.emptyParentheses.attribute` adds or removes empty parentheses following attribute names. This separation ensures projects can disable one behavior via `keep` while leaving the other fully active.

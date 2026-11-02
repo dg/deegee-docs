@@ -2,67 +2,67 @@ Types from PHPStan
 ******************
 
 .[perex]
-The lossless syntax tree of DressCode knows every space in your code, but it does not know that `$form` is a form. If you have PHPStan in the project, DressCode asks it, and that gives it abilities a code style tool does not usually have: it rewrites deprecated API based on what a variable really is, adds `#[\Override]` to a method that overrides its parent, and recognizes that a string is the name of an existing class.
+DressCode's lossless syntax tree understands every single space and comma in your codebase, but on its own it cannot know that a variable named `$form` represents a form instance. When you have PHPStan installed in your project, DressCode queries it directly. This unlocks capabilities traditional style fixers can only dream of: rewriting deprecated library APIs based on what a variable actually is, inserting `#[\Override]` on methods overriding parents, and verifying that a string literal safely matches an existing class name.
 
 
 What the Tree Does Not Know
 ===========================
 
-A rule working on the tree sees that a line accesses the constant `$form::FILLED`. But it does not see what `$form` is. When it is a Nette form, whose class says `@deprecated use Form::Filled` on the constant, the line should be rewritten. When it is anything else, the line must not be touched. One file cannot tell you which it is, and a fix that guesses is worse than no fix.
+A rule inspecting the syntax tree in isolation sees a line accessing the constant `$form::FILLED`. But looking at a single file, it has no way of knowing what `$form` holds at runtime. If it is a Nette form, whose class annotates that constant with `@deprecated use Form::Filled`, the line should be rewritten. If it is any other object, the code must be left completely untouched. An automated fix based on guesswork is far more dangerous than no fix at all.
 
-Static analysis knows the answer, and you most likely already run it in your project with PHPStan. So DressCode does not compute the types itself. It asks the PHPStan you have installed, with your `phpstan.neon` and the extensions it loads. The answers are therefore as good as the analysis you already trust today, and they understand the magic of your framework too, as long as your PHPStan extensions understand it.
+Static analysis knows the exact answer—and you most likely already run it in your project via PHPStan. DressCode therefore doesn't calculate types on its own. Instead, it queries your existing PHPStan installation, running with your project's `phpstan.neon` and all your configured extensions. The answers are just as dependable as the static analysis you already rely on every day, seamlessly understanding any framework-specific magic your extensions support.
 
 
 Enabling the Types .[#enable]
 =============================
 
-PHPStan and DressCode both belong in the project, so that DressCode asks exactly the PHPStan and the configuration the project uses:
+Ideally, both PHPStan and DressCode belong directly in your project dependencies, ensuring DressCode consults the exact version of PHPStan and rules your team uses:
 
 ```shell
 composer require --dev phpstan/phpstan dresscode/dresscode
 ```
 
-Keep in mind that DressCode requires PHP 8.4 or newer, so your project must run on it too. The PHP version the code is written for is a different number and can stay lower, see [Installation |getting-started#Installation].
+Keep in mind that DressCode itself requires PHP 8.4 or newer to run, meaning your local development environment must run on a modern PHP version. The target PHP version your codebase is written for is a completely separate setting and can safely remain lower (see [Installation |getting-started#Installation]).
 
-And the configuration says where the types come from:
+In your configuration, enabling type analysis takes a single line:
 
 ```neon
 typeAnalysis: phpstan
 ```
 
-That is all. The key `typeAnalysis` is a project fact, just like the PHP version, and a preset cannot set it.
+That is all. The `typeAnalysis` directive represents a statement of fact about your project (much like your target PHP version), and presets cannot enable it on your behalf.
 
-DressCode asks the PHPStan installed next to it, that is, in the same `vendor` directory. When both are in the project, as above, that is the PHPStan of the project. The other option is to install both globally:
+DressCode queries the PHPStan installed alongside it—that is, within the same `vendor/` directory. When both are installed in your project dependencies, as shown above, it communicates directly with your project's local PHPStan. Alternatively, you can install both tools globally:
 
 ```shell
 composer global require dresscode/dresscode phpstan/phpstan
 ```
 
-A global PHPStan also knows the classes of your project and its libraries. It does not need to load them; it reads them from the source files, using the project's `composer.json` and `vendor/composer/installed.json`. But the version of PHPStan will be the global one, not the one the project expects. PHPStan extensions must be installed globally too, through `phpstan/extension-installer`. A global PHPStan does not load code from the `vendor` directory of the project, so an extension that `phpstan.neon` includes by a path into `vendor` will not find its classes unless it is also installed globally. An extension that needs the running project, for example Larastan booting the application, will not work globally at all.
+A global PHPStan also understands your project's classes and dependencies without needing to execute your code: it reads structural declarations directly from source files using `composer.json` and `vendor/composer/installed.json`. However, analysis will run on the globally installed PHPStan version rather than the one locked in your project. Any PHPStan extensions must be installed globally as well (via `phpstan/extension-installer`). A global PHPStan does not load files from your project's local `vendor/` directory, meaning extensions registered in `phpstan.neon` via relative vendor paths won't find their classes unless also installed globally. Extensions that require a booted runtime environment (such as Larastan booting a Laravel application) will not function globally at all.
 
-An installation through `composer create-project` brings PHPStan too, because it also installs the development dependencies of DressCode. You then update it with `composer update` in the directory where you installed DressCode, not in the project.
+Installing DressCode via `composer create-project` includes PHPStan automatically, as it pulls in DressCode's development dependencies. You then update PHPStan by running `composer update` inside that standalone directory.
 
-When you set the key and there is no PHPStan next to DressCode, for example in a global installation without a global PHPStan, DressCode warns about it and the run goes on without types, as if the key were missing:
+If you set `typeAnalysis: phpstan` but no PHPStan installation exists alongside DressCode (for instance, in a global installation where PHPStan was omitted), DressCode issues a warning and proceeds without type analysis—exactly as if the directive were absent:
 
 /--pre .[terminal]
 Warning: The configuration sets `typeAnalysis: phpstan`, but `phpstan/phpstan` is not installed beside DressCode, so the run goes without the types of the code.
 See https://dresscode.run/types#enable
 \--
 
-If you write a decision that needs types into the configuration, such a run reports a configuration error, just as it does [without the key `typeAnalysis` |#Without PHPStan]:
+However, if you explicitly configure a decision that strictly requires static types, that run will fail with a configuration error—just as it would [without the `typeAnalysis` key |#Without PHPStan]:
 
 /--pre .[terminal]
 Error: Decision `upgrading.declarations.deprecatedMember` needs the types of the code, but `phpstan/phpstan` is not installed beside DressCode.
 See https://dresscode.run/types#enable
 \--
 
-The command [`dresscode upgrade today` |upgrade] turns types on by itself, even without the key in the configuration. Without PHPStan next to it, it does not run at all and ends with the error <code>''The command needs the types of the code, but `phpstan/phpstan` is not installed beside DressCode.''</code>
+The [`dresscode upgrade today` |upgrade] command enables type analysis automatically, even without a configuration file. If it cannot find PHPStan alongside itself, it refuses to run and halts immediately with an error: <code>''The command needs the types of the code, but `phpstan/phpstan` is not installed beside DressCode.''</code>
 
 
 What You Gain
 =============
 
-This is a presenter that uses deprecated Nette API and a few older habits, checked with this configuration:
+Take a presenter that uses deprecated Nette APIs and older conventions, checked with the following configuration:
 
 ```neon
 use:
@@ -76,7 +76,7 @@ upgrading:
 		Override: required
 ```
 
-The message of each finding is in a comment on its line:
+The inline comments on each line describe what DressCode flags:
 
 ```php .[before]
 final class SignPresenter extends Presenter
@@ -111,7 +111,7 @@ final class SignPresenter extends Presenter
 }
 ```
 
-After the fix:
+And here is the file after running automated fixes:
 
 ```php .[after]
 final class SignPresenter extends Presenter
@@ -147,20 +147,20 @@ final class SignPresenter extends Presenter
 }
 ```
 
-Each of the five findings needed to know something that is not in the file. A sixth one, which `dresscode check` prints as well, is only a consequence of the first: in a file without a namespace, the preset `nette` writes global names without a leading backslash, so it turns `#[\Override]` into `#[Override]`.
+Every single one of these five findings required knowing something that cannot be deduced from the file's syntax alone. A sixth report that `dresscode check` displays is merely a downstream consequence of the first: in a file without a namespace, the `nette` preset writes global names without a leading backslash, converting `#[\Override]` into clean `#[Override]`.
 
-- **Deprecated API** is rewritten by the decision `upgrading.declarations.deprecatedMember`, following the `@deprecated` annotation in the code of the library. It goes by the class that declares the constant or the method, not by how the code is written, so `$form::FILLED` is rewritten the same way as `Form::FILLED`, and the message at `setAttribute()` names the class `BaseControl`, even though the method is called on a text field. `upgrading.declarations.deprecatedClass` rewrites deprecated classes the same way. The maps that rewrite code according to the data of upgrade packages need types too (`upgrading.api.replacedMembers`, `replacedCalls`, `forbiddenMembers` and `nette.flagsAsNamedArguments`), and with them `upgrading.api.replacedClasses` also makes sure that the class it writes exists in the project. How this works for whole libraries is described in [How Upgrading Libraries Works |upgrading-libraries].
-- **`#[\Override]`** from PHP 8.3 is added by `upgrading.classes.Override: required` to a method that overrides a method of the parent. PHP then reports an error by itself if the parent renamed the method and your method silently stopped overriding anything. The decision skips the implementation of an abstract method or an interface method, because PHP checks that even without the attribute.
-- **A class name in a string** is rewritten to `::class` by `literals.classNameInString` only when a class, interface or enum of that name really exists in the project. Your editor then finds the name when you rename the class. According to its own documentation, the PHP CS Fixer rule `class_keyword` cannot tell this, because a rule working on tokens does not know what classes the project has.
-- **A test for an empty string** `strlen($name) === 0` is rewritten to `$name === ''` by `hygiene.strlenEmptyTest` only where `$name` is certainly a string. For any other value, the two forms would behave differently.
+- **Deprecated APIs** are updated by `upgrading.declarations.deprecatedMember` based on `@deprecated` annotations in library source code. Resolution is driven by the class that actually declares the constant or method rather than how it was invoked in code: `$form::FILLED` is rewritten identically to `Form::FILLED`, and the message for `setAttribute()` accurately cites the `BaseControl` class even though it was called on a text input control. Deprecated classes are updated similarly via `upgrading.declarations.deprecatedClass`. The maps driving library migrations (`upgrading.api.replacedMembers`, `replacedCalls`, `forbiddenMembers`, and `nette.flagsAsNamedArguments`) also rely fundamentally on types, and `upgrading.api.replacedClasses` uses them to ensure that newly written class names genuinely exist in the project (see [How Upgrading Libraries Works |upgrading-libraries]).
+- **The `#[\Override]` attribute** from PHP 8.3 is added by `upgrading.classes.Override: required` to any method that overrides a method in a parent class. PHP will then throw a compile-time fatal error if the parent ever renames that method, preventing your method from silently drifting into dead code. Implementations of abstract methods or interface contracts are intentionally skipped, as PHP already enforces those strictly without attributes.
+- **Class names in string literals** are safely converted to `::class` syntax by `literals.classNameInString` only when a class, interface, or enum of that exact name genuinely exists in the project. IDEs will then reliably catch the reference during future refactorings. According to its own documentation, PHP CS Fixer's `class_keyword` rule cannot provide this safety because a token-based linter cannot know what classes exist across your project.
+- **Empty string comparisons** like `strlen($name) === 0` are rewritten to `$name === ''` by `hygiene.strlenEmptyTest` only when static analysis confirms that `$name` is definitively a string. For any other type, the two constructs could behave differently.
 
-On top of that, `classes.overridingMethod.parentCallOnly` deletes a method that only passes its parameters to the parent's method of the same name. Types reveal whether a caller can tell it apart from the parent's method at all: the parent must declare it with the same visibility, parameters and return type. The fix is risky, because a parent that reads `func_get_args()` would then get the extra arguments too, and one line would disappear from the stack trace; DressCode makes it once you list the decision in the key `fixRisky`.
+Type information also powers `classes.overridingMethod.parentCallOnly`, which deletes boilerplate methods that do nothing except pass arguments to the parent method of the same name. Static analysis verifies whether callers could tell the difference: the parent must declare identical visibility, parameters, and return types. Because a parent method calling `func_get_args()` would receive extra arguments and one call frame would vanish from stack traces, this fix is classified as risky (`fixRisky`).
 
-The decisions that check inheritance after a library moves to a new version cannot do without types either: `classes.overridingMethod.signature` adapts a method of a child class to the signature of the parent, `mistakes.finalParent` reports a child of a class that became `final`, and `mistakes.unimplementedAbstractMethod` an abstract method the child does not have. In the package `dresscode/upgrade-nette`, `nette.linkArguments` and `nette.monitorCallbacks` need them too.
+Decisions that safeguard inheritance contracts after upgrading libraries depend on types as well: `classes.overridingMethod.signature` adapts a child method to a parent's updated signature, `mistakes.finalParent` flags child classes extending a class that recently became `final`, and `mistakes.unimplementedAbstractMethod` detects newly added abstract methods. In the `dresscode/upgrade-nette` package, `nette.linkArguments` and `nette.monitorCallbacks` rely on types similarly.
 
-Several other decisions work without types too, but they do more with them. When a fix is risky only because the type of a value is unknown, DressCode with types makes it safely: `upgrading.functions.arraySearchFunctions` recognizes that a loop goes over an array, and leaves a loop over an object alone; `expressions.comparison.loose`, `upgrading.syntax.match` and `mistakes.strictArgument` recognize that integers, booleans or enum cases are compared, for which loose and strict comparison give the same result; `expressions.assignment.addingOne` recognizes a number, `upgrading.functions.get_debug_type` a string or an array, `expressions.assignment.targetInValue` an ordinary property that `??=` may leave unwritten, and `expressions.coalesce` a property or an array that is not checked through magic methods. `upgrading.syntax.pipe` learns from them whether a method takes a parameter by reference; without them, its fix of a method call is risky. `classes.staticMethod` recognizes which class really is a parent. Without types, `upgrading.api.attributeForMember`, and the decisions `laravel.castsMethod` and `laravel.scopeAttribute` from the package `dresscode/upgrade-laravel`, recognize only a class that names the parent itself in `extends` or `implements`; with types, also one that inherits from it through another class, for example a model derived from your `BaseModel`. With types, `upgrading.api.attributeForMember` also reports an interface the class inherited from its parent, and an attribute whose constructor would be missing a required argument. With types, `upgrading.api.attributeForAnnotation` reports an attribute with a missing required argument too, and when the key of the map is a namespace mask, also a target class that does not exist or is not an attribute.
+Many other rules run without types, but become significantly more capable with them. Fixes that would otherwise be classified as risky due to unknown types can be applied safely: `upgrading.functions.arraySearchFunctions` confirms that a loop iterates over an array, leaving loops over objects alone; rules like `expressions.comparison.loose`, `upgrading.syntax.match`, and `mistakes.strictArgument` verify that operands are integers, booleans, or enum cases (where loose and strict comparisons produce identical results); `expressions.assignment.addingOne` confirms numeric values; `upgrading.functions.get_debug_type` distinguishes strings from arrays; `expressions.assignment.targetInValue` verifies standard properties that `??=` can safely leave unwritten; and `expressions.coalesce` confirms that property or array access bypasses magic methods. The `upgrading.syntax.pipe` rule verifies that methods don't take parameters by reference (without types, piping method calls is risky). The `classes.staticMethod` rule accurately determines true ancestors. Decisions like `upgrading.api.attributeForMember` (and `laravel.castsMethod` and `laravel.scopeAttribute` from `dresscode/upgrade-laravel`) can identify ancestors even when inherited indirectly across intermediary base classes (such as models extending your custom `BaseModel`). With types, `upgrading.api.attributeForMember` also detects inherited interfaces and flags attributes missing mandatory constructor arguments. Attribute validation with types similarly flags missing arguments in `upgrading.api.attributeForAnnotation` and reports target classes that don't exist or aren't attributes when namespace wildcards are used.
 
-You do not have to list the decisions that need types one by one: they belong to the [sets |configuration#Standards and Sets] `cleanup`, `deprecations` and `modernizations`, and the key `typeAnalysis` makes them work. Do not confuse the set with the key: the set `types` says that you want to write types into the code; the key `typeAnalysis` says where DressCode learns the types that are already in the code. The standard `nette` already covers code hygiene, so with it you only add the key and the sets `deprecations` and `modernizations`. They are not part of it, because what each version removed and what a new version writes better is a matter of upgrading, which you run when you choose:
+You don't need to enable type-dependent rules individually: they are curated into the `cleanup`, `deprecations`, and `modernizations` [sets |configuration#Standards and Sets], and configuring `typeAnalysis` automatically provides them with data. Do not confuse the set with the directive: the `types` set dictates that you want to actively declare types in code, while the `typeAnalysis` key specifies where DressCode learns about the types that already exist. The `nette` standard already enforces code hygiene, so you only need to supply the key and attach `deprecations` and `modernizations` (which are omitted from standards because major version upgrades are opt-in):
 
 ```neon
 typeAnalysis: phpstan
@@ -171,7 +171,7 @@ use:
 	- modernizations
 ```
 
-With another standard, you add the sets to it:
+With any other standard, you layer the sets alongside it:
 
 ```neon
 typeAnalysis: phpstan
@@ -187,17 +187,17 @@ use:
 How They Work Together
 ======================
 
-DressCode does not give up its tree to get the types. It prints the tree, lets PHPStan parse the printed text and compute the types, and attaches each answer to the right node by its position in the file. The rules then ask directly: What is this call? Which method does this member access call? What does its declaration say about it? PHPStan rewrites nothing and reports nothing; it only answers. DressCode still does the rewriting, with all the whitespace and comments in their place.
+DressCode never abandons its lossless syntax tree to obtain static types. It prints the tree to memory, lets PHPStan parse and analyze the code, and attaches each deduced type directly to its corresponding node based on source coordinates. Rules then query the node directly: What object is being called? Which method does this access target? What does its signature declare? PHPStan rewrites nothing and reports nothing; it acts as an oracle of facts. All actual refactoring and formatting is performed by DressCode, keeping all original indentation, whitespace, and comments intact.
 
-It costs time: each file goes through two parsers, and PHPStan computes types for it, so a run with `typeAnalysis: phpstan` is noticeably slower than one without. But the result cache still applies, so you will feel it mainly on the first run and after a configuration change.
+This analysis involves overhead: every file passes through two separate parsers, and PHPStan must infer types. Running with `typeAnalysis: phpstan` is therefore noticeably slower than a purely syntactic check. However, results are cached, so you will primarily feel the performance impact on the initial run or after major configuration changes.
 
-The cache knows only the content of a file, though, not where the types came from. When a method in your class gets `@deprecated`, the files that call it have not changed, and the cache skips them until they change themselves. Likewise, it does not notice a change to `phpstan.neon`. It does notice an update of libraries, of PHPStan and of its extensions, because their versions are part of the cache fingerprint. After a change the cache cannot see, run with `--no-cache`; and in CI, run the check that decides the build with types and without the cache.
+The cache operates on individual file contents rather than the broader project state. If a method in one of your classes is annotated with `@deprecated`, files calling that method have not changed on disk—the cache will skip them until they are touched. Similarly, the cache cannot detect changes made to `phpstan.neon`. It does, however, invalidate automatically when libraries, PHPStan, or its extensions are updated, as their versions form part of the cache key. After making changes that the cache cannot observe, run DressCode with `--no-cache`. In CI environments where builds pass or fail, always run checks with types enabled and cache disabled.
 
 
 Without PHPStan
 ===============
 
-Without the key `typeAnalysis`, DressCode keeps working; only the decisions that need types do not apply. When they come from a preset, a set or the data of a package, they are left out quietly, so you can use the standard `nette`, which has several such decisions, even in a project without PHPStan. `dresscode config` gives the reason next to them:
+Without the `typeAnalysis` directive, DressCode functions normally; it simply omits rules that require static types. When those rules come from a preset, set, or package migration file, they are skipped quietly—allowing you to use presets like `nette` (which contains several type-dependent decisions) even in codebases where PHPStan is absent. Running `dresscode config` explains the reason beside each skipped rule:
 
 /--pre .[terminal]
 classes:
@@ -211,7 +211,7 @@ literals:
 	classNameInString: forbidden                # dresscode/cleanup, no effect: types
 \--
 
-But when you write such a decision into the configuration yourself, it is a configuration error. You asked for something the run cannot give, and a run without it would falsely tell you that the code is fine:
+However, if you explicitly configure a type-dependent decision in your own configuration file, DressCode flags it as a configuration error. You requested behavior the engine cannot deliver, and running without it would falsely report that your code is clean:
 
 /--pre .[terminal]
 Error: Decision `upgrading.declarations.deprecatedMember` needs the types of the code; set `typeAnalysis: phpstan` in the configuration and install `phpstan/phpstan` beside DressCode.
@@ -222,9 +222,9 @@ See https://dresscode.run/types#enable
 Where to Go Next
 ================
 
-- [Upgrading code |upgrade], where types rewrite code after an update of Nette and other libraries.
-- [Upgrading to a newer PHP |upgrading-php], for the rest of the rewrites to a newer version of the language.
-- [Configuration |configuration], where the key `typeAnalysis` combines with presets and overrides.
+- [Upgrading Code |upgrade], where static type analysis powers automated rewrites during library updates.
+- [Upgrading to a Newer PHP |upgrading-php], for modernizing language constructs to newer PHP releases.
+- [Configuration |configuration], how the `typeAnalysis` directive interacts with presets and overrides.
 
 {{maintitle: PHPStan Types for Safer PHP Code Fixes and Upgrades}}
 {{description: With PHPStan in your project, DressCode knows the types of your code: it rewrites deprecated library API, adds #[\Override] and spots class names in strings. One line of configuration.}}

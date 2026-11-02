@@ -2,13 +2,13 @@ Mapy náhrad
 ***********
 
 .[perex]
-Přepis kódu na nové API řídí mapa: vlevo, co bylo, vpravo, co psát místo toho. Tutéž mapu napíšete do konfigurace projektu, když přejmenováváte vlastní kód, a tutéž nesou soubory s daty knihovny nebo balíčku pro upgrade. Tady je reference jejího zápisu, pro projekt i pro autora knihovny, který nechce, aby uživatelé při přechodu na novou verzi jeho knihovny přepisovali kód ručně.
+Přepis kódu na nové API řídí mapy náhrad: vlevo to, co v kódu bylo, vpravo to, co se má zapsat místo toho. Úplně stejnou mapu zapíšete do konfigurace projektu, když přejmenováváte vlastní třídy a metody, a tutéž strukturu nesou i migrační soubory knihoven a balíčků pro upgrade. Tato stránka přináší kompletní referenci jejich zápisu – jak pro aplikační vývojáře, tak pro autory knihoven, kteří chtějí svým uživatelům ušetřit hodiny ručního přepisování kódu.
 
 
 Kde mapy stojí
 ==============
 
-V konfiguraci projektu jsou mapy rozhodnutími sekce [`upgrading` |decisions/upgrading] pod klíčem `api`:
+V konfiguraci projektu představují mapy rozhodnutí v sekci [`upgrading` |decisions/upgrading] pod klíčem `api`:
 
 ```neon
 typeAnalysis: phpstan
@@ -21,7 +21,7 @@ upgrading:
 			App\Model\Order::getTotalPrice: getTotal
 ```
 
-V souboru s daty stojí tytéž mapy v sekcích podle verzí a jmenují se krátce, třeba `replacedMembers`, viz [dál |#Soubory s daty]. Mapy ze všech míst se slévají: soubory nainstalovaných balíčků leží pod presety i pod konfigurací, takže projekt má poslední slovo. Položku, kterou chcete zrušit, přepíšete hodnotou `keep`; ta jméno stáhne ze všech vrstev pod sebou, i z dat balíčků:
+V souborech s migračními daty se tytéž mapy nacházejí v sekcích rozdělených podle verzí a zapisují se zkráceně, například `replacedMembers` (viz [podrobnosti níže |#Soubory s daty]). Mapy ze všech zdrojů se logicky slučují: data nainstalovaných balíčků tvoří základní vrstvu pod presety i pod vaší konfigurací, takže projekt má vždy poslední slovo. Pokud chcete některé výchozí přejmenování zrušit, nastavte jeho hodnotu na `keep` – tím se daný prvek vyřadí ze všech nižších vrstev včetně balíčků:
 
 ```neon
 upgrading:
@@ -30,54 +30,54 @@ upgrading:
 			Nette\Forms\Form::FILLED: keep
 ```
 
-Hodnota `keep` místo celé mapy stáhne celou mapu. Kdo chce, aby platila jen jeho vlastní mapa, napíše za její klíč vykřičník, `replacedMembers!:`, a ta pak nahradí mapy všech nižších vrstev i data balíčků.
+Zadáním hodnoty `keep` namísto celé mapy vypnete celou mapu naráz. A pokud chcete, aby platila výhradně vaše vlastní mapa a žádná data z nižších vrstev se k ní nepřidávala, připište za její klíč vykřičník (`replacedMembers!:`). Tím mapy ze všech nižších vrstev i z balíčků zcela nahradíte.
 
-Mapa, kterou napíše projekt, platí vždy. Mapy se členy (`replacedMembers`, `replacedCalls`, `forbiddenMembers`) ale člen poznají podle typu hodnoty, na které se používá, a tak potřebují [typy |phpstan-types]; bez klíče `typeAnalysis: phpstan` je taková mapa v konfiguraci chybou. Data balíčků se uplatní, až když projekt řekne `upgrading.packages: yes`, což dělají sady `deprecations` i `modernizations`, viz [dál |#Soubory s daty].
+Mapa zapsaná v projektu platí vždy. Mapy pracující se členy tříd (`replacedMembers`, `replacedCalls`, `forbiddenMembers`) však potřebují znát datový typ volaného objektu, a proto vyžadují [typy z PHPStanu |phpstan-types]. Bez aktivního klíče `typeAnalysis: phpstan` skončí taková mapa v konfiguraci chybou. Data balíčků se pak uplatní teprve tehdy, když projekt povolí `upgrading.packages: yes`, což automaticky dělají sady `deprecations` i `modernizations` (viz [níže |#Soubory s daty]).
 
 
 Jak se píše člen
 ================
 
-V klíčích map se členy (`replacedMembers`, `replacedCalls`, `nette.flagsAsNamedArguments`, `forbiddenMembers`) se člen píše tak, jak ho čte PHP, a třída vždy plně kvalifikovaná:
+V klíčích map pracujících se členy tříd (`replacedMembers`, `replacedCalls`, `nette.flagsAsNamedArguments`, `forbiddenMembers`) se člen zapisuje v přirozené syntaxi PHP a třída musí být vždy plně kvalifikovaná:
 
 | zápis | co to je |
 |---|---|
-| `App\Form::render` | konstanta nebo metoda s jakýmikoli argumenty |
-| `App\Form::MAX` | jméno bez malého písmene je jen konstanta, na metodu `max()` nesedí |
-| `App\Form::$items` | vlastnost |
-| `'App\Form::$items::get'` | čtení vlastnosti, i v `isset()` |
-| `'App\Form::$items::set'` | zápis do vlastnosti, přiřazení jakéhokoli druhu i `unset()` |
-| `'App\Form::size()'` | volání bez argumentů; v `replacedMembers` metoda s jakýmikoli argumenty |
-| `'App\Form::size(...$args)'` | metoda s jakýmikoli argumenty, tam, kde má třída i konstantu stejného jména |
-| `'App\Form::add($name, $label, true)'` | volání s argumenty tohoto tvaru |
-| `'App\Form::__construct($a)'` | vytvoření objektu |
-| `'App\Html->text()'` | metoda, která není statická, pro třídu, jejíž pozdější verze má statickou metodu téhož jména |
+| `App\Form::render` | konstanta nebo metoda s libovolnými argumenty |
+| `App\Form::MAX` | název bez malých písmen představuje výhradně konstantu; metodu `max()` nezasáhne |
+| `App\Form::$items` | vlastnost (property) |
+| `'App\Form::$items::get'` | čtení vlastnosti, a to i uvnitř `isset()` |
+| `'App\Form::$items::set'` | zápis do vlastnosti: přiřazení jakéhokoliv druhu i volání `unset()` |
+| `'App\Form::size()'` | volání bez argumentů; v `replacedMembers` metoda s libovolnými argumenty |
+| `'App\Form::size(...$args)'` | metoda s libovolnými argumenty (pro případy, kdy má třída i konstantu stejného jména) |
+| `'App\Form::add($name, $label, true)'` | konkrétní volání s argumenty tohoto tvaru |
+| `'App\Form::__construct($a)'` | vytvoření nové instance (konstruktor) |
+| `'App\Html->text()'` | výhradně nestatická metoda (pro třídy, jejichž novější verze zavedla statickou metodu téhož jména) |
 
-Klíč se závorkou nebo s dolarem patří v NEONu do apostrofů. Holé `App\Form::size(...)` je chyba, protože v PHP je to first-class callable; volání s jakýmikoli argumenty se píše `size(...$args)`.
+Klíč obsahující závorky nebo znak dolaru uzavřete v NEONu do apostrofů. Zápis `App\Form::size(...)` je syntaktická chyba, protože v moderním PHP představuje first-class callable; volání s libovolnými argumenty se zapisuje jako `size(...$args)`.
 
-Pozor na prázdné závorky: neznamenají všude totéž. V `replacedMembers` jen říkají, že jde o metodu, a klíč sedí na volání s jakýmikoli argumenty. V `replacedCalls`, `forbiddenMembers` a v mapách balíčků, které čtou tvar argumentů, je `size()` volání bez argumentů a nic jiného. Klíč opsaný z `replacedMembers` tam na volání s argumenty mlčí a nic na to neupozorní: volání bez argumentů bývá právě ten tvar, který stará verze knihovny dovolovala a nová odmítá, takže takový klíč dává smysl. Kdo chce zachytit každé volání, píše `size(...$args)`.
+Pozor na prázdné závorky `()` – neznamenají všude totéž. V mapě `replacedMembers` pouze upřesňují, že jde o metodu, a klíč zasáhne volání s libovolnými argumenty. Naproti tomu v `replacedCalls`, ve `forbiddenMembers` a v balíčkových mapách analyzujících tvar argumentů znamená `size()` výhradně volání **bez argumentů**. Klíč převzatý z `replacedMembers` by v nich volání s argumenty tiše ignoroval: volání bez parametrů bývá totiž často právě tou formou, kterou stará verze dovolovala a nová ji zakazuje, takže takový filtr dává dobrý smysl. Chcete-li bezpečně zachytit každé volání, pište vždy `size(...$args)`.
 
-Klíč sedí na přístup přes kterýkoli podtyp třídy, přes rozhraní i trait, a přes `self::`, `static::` i `parent::`. Rozhoduje typ toho, na čem se člen volá, takže DressCode pozná i člen, který knihovna mezitím smazala. Kde příjemce může být i něco jiného, třeba `Form|stdClass`, nesedí nic. Klíč konstruktoru sedí na vytvoření třídy samé, potomka bez vlastního konstruktoru a na `parent::__construct()`; potomek s vlastním konstruktorem je jiná třída. Vlastnost, kterou si potomek deklaruje sám, když ji třída klíče nemá, je jiná vlastnost.
+Klíč spolehlivě reaguje na volání přes jakýkoliv podtyp dané třídy, přes rozhraní, trait i přes klíčová slova `self::`, `static::` a `parent::`. Rozhodující je reálný typ objektu, na kterém se člen volá – DressCode tak bezpečně rozpozná i prvek, který mezitím nová verze knihovny zcela smazala. Pokud však proměnná může nabývat více různých typů (např. `Form|stdClass`), pravidlo se pro jistotu neaktivuje. Klíč konstruktoru zasáhne vytvoření instance samotné třídy, potomka bez vlastního konstruktoru i volání `parent::__construct()`; potomek s vlastním konstruktorem je z pohledu typů samostatná třída. Vlastnost, kterou si potomek nadeklaruje sám (pokud ji rodičovská třída nemá), se rovněž považuje za odlišnou vlastnost.
 
-Tvar argumentů popisuje, jak vypadají argumenty volání:
+Tvar argumentů přesně popisuje signaturu volání v kódu:
 
-- `$name` je jakýkoli výraz, jen `$this` placeholder není, protože v hodnotě znamená příjemce,
-- `array $options` nebo `list $values` je výraz, o kterém typy řeknou, že je tohoto typu; typem může být kterýkoli nativní typ PHP, `list`, třída, nullable typ jako `?Acme\Clock` i sjednocení jako `int|string`,
-- literál (`true`, `0`, `'array'`) sedí na stejnou hodnotu, ať je zapsaná jakkoli,
-- `['mode' => $mode, ...$options]` sedí na doslovné pole s těmito klíči; ostatní položky vezme `...$options`, bez něj je pole mít nesmí,
-- `name: $x` sedí na argument předaný tímto jménem,
-- `...` a `...$rest` jsou zbylé argumenty; bez nich volání žádné další mít nesmí,
-- `int|string ...$kinds` jsou zbylé argumenty, z nichž každý má daný typ, stejně jako u variadického parametru; argument, který pole rozbalí, třeba `...self::Kinds`, sedí, když ten typ má každá jeho hodnota.
+- `$name` představuje jakýkoliv výraz; pouze `$this` není zástupným symbolem, protože v cílové hodnotě zastupuje samotný volaný objekt,
+- `array $options` nebo `list $values` zachytí výraz, o kterém typová analýza potvrdí daný typ; typem může být jakýkoliv nativní typ PHP, `list`, konkrétní třída, nullable typ (např. `?Acme\Clock`) i sjednocení typu `int|string`,
+- literál (`true`, `0`, `'array'`) zachytí identickou hodnotu bez ohledu na to, jakým způsobem je v kódu zapsána,
+- zápis `['mode' => $mode, ...$options]` odpovídá poli zapsanému literálem s těmito konkrétními klíči; ostatní položky převezme `...$options` (bez tohoto zástupce nesmí pole obsahovat nic navíc),
+- `name: $x` zachytí argument předaný tímto konkrétním pojmenovaným parametrem,
+- symboly `...` a `...$rest` reprezentují zbývající volitelné argumenty; bez nich nesmí volání žádné další argumenty obsahovat,
+- `int|string ...$kinds` označuje zbývající variadické argumenty, z nichž každý musí mít uvedený typ; argument rozbalující pole (např. `...self::Kinds`) projde tehdy, pokud daný typ splňuje každá jeho hodnota.
 
-Poziční položka vezme i argument předaný jménem parametru, pokud je metoda někde deklarovaná.
+Poziční zástupce zachytí i argument předaný pojmenovaným parametrem, pokud má metoda dohledatelnou deklaraci.
 
-Když na volání sedí víc klíčů `replacedCalls` jedné metody, vyhraje ten s víc literály, kde se každý klíč doslovného pole počítá jako literál. Při shodě vyhraje ten s víc typy, kde `list` váží dvakrát, pak klíč bez zbylých argumentů `...`, pak ten s víc položkami, pak klíč třídy bližší volání, tedy potomka před předkem, a nakonec ten, který mapa uvádí dřív. V `replacedMembers` a `forbiddenMembers` tvar argumentů nerozhoduje: vyhraje klíč třídy bližší volání a pak ten, který mapa uvádí dřív. `nette.flagsAsNamedArguments` vezme první klíč v pořadí mapy, který na volání sedí.
+Pokud na jedno volání metody sedí více klíčů v `replacedCalls`, přednost dostane ten s větším počtem literálů (každý klíč v poli se přitom počítá jako samostatný literál). Při shodě rozhoduje větší počet typovaných argumentů (přičemž `list` má dvojnásobnou váhu), následně klíč bez variadického `...`, dále klíč s větším celkovým počtem parametrů, poté klíč třídy stojící blíže volanému objektu (potomek před předkem) a nakonec pořadí v mapě. V mapách `replacedMembers` a `forbiddenMembers` tvar argumentů nerozhoduje: vítězí třída bližší volanému objektu a následně dříve uvedený klíč. Pravidlo `nette.flagsAsNamedArguments` uplatní první odpovídající klíč podle pořadí v mapě.
 
 
 replacedClasses a replacedFunctions
 ===================================
 
-Mapují starou třídu, rozhraní nebo výčet na nové, obojí plně kvalifikované, a starou funkci na novou:
+Slouží k přemapování staré třídy, rozhraní či výčtu na nový název (obojí plně kvalifikované), případně k nahrazení staré funkce novou:
 
 ```neon
 replacedClasses:
@@ -86,22 +86,22 @@ replacedFunctions:
 	formatPrice: App\Utils\formatPrice
 ```
 
-Třída se přepíše v importu, v typu, za `new`, u statického přístupu, v `instanceof` i v atributu, a nové jméno se zapíše tak, jak na ně soubor dosáhne: přes import tam, kde je jméno volné. Kde se přepíše sám import, plně kvalifikovaná jména nové třídy v souboru se zkrátí na jméno, které import přináší. Třída se přepíše i v doc komentáři: v typu, v konstantě třídy jako `Kind::*`, v cíli `@see` a v inline tagu `{@link}`. Mění se jen samo jméno, takže zarovnání komentáře zůstane, a zmínek v běžném textu komentáře se přepis nedotkne. Totéž v doc komentářích dělá `noDeprecatedClasses`, ale jen u třídy, jejíž `@deprecated` jmenuje náhradu. Když má běh [typy |phpstan-types], třída, kterou projekt nemá, se jen ohlásí. Funkce se zapíše plně kvalifikovaná; jsou-li obě funkce z PHP, jen tam, kde nová vezme všechny argumenty volání. Klíčem může být i funkce jmenného prostoru, `Symfony\Component\DependencyInjection\Loader\Configurator\ref`: sedí na volání přes import, přes kvalifikované jméno i bez kvalifikace uvnitř toho prostoru, a náhrada se zapíše stejnou cestou, přes import tam, kde volání přes import šlo.
+Třída se automaticky přepíše v importech `use`, v typových deklaracích, za operátorem `new`, u statických volání, v `instanceof` i uvnitř atributů. Nový název se zapíše v nejkratší dostupné podobě: přes import tam, kde je název v souboru volný. Pokud se přepíše samotný import v hlavičce, plně kvalifikované výskyty v těle souboru se automaticky zkrátí. Třída se přejmenuje i v phpDoc komentářích: v typech, v konstantách tříd typu `Kind::*`, v cílech tagu `@see` i v odkazech `{@link}`. Mění se výhradně samotný název třídy, takže odsazení a zarovnání komentáře zůstane nedotčeno, a běžných zmínek v textu se přepis netýká. Podobně pracuje pravidlo `noDeprecatedClasses`, ale pouze u tříd, jejichž anotace `@deprecated` přímo jmenuje náhradu. Pokud má běh k dispozici [typy z PHPStanu |phpstan-types], třída, která v projektu neexistuje, se pouze nahlásí bez přepsání. Funkce se zapisuje plně kvalifikovaná; pokud obě funkce pocházejí přímo z PHP, přepíše se pouze tehdy, když nová funkce bezpečně přijímá všechny předávané argumenty. Klíčem může být i funkce z konkrétního namespace (např. `Symfony\Component\DependencyInjection\Loader\Configurator\ref`): zachytí volání přes import, přes kvalifikovaný název i bez kvalifikace uvnitř daného namespace, a náhrada se zapíše stejnou cestou.
 
-Náhradou funkce může být i statická metoda, `str_slug: Illuminate\Support\Str::slug`: volání se přepíše na `Str::slug()` se stejnými argumenty a třída se zapíše přes importy projektu. Oprava volání globální funkce bez kvalifikace uvnitř jmenného prostoru je i tady riziková (risky fix), protože stejnojmennou funkci by mohl deklarovat ten prostor.
+Náhradou funkce může být i statická metoda, například `str_slug: Illuminate\Support\Str::slug`: volání se přepíše na `Str::slug()` se zachováním argumentů a třída se naimportuje podle pravidel projektu. Úprava nekvalifikovaného volání globální funkce uvnitř namespace je i zde riziková (risky fix), protože daný namespace mohl funkci stejného jména deklarovat sám.
 
 
 replacedMembers
 ===============
 
-Člen, který se jmenuje jinak a používá se stejně. Hodnotou je:
+Používá se pro členy, které se pouze přejmenovaly a používají se naprosto stejně. Hodnotou může být:
 
 | hodnota | co to je |
 |---|---|
-| `Filled` | nové jméno v téže třídě |
-| `App\Helpers::create` | člen jiné třídy, jen u statického přístupu a konstanty |
-| `$items` | nová vlastnost |
-| `\str_contains` | globální funkce, na kterou se změnila metoda |
+| `Filled` | nový název v rámci téže třídy |
+| `App\Helpers::create` | člen jiné třídy (výhradně u statického volání a konstant) |
+| `$items` | nová vlastnost (property) |
+| `\str_contains` | globální funkce, na kterou se původní metoda proměnila |
 
 ```neon
 replacedMembers:
@@ -110,13 +110,13 @@ replacedMembers:
 	Nette\Utils\Strings::contains: \str_contains
 ```
 
-Deklarace metody pod starým jménem v potomkovi se přejmenuje taky, protože by jinak nic nepřepisovala. First-class callable `$control->invalidateControl(...)` dostane nové jméno stejně jako volání. Callable zapsané hodnotou, `[$control, 'invalidateControl']` nebo `'App\Form::create'`, ho dostane tam, kde typy řeknou, že hodnota callable je. U řetězce je to riziková oprava, protože řetězec může metodu jmenovat i k něčemu jinému než k volání. Kde přepis zahodí výraz, na kterém se člen volal (`getForm()::FILLED` přesunuté do jiné třídy), je oprava riziková. Volání instanční metody přes objekt do jiné třídy přesunout nejde a ohlásí se s důvodem.
+Automaticky se přejmenuje i deklarace metody pod starým názvem v dceřiné třídě, protože by jinak ztratila vazbu na předka. Zápis first-class callable `$control->invalidateControl(...)` získá nový název stejně spolehlivě jako běžné volání. Callable zapsané jako hodnota (`[$control, 'invalidateControl']` nebo `'App\Form::create'`) se přejmenuje tam, kde typová analýza potvrdí, že hodnota slouží jako callable. U řetězců jde o rizikovou opravu, protože text může metodu zmiňovat i k jiným účelům než k volání. Kde by přepis zahodil výraz, na kterém byl člen volán (např. `getForm()::FILLED` přesunuté do jiné třídy), je oprava rovněž riziková. Volání instanční metody nad objektem nelze do jiné třídy přesunout automaticky vůbec a nahlásí se s vysvětlením.
 
 
 replacedCalls
 =============
 
-Volání, které se píše jinak. Klíč nese tvar argumentů a hodnota je výraz PHP, do kterého se dosadí jeho placeholdery:
+Používá se pro volání, jejichž zápis nebo předávání argumentů se změnily. Klíč nese vzor argumentů a hodnotou je cílový PHP výraz, do kterého se dosadí zachycené zástupné symboly:
 
 ```neon
 replacedCalls:
@@ -126,13 +126,13 @@ replacedCalls:
 	'Nette\Http\Response::setExpiration(time: $t)': 'setExpiration(expire: $t)'
 ```
 
-- **Holé volání** `addMultiUpload(...)` je volání na tom, na čem bylo původní, stejným způsobem: `->`, `?->` nebo `::`.
-- **`$this`** zastupuje výraz, na kterém se volalo původní volání, kdekoli v hodnotě: `\Nette\Utils\Arrays::invoke($this->onFailure, ...$args)`. Volání přes `::` nic takového nemá, proto se jen ohlásí. Volání přes `?->` se přepíše jen tam, kde je výraz řetězem přístupů na tomtéž objektu, tedy holým voláním nebo čtením či voláním na `$this`, a operátor přejde na jeho první článek: `$token?->getOffset()` s hodnotou `'$this->currentOffset'` se stane `$token?->currentOffset`. Jiný výraz by na null zavolal, co původní volání přeskočilo, nebo by místo null vrátil něco jiného, a tak se volání jen ohlásí.
-- **Kvalifikované jméno** `\Closure::fromCallable()` je funkce nebo třída sama za sebe; třídu DressCode zapíše přes importy projektu.
-- **`...`** zapíše argumenty, které klíč nechal nepojmenované, a **`...$args`** ty, za které stojí variadický placeholder, nebo hodnoty pole, za které stojí obyčejný. Když je tím polem literál, rozepíše se na argumenty, jak to dělá PHP: `new Signer(...['domain' => $d])` jako `new Signer(domain: $d)`.
-- **Konstruktor**, jehož hodnota je `new Třída(...)` té třídy, kterou klíč nahrazuje, zachová třídu z kódu, takže se opraví i potomek a `parent::__construct()`. Atribut je vytvoření objektu své třídy, a tak klíč konstruktoru přepíše i jeho argumenty, pokud výraz vytváří tutéž třídu; jinak se atribut jen ohlásí.
+- **Holé volání** `addMultiUpload(...)` představuje volání na stejném objektu a stejným operátorem jako původní kód: `->`, `?->` nebo `::`.
+- **Zástupce `$this`** reprezentuje výraz, nad kterým bylo původní volání provedeno, a může stát kdekoliv v cílové hodnotě: `\Nette\Utils\Arrays::invoke($this->onFailure, ...$args)`. Statické volání přes `::` žádný takový výraz nemá, proto se pouze nahlásí. Volání s operátorem nullsafe `?->` se přepíše pouze tehdy, když je cílový výraz řetězem přístupů nad týmž objektem (holé volání nebo čtení vlastnosti nad `$this`), a operátor `?->` se přesune na jeho první článek: `$token?->getOffset()` s náhradou `'$this->currentOffset'` se transformuje na `$token?->currentOffset`. Složitější výraz by na hodnotě `null` vyvolal kód, který měl původní operátor přeskočit, takže se takové místo pouze ohlásí.
+- **Kvalifikovaný název** `\Closure::fromCallable()` představuje samostatnou funkci nebo třídu; třídu DressCode zapíše přes projektové importy.
+- **Symbol `...`** dosadí všechny argumenty, které klíč nepojmenoval, a **`...$args`** vloží argumenty zastoupené variadickým symbolem (případně hodnoty pole z běžného zástupce). Pokud je tímto polem literál, rozepíše se na argumenty přesně tak, jak to dělá PHP: `new Signer(...['domain' => $d])` jako `new Signer(domain: $d)`.
+- **Konstruktor**, jehož cílová hodnota zní `new Trida(...)` pro stejnou třídu, jakou klíč nahrazuje, zachová původní třídu z kódu – správně se tedy opraví i potomci a volání `parent::__construct()`. Atribut představuje instanciaci své třídy, takže klíč konstruktoru přepíše i argumenty atributu, pokud výraz vytváří stejnou třídu; jinak se atribut pouze ohlásí.
 
-Vlastnost dostane výraz pro čtení a výraz pro zápis, každý pod klíčem svého property hooku, `::get` a `::set`; v zápisu je `$value` přiřazovaná hodnota:
+Pro vlastnosti se definuje výraz pro čtení a výraz pro zápis, každý pod klíčem odpovídajícího property hooku `::get` a `::set`; při zápisu zastupuje `$value` přiřazovanou hodnotu:
 
 ```neon
 replacedCalls:
@@ -140,37 +140,37 @@ replacedCalls:
 	'Nette\Forms\Form::$action::set': 'setAction($value)'
 ```
 
-U statické vlastnosti se výraz zavolá na třídě, přes kterou se k ní kód dostal: `self::$container` jako `self::getContainer()`.
+U statické vlastnosti se výraz zavolá nad třídou, přes kterou k ní kód přistupoval: `self::$container` se promění v `self::getContainer()`.
 
-Hodnota, která jen píše tytéž klíče pole voleb pod jinými jmény, přejmenuje klíče v poli volání na místě; rozložení pole, komentáře i pořadí položek zůstanou:
+Hodnota, která pouze přejmenovává klíče v poli s konfigurací, upraví klíče v poli přímo na místě; formátování pole, komentáře i pořadí položek zůstanou nedotčeny:
 
 ```neon
 replacedCalls:
 	'Symfony\Component\Filesystem\Filesystem::mirror($originDir, $targetDir, $iterator, [''copy_on_windows'' => $follow, ...$options])': 'mirror($originDir, $targetDir, $iterator, [''follow_symlinks'' => $follow, ...$options])'
 ```
 
-A magická metoda je klíčem pro syntaxi, kterou ji PHP volá: `__get($name)` je čtení vlastnosti, kterou třída nedeklaruje, `__set($name, $value)` zápis do ní, `__isset()` a `__unset()` to, co říká jejich jméno, a `offsetGet($key)`, `offsetSet($key, $value)`, `offsetExists()` a `offsetUnset()` totéž pro `$object[$key]`. Zápis `$object[] = $value` je `offsetSet(null, $value)`.
+Magické metody se zapisují pod syntaxí, kterou je PHP reálně volá: `__get($name)` představuje čtení nedeklarované vlastnosti, `__set($name, $value)` zápis do ní, `__isset()` a `__unset()` odpovídají stejnojmenným konstrukcím a `offsetGet($key)`, `offsetSet($key, $value)`, `offsetExists()` a `offsetUnset()` pokrývají přístup `$object[$key]`. Zápis do pole `$object[] = $value` odpovídá volání `offsetSet(null, $value)`.
 
-Pro vlastnost pod klíči `::get` a `::set` i pro magické metody platí několik omezení. Přiřazení se přepíše, jen když stojí samo jako příkaz, a `isset()` a `unset()`, jen když nic jiného nedrží; jiný zápis do vlastnosti se ohlásí a zůstane, jak je. Čtení nalevo od `??` je riziková oprava, protože PHP se tam nejdřív ptá, jestli je vlastnost nastavená. Že funkce bere argument referencí, DressCode nevidí, takže vlastnost předanou takové funkci přepíše jako čtení.
+Pro vlastnosti pod klíči `::get` a `::set` i pro magické metody platí několik rozumných omezení. Přiřazení se přepíše pouze tehdy, když stojí samostatně jako příkaz, a konstrukce `isset()` a `unset()` jen tehdy, když neobsahují žádné další proměnné; jiné zápisy do vlastnosti se pouze nahlásí. Čtení na levé straně operátoru `??` je riziková oprava, protože PHP nejprve zjišťuje existenci vlastnosti. Skutečnost, že funkce přebírá argument referencí, DressCode z volání nevidí, takže vlastnost předanou takové funkci přepíše jako běžné čtení.
 
-Uvnitř řetězce se výraz zapíše, jen když ho interpolace pojme, tedy proměnnou a čtení nebo volání na ní, a to ve složených závorkách: `"$mail->subject"` se stane `"{$mail->getSubject()}"`. Jiný výraz, třeba `$this->decaySeconds / 60`, se v řetězci jen ohlásí.
+Uvnitř řetězců se výraz zapíše pouze tehdy, pokud jej interpolace dokáže pojmout (proměnná s přístupem k vlastnosti nebo metodě), a to v显 složených závorkách: `"$mail->subject"` se změní na `"{$mail->getSubject()}"`. Složitější výraz (například `$this->decaySeconds / 60`) se uvnitř řetězce pouze nahlásí.
 
-Oprava není riziková, když se každý argument vyhodnotí jednou jako předtím. Kde výraz argument vyhodnotí jen někdy, nikdy nebo v jiném pořadí, je riziková, pokud má vyhodnocení argumentu vedlejší účinky; kde by ho vyhodnotil dvakrát, volání se jen ohlásí. Deklarace metody v potomkovi pod jménem klíče, který bere jakékoli argumenty, se ohlásí taky: metoda se nahrazuje celá a deklaraci žádný výraz nenahradí. Když na totéž volání sedí klíč `replacedCalls` i prosté přejmenování v `replacedMembers`, vyhrává tvar argumentů.
+Oprava není riziková, pokud se každý argument vyhodnotí přesně jednou jako dříve. Kde by se argument vyhodnotil jen někdy, vůbec nebo v jiném pořadí, je oprava riziková (pokud má vyhodnocení vedlejší účinky); kdyby se měl vyhodnotit dvakrát, volání se pouze ohlásí. Deklarace metody v potomkovi pod názvem klíče, který přijímá libovolné argumenty, se rovněž pouze nahlásí: metoda se nahrazuje jako celek a samotnou deklaraci žádný výraz nahradit neumí. Pokud na stejné volání sedí klíč z `replacedCalls` i prosté přejmenování z `replacedMembers`, přednost má vždy tvar argumentů.
 
-Volání, které už má tvar, jaký by výraz zapsal, DressCode nechá být, i když na něj klíč sedí. S klíčem `'Acme\Route::__construct($path, $methods)'` a hodnotou `'new Acme\Route(path: $path, methods: $methods)'` se tak `new Route('/a', ['GET'])` přepíše na pojmenované argumenty, kdežto `new Route(path: '/b', methods: ['GET'])` zůstane, jak je.
+Volání, které už cílový tvar má, nechá DressCode bez povšimnutí, i když na něj klíč sedí. S klíčem `'Acme\Route::__construct($path, $methods)'` a hodnotou `'new Acme\Route(path: $path, methods: $methods)'` se kód `new Route('/a', ['GET'])` převede na pojmenované argumenty, zatímco `new Route(path: '/b', methods: ['GET'])` zůstane beze změny.
 
-Když výraz na tentýž objekt volá metodu, na kterou znovu sedí klíč téže třídy, sám nebo přes další klíč, přepis by nikdy neskončil. Takovou mapu DressCode odmítne jako chybu konfigurace. Týká se to typicky metody, která místo jednotlivých argumentů nově bere pole. Klíč `is(...$kinds)` s hodnotou `is([...$kinds])` by vzal i vlastní výstup, a tak se zbylým argumentům dá typ, který pole nemá:
+Pokud by cílový výraz volal nad stejným objektem metodu, na kterou znovu sedí klíč téže třídy (přímo nebo přes další pravidlo), přepis by se nekonečně zacyklil. Takovou konfiguraci DressCode okamžitě odmítne jako chybu. Týká se to typicky metod, které namísto jednotlivých argumentů nově přebírají pole. Klíč `is(...$kinds)` s hodnotou `is([...$kinds])` by zachytil i svůj vlastní výstup; řešením je přiřadit zbývajícím argumentům typ, který pole nemá:
 
 ```neon
 replacedCalls:
 	'PhpSyntax\Token::is(int|string ...$kinds)': 'is([...$kinds])'
 ```
 
-S tímto klíčem se `$token->is(T_STRING, ';')` stane `$token->is([T_STRING, ';'])` a `$token->is(...self::Operators)` se stane `$token->is([...self::Operators])`, ale `$token->is([T_STRING])` už na klíč nesedí. Volání, které argumenty rozbalí, sedí jen na klíč se zbylými argumenty. Kde klíče metody vyjmenovávají argumenty jednotlivě, třeba `is($a, $b)` a `is($a, $b, $c)`, se takové volání jen ohlásí. Jen se ohlásí i argument předaný jménem metodě, kterou knihovna smazala: ke které poziční položce klíče jméno patří, řekne jen deklarace metody, a ta už ve vendoru není.
+S tímto upřesněním se `$token->is(T_STRING, ';')` bezpečně změní na `$token->is([T_STRING, ';'])` a `$token->is(...self::Operators)` na `$token->is([...self::Operators])`, ale hotový tvar `$token->is([T_STRING])` už podmínce nevyhoví a zůstane netknutý. Volání rozbalující argumenty (`...`) zachytí pouze klíč s variadickým zástupcem. Kde klíče metody vyjmenovávají argumenty jednotlivě (např. `is($a, $b)` a `is($a, $b, $c)`), tam se rozbalené volání pouze ohlásí. Stejně tak se pouze ohlásí argument předaný jménem metodě, kterou knihovna v nové verzi smazala: ke kterému pozičnímu parametru jméno patřilo, by totiž prozradila pouze původní deklarace metody, a ta už ve složce `vendor` není k dispozici.
 
-First-class callable `$token->getLine(...)` se přepíše na arrow funkci `fn() => $token->currentLine`, jen když klíč nebere žádné argumenty a callable vzniká na proměnné nebo na třídě; ty se při vytvoření closure (anonymní funkce) čtou stejně jako při jejím zavolání. Jinak se jen ohlásí, stejně jako callable zapsané hodnotou, `[$token, 'getLine']` nebo `'Acme\Token::getLine'`, tam, kde typy řeknou, že hodnota callable je.
+First-class callable `$token->getLine(...)` se převede na arrow funkci `fn() => $token->currentLine` pouze tehdy, když klíč nepřijímá žádné argumenty a callable vzniká nad proměnnou nebo třídou (ty se při vytvoření uzávěry vyhodnocují stejně jako při jejím zavolání). V ostatních případech se pouze ohlásí.
 
-Klíčem může být i volání globální funkce se stejným tvarem argumentů, `'utf8_encode($string)'`. Takové volání DressCode pozná podle jména funkce, stejně jako v `replacedFunctions`, a holé volání v hodnotě je tu globální funkce, zapsaná tak, jak na ni soubor dosáhne. Hodnotou může být kromě výrazu i slovo `removed` nebo výraz s důvodem rizika:
+Klíčem může být i volání globální funkce se stejným vzorem argumentů, například `'utf8_encode($string)'`. Takové volání DressCode rozpozná podle názvu stejně jako v `replacedFunctions`, a holé volání v cílové hodnotě se interpretuje jako globální funkce zapsaná tak, jak na ni soubor dosáhne. Hodnotou může být kromě výrazu i klíčové slovo `removed` nebo výraz doplněný o důvod rizika:
 
 ```neon
 replacedCalls:
@@ -178,14 +178,14 @@ replacedCalls:
 	'utf8_encode($string)': {write: "mb_convert_encoding($string, 'UTF-8', 'ISO-8859-1')", because: a build without mbstring answers the call with an error}
 ```
 
-- **`removed`** je volání, které nic nedělá. Zmizí i s celým příkazem, pokud nic nedělá ani to, na čem se volá, ani jeho argumenty. Volání, jehož výsledek kód používá, volání, které tvoří tělo konstrukce bez složených závorek, a volání s komentářem se jen ohlásí. Hláška zní <code>''Function `curl_close()` does nothing.''</code>
-- **`{write: …, because: …}`** je přepis, který může změnit, co kód dělá. Oprava je pak riziková a hláška řekne důvod větou z `because`: <code>''Risky because a build without mbstring answers the call with an error.''</code>
+- **Klíčové slovo `removed`** označuje volání, které v nové verzi již nic nedělá. Odstraní se z kódu včetně celého příkazu za předpokladu, že žádné vedlejší účinky nemá ani volaný objekt, ani předávané argumenty. Volání, jehož návratovou hodnotu kód dále zpracovává, volání tvořící tělo řídicí konstrukce bez složených závorek nebo volání obsahující komentář se pouze nahlásí se zprávou: <code>''Function `curl_close()` does nothing.''</code>
+- **Zápis `{write: …, because: …}`** definuje přepis, který může změnit chování programu. Oprava se označí jako riziková a zpráva srozumitelně cituje důvod zadaný v `because`: <code>''Risky because a build without mbstring answers the call with an error.''</code>
 
 
 nette.flagsAsNamedArguments
 ===========================
 
-Metoda, která místo celého čísla příznaků bere pojmenované argumenty. Mapa nepatří jádru DressCode, přináší ji se svým pravidlem balíček `dresscode/upgrade-nette`, protože příklady takové změny má zatím jen Nette, a v konfiguraci projektu proto stojí v sekci `nette` jako `flagsAsNamedArguments`. Klíč je volání s placeholderem příznaků na konci, nebo na konci před `...`; hodnota mapuje každý příznak na argumenty, na které se změní:
+Řeší metody, které namísto bitových příznaků (flags) nově přebírají moderní pojmenované argumenty. Mapa nepatří přímo jádru DressCode – přináší ji se svým pravidlem balíček `dresscode/upgrade-nette`, protože s touto koncepcí zatím pracuje především Nette. V konfiguraci projektu proto sídlí v sekci `nette` pod názvem `flagsAsNamedArguments`. Klíč představuje volání se zástupným symbolem příznaků na konci (případně těsně před `...`); hodnota mapuje jednotlivé bitové konstanty na konkrétní pojmenované argumenty:
 
 ```neon
 nette.flagsAsNamedArguments:
@@ -197,13 +197,13 @@ nette.flagsAsNamedArguments:
 		PREG_SPLIT_DELIM_CAPTURE: {}
 ```
 
-Z `Json::encode($data, Json::PRETTY | Json::ESCAPE_UNICODE)` se stane `Json::encode($data, pretty: true, asciiSafe: true)`. Konstanta se pozná podle třídy, která ji deklaruje, takže sedí i `self::PRETTY` nebo `$json::PRETTY`. Hodnota `{}` označuje příznak, který metoda teď uplatňuje vždy. Poziční argument za příznaky dostane jméno svého parametru. Příznak, který mapa nezná, nebo proměnná na místě příznaků se jen ohlásí, a literál na tom místě, třeba `true` nebo `0`, je už nové API a zůstane.
+Zápis `Json::encode($data, Json::PRETTY | Json::ESCAPE_UNICODE)` se přehledně transformuje na `Json::encode($data, pretty: true, asciiSafe: true)`. Konstanta se bezpečně pozná podle třídy, která ji deklaruje, takže podmínce vyhoví i `self::PRETTY` či `$json::PRETTY`. Prázdná hodnota `{}` označuje příznak, který metoda nově uplatňuje automaticky vždy. Běžný poziční argument stojící za příznaky získá název svého parametru. Příznak, který mapa nezná, nebo dynamická proměnná na místě příznaků se pouze nahlásí; literál na tomto místě (např. `true` či `0`) značí, že kód už nové API používá, a zůstane netknutý.
 
 
 attributeForAnnotation
 ======================
 
-Anotace, kterou knihovna teď čte jako atribut. Klíčem je jméno anotace bez `@`, hodnotou třída atributu, případně i s argumenty:
+Převádí phpDoc anotace, které knihovna nově čte jako nativní PHP atributy. Klíčem je název anotace bez úvodního znaku `@`, hodnotou je plně kvalifikovaná třída atributu (případně včetně předávaných argumentů):
 
 ```neon
 attributeForAnnotation:
@@ -211,17 +211,17 @@ attributeForAnnotation:
 	crossOrigin: Nette\Application\Attributes\Requires(sameOrigin: false)
 ```
 
-Anotace zmizí z phpDocu, atribut se zapíše nad deklaraci a jeho třída se naimportuje.
+Původní anotace z phpDocu zmizí, nad deklaraci se zapíše nativní atribut a jeho třída se automaticky naimportuje do hlavičky souboru.
 
-Klíčem může být i plně kvalifikovaná třída atributu, který knihovna čte jako jiný: `Nette\Application\Attributes\CrossOrigin: Nette\Application\Attributes\Requires(sameOrigin: false)`. Starý atribut se na svém místě přepíše na nový a své argumenty mu předá. Jen se ohlásí, když mají argumenty starý atribut i hodnota mapy, jako `sameOrigin: false` v ukázce, nebo když deklarace nový atribut už nese. Tentýž klíč s třídou platí i pro anotaci Doctrine této třídy, `@Route("/blog")` rozpoznanou podle importů souboru, a její argumenty přejdou do atributu.
+Klíčem může být i plně kvalifikovaný název starého atributu, který knihovna v nové verzi nahradila jiným: `Nette\Application\Attributes\CrossOrigin: Nette\Application\Attributes\Requires(sameOrigin: false)`. Původní atribut se na svém místě přepíše na nový a své argumenty mu korektně předá. Pokud však argumenty obsahoval jak starý atribut, tak cílová hodnota v mapě, nebo pokud deklarace nový atribut už nese, výskyt se pouze nahlásí. Stejný klíč s názvem třídy platí i pro Doctrine anotace dané třídy (např. `@Route("/blog")` rozpoznané podle importů v souboru) a jejich parametry se přirozeně přenesou do atributu.
 
-Celý jmenný prostor anotací převede maska: `Symfony\Component\Routing\Annotation\*: Symfony\Component\Routing\Attribute\*` zapíše anotaci každé třídy prostoru jako atribut třídy téhož jména v novém prostoru, a `Acme\Validation\*: Acme\Validation\*` jako atribut téže třídy. Hvězdička smí stát jen na konci a přesný klíč s třídou má před maskou přednost. S typy se ohlásí cílová třída, která neexistuje nebo atributem není, a také atribut, kterému by zůstal nevyplněný povinný parametr, třeba `@Template()` bez jména šablony.
+Celý jmenný prostor anotací lze hromadně převést pomocí masky: zápis `Symfony\Component\Routing\Annotation\*: Symfony\Component\Routing\Attribute\*` převede anotaci každé třídy v daném namespace na atribut odpovídající třídy v novém prostoru; maska `Acme\Validation\*: Acme\Validation\*` vytvoří atribut téže třídy. Hvězdička smí stát výhradně na konci a přesný klíč s konkrétní třídou má před obecnou maskou vždy přednost. S typovou analýzou se navíc bezpečně nahlásí cílová třída, která v projektu neexistuje nebo není atributem, i atribut, kterému by po převodu chyběl povinný parametr (např. `@Template()` bez zadaného názvu šablony).
 
 
 attributeForMember
 ==================
 
-Člen, který třída deklarovala, aby ji knihovna našla, a knihovna teď místo něj čte atribut třídy. Klíčem je člen předka nebo rozhraní, hodnotou atribut, v jehož argumentech `$value` znamená hodnotu členu:
+Řeší situace, kdy třída dříve deklarovala vlastnost či metodu pouze proto, aby ji framework mohl zaregistrovat, a nově namísto toho vyžaduje třídní atribut. Klíčem je člen předka nebo rozhraní, hodnotou je atribut, v jehož argumentech zástupný symbol `$value` reprezentuje původní hodnotu člena:
 
 ```neon
 attributeForMember:
@@ -232,18 +232,18 @@ attributeForMember:
 
 | klíč | co to je |
 |---|---|
-| `App\Command::$defaultName` | vlastnost, `$value` je její výchozí hodnota |
-| `'App\Model::$timestamps = false'` | vlastnost jen s touto hodnotou, atribut ji nemusí nést |
-| `'App\Command::getDefaultName()'` | metoda, jejíž tělo jen vrátí konstantní výraz, `$value` je ten výraz |
-| `App\Handler` | rozhraní, které třída uvádí v `implements`; odtamtud se odebere |
+| `App\Command::$defaultName` | vlastnost; `$value` představuje její výchozí hodnotu |
+| `'App\Model::$timestamps = false'` | vlastnost s touto konkrétní hodnotou (atribut ji pak nemusí nést v parametrech) |
+| `'App\Command::getDefaultName()'` | metoda, jejíž tělo pouze vrací konstantní výraz; `$value` je tento výraz |
+| `App\Handler` | rozhraní, které třída uvádí v klauzuli `implements`; odtud se automaticky odstraní |
 
-Deklarace ve třídě zmizí a atribut se zapíše nad třídu. Položky s atributem téže třídy se spojí do jednoho, takže z obou vlastností příkazu vznikne `#[AsCommand(name: 'app:report', description: 'Sends the daily report')]`, a atribut té třídy, který na třídě už stojí, dostane pojmenované argumenty, které mu chybí. Jen se ohlásí třída, která člen čte sama, abstraktní třída, jejíž atribut knihovna u potomka číst nemusí, vlastnost bez hodnoty a metoda s jiným tělem; s typy také rozhraní zděděné od předka a atribut, kterému by zůstal nevyplněný povinný parametr, třeba příkaz jen s popisem a bez jména. Import rozhraní, které zmizelo z `implements`, uklidí [`imports.unused` |decisions/imports], pokud ho projekt nenechal na `keep`.
+Původní deklarace z těla třídy zmizí a nad třídu se zapíše odpovídající atribut. Pokud třída obsahovala více vlastností generujících stejný atribut, sloučí se do jednoho: z obou vlastností konzolového příkazu tak vznikne čistý zápis `#[AsCommand(name: 'app:report', description: 'Sends the daily report')]`. A pokud už daný atribut nad třídou stál, pouze se doplní o chybějící pojmenované argumenty. Místa, kde třída člen sama aktivně čte, abstraktní třídy (jejichž atribut by framework u potomků nemusel vidět), vlastnosti bez výchozí hodnoty a metody se složitějším tělem se pouze nahlásí. S typovou analýzou se navíc ohlásí rozhraní zděděné po předkovi i atribut s nevyplněným povinným parametrem (např. příkaz s popisem, ale bez názvu). Import rozhraní, které zmizelo z `implements`, automaticky uklidí pravidlo [`imports.unused` |decisions/imports], pokud jej projekt nenechal na `keep`.
 
 
 forbiddenClasses, forbiddenMembers, forbiddenFunctions a forbiddenConstants
 ===========================================================================
 
-Co náhradu nemá nebo ji musí napsat člověk. Hodnotou je anglická věta, která doplní hlášku `… is forbidden:` a řekne, co napsat místo toho; kód v ní je ve zpětných apostrofech jako ve zbytku hlášky, konzole ho obarví:
+Slouží k zachycení prvků, které nemají přímou náhradu nebo kde musí o dalším postupu rozhodnout vývojář. Hodnotou je anglická věta, která přirozeně doplní hlášení `… is forbidden:` a vysvětlí doporučený postup; kód v ní uzavřete do zpětných apostrofů:
 
 ```neon
 forbiddenMembers:
@@ -255,15 +255,15 @@ forbiddenFunctions:
 	- dump*
 ```
 
-Volání `elixir('app.css')` se ohlásí jako <code>''Function `elixir()` is forbidden: use `vite()` for an asset built by Vite.''</code>. Jméno zapsané samo jako položka seznamu, `- dump*`, je položka bez věty a hláška skončí jménem: `dumpVars($x)` se ohlásí jako <code>''Function `dumpVars()` is forbidden.''</code>. Bez věty smí položku napsat jen konfigurace projektu, data balíčku větu uvádět musí.
+Volání `elixir('app.css')` se ohlásí jako <code>''Function `elixir()` is forbidden: use `vite()` for an asset built by Vite.''</code>. Identifikátor zapsaný jako samostatná položka seznamu (`- dump*`) představuje pravidlo bez doplňující věty a hlášení skončí samotným názvem: volání `dumpVars($x)` se ohlásí jako <code>''Function `dumpVars()` is forbidden.''</code>. Zápis bez vysvětlující věty smí použít pouze projektová konfigurace; soubory migračních balíčků musí doprovodný text uvést vždy.
 
-Položku z dat balíčku hláška pojmenuje přesněji. Místo `forbidden` řekne `deprecated`, když nainstalovaný kód věc ještě má, a `removed`, když už ne; u funkcí a konstant PHP to pozná i v běhu bez typů. Větu pak doplní o verzi, která věc zavrhla, `, since acme/lib 3.0`, a u položky bez věty stojí verze sama: <code>''Function `strftime()` is deprecated: since PHP 8.1.''</code>
+U položek z migračních balíčků je terminálové hlášení ještě přesnější. Namísto obecného slova `forbidden` použije výraz `deprecated` (pokud nainstalovaná verze knihovny daný prvek ještě obsahuje) nebo `removed` (pokud už byl definitivně smazán); u vestavěných funkcí a konstant PHP to nástroj spolehlivě pozná i v běhu bez typové analýzy. Zprávu navíc doplní o označení verze, která změnu přinesla (`, since acme/lib 3.0`), a u položek bez věty stojí samotná verze: <code>''Function `strftime()` is deprecated: since PHP 8.1.''</code>
 
-Klíče `forbiddenClasses` a `forbiddenMembers` mají stejný tvar jako u ostatních map, včetně tvaru argumentů a magických metod; `'Symfony\Component\HttpFoundation\Request::$query::set'` zakáže jen zápis do vlastnosti a čtení nechá být. Metoda, kterou pod zakázaným jménem deklaruje potomek, se ohlásí taky. Mapy se hodí i pro náhradu, která mění typ nebo chování, třeba řetězec za výčet nebo iterátor za pole: oprava by takovou změnu udělala potichu.
+Klíče pro `forbiddenClasses` a `forbiddenMembers` mají naprosto shodnou syntaxi jako u ostatních map (včetně tvaru argumentů a magických metod); zápis `'Symfony\Component\HttpFoundation\Request::$query::set'` zakáže výhradně zápis do vlastnosti a čtení nechá povolené. Nahlásí se i metoda, kterou pod zakázaným jménem deklaruje dceřiná třída. Tyto mapy se skvěle hodí i pro náhrady, které mění návratový typ nebo sémantiku (například řetězec za enum nebo pole za iterátor), kde by automatický přepis mohl tiše způsobit chybu.
 
-Klíčem `forbiddenFunctions` je jméno funkce nebo vzor s `*`. Jméno bez zpětného lomítka znamená globální funkci a volání se vyhodnotí jako v PHP, takže `elixir()` uvnitř jmenného prostoru sedí, pokud soubor nedeklaruje nebo neimportuje jinou funkci toho jména. Vzor se zpětným lomítkem sedí na plně kvalifikované jméno. Stejně se zakazují i konstrukce, které se píšou jako volání: `eval`, `exit`, `die`, `print`, `empty`, `isset` a `unset`. Typy tahle mapa nepotřebuje, na rozdíl od `forbiddenMembers`.
+Klíčem v `forbiddenFunctions` je název funkce nebo vzor s hvězdičkou `*`. Název bez zpětného lomítka reprezentuje globální funkci a vyhodnocuje se přesně podle pravidel PHP, takže volání `elixir()` uvnitř namespace bude zachyceno, pokud soubor nedeklaruje ani neimportuje jinou funkci stejného jména. Vzor se zpětným lomítkem zachytí plně kvalifikovaný název. Stejně lze zakázat i jazykové konstrukce zapisované se závorkami: `eval`, `exit`, `die`, `print`, `empty`, `isset` a `unset`. Tato mapa na rozdíl od `forbiddenMembers` typovou analýzu nepotřebuje.
 
-Mapa `forbiddenConstants` dělá totéž s globálními konstantami. Klíčem je jméno konstanty nebo vzor s `*`, jméno bez zpětného lomítka znamená globální konstantu a jméno se vyhodnotí jako v PHP. Na rozdíl od funkcí se u konstant rozlišuje velikost písmen, `E_STRICT` tedy nesedí na `e_strict`. Import konstanty se nehlásí, stejně jako import třídy.
+Mapa `forbiddenConstants` provádí totéž pro globální konstanty. Klíčem je název konstanty nebo vzor s `*`. Název bez zpětného lomítka znamená globální konstantu vyhodnocovanou podle pravidel PHP. Na rozdíl od funkcí jsou konstanty v PHP case-sensitive, takže `E_STRICT` nezachytí zápis `e_strict`. Samotný import konstanty se nehlásí, stejně jako import třídy.
 
 ```neon
 forbiddenConstants:
@@ -275,13 +275,13 @@ forbiddenConstants:
 Hodnota jako kód v NEONu
 ========================
 
-Hodnotu `replacedCalls` pište jako řetězec s kódem PHP v apostrofech; apostrof uvnitř se zdvojí: `'isMethod(''POST'')'`. NEON sice přečte `isMethod(POST)` bez apostrofů jako entitu, ale v jejích argumentech je holé slovo řetězcem, `Class::NAME` konstantou třídy a `$name` placeholderem, `...` a `...$args` zůstanou zbylými argumenty, číslo, `true`, `false` a `null` jsou literály PHP a vnořená entita je další volání. Globální konstantu, operátor nebo cokoli dalšího entita neunese, a řetěz entit, tedy volání na výsledku volání, DressCode odmítne; takový kód patří do řetězce celý. Stejně tak jméno, které by NEON přečetl jako literál, `False` nebo `Null`, patří do apostrofů.
+Hodnotu v `replacedCalls` zapisujte vždy jako řetězec s PHP kódem v apostrofech; apostrof uvnitř kódu zdvojte: `'isMethod(''POST'')'`. Parser NEONu sice dokáže zápis `isMethod(POST)` bez uvozovek přečíst jako entitu, jenže v jejích argumentech je holé slovo řetězcem, `Class::NAME` konstantou, `$name` zástupným symbolem, čísla i booleany literály a vnořená entita dalším voláním. Globální konstantu, operátor ani složitější výraz entita nepřenese a řetězení entit (volání nad výsledkem jiného volání) DressCode odmítne. Takový kód proto patří do apostrofů jako celistvý řetězec. Stejně tak identifikátory, které by NEON mohl považovat za literály (`False`, `Null`), patří vždy do uvozovek.
 
 
 Soubory s daty
 ==============
 
-Knihovna nebo balíček pro upgrade nese mapy v souborech NEON, jeden na knihovnu, v adresáři, který jmenuje ve svém `composer.json` klíčem `upgrading-dir`; DressCode přečte každý soubor `*.neon` v něm. Klíč `packages` vyjmenuje balíčky, o kterých data mluví:
+Knihovna nebo migrační balíček nese mapy v přehledných souborech NEON (jeden soubor pro každou knihovnu) v adresáři, který ohlásí ve svém `composer.json` pomocí klíče `upgrading-dir`. DressCode automaticky projde a načte všechny soubory `*.neon` v něm. Klíč `packages` pak vyjmenuje balíčky, kterých se data týkají:
 
 ```json
 {
@@ -294,9 +294,9 @@ Knihovna nebo balíček pro upgrade nese mapy v souborech NEON, jeden na knihovn
 }
 ```
 
-DressCode čte obojí přímo z `composer.json` a ze souborů, kód balíčku kvůli tomu nespouští. Podle seznamu `packages` pozná `dresscode upgrade today`, kterému projektu balíček chybí, a nabídne ho projektu, který některou z těch knihoven vyžaduje; zatím jen u balíčků vendoru `dresscode`. Seznam proto jmenuje přesně ty knihovny, o kterých soubory mluví, a celý vendor se v něm dá zapsat s lomítkem na konci, `nette/`. Vedle `upgrading-dir` a `packages` zná DressCode pod `extra.dresscode` už jen klíč `plugin`, viz [dál |#Balíček pro upgrade ekosystému]; jiný klíč přeskočí a ohlásí jako varování, protože ho mohl zavést novější DressCode, než jaký projekt má.
+DressCode čte tyto informace přímo z `composer.json` a z textu souborů – kód balíčku kvůli tomu vůbec nespouští. Podle seznamu `packages` příkaz `dresscode upgrade today` okamžitě pozná, kterému projektu balíček chybí, a nabídne jeho instalaci (zatím výhradně pro balíčky od vendoru `dresscode`). Seznam proto musí jmenovat přesně ty knihovny, o kterých soubory pojednávají; celý vendor v něm lze zapsat s lomítkem na konci (`nette/`). Kromě `upgrading-dir` a `packages` zná DressCode v sekci `extra.dresscode` už pouze klíč `plugin` (viz [níže |#Balíček pro upgrade ekosystému]); jakýkoliv jiný klíč přeskočí s varováním, protože jej mohl zavést novější DressCode.
 
-Soubor začíná klíčem `package` se jménem balíčku, o jehož verzích mluví, a pokračuje sekcemi `since <verze>`. Balíčkem může být i `php`: tak DressCode v souboru `src/Rules/Upgrading/php.neon` zapisuje data o tom, co zavrhlo samo PHP, a jejich verze se měří verzí PHP projektu:
+Soubor začíná klíčem `package` se jménem balíčku, jehož verze popisuje, a pokračuje sekcemi `since <verze>`. Balíčkem může být i samotné `php`: přesně takto DressCode v souboru `src/Rules/Upgrading/php.neon` spravuje data o prvcích zavržených v jazyce PHP, přičemž jejich platnost porovnává s verzí PHP v projektu:
 
 ```neon
 package: nette/http
@@ -313,15 +313,15 @@ since 3.2.1:
 		Nette\Http\IRequest::POST: Post
 ```
 
-- **Záměr** soubor neříká. Co jedna verze nabídne jako novější zápis, se v pozdější verzi obvykle stane zavržením, a kdy, to už říká sekce `since <verze>`. Data souboru se uplatní, až když projekt řekne `upgrading.packages: yes`; to dělají [sady |configuration#Standardy a sady] `deprecations` i `modernizations`. Data PHP zapíná zvlášť požadavek `upgrading.php.deprecatedApi: forbidden`, který obsahuje sada `deprecations` i standard `nette`.
-- **Sekce** pište od nejnovější verze, jak je píše i průvodce upgradem; slévají se podle verzí bez ohledu na pořadí v souboru a pozdější má poslední slovo.
-- **Která sekce se uplatní**, rozhoduje nejnižší verze, kterou dovolí omezení projektu v `composer.json`. Kód se přepíše podle sekcí, na které tato verze dosáhne. Sekce vyšší verze, kterou omezení také dovoluje, se jen ohlásí a hláška nese náhradu i verzi, třeba <code>''Class `Acme\Old` is deprecated: replaced by `Acme\New`, since acme/lib 4.0.''</code> U balíčku, který projekt nevyžaduje sám nebo ho vyžaduje bez dolní meze, se hlásí každá sekce. Víc v [Upgrade kódu |upgrade#Rozhodují dolní meze].
-- **Oprava správná už ve starší verzi**, než je ta v sekci, dostane klíč `from`, `{write: …, from: '8.0'}`. `curl_close()` od PHP 8.0 nic nedělá, zavržené je ale až od 8.5, a tak stojí v sekci `since 8.5` jako `'curl_close($handle)': {write: removed, from: '8.0'}` a zmizí v každém projektu, jehož nejnižší verze dosáhne na PHP 8.0.
-- **Verze** se píše bez koncových nul, `since 3.1`, a klíč `since 3.10` je text, takže se nepromění v číslo 3.1.
-- **Co pozdější verze vzala zpět**, dostane v její sekci `keep`, případně i zákaz, jako `IMAGE_MIME_TYPES` v ukázce.
-- **Řetěz** přes verze se píše po článcích, `REALPATH` na `Realpath` a v další verzi `Realpath` na `RealPath`; kód se přepíše rovnou na konec řetězu.
+- **Soubor nedefinuje záměr.** Co jedna verze nabídne jako modernější alternativu, se v některé z dalších verzí obvykle stane oficiálně zavrženým prvkem – a přesný časový okamžik určuje právě sekce `since <verze>`. Data se uplatní ve chvíli, kdy projekt povolí `upgrading.packages: yes`, což dělají [sady |configuration#Standardy a sady] `deprecations` i `modernizations`. Data pro samotné PHP aktivuje požadavek `upgrading.php.deprecatedApi: forbidden`, který obsahuje sada `deprecations` i standard `nette`.
+- **Sekce pište sestupně od nejnovější verze**, přesně tak, jak vznikají oficiální průvodci migrací. Sekce se slučují podle verzí bez ohledu na pořadí v souboru a novější verze má vždy rozhodující slovo.
+- **Která sekce se uplatní**, o tom rozhoduje nejnižší možná verze, kterou povolují podmínky projektu v `composer.json`. Kód se automaticky přepíše podle sekcí, na které tato verze dosáhne. Sekce vyšších verzí, které podmínka rovněž umožňuje nainstalovat, se pouze nahlásí i s uvedením náhrady a verze (např. <code>''Class `Acme\Old` is deprecated: replaced by `Acme\New`, since acme/lib 4.0.''</code>). U balíčků, které projekt nevyžaduje přímo nebo je vyžaduje bez spodní meze, se hlásí každá sekce (více v kapitole [Upgrade kódu |upgrade#Rozhodují dolní meze]).
+- **Oprava platná i ve starší verzi**, než jakou nese název sekce, se označí klíčem `from`, např. `{write: …, from: '8.0'}`. Funkce `curl_close()` nedělá od PHP 8.0 vůbec nic, ale oficiálně zavržena byla až v PHP 8.5. V sekci `since 8.5` je proto zapsána jako `'curl_close($handle)': {write: removed, from: '8.0'}` a z kódu bezpečně zmizí v každém projektu, jehož minimální verze dosahuje alespoň na PHP 8.0.
+- **Verze** se píše bez nadbytečných nul na konci (`since 3.1`), a klíč `since 3.10` je textový řetězec, takže jej parser nezamění za číslo 3.1.
+- **Prvek, který novější verze vzala zpět**, získá v příslušné sekci hodnotu `keep` (případně výslovný zákaz jako `IMAGE_MIME_TYPES` v ukázce výše).
+- **Řetězec přejmenování** napříč více verzemi zapisujte po jednotlivých krocích: nejprve `REALPATH` na `Realpath` a v další verzi `Realpath` na `RealPath`; kód se automaticky přepíše rovnou na finální konec řetězce.
 
-Soubor doplňuje mapy, a tak sekce, která místo mapy dá holou hodnotu, třeba `true`, je chyba. Mapy jádra jmenuje krátce (`replacedCalls`), mapy pluginů celou cestou rozhodnutí (`nette.flagsAsNamedArguments`); mapu, kterou nezná, DressCode přeskočí a ohlásí jako varování. Jedinou výjimkou jsou pravidla pluginu, který nese tentýž balíček: soubor zapne jeho požadavek cestou rozhodnutí a slovem, a to v sekci verze, od které je přepis správný:
+Soubor pouze plní jednotlivé mapy, takže sekce obsahující namísto mapy skalární hodnotu (např. `true`) je neplatná. Mapy jádra jmenuje soubor zkráceně (`replacedCalls`), mapy pluginů plnou cestou rozhodnutí (`nette.flagsAsNamedArguments`); neznámou mapu DressCode přeskočí s varováním. Jedinou výjimku tvoří pravidla pluginu, který je součástí stejného balíčku: soubor může jeho požadavek přímo aktivovat uvedením cesty rozhodnutí a požadované hodnoty v sekci verze, od které je přepis správný:
 
 ```neon
 package: laravel/framework
@@ -330,27 +330,27 @@ since 12.4:
 	laravel.scopeAttribute: required
 ```
 
-Požadavek platí tam, kam dosáhne nejnižší verze, kterou dovolí omezení projektu; sekce nad ní ho nezapne a nic nehlásí. Požadavek jádra nebo jiného pluginu je chyba, protože o tom, jak se píše kód projektu, balíček nerozhoduje.
+Požadavek začne platit ve chvíli, kdy na danou sekci dosáhne nejnižší verze z `composer.json` projektu; sekce nad touto mezí jej neaktivuje a nic nehlásí. Zápis požadavku patřícího jádru nebo cizímu pluginu skončí chybou, protože balíček nemá právo rozhodovat o obecném stylu kódu v projektu.
 
-Kromě sekcí smí soubor nést ještě klíč `namespaces`, zapsaný jako v konfiguraci: funkce a konstanty, které jmenné prostory balíčku deklarují pro soubory, které do nich píše projekt, viz [Funkce a konstanty ve jmenných prostorech |php-functions-in-namespaces]. Pro kořenový balíček platí všechny sekce bez ohledu na verzi, takže `dresscode check` v repozitáři knihovny soubor načte a chybu v něm ohlásí dřív, než vydáte novou verzi.
+Kromě sekcí může soubor obsahovat ještě klíč `namespaces` se stejnou strukturou jako v konfiguraci: vyjmenuje funkce a konstanty, které namespaces balíčku deklarují pro kód, který do nich vývojáři v projektu píší (viz [Funkce a konstanty ve jmenných prostorech |php-functions-in-namespaces]). V kořenovém repozitáři knihovny samotné platí všechny sekce bez ohledu na verzi, takže příkaz `dresscode check` v repozitáři knihovny soubor načte a případné chyby odhalí dříve, než vydáte novou verzi.
 
 
 Kontrola dat
 ============
 
-Třída `DressCode\Testing\UpgradingTester` zkontroluje soubor podle knihovny nainstalované v projektu. Metoda `collectProblems()` ověří, že DressCode všechny sekce přijme, že `extra.dresscode` v `composer.json` balíčku nemá klíč, který DressCode nezná, a že každá položka map `forbiddenClasses`, `forbiddenMembers`, `forbiddenFunctions` a `forbiddenConstants` má větu v tvaru, jaký hláška potřebuje: malým písmenem, pokud nezačíná jménem, bez tečky na konci, bez dvojitých uvozovek a nejvýš 160 znaků bez zpětných apostrofů. U map `replacedClasses` a `replacedMembers`, u statické metody v `replacedFunctions` a u atributu v `attributeForMember` ověří i to, že náhrada, ke které sekce při nainstalované verzi dojdou, existuje, a u prvních dvou map i to, že řetěz náhrad nekončí v kruhu. Hodnoty ostatních map, třeba výrazy `replacedCalls`, nekontroluje. Problémy vrátí jako seznam vět, prázdný u souboru bez chyby, takže metodu zavoláte z testu v jakémkoli frameworku:
+Třída `DressCode\Testing\UpgradingTester` slouží k automatickému ověření migračního souboru proti knihovně nainstalované v projektu. Metoda `collectProblems()` prověří, že DressCode všechny sekce bez výhrad přijme, že sekce `extra.dresscode` v `composer.json` neobsahuje neznámé klíče a že každá položka v mapách `forbiddenClasses`, `forbiddenMembers`, `forbiddenFunctions` a `forbiddenConstants` nese správně zformátovanou větu: začíná malým písmenem (pokud nezačíná názvem prvku), nekončí tečkou, nepoužívá dvojité uvozovky a nepřesahuje 160 znaků (bez zpětných apostrofů). U map `replacedClasses` a `replacedMembers`, u statických metod v `replacedFunctions` a u atributů v `attributeForMember` navíc ověří, že cílová náhrada v nainstalované verzi knihovny skutečně existuje, a u prvních dvou map prověří, že řetězec přejmenování nekončí v nekonečném cyklu. Samotné výrazy v `replacedCalls` tato metoda nekontroluje. Nalezené problémy vrátí jako pole chybových vět (u bezchybného souboru prázdné), takže metodu snadno začleníte do testu v jakémkoliv testovacím frameworku:
 
 ```php
 Assert::same([], DressCode\Testing\UpgradingTester::collectProblems(__DIR__ . '/../upgrading/forms.neon', __DIR__ . '/..'));
 ```
 
-Balíček s vlastními pravidly předá jejich třídy třetím argumentem, aby soubor směl plnit jejich mapy. Metoda `collectPackageProblems()` porovná seznam `packages` se soubory v obou směrech: ohlásí knihovnu, o které mluví soubor, ale v seznamu chybí, i knihovnu ze seznamu, o které nemluví žádný soubor.
+Balíček s vlastními pravidly předá jejich třídy ve třetím argumentu, aby soubor směl plnit jejich specifické mapy. Metoda `collectPackageProblems()` vzájemně porovná seznam `packages` se soubory na disku v obou směrech: odhalí knihovnu, o které soubor mluví, ale chybí v seznamu, i knihovnu ze seznamu, pro kterou neexistuje žádný soubor.
 
 ```php
 Assert::same([], DressCode\Testing\UpgradingTester::collectPackageProblems(__DIR__ . '/..'));
 ```
 
-Nejlepší kontrolou je ale vzorek: kus kódu ve starém API, jak ho píše uživatel, a jeho opravená podoba s hláškami, zapsaná vedle a pozorně přečtená. Na něm uvidíte, co data opravdu udělají, i to, co by udělala špatně. Metoda `runSample()` vzorek opraví tak, jak by ho opravil projekt se zapnutými daty: platí každá sekce, ke které dojde nainstalovaná verze knihovny, a typy dodá PHPStan projektu, a proto kód zapíše do adresáře `temp/` v kořeni projektu. Požadavky pravidel balíčku se zapnou samy podle sekcí; rozhodnutí, která data nezapínají, dostane metoda třetím argumentem, po sekcích jako v konfiguraci. Vrátí opravený kód v `$result->output` a nálezy v `$result->violations`:
+Nejlepším testem funkčnosti je však reálný vzorek: kus kódu ve starém API zapsaný tak, jak jej reálně tvoří vývojáři, a jeho očekávaná opravená podoba s chybovými hláškami. Na něm okamžitě uvidíte skutečný dopad migračních pravidel. Metoda `runSample()` vzorek opraví přesně tak, jak by jej zpracoval reálný projekt se zapnutými daty: uplatní se všechny sekce odpovídající nainstalované verzi knihovny a typy dodá PHPStan projektu (proto se kód dočasně zapíše do složky `temp/` v kořeni projektu). Požadavky pravidel balíčku se aktivují automaticky podle sekcí; doplňující rozhodnutí můžete předat ve třetím argumentu. Metoda vrátí opravený kód v `$result->output` a seznam nálezů v `$result->violations`:
 
 ```php
 $code = file_get_contents(__DIR__ . '/samples/forms.code');
@@ -362,12 +362,12 @@ Assert::matchFile(__DIR__ . '/samples/forms.expected', $result->output);
 Balíček pro upgrade ekosystému
 ==============================
 
-Data celého ekosystému patří do jednoho balíčku. Balíčky vendoru `dresscode` se jmenují `dresscode/upgrade-<ekosystém>`: `dresscode/upgrade-nette`, `dresscode/upgrade-symfony`, `dresscode/upgrade-laravel`, `dresscode/upgrade-deegee` pro Dibi a Texy. Knihovna tak data nemusí nést sama a balíček je může doplňovat i pro starší verze, které už nikdo nevydá. Stavba takového balíčku:
+Migrační data celého uceleného ekosystému patří do jednoho samostatného balíčku. Oficiální balíčky od vendoru `dresscode` nesou označení `dresscode/upgrade-<ekosystém>`: `dresscode/upgrade-nette`, `dresscode/upgrade-symfony`, `dresscode/upgrade-laravel` či `dresscode/upgrade-deegee` (pro Dibi a Texy). Knihovna samotná tak nemusí migrační data udržovat a balíček může doplňovat podporu i pro starší historické verze, pro které už nová vydání nevzniknou. Struktura takového balíčku vypadá následovně:
 
-- `composer.json` s typem `dresscode-plugin`, závislostí na `dresscode/dresscode`, knihovnami ekosystému v `require-dev` (kontrola dat je potřebuje nainstalované) a klíči `upgrading-dir` a `packages` pod `extra.dresscode`,
-- adresář `upgrading/` s jedním souborem na knihovnu,
-- testy: kontrola každého souboru a seznamu `packages` přes `UpgradingTester` a vzorek na knihovnu,
-- a pravidla s kódem tam, kde změnu mapou vyjádřit nejde. Ta balíček ohlásí třídou [pluginu |presets-and-plugins] pod `extra.dresscode.plugin` a jejich rozhodnutí stojí v sekci pojmenované po pluginu, třeba `nette.flagsAsNamedArguments`. Při `check` a `fix` je projekt pustí dovnitř jménem balíčku v `use`, `dresscode upgrade today` je načte sám.
+- `composer.json` s typem `dresscode-plugin`, přímou závislostí na `dresscode/dresscode`, knihovnami daného ekosystému v `require-dev` (validace dat vyžaduje jejich přítomnost) a s klíči `upgrading-dir` a `packages` v sekci `extra.dresscode`,
+- adresář `upgrading/` obsahující jeden přehledný NEON soubor pro každou knihovnu,
+- automatické testy: kontrola integrity každého souboru a seznamu `packages` přes `UpgradingTester` a integrační vzorek pro každou knihovnu,
+- specifická pravidla s výkonným kódem tam, kde změnu nelze popsat pouhou deklarativní mapou. Balíček je registruje prostřednictvím třídy [pluginu |presets-and-plugins] pod klíčem `extra.dresscode.plugin` a jejich rozhodnutí leží v sekci pojmenované podle pluginu (např. `nette.flagsAsNamedArguments`). Při běhu `check` a `fix` je projekt aktivuje uvedením balíčku v `use`; příkaz `dresscode upgrade today` si je načte automaticky.
 
 ```json
 {
@@ -382,9 +382,9 @@ Data celého ekosystému patří do jednoho balíčku. Balíčky vendoru `dressc
 }
 ```
 
-Seznam souborů nestojí v pluginu proto, že se data čtou bez spuštění kódu balíčku; plugin se načte, jen když ho projekt pustí dovnitř. Mapu pravidla balíčku plní data stejně jako mapy jádra a jeho požadavky se zapnou ze souborů od verze, od které je přepis správný, `nette.linkArguments` třeba od `nette/application` 3.3; obojí tam, kde projekt řekne `upgrading.packages: yes`. Projekt je tak nemusí zapínat sám a dostanou je `dresscode upgrade today` i obě sady.
+Seznam migračních souborů není součástí kódu pluginu záměrně – data se totiž načítají bez spouštění PHP kódu balíčku. Samotný plugin se načte výhradně tehdy, když jej projekt výslovně povolí. Migrační data plní mapy pravidel balíčku naprosto stejně jako vestavěné mapy jádra a požadavky se aktivují od verze, od níž je přepis platný (např. `nette.linkArguments` od verze `nette/application` 3.3). Projekt je tedy nemusí zapínat ručně – automaticky je získá příkaz `dresscode upgrade today` i obě hlavní sady.
 
-Vzorem je balíček [dresscode/upgrade-nette |https://github.com/dg/dresscode-upgrade-nette].
+Vzorovou referenční implementací je balíček [dresscode/upgrade-nette |https://github.com/dg/dresscode-upgrade-nette].
 
 {{maintitle: Mapy náhrad: jak popsat změnu API pro upgrade PHP kódu}}
 {{description: Reference map, podle kterých DressCode přepisuje PHP kód na nové API: zápis členu a tvaru argumentů, výraz PHP jako náhrada, soubory s daty a balíček pro upgrade.}}

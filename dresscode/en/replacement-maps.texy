@@ -2,13 +2,13 @@ Replacement Maps
 ****************
 
 .[perex]
-A map drives the rewriting of code to a new API: on the left, what was there; on the right, what to write instead. You write the same map into the configuration of a project when you rename your own code, and the data files of a library or an upgrade package carry it too. This page is the reference for writing it, for a project and for a library author who does not want users to rewrite their code by hand when they move to a new version.
+Replacement maps govern how code is transformed when migrating to newer APIs: on the left sits the legacy construct, and on the right is what to write instead. You use the exact same map syntax in your project configuration when renaming your own classes and methods as library authors and ecosystem packages use in their upgrade data files. This page serves as a comprehensive reference for mapping syntax—both for application developers and for package maintainers looking to spare their users hours of manual refactoring.
 
 
 Where the Maps Live
 ===================
 
-In the configuration of a project, the maps are decisions of the section [`upgrading` |decisions/upgrading] under the key `api`:
+In a project configuration, replacement maps are defined as decisions in the [`upgrading` |decisions/upgrading] section under the `api` key:
 
 ```neon
 typeAnalysis: phpstan
@@ -21,7 +21,7 @@ upgrading:
 			App\Model\Order::getTotalPrice: getTotal
 ```
 
-In a data file, the same maps are grouped in sections by version and have short names such as `replacedMembers`; see [below |#Data Files]. The maps from all places are merged: the files of installed packages are a layer beneath the presets and beneath the configuration, so the project has the last word. To cancel an item, set it to `keep`; that withdraws the name from all layers beneath it, package data included:
+In upgrade data files, these same maps are organized into sections by version and written using short names like `replacedMembers` (see [Data Files |#Data Files] below). Maps from all sources are merged hierarchically: files provided by installed packages form a baseline layer beneath presets and your project configuration, ensuring your project always has the final word. To cancel a specific replacement, assign it the value `keep`—this withdraws the identifier across all lower layers, including package data:
 
 ```neon
 upgrading:
@@ -30,54 +30,54 @@ upgrading:
 			Nette\Forms\Form::FILLED: keep
 ```
 
-The value `keep` in place of a whole map withdraws the whole map. If you want only your own map to apply, write an exclamation mark after its key, `replacedMembers!:`, and it then replaces the maps of all lower layers and package data.
+Setting `keep` on an entire map disables the whole map at once. If you want only your custom map to apply without inheriting rules from lower layers or packages, append an exclamation mark to the key (`replacedMembers!:`). This completely replaces maps from lower layers and package data files.
 
-A map the project writes always applies. But the maps with members (`replacedMembers`, `replacedCalls`, `forbiddenMembers`) recognize a member by the type of the value it is used on, so they need [types |phpstan-types]; without the key `typeAnalysis: phpstan`, such a map in the configuration is an error. Package data applies only when the project says `upgrading.packages: yes`, which the sets `deprecations` and `modernizations` both do; see [below |#Data Files].
+A map declared in your project configuration always applies. However, maps targeting class members (`replacedMembers`, `replacedCalls`, `forbiddenMembers`) must resolve the runtime type of the target object, which requires [types from PHPStan |phpstan-types]; without `typeAnalysis: phpstan`, configuring such a map will trigger an error. Package data files take effect only when your project enables `upgrading.packages: yes`, which the `deprecations` and `modernizations` sets do automatically (see [Data Files |#Data Files] below).
 
 
 How a Member Is Written
 =======================
 
-In the keys of the maps with members (`replacedMembers`, `replacedCalls`, `nette.flagsAsNamedArguments`, `forbiddenMembers`), a member is written the way PHP reads it, with the class always fully qualified:
+In map keys targeting class members (`replacedMembers`, `replacedCalls`, `nette.flagsAsNamedArguments`, `forbiddenMembers`), members are written using standard PHP syntax with fully qualified class names:
 
 | notation | what it is |
 |---|---|
-| `App\Form::render` | a constant, or a method with any arguments |
-| `App\Form::MAX` | a name without a lowercase letter is only a constant; it does not match the method `max()` |
-| `App\Form::$items` | a property |
-| `'App\Form::$items::get'` | reading the property, also in `isset()` |
-| `'App\Form::$items::set'` | writing the property: an assignment of any kind, and `unset()` |
-| `'App\Form::size()'` | a call without arguments; in `replacedMembers`, a method with any arguments |
-| `'App\Form::size(...$args)'` | a method with any arguments, where the class also has a constant of the same name |
-| `'App\Form::add($name, $label, true)'` | a call with arguments of this shape |
-| `'App\Form::__construct($a)'` | creating an object |
-| `'App\Html->text()'` | a non-static method, for a class whose later version has a static method of the same name |
+| `App\Form::render` | A constant or method with any arguments |
+| `App\Form::MAX` | An identifier without lowercase letters matches constants exclusively; it will not match the method `max()` |
+| `App\Form::$items` | A property |
+| `'App\Form::$items::get'` | Property reads, including evaluations inside `isset()` |
+| `'App\Form::$items::set'` | Property writes: any assignment operator or `unset()` |
+| `'App\Form::size()'` | A call without arguments; in `replacedMembers`, a method with any arguments |
+| `'App\Form::size(...$args)'` | A method with any arguments (used when a class declares both a method and constant with the same name) |
+| `'App\Form::add($name, $label, true)'` | An invocation matching this exact argument signature |
+| `'App\Form::__construct($a)'` | Instantiating an object via `new` |
+| `'App\Html->text()'` | Strictly non-static method calls (for classes whose newer versions introduced a static method of the same name) |
 
-In NEON, a key with a parenthesis or a dollar sign belongs in single quotes. A bare `App\Form::size(...)` is an error, because in PHP it is a first-class callable; a call with any arguments is written `size(...$args)`.
+In NEON, keys containing parentheses or dollar signs must be wrapped in single quotes. A bare `App\Form::size(...)` is invalid syntax because modern PHP treats that as a first-class callable; match invocations with arbitrary arguments using `size(...$args)`.
 
-Watch out for empty parentheses: they do not mean the same thing everywhere. In `replacedMembers`, they only say that it is a method, and the key matches a call with any arguments. In `replacedCalls`, `forbiddenMembers` and in the maps of packages that read the shape of arguments, `size()` is a call without arguments and nothing else. Copied into these maps, a key from `replacedMembers` ignores every call with arguments, and nothing warns you about it: a call without arguments is often exactly the shape the old version of the library allowed and the new one rejects, so such a key is legitimate. To catch every call, write `size(...$args)`.
+Pay close attention to empty parentheses `()`—they do not mean the same thing everywhere. In `replacedMembers`, they simply clarify that the symbol is a method, matching calls with any arguments. In `replacedCalls`, `forbiddenMembers`, and package maps inspecting argument shapes, `size()` matches calls with **no arguments** exclusively. If copied into those maps, a key from `replacedMembers` will silently ignore calls that pass arguments: calls with zero arguments are often precisely the pattern that older library versions allowed and newer releases forbid, making this distinction intentional. To match any invocation regardless of arguments, always use `size(...$args)`.
 
-A key matches access through any subtype of the class, through an interface and a trait, and through `self::`, `static::` and `parent::`. What decides is the type of what the member is called on, so DressCode recognizes even a member the library has deleted in the meantime. Where the receiver can also be something else, for example `Form|stdClass`, nothing matches. The key of a constructor matches the creation of the class itself, of a child class without its own constructor, and `parent::__construct()`; a child class with its own constructor is a different class. A property that a child class declares itself, when the class of the key does not have it, is a different property.
+A key matches access through any subtype of the specified class, including interfaces, traits, and calls via `self::`, `static::`, or `parent::`. Resolution is driven by the true runtime type of the receiver expression, allowing DressCode to recognize members that newer releases have completely removed. Where a receiver could evaluate to multiple distinct types (such as `Form|stdClass`), the rule safely steps aside. Constructor keys match direct instantiations of the class, child classes without their own constructor, and calls to `parent::__construct()`; a child class declaring its own constructor is treated as a distinct class. Similarly, properties declared directly on a child class (when absent on the parent) are treated as distinct properties.
 
-The shape of arguments describes what the arguments of the call look like:
+The argument shape pattern describes the signature of the call:
 
-- `$name` is any expression; only `$this` is not a placeholder, because in the value it means the receiver,
-- `array $options` or `list $values` is an expression the types say is of this type; the type can be any native PHP type, `list`, a class, a nullable type such as `?Acme\Clock`, or a union such as `int|string`,
-- a literal (`true`, `0`, `'array'`) matches the same value, however it is written,
-- `['mode' => $mode, ...$options]` matches a literal array with these keys; `...$options` takes the other items, and without it the array must not have any,
-- `name: $x` matches an argument passed by this name,
-- `...` and `...$rest` are the remaining arguments; without them the call must not have any more,
-- `int|string ...$kinds` are remaining arguments that each have the given type, as with a variadic parameter; an argument that unpacks an array, for example `...self::Kinds`, matches when each of its values has that type.
+- `$name` matches any expression; only `$this` is reserved, representing the receiver expression itself in the target value,
+- `array $options` or `list $values` matches an expression confirmed by static type analysis to have that type; types can be any native PHP type, `list`, class names, nullable types like `?Acme\Clock`, or unions like `int|string`,
+- a literal (`true`, `0`, `'array'`) matches an identical literal value regardless of how it is written in source code,
+- `['mode' => $mode, ...$options]` matches an array literal containing these specific keys; `...$options` captures any additional keys (without it, the array cannot contain extra items),
+- `name: $x` matches an argument passed explicitly using that named parameter,
+- `...` and `...$rest` capture any remaining positional arguments; without them, the call cannot include extra arguments,
+- `int|string ...$kinds` captures remaining variadic arguments, requiring each to satisfy the specified type; an argument that unpacks an array (e.g. `...self::Kinds`) matches if all its elements satisfy the type.
 
-A positional item also takes an argument passed by the name of the parameter, if the method is declared somewhere.
+Positional placeholders also match arguments passed by parameter name, provided the method declaration can be inspected.
 
-When several `replacedCalls` keys of one method match a call, the one with more literals wins, where each key of a literal array counts as a literal. On a tie, the one with more types wins, where `list` counts twice; then the key without remaining arguments `...`; then the one with more items; then the key of the class closer to the call, that is, the child before the parent; and finally the one the map lists first. In `replacedMembers` and `forbiddenMembers`, the shape of arguments does not decide: the key of the class closer to the call wins, then the one the map lists first. `nette.flagsAsNamedArguments` takes the first matching key in the order of the map.
+When multiple `replacedCalls` keys match a single invocation, the one containing more literals wins (each key in an array literal counts as a literal). In the event of a tie, the key with more typed parameters wins (with `list` weighted double), followed by keys without trailing variadic `...` placeholders, then keys with more total arguments, then the class closest to the receiver in the inheritance hierarchy (child before parent), and finally the order in the map. In `replacedMembers` and `forbiddenMembers`, argument shapes do not participate in tie-breaking: the class closest to the receiver wins, followed by declaration order in the map. The `nette.flagsAsNamedArguments` map selects the first matching key in declaration order.
 
 
 replacedClasses and replacedFunctions
 =====================================
 
-They map an old class, interface or enum to a new one, both fully qualified, and an old function to a new one:
+These maps rewrite legacy classes, interfaces, and enums to their replacements (both fully qualified), or map legacy functions to new ones:
 
 ```neon
 replacedClasses:
@@ -86,22 +86,22 @@ replacedFunctions:
 	formatPrice: App\Utils\formatPrice
 ```
 
-A class is rewritten in an import, in a type, after `new`, in static access, in `instanceof` and in an attribute, and the new name is written the way the file can reach it, through an import where the name is free. Where the import itself is rewritten, the fully qualified names of the new class in the file are shortened to the name the import brings. A class is also rewritten in a doc comment: in a type, in a class constant such as `Kind::*`, in the target of `@see` and in the inline tag `{@link}`. Only the name itself changes, so the alignment of the comment is kept, and mentions in the plain text of the comment are left untouched. `noDeprecatedClasses` does the same in doc comments, but only for a class whose `@deprecated` names a replacement. When the run has [types |phpstan-types], a class the project does not have is only reported. A function is written fully qualified. If both functions are from PHP, the call is rewritten only where the new one takes all the arguments of the call. The key can also be a function in a namespace, `Symfony\Component\DependencyInjection\Loader\Configurator\ref`: it matches a call through an import, through a qualified name, and without qualification inside that namespace, and the replacement is written the same way, through an import where the call used one.
+A class is rewritten across `use` import statements, type declarations, `new` instantiations, static member accesses, `instanceof` checks, and attributes. The replacement is emitted in the shortest form the file context allows—importing it where the unqualified name is free. When the import statement itself is rewritten, fully qualified references in the file are shortened automatically. Classes are updated in docblock comments as well: in type annotations, class constant references like `Kind::*`, `@see` targets, and inline `{@link}` tags. Because only the identifier itself changes, comment indentation and alignment are preserved, and plain prose mentions remain untouched. The `noDeprecatedClasses` rule performs equivalent updates in docblocks, but only for classes whose `@deprecated` annotation explicitly names a replacement. When [types from PHPStan |phpstan-types] are available, target classes that don't exist in the project are reported without being rewritten. Functions are emitted fully qualified; when both functions belong to PHP core, the rewrite occurs only if the replacement safely accepts all passed arguments. Keys can also target namespaced functions (e.g. `Symfony\Component\DependencyInjection\Loader\Configurator\ref`): matching calls via imports, fully qualified names, or unqualified calls within that namespace, and writing the replacement using the same convention.
 
-The replacement of a function can also be a static method, `str_slug: Illuminate\Support\Str::slug`: the call is rewritten to `Str::slug()` with the same arguments, and the class is written through the imports of the project. Here too, the fix of a call to an unqualified global function inside a namespace is risky, because the namespace could declare a function of the same name.
+A function can also be mapped to a static method, such as `str_slug: Illuminate\Support\Str::slug`: the invocation is rewritten to `Str::slug()` with matching arguments, and the class is imported according to project conventions. Updating unqualified calls to global functions inside namespaces remains a risky fix here as well, because the namespace could theoretically declare a function of the same name.
 
 
 replacedMembers
 ===============
 
-A member that has a different name and is used the same way. The value is:
+Use this map for members that have simply been renamed and are consumed in the exact same way. Allowed values are:
 
 | value | what it is |
 |---|---|
-| `Filled` | a new name in the same class |
-| `App\Helpers::create` | a member of another class, only for static access and a constant |
-| `$items` | a new property |
-| `\str_contains` | a global function the method has become |
+| `Filled` | A new member name within the same class |
+| `App\Helpers::create` | A member on a different class (supported exclusively for static calls and constants) |
+| `$items` | A replacement property |
+| `\str_contains` | A global function that replaces the method |
 
 ```neon
 replacedMembers:
@@ -110,13 +110,13 @@ replacedMembers:
 	Nette\Utils\Strings::contains: \str_contains
 ```
 
-A declaration of the method under the old name in a child class is renamed too, because otherwise it would not override anything. The first-class callable `$control->invalidateControl(...)` gets the new name just like a call. A callable written as a value, `[$control, 'invalidateControl']` or `'App\Form::create'`, gets it where the types say the value is a callable. For a string, this is a risky fix, because a string can name a method for something other than a call. Where the rewrite throws away the expression the member was called on (`getForm()::FILLED` moved to another class), the fix is risky. A call to an instance method on an object cannot be moved to another class, so it is reported with the reason.
+Declarations of the method under the legacy name in subclasses are updated as well to preserve the inheritance chain. First-class callables like `$control->invalidateControl(...)` are updated just like standard invocations. Callables represented as values (`[$control, 'invalidateControl']` or `'App\Form::create'`) are rewritten wherever static analysis confirms the value serves as a callable. For string literals, this is a risky fix because strings can reference methods for reasons unrelated to invocation. Where a rewrite would discard the receiver expression (such as `getForm()::FILLED` moving to another class), the edit is also classified as risky. Moving an instance method call on an object to a different class cannot be done automatically and is reported with an explanation.
 
 
 replacedCalls
 =============
 
-A call that is written differently. The key carries the shape of arguments, and the value is a PHP expression into which its placeholders are substituted:
+Used for invocations where call syntax or argument ordering has changed. The key defines the argument pattern, and the value is a replacement PHP expression into which placeholders are substituted:
 
 ```neon
 replacedCalls:
@@ -126,13 +126,13 @@ replacedCalls:
 	'Nette\Http\Response::setExpiration(time: $t)': 'setExpiration(expire: $t)'
 ```
 
-- **A bare call** `addMultiUpload(...)` is a call on whatever the original was called on, in the same way: `->`, `?->` or `::`.
-- **`$this`** stands for the expression the original was called on, anywhere in the value: `\Nette\Utils\Arrays::invoke($this->onFailure, ...$args)`. A call through `::` has no such expression, so it is only reported. A call through `?->` is rewritten only where the expression is a chain of accesses on the same object, that is, a bare call, or a read or a call on `$this`, and the operator moves to its first link: `$token?->getOffset()` with the value `'$this->currentOffset'` becomes `$token?->currentOffset`. Any other expression would call on null what the original call skipped, or would return something other than null, so the call is only reported.
-- **A qualified name** `\Closure::fromCallable()` is that function or class itself; DressCode writes the class through the imports of the project.
-- **`...`** writes the arguments the key left unnamed, and **`...$args`** those a variadic placeholder stands for, or the values of the array an ordinary placeholder stands for. When that array is a literal, it is spread into arguments, as PHP does: `new Signer(...['domain' => $d])` as `new Signer(domain: $d)`.
-- **A constructor** whose value is `new Class(...)`, where `Class` is the class the key replaces, keeps the class from the code, so a child class and `parent::__construct()` are fixed too. An attribute creates an object of its class, so the key of a constructor also rewrites the arguments of the attribute if the expression creates the same class; otherwise the attribute is only reported.
+- **A bare call** like `addMultiUpload(...)` represents a call on the original receiver using the original operator: `->`, `?->`, or `::`.
+- **The `$this` placeholder** represents the expression the original method was called on, and can appear anywhere in the replacement: `\Nette\Utils\Arrays::invoke($this->onFailure, ...$args)`. Static calls via `::` have no receiver expression, so they are reported without being rewritten. Calls using the nullsafe `?->` operator are rewritten only when the replacement is a simple chain of accesses on the same object (a bare call, property read, or method call on `$this`), moving `?->` to the first link: `$token?->getOffset()` mapped to `'$this->currentOffset'` becomes `$token?->currentOffset`. A more complex expression would execute code on `null` that the original call skipped, so it is reported instead.
+- **A qualified name** like `\Closure::fromCallable()` represents an independent function or class; classes are written using your project's import conventions.
+- **The `...` symbol** outputs all arguments that the key left unnamed, while **`...$args`** emits arguments matched by a variadic placeholder (or array values matched by a standard placeholder). When that array is a literal, it is unpacked into arguments matching PHP semantics: `new Signer(...['domain' => $d])` becomes `new Signer(domain: $d)`.
+- **A constructor** whose value is `new Class(...)` for the class the key replaces preserves the original class from code, ensuring child classes and `parent::__construct()` calls are updated correctly. Attributes represent instantiations of their class, so a constructor key will update attribute arguments if the replacement expression instantiates that same class; otherwise, the attribute is reported.
 
-A property gets an expression for reading and an expression for writing, each under the key of its property hook, `::get` and `::set`; in the write, `$value` is the assigned value:
+Properties define read and write expressions under their corresponding property hook keys, `::get` and `::set`; in writes, `$value` represents the assigned value:
 
 ```neon
 replacedCalls:
@@ -140,37 +140,37 @@ replacedCalls:
 	'Nette\Forms\Form::$action::set': 'setAction($value)'
 ```
 
-For a static property, the expression is called on the class through which the code reached it: `self::$container` becomes `self::getContainer()`.
+For static properties, the expression is evaluated on the class through which the code accessed it: `self::$container` becomes `self::getContainer()`.
 
-A value that only writes the same keys of an options array under other names renames those keys in place, in the array of the call; the layout of the array, the comments and the order of the items are kept:
+Values that simply rename keys within an options array update those keys in place; array formatting, inline comments, and item ordering are fully preserved:
 
 ```neon
 replacedCalls:
 	'Symfony\Component\Filesystem\Filesystem::mirror($originDir, $targetDir, $iterator, [''copy_on_windows'' => $follow, ...$options])': 'mirror($originDir, $targetDir, $iterator, [''follow_symlinks'' => $follow, ...$options])'
 ```
 
-And a magic method is a key for the syntax through which PHP calls it: `__get($name)` is reading a property the class does not declare, `__set($name, $value)` writing it, `__isset()` and `__unset()` what their names say, and `offsetGet($key)`, `offsetSet($key, $value)`, `offsetExists()` and `offsetUnset()` the same for `$object[$key]`. The write `$object[] = $value` is `offsetSet(null, $value)`.
+Magic methods are mapped to the syntax through which PHP natively invokes them: `__get($name)` represents reading an undeclared property, `__set($name, $value)` represents writing to it, `__isset()` and `__unset()` correspond to their respective constructs, and `offsetGet($key)`, `offsetSet($key, $value)`, `offsetExists()`, and `offsetUnset()` govern `$object[$key]` array access. Appending to an array via `$object[] = $value` maps to `offsetSet(null, $value)`.
 
-A few limits apply to a property under the keys `::get` and `::set` and to magic methods. An assignment is rewritten only when it stands alone as a statement, and `isset()` and `unset()` only when they contain nothing else; any other write to the property is reported and stays as it is. Reading on the left of `??` is a risky fix, because there PHP first asks whether the property is set. DressCode cannot see that a function takes an argument by reference, so it rewrites a property passed to such a function as a read.
+A few sensible limitations apply to property hooks (`::get`/`::set`) and magic methods. An assignment is rewritten only when it stands as an independent statement, and `isset()` or `unset()` calls are rewritten only when inspecting that property alone; other property mutations are reported and left untouched. Reading a property on the left of `??` is a risky fix because PHP first checks whether the property is initialized. DressCode cannot determine whether a function accepts arguments by reference, so properties passed into function calls are rewritten as reads.
 
-Inside a string, the expression is written only when interpolation can hold it, that is, a variable and a read or a call on it, and then in braces: `"$mail->subject"` becomes `"{$mail->getSubject()}"`. Any other expression, for example `$this->decaySeconds / 60`, is only reported in a string.
+Inside double-quoted strings, expressions are rewritten only when variable interpolation supports them (a variable with a property read or method call), wrapped in braces: `"$mail->subject"` becomes `"{$mail->getSubject()}"`. More complex expressions (like `$this->decaySeconds / 60`) are reported without being rewritten inside strings.
 
-The fix is not risky when each argument is evaluated once, as before. Where the expression evaluates an argument only sometimes, not at all, or in a different order, the fix is risky if evaluating the argument has side effects; where it would evaluate it twice, the call is only reported. A declaration of the method in a child class under the name of a key that takes any arguments is reported too: the method is replaced as a whole, and no expression replaces a declaration. When both a `replacedCalls` key and a plain rename in `replacedMembers` match the same call, the shape of arguments wins.
+A fix is not risky if every argument is evaluated exactly once, preserving original execution semantics. Where an expression evaluates an argument conditionally, never, or in a different order, the fix is classified as risky (provided argument evaluation has side effects); if an argument would be evaluated twice, the call is reported. Subclass method declarations matching a key that accepts arbitrary arguments are reported as well: the method is replaced as a whole, and an expression cannot substitute for a declaration. When an invocation matches both a `replacedCalls` signature and a plain rename in `replacedMembers`, the argument shape pattern always takes precedence.
 
-DressCode leaves alone a call that already has the shape the expression would write, even when a key matches it. With the key `'Acme\Route::__construct($path, $methods)'` and the value `'new Acme\Route(path: $path, methods: $methods)'`, `new Route('/a', ['GET'])` is rewritten to named arguments, while `new Route(path: '/b', methods: ['GET'])` stays as it is.
+Invocations that already match the target shape are left alone, even if the key matches them. Given the key `'Acme\Route::__construct($path, $methods)'` and value `'new Acme\Route(path: $path, methods: $methods)'`, calls like `new Route('/a', ['GET'])` are converted to named arguments, while `new Route(path: '/b', methods: ['GET'])` is left untouched.
 
-When the expression calls a method on the same object that a key of the same class matches again, directly or through another key, the rewrite would never end. DressCode rejects such a map as a configuration error. This typically happens with a method that now takes an array instead of individual arguments. The key `is(...$kinds)` with the value `is([...$kinds])` would also match its own output, so the remaining arguments get a type an array does not have:
+If the replacement expression calls a method on the same object that matches a key of the same class (directly or through a secondary rule), the transformation would loop infinitely. DressCode detects this and rejects the configuration as an error. This pattern typically occurs with methods that now accept an array instead of variadic arguments. The key `is(...$kinds)` mapped to `is([...$kinds])` would match its own output; avoid this by typing the remaining arguments to a type that arrays cannot satisfy:
 
 ```neon
 replacedCalls:
 	'PhpSyntax\Token::is(int|string ...$kinds)': 'is([...$kinds])'
 ```
 
-With this key, `$token->is(T_STRING, ';')` becomes `$token->is([T_STRING, ';'])` and `$token->is(...self::Operators)` becomes `$token->is([...self::Operators])`, but `$token->is([T_STRING])` no longer matches the key. A call that unpacks its arguments matches only a key with remaining arguments. Where the keys of a method list the arguments one by one, for example `is($a, $b)` and `is($a, $b, $c)`, such a call is only reported. An argument passed by name to a method the library deleted is only reported as well: only the declaration of the method tells which positional item of the key the name belongs to, and that declaration is no longer in vendor.
+Under this key, `$token->is(T_STRING, ';')` safely becomes `$token->is([T_STRING, ';'])` and `$token->is(...self::Operators)` becomes `$token->is([...self::Operators])`, while the target form `$token->is([T_STRING])` no longer matches the key. Calls that unpack arguments (`...`) match only keys with variadic placeholders. Where a method lists parameters individually (e.g. `is($a, $b)` and `is($a, $b, $c)`), calls that unpack arguments are reported. Arguments passed by parameter name to a method that a library removed are reported as well: only the original method declaration defines which positional slot a named argument corresponds to, and that declaration is no longer present in `vendor/`.
 
-The first-class callable `$token->getLine(...)` is rewritten to the arrow function `fn() => $token->currentLine` only when the key takes no arguments and the callable is created on a variable or on a class; those are read the same way when the closure is created as when it is called. Otherwise it is only reported, just like a callable written as a value, `[$token, 'getLine']` or `'Acme\Token::getLine'`, where the types say the value is a callable.
+First-class callables like `$token->getLine(...)` are converted to arrow functions `fn() => $token->currentLine` only when the key accepts zero arguments and the callable is created on a variable or class (which evaluate identically when creating or invoking a closure). In all other cases, they are reported.
 
-The key can also be a call to a global function with the same shape of arguments, `'utf8_encode($string)'`. DressCode recognizes such a call by the name of the function, as in `replacedFunctions`, and a bare call in the value is a global function here, written the way the file can reach it. Besides an expression, the value can be the word `removed`, or an expression with the reason for the risk:
+Keys can also target global function calls with matching argument signatures, such as `'utf8_encode($string)'`. DressCode identifies these calls by function name, just as in `replacedFunctions`, and a bare call in the replacement expression is interpreted as a global function written using the shortest reachable import form. In addition to expressions, the replacement value can be the keyword `removed` or an expression paired with an explicit risk reason:
 
 ```neon
 replacedCalls:
@@ -178,14 +178,14 @@ replacedCalls:
 	'utf8_encode($string)': {write: "mb_convert_encoding($string, 'UTF-8', 'ISO-8859-1')", because: a build without mbstring answers the call with an error}
 ```
 
-- **`removed`** marks a call that does nothing. It disappears together with the whole statement if neither what it is called on nor its arguments do anything. A call whose result the code uses, a call that forms the body of a construct without braces, and a call with a comment are only reported. The message is <code>''Function `curl_close()` does nothing.''</code>
-- **`{write: …, because: …}`** is a rewrite that can change what the code does. The fix is then risky, and the message gives the reason with the sentence from `because`: <code>''Risky because a build without mbstring answers the call with an error.''</code>
+- **The `removed` keyword** designates an invocation that is completely inert in newer versions. It is deleted along with its entire statement, provided neither the receiver nor the arguments produce side effects. Invocations whose return value is consumed, calls forming the body of a control structure without braces, or calls containing inline comments are reported rather than deleted, with the message: <code>''Function `curl_close()` does nothing.''</code>
+- **The `{write: …, because: …}` syntax** defines a rewrite that can alter program behavior. The fix is classified as risky, and the error report cites the explanation provided in `because`: <code>''Risky because a build without mbstring answers the call with an error.''</code>
 
 
 nette.flagsAsNamedArguments
 ===========================
 
-A method that takes named arguments instead of flags combined into an integer. The map does not belong to the DressCode engine; the package `dresscode/upgrade-nette` brings it with its rule, because so far only Nette has examples of such a change. So in the configuration of a project, it is in the section `nette` as `flagsAsNamedArguments`. The key is a call with the placeholder of the flags at the end, or just before `...`; the value maps each flag to the arguments it turns into:
+Handles methods that previously accepted bitwise integer flags and now take modern named arguments. This map is not part of the DressCode core; it is provided alongside its dedicated rule by the `dresscode/upgrade-nette` package. In project configurations, it resides in the `nette` section under `flagsAsNamedArguments`. The key is an invocation with a flag placeholder at the end (or just before `...`); the value maps individual flag constants to specific named arguments:
 
 ```neon
 nette.flagsAsNamedArguments:
@@ -197,13 +197,13 @@ nette.flagsAsNamedArguments:
 		PREG_SPLIT_DELIM_CAPTURE: {}
 ```
 
-`Json::encode($data, Json::PRETTY | Json::ESCAPE_UNICODE)` becomes `Json::encode($data, pretty: true, asciiSafe: true)`. A constant is recognized by the class that declares it, so `self::PRETTY` or `$json::PRETTY` match too. The value `{}` marks a flag the method now always applies. A positional argument after the flags gets the name of its parameter. A flag the map does not know, or a variable in place of the flags, is only reported, and a literal in that place, for example `true` or `0`, is already the new API and is left alone.
+An invocation like `Json::encode($data, Json::PRETTY | Json::ESCAPE_UNICODE)` becomes `Json::encode($data, pretty: true, asciiSafe: true)`. Constants are resolved via static analysis, so `self::PRETTY` or `$json::PRETTY` match correctly. An empty value `{}` marks a flag that the method now applies unconditionally. Positional arguments after the flags are converted to use their parameter names. Unrecognized flags or dynamic variables passed as flags are reported; literals in that position (such as `true` or `0`) indicate the call already targets the new API and are left alone.
 
 
 attributeForAnnotation
 ======================
 
-An annotation the library now reads as an attribute. The key is the name of the annotation without `@`; the value is the class of the attribute, possibly with arguments:
+Converts phpDoc annotations that a library now reads as native PHP attributes. The key is the annotation name without the leading `@`; the value is the fully qualified attribute class, optionally including arguments:
 
 ```neon
 attributeForAnnotation:
@@ -211,17 +211,17 @@ attributeForAnnotation:
 	crossOrigin: Nette\Application\Attributes\Requires(sameOrigin: false)
 ```
 
-The annotation disappears from the phpDoc, the attribute is written above the declaration, and its class is imported.
+The annotation is removed from the docblock, the native attribute is added above the declaration, and its class is imported.
 
-The key can also be the fully qualified class of an attribute the library reads as a different one: `Nette\Application\Attributes\CrossOrigin: Nette\Application\Attributes\Requires(sameOrigin: false)`. The old attribute is rewritten to the new one in its place and passes its arguments to it. It is only reported when both the old attribute and the value of the map have arguments, like `sameOrigin: false` in the example, or when the declaration already carries the new attribute. The same class key also applies to the Doctrine annotation of that class, `@Route("/blog")`, resolved by the imports of the file, and its arguments move into the attribute.
+Keys can also specify fully qualified attribute classes that a library replaced with another: `Nette\Application\Attributes\CrossOrigin: Nette\Application\Attributes\Requires(sameOrigin: false)`. The legacy attribute is rewritten in place and passes its arguments forward. If both the legacy attribute and the map value define arguments, or if the declaration already carries the new attribute, the occurrence is reported. The same class key applies to Doctrine annotations of that class (e.g. `@Route("/blog")` resolved via file imports), transferring its arguments into the native attribute.
 
-A mask converts a whole namespace of annotations: `Symfony\Component\Routing\Annotation\*: Symfony\Component\Routing\Attribute\*` writes the annotation of each class of the namespace as an attribute of the class of the same name in the new namespace, and `Acme\Validation\*: Acme\Validation\*` as an attribute of the same class. The asterisk may stand only at the end, and an exact key with a class takes precedence over a mask. With types, DressCode reports a target class that does not exist or is not an attribute, and also an attribute that would be left with a required parameter unfilled, for example `@Template()` without the name of the template.
+Entire annotation namespaces can be converted using wildcards: `Symfony\Component\Routing\Annotation\*: Symfony\Component\Routing\Attribute\*` maps annotations of every class in that namespace to attributes of the same name in the new namespace, while `Acme\Validation\*: Acme\Validation\*` emits attributes of the same class. Asterisks may appear only at the end, and exact class keys take precedence over wildcards. With static type analysis, DressCode reports target classes that don't exist or aren't attributes, as well as attributes that would be left with missing required parameters (such as `@Template()` without a template name).
 
 
 attributeForMember
 ==================
 
-A member the class declared so that the library would find it, and the library now reads a class attribute instead. The key is a member of a parent class or an interface; the value is an attribute in whose arguments `$value` means the value of the member:
+Handles cases where a class previously declared a property or method simply so a framework could discover it, and the library now reads a class-level attribute instead. The key is a parent or interface member; the value is an attribute where the placeholder `$value` represents the member's value:
 
 ```neon
 attributeForMember:
@@ -232,18 +232,18 @@ attributeForMember:
 
 | key | what it is |
 |---|---|
-| `App\Command::$defaultName` | a property; `$value` is its default value |
-| `'App\Model::$timestamps = false'` | the property only when it has this value; the attribute does not need to carry it |
-| `'App\Command::getDefaultName()'` | a method whose body only returns a constant expression; `$value` is that expression |
-| `App\Handler` | an interface the class lists in `implements`; it is removed from there |
+| `App\Command::$defaultName` | A property; `$value` represents its default value |
+| `'App\Model::$timestamps = false'` | A property matching this specific value (the attribute doesn't need to carry it) |
+| `'App\Command::getDefaultName()'` | A method whose body merely returns a constant expression; `$value` is that expression |
+| `App\Handler` | An interface the class lists in `implements`; it is removed from the clause |
 
-The declaration in the class disappears, and the attribute is written above the class. Items with an attribute of the same class are merged into one, so both properties of a command become `#[AsCommand(name: 'app:report', description: 'Sends the daily report')]`, and an attribute of that class that is already on the class gets the named arguments it is missing. These are only reported: a class that reads the member itself, an abstract class whose attribute the library need not read on a child class, a property without a value, a method with a different body, and, with types, an interface inherited from a parent class and an attribute that would be left with a required parameter unfilled, for example a command with only a description and no name. [`imports.unused` |decisions/imports] removes the import of an interface that disappeared from `implements`, unless the project left that decision at `keep`.
+The member declaration is removed from the class body, and the attribute is placed above the class. Items mapping to the same attribute class are merged: both command properties merge into `#[AsCommand(name: 'app:report', description: 'Sends the daily report')]`. If the class already carries that attribute, it is simply updated with any missing named arguments. Classes that read the member internally, abstract classes whose attributes frameworks might not inspect on subclasses, properties without values, and methods with complex bodies are reported without being rewritten. With type analysis, inherited interfaces and attributes left with unfilled required parameters are reported as well. Imports for interfaces removed from `implements` are cleaned up by [`imports.unused` |decisions/imports], unless set to `keep`.
 
 
 forbiddenClasses, forbiddenMembers, forbiddenFunctions and forbiddenConstants
 =============================================================================
 
-What has no replacement, or needs a human to write it. The value is a sentence in English that completes the message `… is forbidden:` and says what to write instead; code in it is in backticks, as in the rest of the message, and the console colors it:
+Flags constructs that have no automated replacement or require architectural review by a developer. The value is an English sentence that completes the message `… is forbidden:`, explaining what to write instead; code snippets are enclosed in backticks:
 
 ```neon
 forbiddenMembers:
@@ -255,15 +255,15 @@ forbiddenFunctions:
 	- dump*
 ```
 
-The call `elixir('app.css')` is reported as <code>''Function `elixir()` is forbidden: use `vite()` for an asset built by Vite.''</code>. A name written alone as an item of the list, `- dump*`, is an item without a sentence, and the message ends with the name: `dumpVars($x)` is reported as <code>''Function `dumpVars()` is forbidden.''</code>. Only the configuration of a project may write an item without a sentence; package data must give one.
+A call like `elixir('app.css')` is reported as <code>''Function `elixir()` is forbidden: use `vite()` for an asset built by Vite.''</code>. An identifier listed as a standalone list item (`- dump*`) represents an entry without an explanatory sentence, ending the message with the identifier name: `dumpVars($x)` is reported as <code>''Function `dumpVars()` is forbidden.''</code>. Only project configurations may omit the sentence; package data files must always provide an explanation.
 
-For an item from package data, the message is more precise. Instead of `forbidden`, it says `deprecated` when the installed code still has the thing, and `removed` when it no longer does; for functions and constants of PHP, it can tell even in a run without types. It then completes the sentence with the version that deprecated the thing, `, since acme/lib 3.0`, and for an item without a sentence, the version stands alone: <code>''Function `strftime()` is deprecated: since PHP 8.1.''</code>
+For entries originating from package data files, terminal reports are more specific. Instead of `forbidden`, the report states `deprecated` if the currently installed package still contains the symbol, and `removed` if it has been deleted; for built-in PHP functions and constants, DressCode detects this even without static type analysis. The message is appended with the release version that deprecated the construct (`, since acme/lib 3.0`), and for entries without a sentence, the version stands alone: <code>''Function `strftime()` is deprecated: since PHP 8.1.''</code>
 
-The keys of `forbiddenClasses` and `forbiddenMembers` have the same shape as in the other maps, including the shape of arguments and magic methods; `'Symfony\Component\HttpFoundation\Request::$query::set'` forbids only writing the property and leaves reading alone. A method that a child class declares under a forbidden name is reported too. The maps are also useful for a replacement that changes a type or behavior, for example a string for an enum or an iterator for an array: a fix would change that silently.
+Keys for `forbiddenClasses` and `forbiddenMembers` use the exact same syntax as other maps (including argument shapes and magic methods); `'Symfony\Component\HttpFoundation\Request::$query::set'` forbids property writes while leaving reads permitted. Subclass method declarations matching a forbidden name are reported as well. These maps are also valuable for replacements that alter return types or runtime semantics (such as replacing a string with an enum or an array with an iterator), where automated fixes could introduce subtle regressions.
 
-The key of `forbiddenFunctions` is the name of a function or a pattern with `*`. A name without a backslash means a global function, and the call is resolved as in PHP, so `elixir()` inside a namespace matches, unless the file declares or imports another function of that name. A pattern with a backslash matches the fully qualified name. Language constructs written like a call are forbidden the same way: `eval`, `exit`, `die`, `print`, `empty`, `isset` and `unset`. Unlike `forbiddenMembers`, this map does not need types.
+Keys in `forbiddenFunctions` specify function names or patterns with wildcards `*`. A name without a backslash represents a global function resolved using standard PHP semantics, matching `elixir()` inside a namespace unless the file declares or imports a local function of that name. A pattern with a leading backslash matches fully qualified names. Language constructs written like function calls can be forbidden identically: `eval`, `exit`, `die`, `print`, `empty`, `isset`, and `unset`. Unlike `forbiddenMembers`, this map does not require type analysis.
 
-The map `forbiddenConstants` does the same with global constants. The key is the name of a constant or a pattern with `*`; a name without a backslash means a global constant, and the name is resolved as in PHP. Unlike functions, constants are case-sensitive, so `E_STRICT` does not match `e_strict`. The import of a constant is not reported, just like the import of a class.
+The `forbiddenConstants` map handles global constants similarly. Keys define constant names or patterns with `*`. A name without a backslash represents a global constant resolved using PHP semantics. Unlike functions, constants in PHP are case-sensitive, so `E_STRICT` will not match `e_strict`. Constant imports are not reported, matching the behavior of class imports.
 
 ```neon
 forbiddenConstants:
@@ -275,13 +275,13 @@ forbiddenConstants:
 A Value as Code in NEON
 =======================
 
-Write the value of `replacedCalls` as a string with PHP code in single quotes; a single quote inside is doubled: `'isMethod(''POST'')'`. NEON does read `isMethod(POST)` without quotes as an entity, but in its arguments a bare word is a string, `Class::NAME` a class constant and `$name` a placeholder; `...` and `...$args` still mean the remaining arguments; a number, `true`, `false` and `null` are PHP literals; and a nested entity is another call. An entity cannot hold a global constant, an operator or anything else, and DressCode rejects a chain of entities, that is, a call on the result of a call; such code belongs in a string as a whole. Likewise, a name NEON would read as a literal, `False` or `Null`, belongs in single quotes.
+Always write `replacedCalls` values as single-quoted strings containing valid PHP code; escape single quotes inside by doubling them: `'isMethod(''POST'')'`. While NEON can parse unquoted calls like `isMethod(POST)` as entities, entity arguments interpret bare words as strings, `Class::NAME` as class constants, `$name` as placeholders, numbers and booleans as PHP literals, and nested entities as nested calls. An entity cannot hold global constants, operators, or arbitrary expressions, and DressCode explicitly rejects chained entities (calling a method on the result of another call). Such expressions belong in single quotes as complete strings. Similarly, identifiers that NEON could interpret as literals (`False`, `Null`) must always be wrapped in quotes.
 
 
 Data Files
 ==========
 
-A library or an upgrade package carries the maps in NEON files, one per library, in a directory it names in its `composer.json` with the key `upgrading-dir`; DressCode reads every `*.neon` file in it. The key `packages` lists the packages the data describes:
+A library or migration package ships replacement maps in NEON files (one file per library) inside a directory declared in its `composer.json` under `extra.dresscode.upgrading-dir`. DressCode automatically discovers and loads every `*.neon` file inside it. The `packages` key enumerates the exact packages described:
 
 ```json
 {
@@ -294,9 +294,9 @@ A library or an upgrade package carries the maps in NEON files, one per library,
 }
 ```
 
-DressCode reads both directly from `composer.json` and from the files; it does not run the code of the package for that. From the list `packages`, `dresscode upgrade today` recognizes which project is missing the package and offers it to a project that requires one of those libraries; for now, it does so only for packages of the vendor `dresscode`. So the list names exactly the libraries the files describe, and a whole vendor can be written in it with a slash at the end, `nette/`. Besides `upgrading-dir` and `packages`, DressCode knows only the key `plugin` under `extra.dresscode`; see [below |#A Package for Upgrading an Ecosystem]. It skips any other key and reports it as a warning, because the key may have been introduced by a newer DressCode than the one the project has.
+DressCode inspects these declarations directly from `composer.json` and file contents without executing package code. Based on the `packages` list, `dresscode upgrade today` detects which packages a project is missing and prompts to install them (currently supported for packages from the `dresscode` vendor). The list must therefore accurately name the libraries covered by the files; whole vendors can be matched with a trailing slash (`nette/`). Beside `upgrading-dir` and `packages`, DressCode only recognizes the `plugin` key under `extra.dresscode` (see [A Package for Upgrading an Ecosystem |#A Package for Upgrading an Ecosystem]); any unrecognized key is skipped with a warning, as it may belong to a newer DressCode release.
 
-A file starts with the key `package`, naming the package whose versions it describes, and continues with `since <version>` sections. The package can also be `php`: that is how DressCode writes the data about what PHP itself deprecated, in the file `src/Rules/Upgrading/php.neon`, and its versions are measured against the PHP version of the project:
+A data file starts with the `package` key naming the package it describes, followed by versioned `since <version>` sections. The package name can also be `php`: this is how DressCode maintains its internal deprecation database for PHP itself in `src/Rules/Upgrading/php.neon`, evaluated against your project's target PHP version:
 
 ```neon
 package: nette/http
@@ -313,15 +313,15 @@ since 3.2.1:
 		Nette\Http\IRequest::POST: Post
 ```
 
-- **The intent** is not stated in the file. What one version offers as a newer form usually becomes a deprecation in a later version, and the section `since <version>` already says when. The data of a file applies only when the project says `upgrading.packages: yes`; the [sets |configuration#Standards and Sets] `deprecations` and `modernizations` both do that. The requirement `upgrading.php.deprecatedApi: forbidden` turns on the PHP data separately; both the set `deprecations` and the standard `nette` include it.
-- **Write the sections** from the newest version down, as an upgrade guide does; they are merged by version regardless of their order in the file, and the later one has the last word.
-- **Which section applies** is decided by the lowest version the project's constraint in `composer.json` allows. The code is rewritten by the sections that version reaches. A section for a higher version that the constraint also allows is only reported, and the message carries the replacement and the version, for example <code>''Class `Acme\Old` is deprecated: replaced by `Acme\New`, since acme/lib 4.0.''</code> For a package the project does not require itself, or requires without a lower bound, every section is reported. More in [Upgrading Code |upgrade#Lower Bounds Decide].
-- **A fix that is correct even in a version older than the section's** says so with the key `from`, `{write: …, from: '8.0'}`. `curl_close()` has done nothing since PHP 8.0, but it has been deprecated only since 8.5, so it is in the section `since 8.5` as `'curl_close($handle)': {write: removed, from: '8.0'}` and disappears in every project whose lowest version reaches PHP 8.0.
-- **A version** is written without trailing zeros, `since 3.1`, and the key `since 3.10` is text, so it does not turn into the number 3.1.
-- **What a later version took back** gets `keep` in its section, possibly also a ban, like `IMAGE_MIME_TYPES` in the example.
-- **A chain** across versions is written link by link, `REALPATH` to `Realpath` and in the next version `Realpath` to `RealPath`; the code is rewritten straight to the end of the chain.
+- **Files do not define intent.** What one version introduces as a modern syntax alternative usually becomes a formal deprecation in a subsequent release—and the `since <version>` section explicitly records that timeline. Data files take effect when a project enables `upgrading.packages: yes`, which the `deprecations` and `modernizations` [sets |configuration#Standards and Sets] do automatically. PHP deprecation data is activated separately via `upgrading.php.deprecatedApi: forbidden`, which is included in both the `deprecations` set and the `nette` standard.
+- **Write sections in descending order from the newest version down**, matching how official upgrade guides are written. Sections are merged by version regardless of their order in the file, and newer releases always take precedence.
+- **Which section applies** is decided by the lowest version permitted by your project's constraints in `composer.json`. Code is rewritten according to sections that this lower bound reaches. Sections for higher versions that constraints also permit are reported as informational findings, including the replacement and version (e.g. <code>''Class `Acme\Old` is deprecated: replaced by `Acme\New`, since acme/lib 4.0.''</code>). For packages required without a lower bound or present purely as unconstrained transitive dependencies, every section is reported (see [Upgrading Code |upgrade#Lower Bounds Decide]).
+- **Fixes valid in earlier versions** than the section's release use the `from` key, e.g. `{write: …, from: '8.0'}`. For example, `curl_close()` has been inert since PHP 8.0, but was only officially deprecated in PHP 8.5. In the `since 8.5` section, it is recorded as `'curl_close($handle)': {write: removed, from: '8.0'}`, safely removing calls in any project targeting PHP 8.0 or newer.
+- **Versions** are written without trailing zeros (`since 3.1`), and the key `since 3.10` is parsed as a string, preventing it from converting to the number 3.1.
+- **Constructs reverted by later releases** receive `keep` in that version's section (or an explicit prohibition, like `IMAGE_MIME_TYPES` above).
+- **Chained renames** across multiple releases are written step by step: `REALPATH` to `Realpath`, and in the next release `Realpath` to `RealPath`; DressCode automatically rewrites code directly to the final end of the chain.
 
-A file adds items to maps, so a section that gives a bare value instead of a map, for example `true`, is an error. It names the maps of the engine by their short name (`replacedCalls`), and the maps of plugins by the whole decision path (`nette.flagsAsNamedArguments`); DressCode skips a map it does not know and reports it as a warning. The rules of a plugin carried by the same package are the one exception: the file turns on its requirement with the decision path and a value, in the section of the version from which the rewrite is correct:
+A data file merely populates maps; a section containing a scalar value like `true` instead of a map is invalid. Built-in maps are referenced by short names (`replacedCalls`), while plugin maps use their full decision path (`nette.flagsAsNamedArguments`); unrecognized maps are skipped with a warning. Plugin rules shipped within the same package are the one exception: a data file can directly activate its requirement by stating the decision path and value in the version section where the rewrite becomes valid:
 
 ```neon
 package: laravel/framework
@@ -330,27 +330,27 @@ since 12.4:
 	laravel.scopeAttribute: required
 ```
 
-The requirement applies once the lowest version the project's constraint allows reaches that section; a section above it does not turn it on and reports nothing. A requirement of the engine or of another plugin is an error, because a package does not decide how the code of a project is written.
+The requirement activates once your project's lower bound reaches that section; sections above that threshold do not activate it and report nothing. Declaring requirements belonging to the core engine or another plugin triggers an error, as a package cannot dictate general project coding standards.
 
-Besides sections, a file may carry one more key, `namespaces`, written as in the configuration: the functions and constants the namespaces of the package declare for the files the project writes into them; see [Functions and Constants in Namespaces |php-functions-in-namespaces]. For the root package, all sections apply regardless of version, so `dresscode check` in the repository of a library loads the file and reports an error in it before you release a new version.
+Beside version sections, a data file may define a `namespaces` key using standard configuration syntax: listing functions and constants that the package declares in namespaces for userland code (see [Functions and Constants in Namespaces |php-functions-in-namespaces]). In a library's own root repository, all version sections apply unconditionally, allowing `dresscode check` to catch data file syntax errors before you release a new version.
 
 
 Checking the Data
 =================
 
-The class `DressCode\Testing\UpgradingTester` checks a file against the library installed in the project. The method `collectProblems()` verifies that DressCode accepts all sections, that `extra.dresscode` in the `composer.json` of the package has no key DressCode does not know, and that each item of the maps `forbiddenClasses`, `forbiddenMembers`, `forbiddenFunctions` and `forbiddenConstants` has a sentence in the shape the message needs: lowercase unless it starts with a name, no period at the end, no double quotes, and at most 160 characters not counting backticks. For the maps `replacedClasses` and `replacedMembers`, for a static method in `replacedFunctions` and for an attribute in `attributeForMember`, it also verifies that the replacement the sections lead to with the installed version exists, and for the first two maps also that a chain of replacements does not end in a loop. It does not check the values of the other maps, for example the expressions of `replacedCalls`. It returns the problems as a list of sentences, empty for a file without problems, so you can call the method from a test in any framework:
+The `DressCode\Testing\UpgradingTester` utility validates migration data files against the library version installed in your project. The `collectProblems()` method verifies that DressCode accepts all sections, that `extra.dresscode` in the package's `composer.json` contains no unrecognized keys, and that every entry in `forbiddenClasses`, `forbiddenMembers`, `forbiddenFunctions`, and `forbiddenConstants` supplies a properly formatted sentence: lowercase unless starting with an identifier, no trailing period, no double quotes, and under 160 characters (excluding backticks). For `replacedClasses`, `replacedMembers`, static methods in `replacedFunctions`, and attributes in `attributeForMember`, it verifies that the resolved replacement exists in the installed library, and for the first two maps, that renames do not form circular loops. It does not validate expression strings in `replacedCalls`. Discovered issues are returned as a list of strings (empty if valid), allowing seamless integration into any test runner:
 
 ```php
 Assert::same([], DressCode\Testing\UpgradingTester::collectProblems(__DIR__ . '/../upgrading/forms.neon', __DIR__ . '/..'));
 ```
 
-A package with its own rules passes their classes as the third argument, so that the file may fill their maps. The method `collectPackageProblems()` compares the list `packages` with the files in both directions: it reports a library a file describes that the list does not name, and a library from the list that no file describes.
+Packages with custom rules pass their classes as the third argument so the data file is permitted to populate their maps. The `collectPackageProblems()` method verifies the `packages` list against files on disk in both directions: reporting libraries described by files but missing from the list, as well as libraries in the list lacking data files:
 
 ```php
 Assert::same([], DressCode\Testing\UpgradingTester::collectPackageProblems(__DIR__ . '/..'));
 ```
 
-But the best check is a sample: a piece of code in the old API, written the way a user writes it, and its fixed form with the messages, written next to it and read carefully. It shows you what the data really does, and also what it would do wrong. The method `runSample()` fixes the sample the way a project with the data turned on would fix it: every section the installed version of the library reaches applies, and the PHPStan of the project supplies the types; that is why the method writes the code into the directory `temp/` in the root of the project. The sections themselves turn on the requirements of the package's rules; decisions the data does not turn on are passed to the method as the third argument, grouped by section as in the configuration. It returns the fixed code in `$result->output` and the findings in `$result->violations`:
+The ultimate test of migration data is an end-to-end sample: real-world legacy code paired with its expected output and reports. The `runSample()` method executes fixes exactly as a project with enabled migration data would: applying all sections matching the installed library version and using static types from the project's PHPStan (writing code temporarily to `temp/` in the project root). Package rule requirements activate automatically based on sections; unactivated decisions can be passed via the third argument. The method returns the transformed code in `$result->output` and findings in `$result->violations`:
 
 ```php
 $code = file_get_contents(__DIR__ . '/samples/forms.code');
@@ -362,12 +362,12 @@ Assert::matchFile(__DIR__ . '/samples/forms.expected', $result->output);
 A Package for Upgrading an Ecosystem
 ====================================
 
-The data of a whole ecosystem belongs in one package. The packages of the vendor `dresscode` are named `dresscode/upgrade-<ecosystem>`: `dresscode/upgrade-nette`, `dresscode/upgrade-symfony`, `dresscode/upgrade-laravel`, `dresscode/upgrade-deegee` for Dibi and Texy. A library thus does not have to carry the data itself, and the package can add data even for older versions that nobody will release again. The structure of such a package:
+Migration data for an entire ecosystem belongs in a dedicated package. Official packages from the `dresscode` vendor follow the naming convention `dresscode/upgrade-<ecosystem>`: `dresscode/upgrade-nette`, `dresscode/upgrade-symfony`, `dresscode/upgrade-laravel`, or `dresscode/upgrade-deegee` (for Dibi and Texy). This relieves libraries from maintaining migration data directly and allows packages to support older historical releases for which new versions will never be tagged. The architecture of an upgrade package:
 
-- `composer.json` with the type `dresscode-plugin`, a dependency on `dresscode/dresscode`, the libraries of the ecosystem in `require-dev` (checking the data needs them installed), and the keys `upgrading-dir` and `packages` under `extra.dresscode`,
-- a directory `upgrading/` with one file per library,
-- tests: a check of each file and of the list `packages` through `UpgradingTester`, and a sample per library,
-- and rules with code where a change cannot be expressed with a map. The package announces them through its [plugin |presets-and-plugins] class under `extra.dresscode.plugin`, and their decisions are in a section named after the plugin, for example `nette.flagsAsNamedArguments`. For `check` and `fix`, the project enables them with the name of the package in `use`; `dresscode upgrade today` loads them on its own.
+- A `composer.json` file with type `dresscode-plugin`, a dependency on `dresscode/dresscode`, ecosystem libraries in `require-dev` (needed for test validation), and `upgrading-dir` and `packages` defined under `extra.dresscode`,
+- An `upgrading/` directory containing one clean NEON file per library,
+- Automated tests: validation of every file and the `packages` list via `UpgradingTester`, along with integration samples for each library,
+- Custom rules with executable code where transformations cannot be expressed via declarative maps. The package registers them through its [plugin |presets-and-plugins] class under `extra.dresscode.plugin`, and their decisions live in a section named after the plugin (e.g. `nette.flagsAsNamedArguments`). During `check` and `fix`, projects activate them by listing the package name in `use`; `dresscode upgrade today` loads them automatically.
 
 ```json
 {
@@ -382,9 +382,9 @@ The data of a whole ecosystem belongs in one package. The packages of the vendor
 }
 ```
 
-The list of files is not in the plugin because the data is read without running the code of the package; the plugin is loaded only when the project enables it. The data fills the map of a package's rule the same way as the maps of the engine, and the files turn on its requirements from the version from which the rewrite is correct, for example `nette.linkArguments` from `nette/application` 3.3; both happen when the project says `upgrading.packages: yes`. The project thus does not have to turn them on itself, and both `dresscode upgrade today` and the two sets get them.
+The list of data files is not declared in the plugin class because data is loaded without executing package code; the plugin itself is instantiated only when a project explicitly allows it in `use`. Migration data populates plugin maps identically to core engine maps, and requirements activate starting with the version where the rewrite becomes valid (e.g. `nette.linkArguments` from `nette/application` 3.3). Projects do not need to enable them manually—they are provided to `dresscode upgrade today` and both primary sets automatically.
 
-The model is the package [dresscode/upgrade-nette |https://github.com/dg/dresscode-upgrade-nette].
+The reference implementation is [dresscode/upgrade-nette |https://github.com/dg/dresscode-upgrade-nette].
 
 {{maintitle: Replacement Maps: Describe an API Change for PHP Upgrades}}
 {{description: Reference for the maps DressCode uses to rewrite PHP code to a new API: members and argument shapes, PHP expressions as replacements, data files and upgrade packages.}}

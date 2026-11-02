@@ -2,19 +2,19 @@ How to Write Your Own Rule
 **************************
 
 .[perex]
-From the first test to a custom rule running in your project, in one afternoon: you name the decision the rule enforces, say which nodes you care about, write down the conditions with the fix, and `RuleTester` takes care of the rest.
+From writing your first test to running a custom rule across your codebase in a single afternoon: define the decision your rule enforces, specify the syntax tree nodes you want to inspect, write your conditions alongside the automated fix, and let `RuleTester` handle everything else.
 
 
 What We Are Going to Write
 ==========================
 
-Every team has a few rules that no standard covers, because they belong to that team alone. Take this one: the message of an exception is a sentence and ends with a period, so `throw new InvalidArgumentException('The name must not be empty')` should become `'The name must not be empty.'`. For years I watched for this in code review, because writing a sniff (a PHP_CodeSniffer rule) for it took more work than it saved. Here it takes fifty lines, and we will write them together.
+Every team has a few bespoke coding conventions that no standard covers because they belong to that team alone. Take this common example: an exception message is a complete sentence and must end with a period. A statement like `throw new InvalidArgumentException('The name must not be empty')` should therefore automatically become `'The name must not be empty.'`. For years, I watched for this manually in code reviews because writing a custom sniff for PHP_CodeSniffer was more trouble than it was worth. In DressCode, we can implement this cleanly in about fifty lines—and we’ll write them together.
 
 
 The Fixture First
 =================
 
-A rule is tested on fixtures, that is, pairs of files with the code before the fix and after it. One fixture has up to three files: `.code` with the code before the fix, `.expected` with the code after it, and `.violations` with the lines and messages the rule should report. A fixture is the best specification you can write, so we start with it. We put this into `tests/fixtures/exceptionMessagePeriod/basic.code`:
+Every rule in DressCode is developed and tested against fixtures: paired files containing code before and after an automated fix. A complete fixture is composed of three files: `.code` containing the input code, `.expected` containing the expected output after the fix, and `.violations` listing the exact line numbers and error messages the rule must report. A fixture is the most unambiguous specification you can write, so we begin right there in `tests/fixtures/exceptionMessagePeriod/basic.code`:
 
 ```php
 <?php
@@ -26,7 +26,7 @@ throw new LogicException('Unreachable ');
 $logger->log('Started');
 ```
 
-This is already where we decide what the rule can and cannot do. The second line is fine. The third one contains an interpolated string, and we leave it alone (who knows what is in `$id`). The fourth one has an extra space at the end, which disappears when the period is added. The fifth one is not an exception. The file `basic.expected` is the same code with periods on lines 3 and 6, and `basic.violations` says what should be reported:
+Right here, we define the exact boundaries of what our rule should and shouldn't do: line 2 is already valid; line 3 contains an interpolated string that we intentionally leave untouched (we can't predict what `$id` will evaluate to); line 4 has trailing whitespace that the period should absorb; and line 5 isn't an exception at all. The `basic.expected` file contains the exact same code with periods added on lines 3 and 6, while `basic.violations` specifies the expected reports:
 
 ```
 3: The message of an exception must end with a period.
@@ -37,9 +37,9 @@ This is already where we decide what the rule can and cannot do. The second line
 The Skeleton of the Rule
 ========================
 
-A rule is a class extending `DressCode\NodeRule` with the `#[RuleInfo]` attribute, which says which stage the rule runs in. There are three stages (`Stage`): `Structure` for changes to the code, `Formatting` for whitespace and line breaks, and `Finishing` for the final cleanup. Our rule changes text, so it belongs to `Structure`.
+A rule is a class extending `DressCode\NodeRule`, decorated with the `#[RuleInfo]` attribute specifying which execution stage it belongs to. There are three stages (`Stage`): `Structure` for structural code changes, `Formatting` for whitespace and line breaks, and `Finishing` for final cleanup. Because our rule modifies text content, it belongs in `Structure`.
 
-A rule has no name. Users never write a rule; they write a **decision**, a configuration key that says how something is written in the code, and the rule only enforces it. Our decision is that the message of an exception ends with a period, and the rule declares it in its `getDecisions()` method:
+A rule has no public name. In DressCode, users never configure or enable rules directly—they configure **decisions** (configuration keys that define how code should look), and rules merely enforce them. Our decision is that exception messages must end with a period. The rule declares this via `getDecisions()`:
 
 ```php
 namespace App\CodeStyle;
@@ -78,19 +78,19 @@ final class ExceptionMessagePeriodRule extends NodeRule
 }
 ```
 
-A `Decision` has three parts. The **path** `project.exceptionMessagePeriod` ties together everything the user will see: they write it into the configuration, find it next to every finding in the output, suppress it in a `dresscode:ignore` comment and ask about it with `dresscode explain`. A project's rules put their decisions in the `project` section, a plugin's rules in a section named after the plugin, and the engine in its twenty or so sections, so paths never clash. The **domain** `Domain::state('required')` says what values the key takes: the word `required` ("the period is always there"), and also `keep`, like every decision that requires something. And the **description** is an English sentence without a period at the end. It says what the rule does where the key is not `keep`, and both `dresscode explain` and the catalogue print it.
+A `Decision` consists of three parts. The **path** `project.exceptionMessagePeriod` connects everything the user sees: they write it in their configuration, see it next to every finding in the terminal, use it in `dresscode:ignore` comments, and query it using `dresscode explain`. Project-specific rules operate in the `project` section, plugin rules use a section named after the plugin, and the engine uses its own built-in sections—ensuring paths never collide. The **domain** `Domain::state('required')` defines accepted values: the string `required` ("periods are mandatory") and the universal `keep` ("do not check"). Finally, the **description** is an English sentence without a trailing period that explains what the rule does; it is displayed by `dresscode explain` and in the generated catalogue.
 
-A decision like this is called a **requirement**: the rule runs wherever some layer of the configuration sets it to a value other than `keep`, and where no layer sets it, the decision requires nothing. So a rule is never turned on by its name. The project writes the decision it wants, and the rule that enforces it joins in by itself.
+A decision like this is called a **requirement**: the rule runs wherever any configuration layer sets it to a value other than `keep`. Where no configuration mentions it, it requires nothing and does not run. Rules are therefore never enabled by class name—a project simply declares its desired code style, and the corresponding rule joins the run automatically.
 
-`NodeRule` is one of the two forms of a rule: it visits the nodes of the tree and works on them. The other form is `GapRule`, which does not visit nodes; it [makes claims about the whitespace |whitespace-rules] instead.
+`NodeRule` is one of two rule types: it traverses syntax tree nodes and inspects them directly. The other type is `GapRule`, which doesn't visit nodes, but [submits declarative claims about whitespace |whitespace-rules] instead.
 
-The `getVisitedNodes()` method says which nodes you want to see; the engine then calls `enter()` only for them. We care about `new`, that is, `NewNode`. The [node reference |phpsyntax:nodes] lists which nodes exist and what they contain: `NewNode` has the slots `newKeyword`, `class` and `arguments`.
+The `getVisitedNodes()` method declares which node types you want to inspect. The engine will call `enter()` exclusively for those nodes. We care about instantiation via `new`, represented by `NewNode`. The [node reference |phpsyntax:nodes] lists all available nodes and their slots: `NewNode` provides `newKeyword`, `class`, and `arguments`.
 
 
 Conditions and the Fix
 ======================
 
-Now for the main part. In `enter()`, we describe when something is wrong, as a series of questions about the tree (the imports gain `PhpSyntax\Nodes\NameNode` and `PhpSyntax\Nodes\Scalar\StringNode`):
+Now for the core logic. In `enter()`, we evaluate a series of conditions against the syntax tree to detect violations (adding imports for `PhpSyntax\Nodes\NameNode` and `PhpSyntax\Nodes\Scalar\StringNode`):
 
 ```php
 public function enter(Node|Token $node, RuleContext $context): void
@@ -118,24 +118,26 @@ public function enter(Node|Token $node, RuleContext $context): void
 }
 ```
 
-Read it from the top: it is a `new` with a class name (so not `new $class` or an anonymous class), and the name ends with `Exception`. The first argument is a string without interpolation. An interpolated string is a different node, not a `StringNode`, so the third line of the fixture is skipped without any extra condition. The string is in single quotes, it is not empty, and it does not end with a period. And the last question: **nobody suppressed the decision here.** The `report()` call returns `false` if the place is [suppressed |suppressions-and-baseline] by a `dresscode:ignore` comment on the same line or on its own line above the construct, or by a pair of `dresscode:disable` and `dresscode:enable` around it. Then nothing may change. That is why the call is part of the condition and does not come before it. `report()` does not need the path of the decision: a rule with a single requirement reports under it automatically.
+Read the checks from the top down: this is a `new` instantiation with an explicit class name (not `new $class` or an anonymous class), and the class name ends with `Exception`. The first argument is a plain string without interpolation: an interpolated string in double quotes produces a completely different AST node, so line 3 of our fixture is filtered out automatically without any special conditions. That string uses single quotes, is non-empty, and its trimmed value doesn't already end with a period.
 
-Only after all of this comes the fix: a single `setValue()`. We do not write the text of the token but the value of the string, so the node itself takes care of escaping and quotes. The rest of the file does not change by a single byte.
+And the crucial final check: **nobody suppressed the decision at this location.** The `$context->report()` method returns `false` if the construct is [suppressed |suppressions-and-baseline] by a `dresscode:ignore` comment on the same line or above it, or by a `dresscode:disable`/`dresscode:enable` block. In that scenario, the code must not change. That is why `report()` sits at the end of the `if` condition rather than before it. You don't need to pass the decision path manually: a rule with a single requirement reports under it automatically.
 
-Notice what is not in the rule: no counting of parentheses, no searching for where an argument ends, no defense against a comment in the middle of a call. The tree knows all of that. On a flat array of tokens, most of the code would deal with everything that can stand between `new` and the string; here that question never arises.
+Only after passing all these guards do we apply the fix: a single call to `setValue()`. We don't overwrite raw token text; we update the string's semantic value, letting the node handle quotes and escaping automatically. The rest of the file remains byte-for-byte identical.
+
+Notice what this rule never has to deal with: no parenthesis counting, no hunting for argument boundaries, and no special handling for inline comments nested inside the call. The syntax tree handles all of that. On a flat array of tokens, most of your code would be spent defending against things that can appear between `new` and the string literal; in an AST, that problem never arises.
 
 
 Testing the Rule
 ================
 
-The fixture must say which value the decision runs with; otherwise it would be `keep` and the rule would do nothing. The values for all fixtures of a directory go into a `values.neon` file next to them, written the same way as in the configuration:
+Fixtures need to declare what value the decision runs with; otherwise it defaults to `keep` and the rule does nothing. Configuration values for all fixtures in a directory belong in a `values.neon` file placed alongside them, matching standard configuration syntax:
 
 ```neon
 project:
 	exceptionMessagePeriod: required
 ```
 
-`RuleTester` gets the class of the rule and the directory with the fixtures, and it checks everything you would forget: that the output matches the `.expected` file, that the reports match the `.violations` file, that running the rule again on its own output changes nothing, that it did not drop any comment, that it respects `dresscode:ignoreFile`, and that it changed nothing without reporting it. With Nette Tester, such a test looks like this:
+The `RuleTester` utility takes the rule class and the fixtures directory, automatically verifying everything you might otherwise forget to test: that the output matches `.expected`, that reported errors match `.violations`, that running the rule on its own output mutates nothing further (idempotence), that comments are fully preserved, that `dresscode:ignoreFile` is respected, and that nothing was modified without being reported. In Nette Tester, a test looks like this:
 
 ```php
 use App\CodeStyle\ExceptionMessagePeriodRule;
@@ -148,15 +150,15 @@ Tester\Environment::setup();
 Assert::noError(fn() => RuleTester::run(ExceptionMessagePeriodRule::class, __DIR__ . '/fixtures/exceptionMessagePeriod'));
 ```
 
-Nette Tester wants at least one assertion in every test, which is why the call is wrapped in `Assert::noError()`. With PHPUnit, it is the same call inside a test method. A failure is reported as the exception `DressCode\Testing\TestFailure` with a diff, so every framework shows it clearly.
+Nette Tester expects at least one assertion per test, which is why the call is wrapped in `Assert::noError()`. In PHPUnit, you would place the exact same call inside a test method. Any assertion failure throws a `DressCode\Testing\TestFailure` exception with a unified diff, highlighting exactly where the output diverged from expectations.
 
-When you run the test now, it passes. If it did not, the diff would tell you on which line of the fixture the rule sees something different from what you see, and that is often the moment you learn something new about your code. In this case it was `rtrim()`: the first version of the rule did not have it, and the fixture with the trailing space made it necessary.
+Run the test now, and it will pass. If it fails, the diff reveals the exact line where the rule sees code differently than you do. That is often when you discover subtle edge cases—in our case, `rtrim()` was missing in the first draft, and the fixture with trailing whitespace immediately prompted its addition.
 
 
 Enabling It in a Project
 ========================
 
-You can put the class anywhere the autoloader can find it. I keep my own rules in the `tools/CodeStyle/` directory, loaded through `autoload-dev`, so that `DressCode\NodeRule` does not get into the production autoloader. The configuration names the rule by its class in the key `rules`, and that adds its decision to the catalogue. The decision gets its value in the `project` section, like any other decision:
+You can place your rule class anywhere your autoloader can find it. A good convention is placing custom rules in `tools/CodeStyle/` loaded via `autoload-dev`, preventing `DressCode\NodeRule` from entering your production autoloader. In your configuration, register the rule class under `rules`, which adds its decisions to the catalogue. Then configure its value in the `project` section, just like any built-in decision:
 
 ```neon
 rules:
@@ -166,22 +168,22 @@ project:
 	exceptionMessagePeriod: required
 ```
 
-From now on, `dresscode check` reports it under its path,
+From this point on, `dresscode check` reports violations under its full path:
 
 /--pre .[terminal]
 src/check.php
   error  8:39  The message of an exception must end with a period.  project.exceptionMessagePeriod
 \--
 
-`dresscode fix` fixes it, the comment `// dresscode:ignore project.exceptionMessagePeriod` suppresses it, and `dresscode explain project.exceptionMessagePeriod` prints the description, the domain and which layer set the value, just like for any decision of the engine. When several projects need the same rule, wrap it in a [plugin |presets-and-plugins]; its decision then moves to the plugin's section.
+The `dresscode fix` command repairs it automatically, `// dresscode:ignore project.exceptionMessagePeriod` suppresses it locally, and `dresscode explain project.exceptionMessagePeriod` displays its description, domain, and configuring layer—exactly like any built-in engine decision. When multiple projects need the same rule, wrap it in a [plugin |presets-and-plugins]; its decisions then simply relocate to the plugin's dedicated section.
 
 
 Where to Go Next
 ================
 
-- A rule that needs more values (say, a list of exception suffixes) declares a **parameter** next to the requirement: another decision that only refines it. The rule reads the values in its `configure()` method. The page [A Rule in Detail |rule-contract] shows how to do it, lists the domains, and describes everything a rule must follow.
-- Our rule recognizes an exception by its name. If you need more than that, use the `NameResolver` analysis, which resolves a name according to the imports and the namespace; analyses are described in [PhpSyntax |phpsyntax:analyses].
-- A rule for spaces and line breaks is written differently, with a claim instead of `enter()`: [Whitespace Rules |whitespace-rules].
-- If you are porting an existing sniff or fixer, there is a separate guide: [Porting a Rule from Another Tool |porting-rules].
+- When a rule needs additional options (such as a configurable list of exception name suffixes), it declares a **parameter** alongside its requirement: a companion decision that refines behavior and is read in `configure()`. See [A Rule in Detail |rule-contract] for parameter types and contract guidelines.
+- Our rule identifies exceptions simply by checking if their name ends with `Exception`. To verify inheritance with certainty, use the `NameResolver` analysis to resolve names against imports and namespaces; available analyses are documented in [PhpSyntax |phpsyntax:analyses].
+- Rules controlling spaces, indentation, and line breaks are written differently—submitting declarative claims instead of implementing `enter()`: [Whitespace Rules |whitespace-rules].
+- If you are migrating an existing sniff from CodeSniffer or a fixer from PHP CS Fixer, check our porting guide: [Porting a Rule from Another Tool |porting-rules].
 
 {{maintitle: Write Your Own PHP Code Style Rule}}

@@ -2,15 +2,15 @@ Upgrade Your Code Step by Step
 ******************************
 
 .[perex]
-How much work does it take to move to a newer Nette, Symfony, Laravel or PHP? DressCode measures it before it changes anything in your code: it tells you what it rewrites by itself, what waits until you raise the versions in `composer.json`, and what is left to you. Then it makes a plan and carries it out step by step, including raising the versions with Composer, and if a step breaks one of your tests, it reverts that step.
+How much effort will it actually take to upgrade to a newer Nette, Symfony, Laravel, or modern PHP? DressCode measures the scope before touching a single line of code: calculating what it can rewrite automatically, what must wait until dependencies are raised in `composer.json`, and what requires manual attention. It then builds a step-by-step upgrade plan and executes it—including dependency updates via Composer. And if any step breaks your test suite, it reverts the changes immediately.
 
-If you have not installed DressCode yet, [Getting Started |getting-started#Installation] shows how. The whole upgrade takes three commands: `dresscode upgrade estimate` measures, `upgrade plan` plans, and `upgrade run` carries the plan out. If you have already raised the versions yourself, [`upgrade today` |#When You Have Already Raised the Versions] is enough. Every option is described in the [command line reference |cli#upgrade].
+If you haven't installed DressCode yet, [Getting Started |getting-started#Installation] shows how to set it up. The whole process is driven by three commands: `dresscode upgrade estimate` measures the work, `upgrade plan` builds the execution plan, and `upgrade run` carries it out. If you have already bumped your dependencies manually, the direct command [`upgrade today` |#When You Have Already Raised the Versions] is all you need. Every option is detailed in the [command line reference |cli#upgrade].
 
 
 How Much Work an Upgrade Takes
 ==============================
 
-Take a Nette 3 application that is about to move to `nette/utils` 4.0; [below |#Where DressCode Runs] you will see how to install DressCode for it. All the estimate needs is a target: the package and the version you are moving to, or the word `php` and a PHP version:
+Take a Nette 3 application moving to `nette/utils` 4.0 (we explain how to install DressCode for older environments [below |#Where DressCode Runs]). To estimate the effort, all you need to supply is the target package and version, or the keyword `php` and a PHP version:
 
 ```shell
 dresscode upgrade estimate nette/utils 4.0
@@ -32,35 +32,35 @@ Data       nette/application up to 3.3, nette/component-model up to 3.2, nette/h
            nette/routing up to 3.1.4, nette/utils up to 4.1.5, php up to 8.6
 \--
 
-Each line is one topic: either a library DressCode has data about, here `nette/utils`, or a single [decision |configuration] for a change that no data describes. Next to the topic you see the number of findings (the places that must change), the number of files they are in, and two words that describe the topic.
+Each line in the output represents a single topic: either a library for which DressCode has migration data (here `nette/utils`), or a specific [decision |configuration] for an architectural change that migration data cannot describe declaratively. Next to the topic name, you see the number of findings (locations requiring modification), the number of affected files, and two descriptors outlining the nature of the edits.
 
-The first word says when a place may be rewritten. `works on ^3.2` means that the new code already works on the versions `composer.json` allows today, `^3.2`, so the place may be rewritten right away. A place marked `needs ^4.0` waits until you raise the constraint to `^4.0`, because code written for the new version would not work on the old one. That is why one library can appear on both lines: Nette deprecated `Arrays::searchKey()` back in the 3.x series and its replacement `getKeyOffset()` already exists in 3.2, while `Strings::startsWith()` disappeared only in 4.0.
+The first descriptor specifies **when** an edit can safely be made. The flag `works on ^3.2` means the updated code is fully backward compatible with the constraints currently permitted by your `composer.json` (here `^3.2`), allowing DressCode to rewrite it immediately. Conversely, a location marked `needs ^4.0` must wait until you raise your dependency constraints, because code written for the new API would break on the older version. This is why a single library can appear on both lines: Nette deprecated `Arrays::searchKey()` back in the 3.x series and its replacement `getKeyOffset()` was introduced in 3.2, whereas `Strings::startsWith()` was removed entirely in 4.0.
 
-The second word says who rewrites the place. DressCode rewrites `automatic` places by itself. `manual` marks manual tasks: places where a person has to choose the replacement, with a message that says what to write. `unknown types` means the place waits for the types from PHPStan, and `uncertain names` that it waits until it is certain which function a call means.
+The second descriptor identifies **who** handles the rewrite. DressCode resolves `automatic` items completely on its own. Items flagged as `manual` represent developer tasks: places where a human must evaluate the context and choose a replacement (the accompanying report explains exactly what to write). Locations marked `unknown types` are waiting on static analysis from PHPStan, while `uncertain names` indicates that the engine must confirm which function a call actually targets.
 
-The line `Today` counts what [`upgrade today` |#When You Have Already Raised the Versions] would rewrite right now. The line `Composer` says what in `composer.lock` refuses the target version: a package that requires an older `nette/utils` would be listed here with its constraint. The line `Moves` lists the packages that raising the constraint would move to a new major version, according to a dry run of Composer. A move the data does not cover is marked `(no data)`, and you make that step without the help of DressCode; a move the data covers only up to a lower minor version is marked `(data up to 4.1)`. The last line, `Data`, lists the libraries DressCode has data about, and the version the data reaches for each.
+The `Today` line highlights what running [`upgrade today` |#When You Have Already Raised the Versions] can fix right now. The `Composer` line warns of potential conflicts in `composer.lock`: if another package blocks the target version, it is listed here along with its conflicting constraint. The `Moves` line shows which packages a constraint bump would advance to a new major version, based on a Composer dry run. Any transition where migration data is unavailable is marked `(no data)`—a step you will need to handle without automated assistance. If data covers a library only up to an earlier minor release, you will see `(data up to 4.1)`. The final `Data` line lists all libraries covered by available migration packages and their maximum supported versions.
 
-The estimate changes nothing. It asks only three questions: it asks Packagist which upgrade packages exist (at most once a day), Composer what in the lock blocks the target (no network needed), and Composer again what the raise would move (this one needs the network). With the option `--offline`, it skips the last question and uses only what it remembers from Packagist. A file the check cannot read, for example one that does not parse, is listed on the line `Unverified`, and its findings are not counted. An estimate that missed a file, lacked upgrade data or did not learn from Composer what blocks the target ends with exit code 2, so that nobody mistakes an incomplete number for a complete one. Without a target, it proposes the newest versions its data knows about, and `dresscode upgrade estimate php` does the same for PHP alone.
+The estimate command is entirely passive and modifies no files. It only makes three queries: asking Packagist which upgrade packages exist (cached for up to 24 hours), asking Composer whether anything in the lockfile blocks the target (no network needed), and asking Composer what versions would change on an update (which requires network access; use `--offline` to skip this and rely on local cache). Files that cannot be parsed due to syntax errors are listed under `Unverified` and excluded from the count. If the estimate encounters an unparseable file, lacks migration data, or cannot query Composer, it exits with code 2 so incomplete data is never mistaken for a clean bill of health. Omitting the target proposes the latest versions known to the data sets; running `dresscode upgrade estimate php` does the same strictly for PHP.
 
-In a terminal, the estimate asks whether to use the types, because they tell which object each method is called on. `--types` turns them on without asking, and `--no-types` measures without them; every place that needs them is then marked `unknown types`.
+In an interactive terminal, the estimate prompts whether to enable static type analysis, since types determine what object a method is invoked upon. Pass `--types` to enable analysis without prompting, or `--no-types` to estimate without it (in which case type-dependent locations are categorized as `unknown types`).
 
 
 Where DressCode Runs
 --------------------
 
-DressCode needs PHP 8.4 and recent versions of its own libraries, including `nette/utils` 4.1. That is why it cannot be a development dependency of an application that is still on an older PHP or on Nette 3. Install it globally, together with PHPStan and the upgrade package of your ecosystem:
+DressCode requires PHP 8.4 and modern versions of its own dependencies, including `nette/utils` 4.1. Consequently, it cannot be installed as a local `vendor/` dependency inside a legacy application running on PHP 7.4/8.1 or Nette 3. Install it globally instead, alongside PHPStan and the migration package for your ecosystem:
 
 ```shell
 composer global require dresscode/dresscode dresscode/upgrade-nette phpstan/phpstan
 ```
 
-Instead of `upgrade-nette`, use `upgrade-symfony`, `upgrade-laravel`, or `upgrade-deegee` for Dibi and Texy; the [table of packages |upgrading-libraries#Packages for Ecosystems] shows what each one covers. A project that is already on the new versions and only wants to watch for the old API can also have DressCode as a development dependency, see [below |#Keeping the Old API from Coming Back].
+Substitute `upgrade-nette` with `upgrade-symfony`, `upgrade-laravel`, or `upgrade-deegee` (for Dibi and Texy); see the [table of packages |upgrading-libraries#Packages for Ecosystems] for full coverage. Once an application is running on modern PHP and only wants to guard against deprecated APIs, DressCode can be added directly to the project as a standard dev dependency (see [below |#Keeping the Old API from Coming Back]).
 
 
 The Upgrade Plan
 ================
 
-The command `upgrade plan` prints the estimate followed by the plan, which is the estimate arranged into steps; the option `--save` also saves the plan. The estimate is the same as above, so the output below replaces it with `...`:
+The `upgrade plan` command prints the estimate followed by a structured, phased execution plan; passing `--save` saves this plan directly to disk. The output below summarizes the estimate with `...`:
 
 ```shell
 dresscode upgrade plan nette/utils 4.0 --save
@@ -82,11 +82,11 @@ Saved      dresscode-upgrade.neon
 Next       `dresscode upgrade run` carries out the plan saved, step by step
 \--
 
-The plan goes from the rewrites that already work today (the bridge), through raising the constraint in `composer.json`, to the rewrites for the new version (the jump). After them would come a cleanup of code for the versions the project has left behind, such as the condition `PHP_VERSION_ID < 80100`, which is never true after the move to PHP 8.4, and finally a skipped step with the set `modernizations`, that is, with what newer PHP offers. Here both are missing, because there is nothing for them to do. The plan of an application ends with a step that updates the packages to the newest versions the constraints allow; the line `Mode` says that the project is an application, and why. A library is planned differently, see [below |#A Library Widens, It Does Not Raise].
+The plan progresses from backward-compatible rewrites that work today (the **bridge**), through raising constraints in `composer.json`, to rewrites that target the new API (the **jump**). Following the jump comes dead code removal (such as `PHP_VERSION_ID < 80100` checks that are always false once running on PHP 8.4) and an optional step running the `modernizations` set to adopt newer PHP syntax. In our example above, those later steps are omitted because there is nothing for them to do. An application plan concludes by updating packages to the newest versions permitted by the constraints; the `Mode` line confirms the project type. Libraries are planned differently (see [below |#A Library Widens, It Does Not Raise]).
 
-A step that cannot be done yet is preceded by a manual step, marked `manual` in the plan. When something in the lock refuses the target version, the plan starts with the command that tells you why, such as `composer why-not nette/utils 4.0`. The run stops at such a step with exit code 4 and moves past it once Composer reports that nothing in the lock refuses the target version any more. Without a `composer.lock` there is nothing to ask Composer about, so the run waits the same way; if you know that nothing blocks the step, skip it with `skip: true`.
+Any step that cannot be executed automatically is preceded by a manual intervention point, labeled `manual`. For example, if a locked dependency blocks the target version, the plan begins with the command needed to diagnose the conflict, such as `composer why-not nette/utils 4.0`. Running the plan halts at that step with exit code 4, resuming only after Composer confirms that the conflict has been resolved. In a project without a `composer.lock`, Composer cannot be queried, so the runner pauses similarly; if you know a step is clear, bypass it by setting `skip: true`.
 
-The file `dresscode-upgrade.neon` in the root of the project is ordinary NEON and belongs in git: the team reviews it, leaves a step out by writing `skip: true`, narrows a topic or adds the test command. DressCode reads the file strictly: an unknown key or a value of the wrong type ends in an error that says where in the file it is, so a typo never silently changes a run. If you narrowed the estimate with `--paths`, the plan keeps those paths and its fixes stay within them. A step is a recipe, not a result: it says which topics to fix and how to raise the constraints, not how many places change; DressCode counts those again when it reaches the step:
+The generated `dresscode-upgrade.neon` file in your project root is standard NEON and belongs in version control: your team can review it, skip steps by setting `skip: true`, narrow topics, or attach your test command. DressCode validates the plan strictly: unknown keys or type mismatches trigger an immediate error with the exact line number, ensuring a typo never silently alters execution. If you narrowed the estimate using `--paths`, the plan preserves that restriction and stays within those directories. Each step is a recipe, not a frozen result: it defines which topics to migrate and how to adjust constraints, calculating the exact number of file modifications dynamically when it reaches that step:
 
 ```neon
 version: 1
@@ -118,15 +118,15 @@ steps:
 		kind: update
 ```
 
-The step `kind: update` updates the packages to the newest versions the constraints allow, and it counts as done once `composer update --dry-run` reports no changes.
+The `kind: update` step brings dependencies to the latest releases allowed by your constraints, completing when `composer update --dry-run` reports no further changes.
 
-The plan records what the estimate could not assess under the key `estimate`: the files it could not process under `unprocessed`, and the missing upgrade packages under `missingData`, each with the libraries it covers. A run of such a plan warns about this right at the start, because its steps may have missed those places, and so it checks the whole code at the end, see [Manual Tasks Along the Way |#Manual Tasks Along the Way].
+Anything the initial estimate could not verify is saved under the `estimate` key: unparseable files are recorded under `unprocessed` and missing migration packages under `missingData` (along with the libraries they cover). When executing such a plan, the runner issues an upfront warning and runs a full-codebase verification pass at the end (see [Manual Tasks Along the Way |#Manual Tasks Along the Way]).
 
 
 Carrying Out the Plan
 =====================
 
-Given a target, `upgrade run` saves the plan and carries it out; without one, it carries out the saved plan. Each topic is fixed separately, in the style the code follows. This is the output of `dresscode upgrade run` for the plan above:
+Running `upgrade run` with a target saves and executes the plan immediately; running it without arguments executes an existing saved plan. Each topic is upgraded independently and formatted strictly to your project's coding standard. Here is the terminal output from running `dresscode upgrade run` for the plan above:
 
 /--pre .[terminal]
 DRESS|CODE 1.3.0
@@ -135,7 +135,7 @@ Step 1     nette/utils 1 file
 Waiting    step 2, raise nette/utils to ^4.0: run `composer require "nette/utils:^4.0" -W --prefer-lowest --minimal-changes`, then `dresscode upgrade run`
 \--
 
-The bridge is done, and the run stopped at the Composer step, because outside a terminal it asks no questions. In a terminal, it shows what will change in the project and asks whether it may change `composer.json` and update the packages; outside one, it does so only with the option `--yes`. Otherwise it does not even call Composer; it only prints the `composer require` command and ends with exit code 4, which means it is waiting for a step outside DressCode. You can run Composer yourself and then `upgrade run`. With `--yes`, the run continues on its own:
+The bridge step completed, and the runner paused before invoking Composer, because outside an interactive terminal it never modifies package files without consent. In an interactive terminal, it presents the planned package changes and asks for confirmation before editing `composer.json` and updating dependencies; non-interactively, it proceeds only if passed `--yes`. Otherwise, it leaves Composer untouched, prints the exact `composer require` command, and exits with code 4, indicating that it is waiting on an external action. You can run Composer manually in your terminal and then call `upgrade run` again. With `--yes`, the runner continues seamlessly:
 
 /--pre .[terminal]
 DRESS|CODE 1.3.0
@@ -154,9 +154,9 @@ Step 3     nette/utils 3 files
 UPGRADED  4 steps done, and the final check finds nothing more to upgrade, no tests run
 \--
 
-The warning appears because the changes from step 1 are not committed yet, so they would mix with those of the jump; commit after each stop and the warning goes away. Composer installs the lowest versions the new constraints allow (`--prefer-lowest --minimal-changes`), because the code is written for them and DressCode reads their `@deprecated` annotations. The other packages change only as much as the update requires, and before you agree, DressCode lists separately any package the raise would move back to a lower version than the lock has. A step that raises PHP also raises `config.platform.php`, if the project sets it. The newest versions come only with the last step of the plan, `update to the newest versions`, which is tested like any other; if you leave it out with `skip: true`, the last line of the run reminds you that the lowest versions are still installed. The line `UPGRADED` says how many steps were done and how many the plan skipped, and that the final check of the whole code found nothing more, see [below |#Manual Tasks Along the Way].
+The warning at the top indicates that edits from step 1 were not yet committed, meaning they will blend with the changes from the jump step. Committing after each stop clears the warning. Composer installs the lowest versions permitted by the new constraints (`--prefer-lowest --minimal-changes`), because code at this stage targets that baseline and DressCode inspects their `@deprecated` annotations. Other packages are updated only as much as necessary, and DressCode explicitly flags any package that would be downgraded relative to the lockfile before you confirm. Steps that raise the PHP version also update `config.platform.php` if defined. The newest package versions arrive in the final step (`update to the newest versions`), which is tested like any other; skipping it with `skip: true` leaves the lowest compatible versions installed, which the final report will note. The `UPGRADED` line reports completed and skipped steps, confirming that the final check of the entire codebase found no remaining deprecated API usage.
 
-This is the result in the code:
+Here is the resulting diff in the code:
 
 ```php .[before]
 if (!Strings::endsWith($file, '.jpg')) {
@@ -176,54 +176,54 @@ $image->resize(300, 200, Image::OrSmaller | Image::ShrinkOnly);
 file_put_contents($this->file, Json::encode($products, pretty: true));
 ```
 
-Notice that step 1 fixed nothing in the second run. DressCode works out where the plan stopped from the code and the lock, not from what a run stores for going back: a topic with nothing left to fix is done, and a Composer step is done when `composer.json` already has its constraint and the installed version is one it allows. So `upgrade run` continues correctly even after the team has squashed or reordered the commits, or after you ran Composer yourself.
+Notice that step 1 performed no modifications during the second run. DressCode determines current progress directly from the code and lockfile rather than relying on state files: a topic with nothing left to rewrite is complete, and a Composer step is satisfied when `composer.json` contains the constraint and the installed version matches. As a result, `upgrade run` resumes reliably even if your team squashes or reorders commits in Git, or if you run Composer commands manually.
 
-After a raise through Composer, the run continues in a new DressCode process, so that the fixes for the new version, the tests and the check at the end of the plan see what the raise installed, including plugins, libraries and upgrade data. For you, it is still one run with one output. The only exception is DressCode running inside another program that reads its output: it starts no new process, stops after the raise with exit code 4 and tells you to run `dresscode upgrade run` again.
+Following a Composer update, execution continues in a fresh DressCode process so that subsequent rewrites, test runs, and final checks immediately see the updated `vendor/` directory, including new plugins and migration data. From your perspective, it remains a single uninterrupted terminal session. The only exception is when DressCode runs inside another tool that captures its output: in that context, it avoids spawning processes, pauses after Composer finishes with exit code 4, and prompts you to invoke `dresscode upgrade run` again.
 
 
 Tests and Commits
 -----------------
 
-DressCode runs your tests only when you tell it how. `--test-command` is the test command of your project, in which `{junit}` stands for a JUnit file the tests write their results to; both Nette Tester and PHPUnit can write this format:
+DressCode runs your test suite only when explicitly instructed how to invoke it. The `--test-command` option accepts your project's test command, where `{junit}` serves as a placeholder for a JUnit XML report file (a format supported out of the box by both Nette Tester and PHPUnit):
 
 ```shell
 dresscode upgrade run nette/utils 4.0 --test-command "vendor/bin/tester tests -o junit:{junit}"
 ```
 
-Before the first step, DressCode runs the tests and remembers which ones passed. If a test that used to pass fails, is skipped or disappears after a step, DressCode restores the files of the step byte for byte, except for any file you changed in the meantime, and ends with exit code 1. The dependencies Composer raised stay raised, though; the output then names `composer.json` and the lock on the line `Raised`, and `dresscode upgrade abort` puts them back, see [below |#Interrupted Runs and Going Back]. A test run that writes no valid JUnit report, or does not finish in time, also counts as a failure, never as a pass. A quicker subset of tests for the steps where little happens goes into `--quick-test-command`, and its results are compared with its own results from before the first step; the whole suite runs after the jump and after the last step. The `Tests` line of the plan already says which command runs after which step. If the tests cannot run even before the first step, the run ends before changing anything, with exit code 1 and the reason. The `Tests` line of the run then says what the tests were compared with: when they ran before the first step and how many of them failed even then, because having no new failures is not the same as having all tests pass. A command without `{junit}` is refused as soon as the plan is made, and also in a plan file edited by hand.
+Before executing the first step, DressCode runs a baseline test pass and records passing tests. If a test that previously passed fails, is skipped, or disappears after a step, DressCode reverts that step's file edits byte for byte (leaving any files you modified manually intact) and exits with code 1. Any dependencies updated by Composer remain raised; the output lists `composer.json` and the lockfile under `Raised`, which you can revert via `dresscode upgrade abort` (see [below |#Interrupted Runs and Going Back]). Test runs that fail to generate a valid JUnit report or exceed timeout thresholds are always treated as failures, never passes. You can supply a faster subset of tests for low-risk intermediate steps via `--quick-test-command`; it is also benchmarked against its own baseline, while the full suite runs after the major jump and after the final update. The `Tests` line in the plan indicates which command runs after each step. If tests cannot run even before step 1 begins, execution halts before changing any files. A test command lacking `{junit}` is rejected during plan construction.
 
-Commits are up to you. Start with a clean working tree, so that the changes of the upgrade do not mix with unfinished work; if it is not clean, DressCode tells you. With the option `--commit`, it makes one commit per topic, but only once the tests of the step pass. It builds each commit from the file contents the topic produced, using a git index of its own, so it never rewrites the working tree to make a commit, and the hooks of the repository run as they do for any other commit. The raise through Composer gets a commit of its own too, with `composer.json` and the lock unless git ignores them, so that the next run does not mistake those files for unfinished work. A commit takes whole files, so `--commit` is refused before anything changes if the tracked files already have changes of their own, or if git finds no repository tracking the project.
+Commits are left to you by default. We recommend starting with a clean Git working tree so upgrade changes don't blend with unrelated work (DressCode warns if the tree is dirty). With `--commit`, DressCode creates an isolated Git commit for each topic as soon as its step passes the test suite. It builds commits directly from topic outputs using its own Git index without altering your working tree state, and all repository Git hooks execute normally. Composer dependency updates receive dedicated commits as well (unless `composer.json` and the lockfile are ignored by Git). Because commits capture entire files, `--commit` is refused up front if tracked files have unstaged local changes or if Git cannot find a tracking repository.
 
-If someone else changes a file after the step wrote it, whether it is the tests or you, the commit would contain code the tests never checked. So the step stays uncommitted in the working tree, and the run asks you to commit it yourself. If git refuses a commit, for example because of a hook, the run stops with exit code 2 and says what is left uncommitted and which topics of the step it had already committed. A step that left files it could not process stays uncommitted until a later run processes them and commits the whole step. If you edit the plan in the meantime so that the step with that number does something else, the run refuses to continue: commit the changes of the step yourself, and `upgrade run --discard` makes the run forget the step.
+If a file is modified externally after a step writes it (whether by tests or by you), committing it automatically would commit unverified code. In that scenario, the step remains uncommitted in your working tree and the runner prompts you to commit it manually. If Git rejects a commit (for example, due to a pre-commit hook), the runner halts with exit code 2 and reports what remains uncommitted. If you edit the plan file so a step does something different, the runner refuses to proceed: commit the step's changes yourself, and use `upgrade run --discard` to drop the runner's cached memory of that step.
 
 
 Manual Tasks Along the Way
 --------------------------
 
-The run lists what the fixes leave behind as manual tasks under the steps (the line `Manual`), each with the place and a message saying what to write instead. While any task remains, the run stops after the jump and at the end of the plan, with exit code 1; the plan is done only once none is left. Fix each place, or confirm it with a comment that gives the reason, and run `upgrade run` again:
+Anything the automated fixer cannot safely resolve is listed under the steps as a manual task (the `Manual` line), complete with file coordinates and instructions on what to write instead. As long as any manual task remains, execution halts after the major jump and at the conclusion of the plan with exit code 1; a plan is only complete when zero manual tasks remain. Resolve each location manually, or confirm the existing code with an explanatory comment, and run `upgrade run` again:
 
 ```php
 // dresscode:ignore upgrading.php.deprecatedApi -- the report needs the locale of the server
 $month = strftime('%B');
 ```
 
-A confirming comment shows up in the diff, so a colleague sees it during review too. A place you want to keep for good can also go into the [baseline |suppressions-and-baseline].
+An inline suppression with a reason is immediately visible in code review diffs, making the justification clear to colleagues. Locations you intend to keep indefinitely can also be added to your [baseline |suppressions-and-baseline].
 
-`dresscode upgrade tasks` lists the manual tasks of the saved plan that are still left in the code, including those found only by the check of the whole code at the end of the plan, and changes nothing. Under `Exceptions`, it adds the `dresscode:ignore` comments that give no reason: they only postpone a task and do not count as accepted exceptions yet. Under `Unverified`, it lists the files the fixes could not process. For a risky fix, it says what the fix is waiting for and how to allow it. It ends with exit code 1 while any task or such comment remains, and with 2 when a file was left unprocessed, so it works in CI too.
+Running `dresscode upgrade tasks` inspects the codebase against the saved plan and prints all remaining manual tasks (including those detected by the whole-codebase scan at the end of the plan) without modifying any files. Under `Exceptions`, it flags `dresscode:ignore` comments that lack an explanatory reason (these merely postpone tasks and are not considered accepted exceptions). Under `Unverified`, it lists unparseable files. For risky fixes, it details what the fix is waiting on and how to approve it. The command exits with code 1 while tasks or unreasoned comments remain (and code 2 if unparseable files exist), making it ideal for CI checks.
 
-At the end of the plan, DressCode checks the whole code once more with the set `deprecations`, not only the topics the estimate found. This is the first point where a library installed only by the raise can show what it deprecates. If the check finds anything, the run ends with exit code 1 and lists it: files that `dresscode upgrade today` will fix, or manual tasks. Then run `upgrade run` again. A plan completed without some of the upgrade data says so on its last line.
+At the end of the plan, DressCode scans the entire project using the `deprecations` set, going beyond the topics flagged in the initial estimate. This catch-all pass is where newly updated libraries installed during Composer steps can reveal newly deprecated APIs. If findings emerge, the run exits with code 1 and lists files for `dresscode upgrade today` or remaining manual tasks. Resolve them and rerun `upgrade run`.
 
-A file the fixes cannot process, for example one that does not parse, is listed under `Unverified`, and the run stops after its step with exit code 2, because a file left unprocessed makes the result incomplete.
+Any file that cannot be processed (for example, due to a syntax error) is listed under `Unverified`, and the runner halts after that step with exit code 2, since an incomplete run cannot be considered successful.
 
 
 Interrupted Runs and Going Back
 -------------------------------
 
-If you interrupt a run in the middle of a step, some files may already have been rewritten. The next run therefore lists them and does nothing else: put them back with `dresscode upgrade abort`, or continue from the code as it is with `upgrade run --discard`. `upgrade plan --save` stops the same way, because a new plan would forget the unfinished step.
+If a run is aborted mid-step, some files on disk may already have been modified. The next invocation detects this, warns you, and halts without performing work: restore them via `dresscode upgrade abort`, or proceed from current disk state with `upgrade run --discard`. Running `upgrade plan --save` pauses similarly, preventing a new plan from overwriting state from an unfinished step.
 
-`dresscode upgrade abort` puts back everything a run stores for going back: the files of an unfinished step, and `composer.json` and `composer.lock` as they were before the first raise through Composer, even when they are located above the configuration directory. The run keeps the Composer files until a step after the raise is done. Whenever it stops with the Composer files changed, for example when the tests fail after the raise or Composer fails halfway through, it lists them on the line `Raised`. When Composer fails, the run shows the last line of its output and the path to a log in the temporary directory with the full output. After putting the files back, `abort` runs `composer install`, so that the packages in vendor match the restored lock. It leaves alone any file someone has changed since and lists it on the line `Left`; in that case, and also when `composer install` fails, it ends with exit code 1. `upgrade abort --dry-run` tells you in advance what it would put back and what it would leave, without changing anything.
+The `dresscode upgrade abort` command restores everything saved for rollback: reverting files modified during the interrupted step and restoring `composer.json` and `composer.lock` to their exact state prior to the first Composer update (even if located above the configuration directory). These backups are held until a subsequent post-update step finishes successfully. Whenever execution halts with modified Composer files (such as when tests fail after an update or Composer crashes), they are listed on the `Raised` line. Composer failures are reported alongside the final line of output and a path to a detailed log file in the temporary directory. After restoring files, `abort` executes `composer install` to synchronize your `vendor/` directory with the restored lockfile. Any file modified manually in the interim is left untouched and reported under `Left`; in that scenario (or if `composer install` fails), `abort` exits with code 1. Run `upgrade abort --dry-run` to preview what would be restored without writing changes.
 
-`dresscode upgrade status` tells you where the saved plan stands, without running a single fix. For a Composer step, it reads from the constraints whether the step is done or due; for a manual step, it reads from the lock whether the lock still refuses the target. It does not count how much is left to fix; that is up to `upgrade run`. Below the plan, it lists what a run has stored: an unfinished step, a raise that `abort` would put back, a step left uncommitted, and when the tests ran before the first step. It always ends with exit code 0:
+To check where a saved plan currently stands without running fixes, use `dresscode upgrade status`. For Composer steps, it inspects constraints to determine if they are pending or complete; for manual steps, it checks the lockfile to see if conflicts have cleared. It does not recalculate remaining code fixes, leaving that to `upgrade run`. Below the plan, it summarizes backup state: interrupted steps, updates `abort` can revert, uncommitted steps, and baseline test timestamps. It always exits with code 0:
 
 /--pre .[terminal]
 DRESS|CODE 1.3.0
@@ -237,48 +237,48 @@ Raised     step 2 changed composer.json, composer.lock, which `dresscode upgrade
 Next       `dresscode upgrade run` carries on from where the code stands
 \--
 
-A run stores this in the project's git repository, in `.git/dresscode-upgrade/`, so clearing the cache does not lose it. A project without a repository keeps it in the cache directory, and the run warns about it. Two runs never work on one project at once: the second is refused until the first one ends.
+Rollback data is stored directly in your Git repository under `.git/dresscode-upgrade/`, ensuring it survives cache purges. Projects without Git fall back to the system cache directory, which triggers a warning. Two upgrade runs cannot execute concurrently on the same project: a second process is refused until the first completes.
 
 
 A Library Widens, It Does Not Raise
 -----------------------------------
 
-A library, a project with `"type": "library"` and no `composer.lock` of its own, does not raise versions: its code must keep working with the older ones it supports today. So its plan contains only the bridge and the constraint widened to include the target, from `^3.2` to `^3.2 || ^4.0`, written with `--no-update`. Whatever would be rewritten only after the jump is reported for now, see [below |#Lower Bounds Decide]. For a project whose `type` says library but which has a lock of its own, DressCode asks in a terminal and follows the `type` outside one; the options `--library` and `--no-library` settle it up front.
+Libraries (projects configured with `"type": "library"` lacking their own `composer.lock`) do not raise minimum version constraints: library code must remain compatible with the older versions it currently supports. A library plan therefore consists only of the bridge step and a widened constraint that includes the target (for example, expanding `^3.2` to `^3.2 || ^4.0`), written using `--no-update`. Rewrites that require the newer target API exclusively are reported rather than applied automatically (see [below |#Lower Bounds Decide]). For projects that declare `type: library` but nevertheless maintain a lockfile, DressCode prompts for clarification in an interactive terminal and follows `type` non-interactively; the `--library` and `--no-library` flags settle this behavior explicitly.
 
 
 What Is Left to You
 ===================
 
-An upgrade is a rewrite plus a list of what is left, and that list is half of its value. DressCode does not guess: where there is no replacement, or a human has to choose it, it reports the place and says what to write instead:
+A high-quality upgrade consists of automated rewrites paired with an exhaustive list of remaining tasks—and that list represents half the value of the tool. DressCode never guesses: where a clean automated replacement does not exist, or where a developer must decide the architecture, it flags the location and provides instructions:
 
 ```
 Constant `Nette\Application\IRouter::SECURED` is forbidden: write the protocol, `https://`, into the mask of the route.
 Method `Nette\Http\UrlScript::setPath()` is forbidden: the class is immutable; take a changed copy with `withPath()`.
 ```
 
-Each such message is an instruction, so you can go through the list yourself or hand it to an AI agent as it is. `upgrade today -f agent` gives the agent the list in a form written for a model, and `--format json` outputs the estimate, the plan, the run and `upgrade tasks` as data, see [AI agents |ai-agents#Upgrading with an Agent]. DressCode also reports places where the data offers a fix that cannot be applied there, for example because it would throw away the expression the method is called on, or because a comment sits between the arguments. The message gives the reason, and the code stays as it was.
+Every message is an actionable directive. You can work through the list manually, or hand it directly to an AI agent: `upgrade today -f agent` formats findings specifically for LLM consumption, while `--format json` outputs estimates, plans, runs, and tasks as structured data (see [AI Agents |ai-agents#Upgrading with an Agent]). DressCode also reports locations where migration data provides a fix that cannot safely be applied in context—such as an edit that would discard the receiver expression of a method call, or where comments sit between arguments. The message states the reason, leaving the code untouched.
 
-**Risky fixes** wait for your permission. A few rewrites could change what the code does, for example reading a property on the left of `??`, where PHP first checks whether it is set. In the plan, such a fix is a manual task. The decisions you trust for good go into the key [`fixRisky` |configuration#risky-fixes], and `dresscode upgrade today --ask-risky` goes through them with you one by one, showing the diff of each.
+**Risky fixes** wait for explicit approval. Certain syntactic transformations can alter runtime behavior—such as reading a property on the left of `??`, where PHP first evaluates whether the property is initialized. In a plan, these are categorized as manual tasks. Decisions you trust globally can be approved via the [`fixRisky` |configuration#risky-fixes] configuration key, and running `dresscode upgrade today --ask-risky` lets you review and approve risky fixes one by one with inline diffs.
 
-**What the data does not see.** The data does not capture changes in behavior, configuration in NEON or the syntax of templates; the upgrade guides of the individual libraries describe those. And when a library removes something that the data does not record, only PHPStan will find it.
+**What migration data cannot see.** Migration metadata describes API signatures, not runtime behavior shifts, template syntax, or NEON configuration files; consult official library upgrade guides for those areas. Furthermore, if a library removes an undocumented internal symbol without a deprecation record, it will only be caught by PHPStan.
 
 
 Lower Bounds Decide
 ===================
 
-The version the code is rewritten for is decided neither by the version installed in vendor nor by the PHP DressCode happens to run on, but by the constraints in `composer.json`. The code must work with every version a constraint allows, so it is written for the lowest one: code written for a newer version would break wherever the constraint lets in an older one. With `"nette/forms": "^3.2"`, the code is therefore rewritten to the API of version 3.2, even if 3.3 is installed in vendor. DressCode reads the PHP version the same way, from `require.php`. Composer does not raise the lower bound of PHP by itself, even when the project runs on a newer PHP; the key `config.platform.php` does: with `^8.1` and the platform `8.3`, the code is written for PHP 8.3.
+The API version targeted by automated rewrites is determined neither by what happens to be installed in `vendor/` nor by the PHP version running DressCode itself. The deciding factor is exclusively the constraints declared in `composer.json`. Code must function on every version allowed by your constraints, so it must be written for the lowest compatible release: using features from newer releases would break environments that resolve to the lower bound. Given `"nette/forms": "^3.2"`, code is rewritten to the 3.2 API, even if 3.3 is currently installed in `vendor/`. DressCode evaluates PHP versions identically via `require.php`. Composer never raises the lower bound of PHP on its own, even if running on a newer runtime, which is where `config.platform.php` comes in: with `^8.1` and platform set to `8.3`, code is safely written for PHP 8.3.
 
-So upgrading does not mean installing a newer version, but raising the lower bound. That is why the plan raises the constraints in `composer.json` first and only then rewrites the code for the new version.
+Upgrading code is therefore not about downloading a newer release into `vendor/`, but about **raising the lower bound**. That is why an upgrade plan raises constraints in `composer.json` before modernizing code to the new API.
 
-Changes in higher versions that the constraint also allows are not rewritten but reported, because the code will run on them one day. With `"^3.2 || ^4.0"`, the code is rewritten to the API of version 3.2, and what 4.0 changed is reported together with the version:
+Features introduced in higher versions that existing constraints allow are reported rather than rewritten automatically, keeping you informed of upcoming changes. With `"^3.2 || ^4.0"`, code is formatted for the 3.2 API, and changes in 4.0 are reported alongside their release version:
 
 ```
 Class `Acme\Old` is deprecated: replaced by `Acme\New`, since acme/lib 4.0.
 ```
 
-The word `deprecated` says that the installed version still has the thing; `removed` says that it no longer does. A library that the project requires without a lower bound (`*`), or does not require at all and gets only as a dependency of another library, can be installed in any version. So its data rewrites nothing; everything is only reported. The header of the `upgrade today` output lists such libraries on the line `Reported`, and on the line `Lowest` the libraries installed in a higher version than the lowest one their constraint allows.
+The keyword `deprecated` indicates that the currently installed package still contains the symbol, whereas `removed` warns that it is gone. A library required without a lower bound (`*`), or one present purely as an unconstrained transitive dependency, can resolve to any version. As a result, its migration data performs no automated rewrites and only reports findings. Such libraries are listed on the `Reported` line in the `upgrade today` header, while packages installed at a higher release than their constraint's minimum appear under `Lowest`.
 
-`dresscode config` shows where the data starts and where raising the lower bound would lead. Versions marked `(reported)` are already allowed by the constraint, so their changes are only reported:
+To inspect where migration data begins and where raising lower bounds would lead, run `dresscode config`. Versions marked `(reported)` are already permitted by current constraints, so their changes are reported as informational:
 
 /--pre .[terminal]
 Packages   3 with upgrading data
@@ -291,7 +291,7 @@ Packages   3 with upgrading data
 When You Have Already Raised the Versions
 =========================================
 
-The plan does everything at once. If you have already raised the constraints in `composer.json` yourself, for example with `composer require`, and only want to rewrite the code for the versions the project now requires, run one command:
+The step-by-step plan orchestrates the entire process end to end. If you have already updated constraints in `composer.json` yourself (using `composer require`, for example) and simply want to adapt your codebase to the new APIs your project now demands, run one command:
 
 ```shell
 dresscode upgrade today
@@ -299,13 +299,13 @@ dresscode upgrade today
 
 What `dresscode upgrade today` does:
 
-- **It needs no configuration.** It takes the whole project directory, and the versions of the libraries and of PHP from the constraints in `composer.json`, see [above |#Lower Bounds Decide].
-- **It rewrites only the old API.** It runs the set [`deprecations` |php-coding-standards#deprecations]: the data of the installed upgrade packages with their rules, plus the data about what PHP has deprecated. With the option `--modernize`, it also rewrites the code to newer PHP constructs (the set `modernizations`).
-- **It does not touch the style.** Without a configuration it has no style; with a configuration, it takes from it only what the code already follows, see [below |#Your Style Stays].
-- **It asks PHPStan about types**, because without them it cannot tell what object a method is called on. If PHPStan is not installed, it stops with an error.
-- **It tells you what is left**, and if it rewrote something, it advises you to run it again.
+- **Requires no configuration file.** It automatically inspects the entire project, deriving library and PHP targets directly from `composer.json` constraints (see [above |#Lower Bounds Decide]).
+- **Rewrites outdated APIs exclusively.** It executes the [`deprecations` |php-coding-standards#deprecations] set, applying rules from installed migration packages and handling PHP engine deprecations. Adding `--modernize` also updates syntax to newer PHP constructs (the `modernizations` set).
+- **Preserves existing visual style.** Without a configuration file, it enforces no formatting style; with a configuration file, it applies only formatting rules your codebase already satisfies 100% (see [below |#Your Style Stays]).
+- **Relies on static types from PHPStan**, without which method targets cannot be reliably identified. If PHPStan is not installed, the command refuses to run.
+- **Reports remaining manual tasks**, and if edits were made, advises you to run it a second time.
 
-This is what an upgrade of a Nette application looks like:
+Here is the terminal output from upgrading a Nette application:
 
 /--pre .[terminal]
 DRESS|CODE 1.3.0
@@ -323,58 +323,58 @@ FIXED  18 violations found, 1 remaining in 3 of 214 files, 3.2 s
 Run `dresscode upgrade today` again: the code it rewrote may hold more to upgrade.
 \--
 
-The line `Upgrading` names the libraries whose data applies. DressCode rewrote the files marked `rewritten`; under each of the other files, the output lists what is left to do. The last line advises a second run, because the rewritten code may contain something else to upgrade that the first run could not see yet. A run that rewrites nothing does not print this advice. `upgrade today` also works in [continuous integration |continuous-integration]: with `--max-warnings 0`, it ends with exit code 1 if even one warning is left.
+The `Upgrading` line lists all libraries whose migration data was activated. Files marked `rewritten` were updated; remaining manual tasks are listed under their respective files. The final line suggests a second pass because freshly rewritten code may expose secondary deprecations that the first pass could not detect. A run that makes no edits omits this suggestion. The `upgrade today` command is also well suited for [continuous integration |continuous-integration]: passing `--max-warnings 0` causes it to exit with code 1 if any warnings remain.
 
 
 A Diff You Can Trust
 --------------------
 
-`upgrade today` writes the changes right away, and git shows them. So start with a clean working tree and read the diff after the run. You will find only the places where the old API was used, rewritten in the style of the surrounding code, imports included. DressCode does not search and replace text. It rewrites a method call only where the types say the method belongs to that class: `getName()` is rewritten where it is called on `FileUpload` and nowhere else. [How Upgrading Libraries Works |upgrading-libraries] explains the mechanism and how DressCode knows what has changed. Want to start carefully? Run it on one file first, `dresscode upgrade today --paths app/Model/Orders.php`, and look at what it did.
+The `upgrade today` command writes changes directly to disk, letting Git present the resulting diff. Start with a clean working tree and inspect the diff after the run: you will find only locations where legacy APIs were used, rewritten to match surrounding conventions, complete with accurate imports. DressCode performs no naive string replacements. A method call is rewritten only where static analysis proves it belongs to that specific class: `getName()` is updated on `FileUpload` instances and left untouched everywhere else. See [How Upgrading Libraries Works |upgrading-libraries] for architectural details. To start cautiously, target a single file first: `dresscode upgrade today --paths app/Model/Orders.php`.
 
-Read the diff anyway. The data describes how code is written, not what it means: when a new version returns `-1` instead of `null`, DressCode rewrites the name of the method but leaves the condition `=== null` as it is. So after the upgrade, run your tests and PHPStan.
+Always review the diff. Migration data describes syntactic patterns, not runtime semantics: if a new method version returns `-1` instead of `null`, DressCode updates the method call but leaves an adjacent `=== null` comparison intact. After upgrading, always run your test suite and PHPStan.
 
 
 Your Style Stays
 ----------------
 
-A project without `dresscode.neon` has no style, and `upgrade today` changes only the old API; the step-by-step plan needs a configuration, and without one it points you to `dresscode init`. If the project has a configuration, everything in it that concerns the upgrade applies: `paths` and `excludePaths`, the target PHP version, `fixRisky`, the baseline, the overrides in `overrides`, and your own [replacement maps |upgrading-libraries#Your Own Renames in a Project]. From the style, only the parts the code already follows apply: DressCode first checks the code against the style of the project and leaves out every decision the code violates somewhere. So new code takes the form the project really uses, and a file the upgrade touches is not reformatted.
+A project without a `dresscode.neon` has no defined style, and `upgrade today` will touch only deprecated APIs (the multi-step upgrade plan requires a configuration and directs you to `dresscode init` if none is found). When a configuration exists, everything relevant to upgrading applies: `paths`, `excludePaths`, target PHP versions, `fixRisky`, baselines, `overrides`, and custom [replacement maps |upgrading-libraries#Your Own Renames in a Project]. For formatting rules, however, it applies only rules that your code already adheres to completely: DressCode tests your code against your configured style and drops any formatting rule that is violated anywhere in the project. Newly inserted code matches your real conventions, and modified files are spared unrelated reformatting.
 
-The unit is the decision, and the choice holds for the whole project: a single long line anywhere leaves out `file.longLines` everywhere. If you want the style as well, run `dresscode fix` afterwards, ideally as a separate commit.
+This filtering is project-wide: a single line exceeding length limits anywhere disables `file.longLines` across the entire upgrade run. If you want to reformat your codebase as well, run `dresscode fix` afterward—ideally as a separate, dedicated commit.
 
 
 Missing Data
 ------------
 
-`upgrade` learns from Packagist which upgrade packages exist, for now only those of the vendor `dresscode`. It asks at most once a day and remembers the answer in the cache directory, so it also works offline; with no network and no remembered answer, it simply offers nothing. The estimate names a missing package, and `upgrade today` offers to install it, but only when the project itself requires one of its libraries in `require` or `require-dev`, not when the library came only as a dependency of another one:
+The `upgrade` command discovers available upgrade packages from Packagist (currently covering packages under the official `dresscode` vendor). It queries at most once per day and caches responses locally, allowing it to work offline (if offline with an empty cache, it simply offers no new packages). The estimate highlights missing packages, and `upgrade today` prompts to install them—provided your project requires that library directly in `require` or `require-dev`:
 
 /--pre .[terminal]
 The libraries of the project have upgrading data in `dresscode/upgrade-nette`, which DressCode does not have.
 Install it beside DressCode in `C:/Users/me/AppData/Roaming/Composer`?
 \--
 
-The package goes into the DressCode installation, so the `composer.json` of the project stays unchanged. If DressCode is a dependency of the project (in its `composer.lock`), the package is installed into the project with `composer require --dev`, and the question warns that the `composer.json` of the project will change. Without a terminal, in CI or in an agent hook, `upgrade today` installs nothing: it ends with exit code 3 and prints the exact Composer command. The option `--yes` allows the installation even there.
+The package installs into your DressCode environment, leaving your project's `composer.json` untouched. If DressCode is installed as a direct project dependency (in `composer.lock`), the package is installed into the project via `composer require --dev`, and the prompt notes that `composer.json` will be modified. Outside an interactive terminal (in CI or AI agent hooks), it installs nothing, exits with code 3, and prints the exact Composer command; passing `--yes` approves installation non-interactively.
 
 
 One Major Version at a Time, by Hand
 ------------------------------------
 
-Without a plan, split a big jump into steps, one major version of a library at a time. Each step is the same:
+If you prefer not to use an automated plan, you can break a major version jump into manual steps, one major release at a time:
 
-1. In `composer.json`, raise the lower bound to the next major version, for example from `"nette/utils": "^3.2"` to `"^4.0"`. If you are also moving to a newer PHP, raise `require.php`, and `config.platform.php` too if the project sets it.
-2. Run `composer update --prefer-lowest`, so that vendor holds exactly the lowest versions the code is written for.
-3. Run `dresscode upgrade today`, and if it advises you to, run it once more.
-4. Go through what is left, run the tests and PHPStan, read the diff and commit.
-5. Continue with the next version, or bring the newest versions back into vendor with a plain `composer update`.
+1. In `composer.json`, bump the lower bound to the next major version (e.g. from `"nette/utils": "^3.2"` to `"^4.0"`). If upgrading PHP as well, raise `require.php` and `config.platform.php` if defined.
+2. Run `composer update --prefer-lowest` so `vendor/` contains the lowest supported versions that code must target at this stage.
+3. Run `dresscode upgrade today` (and rerun if recommended).
+4. Review remaining manual tasks, run tests and PHPStan, review the diff, and commit.
+5. Proceed to the next version, or run a standard `composer update` to bring dependencies to their latest releases.
 
-Why `--prefer-lowest`? Where there is no data, DressCode rewrites according to the `@deprecated` annotations in the code of the library. But an annotation speaks only for the installed version. So DressCode ignores the annotations of a library installed in a higher version than the lowest one the constraint allows: the replacement might not exist in the older version.
+Why is `--prefer-lowest` critical? Where migration data is absent, DressCode rewrites code based on `@deprecated` annotations in library source code. However, annotations speak only for the specific version currently installed in `vendor/`. DressCode intentionally ignores annotations from packages installed above their constraint's lower bound, as proposed replacements might not exist in the minimum allowed release.
 
-Why in steps? Because in each step, the data meets exactly the version of the library it describes. The new classes the data writes into your code are already in vendor, and the `@deprecated` annotations of the installed version reveal what will disappear in the next one; DressCode uses them to rewrite the code right away, or at least to show where you will need to change it. [How Upgrading Libraries Works |upgrading-libraries#One Version at a Time, or All at Once] describes how to upgrade an application all at once, or how to rewrite the code before you update the library.
+Stepping through major versions ensures migration metadata aligns with the library code present in `vendor/`. New classes introduced in that version are available, and `@deprecated` annotations reveal what will disappear in the subsequent release. [How Upgrading Libraries Works |upgrading-libraries#One Version at a Time, or All at Once] details how to upgrade applications all at once or rewrite code before updating packages.
 
 
 Keeping the Old API from Coming Back
 ====================================
 
-An upgrade is a one-time cleanup. To make every check in [continuous integration |continuous-integration] and in a [Git hook |git-hooks] watch for the old API too, add the set `deprecations` and the types to the configuration, and name the package in `use` to enable its rules as well:
+An upgrade is a one-time cleanup. To ensure retired APIs don't creep back in, and to guard against regressions in [continuous integration |continuous-integration] and [Git hooks |git-hooks], add the `deprecations` set and type analysis to your configuration, listing the migration package in `use`:
 
 ```neon
 typeAnalysis: phpstan
@@ -385,21 +385,21 @@ use:
 	- upgrade-nette
 ```
 
-Packages of the vendor `dresscode` can be written short in `use`, like built-in sets; the full name `dresscode/upgrade-nette` works too. The data of a package applies even when `use` does not name it; the name adds the rules the package carries alongside the data (for Nette, the conversion of the flag `Json::PRETTY` to a named argument). If the name is missing, `check` and `fix` point it out once:
+Official packages from the `dresscode` vendor can be written using their short names in `use` just like built-in sets (the full package name `dresscode/upgrade-nette` works as well). Migration data applies even without the package name in `use`; naming it enables the executable rules bundled with the package—such as converting Nette's `Json::PRETTY` flag to a named argument. If omitted from `use`, both `check` and `fix` will display a one-time reminder:
 
 /--pre .[terminal]
 Warning: Package `dresscode/upgrade-nette` brings rules that run only where `use` names it, as `upgrade-nette`, and in `dresscode upgrade`; skipped, with what its upgrading files set for them.
 \--
 
-From then on, `dresscode check` reports the old API in every new piece of code. And because the data follows the constraints in `composer.json`, the check itself reports what needs rewriting as soon as you raise a constraint to the next version.
+From that point on, `dresscode check` flags legacy API usage in newly authored code. And because data tracks constraints in `composer.json`, the linter will automatically highlight necessary updates the moment you raise a dependency to the next version.
 
 
 Upgrading a Library You Maintain
 ================================
 
-A library that depends on other libraries is upgraded the same way as an application, except that its constraints are widened instead of raised, see [above |#A Library Widens, It Does Not Raise]. When I upgraded `nette/application` like this, `upgrade today` rewrote `setFactory()` to `setCreator()` in the code and in the tests, and the flag `RouteList::ONE_WAY` to the named argument `oneWay: 1`. It reported a deprecated property and an annotation whose text does not fit into an attribute, and the second run rewrote nothing more.
+Libraries that depend on third-party packages are upgraded similarly to applications, except their constraints are widened rather than raised (see [above |#A Library Widens, It Does Not Raise]). When upgrading `nette/application` this way, `upgrade today` updated `setFactory()` calls to `setCreator()` and converted `RouteList::ONE_WAY` flags to `oneWay: 1` across both source and test files, flagged a deprecated property and an annotation too complex for an attribute, and required no changes on the second pass.
 
-But a library also has tests that use the old API on purpose: a test of a deprecated attribute, a test of backward compatibility, a type test of an interface. You do not want those rewritten. Exclude such a file from the data with an [override |configuration#Different Values for Part of the Project] in `overrides`:
+However, libraries have a distinct requirement: test suites that invoke deprecated APIs intentionally (such as backward compatibility tests, deprecated attribute tests, or interface tests). You do not want those rewritten. Exclude these test files using an [override |configuration#Different Values for Part of the Project] in `overrides`:
 
 ```neon
 typeAnalysis: phpstan
@@ -417,26 +417,26 @@ overrides:
 				deprecatedMember: keep
 ```
 
-`packages: no` turns off the data of the packages for that file, together with the rewrites their files turn on, and `deprecatedMember: keep` turns off rewriting by `@deprecated` annotations; the style and the rest of the set still apply. For a single line, the comment `// dresscode:ignore upgrading` is enough, see [Suppressions |suppressions-and-baseline]. What `upgrade` still reports in such tests is expected: it is old API that is there on purpose.
+Setting `packages: no` removes package migration data for those files, while `deprecatedMember: keep` disables rewrites driven by `@deprecated` annotations; code style and the remainder of the set remain fully active. For a single line, `// dresscode:ignore upgrading` is sufficient (see [Suppressions |suppressions-and-baseline]). Findings reported in these tests are expected—they confirm that legacy compatibility paths remain exercised.
 
-The data does not rewrite the code of the class itself, because it describes how the class is used, not how it is implemented. When the data of `nette/application` says that a write to `$request->post` should become `setPost($value)`, the line `$this->post = $post` inside the method `Request::setPost()` stays as it is; otherwise the method would call itself. A child class, though, is a user like any other and gets upgraded. Data about a magic property, that is, about `__get()` and `__set()`, also applies to reading and writing a private property from outside, because PHP routes those to `__get()` and `__set()` as well.
+Internal implementation code inside a class is never rewritten by migration data, which describes how classes are consumed externally rather than how they are built internally. When `nette/application` data indicates that writes to `$request->post` should become `setPost($value)`, the line `$this->post = $post` inside `Request::setPost()` remains untouched—otherwise the method would recursively call itself. Subclasses, however, are external consumers and are upgraded normally. Metadata for magic properties (`__get()` and `__set()`) also applies to private property access from outside, since PHP routes external access to private properties through magic methods as well.
 
-Want to upgrade in parts, for example Nette first and PHP later? Give the estimate and the plan a single target, or narrow `upgrade today` with the option `--only` to the data of one package and the rules that read it:
+To upgrade in stages (for example, upgrading Nette first and PHP later), specify a single target in your estimate and plan, or restrict `upgrade today` with `--only` to a single package and its rules:
 
 ```shell
 dresscode upgrade today --only upgrade-nette
 ```
 
-The data of the other packages takes part only where another name in `--only` covers it, for example `deprecations` or `upgrading.api`. You can narrow it further with the name of a library: `--only nette/forms` takes only the files about `nette/forms`, whichever package carries them, and `--only php` the data about what PHP has deprecated. `check` and `fix` support the same `--only`, and the keys `fixRisky` and `severity` also accept the name of a package or a library. Naming a package whose data has no effect here is an error, and the message says why: the data does not cover any version of the project's libraries, or `upgrading.packages` is not `yes`. A name that is both an upgrade package and a library another package writes about stands for both: the files of that package and the files about that library.
+Data from other packages takes effect only if covered by another name in `--only` (such as `deprecations` or `upgrading.api`). You can filter down to a specific library: `--only nette/forms` isolates files related to `nette/forms` regardless of which package supplies them, and `--only php` targets PHP engine deprecations. The same `--only` option is supported by `check` and `fix`, and package/library names are accepted by `fixRisky` and `severity`. Naming a package whose data has no effect in the project triggers an error explaining the cause (either the data does not match the project's dependency versions, or `upgrading.packages` is not enabled). A name that represents both an upgrade package and a library described by another package covers both: the files in that package and files describing that library.
 
 
 Where to Go Next
 ================
 
-- [Nette libraries |upgrading-nette], [Symfony |upgrading-symfony], [Laravel |upgrading-laravel] and [Dibi and Texy |upgrading-dibi-and-texy], what their packages cover.
-- [Upgrading to a newer PHP |upgrading-php], when you raise the PHP version along with the libraries.
-- [How upgrading libraries works |upgrading-libraries], how DressCode knows what has changed, and what it rewrites by itself.
-- [Types from PHPStan |phpstan-types], without which constants, methods and calls are not rewritten.
+- [Nette libraries |upgrading-nette], [Symfony |upgrading-symfony], [Laravel |upgrading-laravel], and [Dibi and Texy |upgrading-dibi-and-texy], for ecosystem-specific migration guides.
+- [Upgrading to a Newer PHP |upgrading-php], when raising your PHP version alongside your libraries.
+- [How Upgrading Libraries Works |upgrading-libraries], for an architectural look at how DressCode discovers API shifts and what it can rewrite automatically.
+- [Types from PHPStan |phpstan-types], which enable safe refactoring of constants, methods, and member calls.
 
 {{maintitle: Upgrade Your PHP Code and Libraries Step by Step}}
 {{description: How much work does it take to move to a newer Nette, Symfony, Laravel or PHP? DressCode measures it, makes a plan and carries it out with Composer and your tests.}}

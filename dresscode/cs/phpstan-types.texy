@@ -2,67 +2,67 @@ Typy z PHPStanu
 ***************
 
 .[perex]
-Bezztrátový strom zná ve vašem kódu každou mezeru, ale neví, že `$form` je formulář. Máte-li v projektu PHPStan, DressCode se ho zeptá, a získá tak schopnosti, které nástroje na kontrolu stylu kódu nemívají: přepíše zastaralé API podle toho, čím proměnná opravdu je, doplní `#[\Override]` k metodě, která přepisuje metodu rodiče, a pozná, že řetězec je jméno existující třídy.
+Bezztrátový syntaktický strom zná ve vašem kódu každou mezeru i čárku, ale sám o sobě neví, že proměnná `$form` představuje formulář. Pokud v projektu používáte PHPStan, DressCode se ho na to jednoduše zeptá. Získá tím schopnosti, o kterých si běžné formátovací nástroje mohou nechat jen zdát: přepíše zastaralé API knihoven podle reálného typu proměnné, doplní atribut `#[\Override]` k metodám přepisujícím předka a bezpečně pozná, zda je řetězec platným názvem existující třídy.
 
 
 Co strom sám neví
 =================
 
-Pravidlo nad stromem vidí, že na řádku stojí přístup ke konstantě `$form::FILLED`. Nevidí ale, čím je `$form`. Když je to formulář z Nette, jehož třída u konstanty říká `@deprecated use Form::Filled`, má se řádek přepsat. Když je to cokoli jiného, nesmí se na něj sáhnout. Z jednoho souboru se to poznat nedá a oprava, která hádá, je horší než žádná.
+Pravidlo operující čistě nad syntaktickým stromem vidí, že na řádku stojí přístup ke konstantě `$form::FILLED`. Z jednoho izolovaného souboru však nemá šanci zjistit, čím proměnná `$form` ve skutečnosti je. Pokud jde o formulář z Nette, jehož třída má u této konstanty anotaci `@deprecated use Form::Filled`, má se řádek automaticky přepsat. Pokud jde o jakýkoliv jiný objekt, kód musí zůstat netknutý. Jakákoliv oprava založená na pouhém hádání by byla nebezpečnější než žádná oprava.
 
-Odpověď zná statická analýza a PHPStan ji ve vašem projektu nejspíš už dělá. DressCode proto typy nepočítá sám. Zeptá se vašeho PHPStanu, který běží s vaší konfigurací `phpstan.neon` a s rozšířeními, která v ní máte. Odpovědi jsou tedy stejně dobré jako analýza, které už dnes věříte, a počítají i s magií vašeho frameworku, pokud jí rozumí vaše rozšíření PHPStanu.
+Přesnou odpověď zná statická analýza – a PHPStan ji ve vašem projektu s největší pravděpodobností už dávno provádí. DressCode proto typy nepočítá sám. Místo toho se přímo dotáže vašeho nainstalovaného PHPStanu, který běží s vaší konfigurací `phpstan.neon` a se všemi vašimi rozšířeními. Výsledky jsou tedy stejně spolehlivé jako analýza, které v projektu každodenně důvěřujete, a bez problémů zohlední i specifickou magii vašeho frameworku.
 
 
 Zapnutí typů .[#enable]
 =======================
 
-PHPStan i DressCode patří do projektu, aby se DressCode ptal právě toho PHPStanu, který projekt používá, a s jeho konfigurací:
+PHPStan i DressCode patří ideálně přímo do projektu, aby se DressCode dotazoval přesně té verze PHPStanu a těch pravidel, se kterými projekt reálně pracuje:
 
 ```shell
 composer require --dev phpstan/phpstan dresscode/dresscode
 ```
 
-Počítejte s tím, že DressCode vyžaduje PHP 8.4 nebo novější, takže na něm musí běžet i váš projekt. Verze PHP, pro kterou je kód psaný, je jiné číslo a může zůstat nižší, viz [Instalace |getting-started#Instalace].
+Počítejte s tím, že samotný DressCode vyžaduje ke svému běhu PHP 8.4 nebo novější, takže na tomto PHP musí běžet i vývojové prostředí projektu. Cílová verze PHP, pro kterou je kód psaný, je nezávislá hodnota a může samozřejmě zůstat nižší (podrobnosti najdete v [průvodci instalací |getting-started#Instalace]).
 
-A konfigurace řekne, odkud se typy berou:
+V konfiguraci pak stačí jediným řádkem určit, odkud se mají informace o typech brát:
 
 ```neon
 typeAnalysis: phpstan
 ```
 
-To je všechno. Klíč `typeAnalysis` je fakt o projektu, stejně jako verze PHP, a preset ho nastavit nemůže.
+To je vše. Klíč `typeAnalysis` vyjadřuje fakt o projektu (podobně jako minimální verze PHP), a žádný preset jej proto nemůže nastavit za vás.
 
-DressCode se ptá PHPStanu nainstalovaného vedle sebe, tedy ve stejném adresáři `vendor`. Když jsou oba v projektu, jako výše, je to PHPStan projektu. Druhá možnost je mít oba globálně:
+DressCode se dotazuje PHPStanu nainstalovaného po svém boku – tedy ve stejné složce `vendor`. Pokud máte oba nástroje v závislostech projektu, komunikuje s projektovým PHPStanem. Druhou možností je mít oba nástroje nainstalované globálně:
 
 ```shell
 composer global require dresscode/dresscode phpstan/phpstan
 ```
 
-I globální PHPStan zná třídy vašeho projektu a jeho knihoven. Nepotřebuje je načítat, přečte si je ze zdrojových souborů podle `composer.json` a `vendor/composer/installed.json` projektu. Verze PHPStanu ale bude ta globální, ne ta, se kterou počítá projekt. Rozšíření PHPStanu musí být nainstalovaná globálně také, přes `phpstan/extension-installer`. Globální PHPStan nenačte kód z adresáře `vendor` projektu, a tak rozšíření, které `phpstan.neon` načítá cestou do `vendor`, nenajde své třídy, pokud není nainstalované i globálně. Rozšíření, které potřebuje běžící projekt, třeba Larastan spouštějící aplikaci, globálně fungovat nebude vůbec.
+Globální PHPStan třídy vašeho projektu i jeho závislostí rovněž bez potíží načte: nepotřebuje kód spouštět, strukturu si přečte ze zdrojových souborů podle `composer.json` a `vendor/composer/installed.json`. Verze PHPStanu se však bude řídit globální instalací, nikoliv verzí uzamčenou v projektu. Rozšíření PHPStanu je v takovém případě nutné doinstalovat rovněž globálně (pomocí `phpstan/extension-installer`). Globální PHPStan nenačítá kód z lokální složky `vendor`, takže rozšíření, které `phpstan.neon` includuje cestou do `vendor`, své třídy nenajde, pokud není přítomno i globálně. Rozšíření vyžadující běžící aplikaci (například Larastan provádějící boot frameworku) v globálním režimu fungovat nebudou.
 
-Instalace přes `composer create-project` přinese PHPStan také, protože instaluje i vývojové závislosti DressCode. PHPStan se pak aktualizuje příkazem `composer update` v adresáři, kam jste DressCode nainstalovali, ne v projektu.
+Instalace přes `composer create-project` přinese PHPStan automaticky, protože instaluje i vývojové závislosti DressCode. PHPStan pak aktualizujete příkazem `composer update` přímo ve složce, kam jste DressCode nainstalovali.
 
-Když klíč uvedete a vedle DressCode žádný PHPStan není, třeba u globální instalace bez globálního PHPStanu, DressCode na to upozorní a běh pokračuje bez typů, jako by klíč chyběl:
+Pokud klíč `typeAnalysis` v konfiguraci zapnete, ale vedle DressCode žádný PHPStan nainstalovaný není (např. u globální instalace bez globálního PHPStanu), DressCode na to vypíše varování a běh pokračuje bez typů – přesně tak, jako by klíč chyběl:
 
 /--pre .[terminal]
 Warning: The configuration sets `typeAnalysis: phpstan`, but `phpstan/phpstan` is not installed beside DressCode, so the run goes without the types of the code.
 See https://dresscode.run/types#enable
 \--
 
-Rozhodnutí, které typy potřebuje a které napíšete do konfigurace, je v takovém běhu chybou konfigurace, stejně jako [bez klíče `typeAnalysis` |#Bez PHPStanu]:
+Rozhodnutí vyžadující typy, které do konfigurace zapíšete sami, skončí v takovém běhu chybou konfigurace – stejně jako [v běhu bez klíče `typeAnalysis` |#Bez PHPStanu]:
 
 /--pre .[terminal]
 Error: Decision `upgrading.declarations.deprecatedMember` needs the types of the code, but `phpstan/phpstan` is not installed beside DressCode.
 See https://dresscode.run/types#enable
 \--
 
-Příkaz [`dresscode upgrade today` |upgrade] si typy zapne sám, bez klíče v konfiguraci, a bez PHPStanu vedle sebe nepoběží vůbec: skončí chybou <code>''The command needs the types of the code, but `phpstan/phpstan` is not installed beside DressCode.''</code>
+Příkaz [`dresscode upgrade today` |upgrade] zapíná typovou analýzu automaticky i bez konfiguračního klíče. Pokud PHPStan vedle sebe nenajde, odmítne běžet a rovnou skončí chybou: <code>''The command needs the types of the code, but `phpstan/phpstan` is not installed beside DressCode.''</code>
 
 
 Co tím získáte
 ==============
 
-Vezměme presenter, který používá zastaralé API Nette a několik starších zvyklostí, a zkontrolujme ho s touto konfigurací:
+Představme si presenter, který využívá zastaralé API Nette a několik starších postupů, a prověřme jej touto konfigurací:
 
 ```neon
 use:
@@ -76,7 +76,7 @@ upgrading:
 		Override: required
 ```
 
-Zpráva každého nálezu stojí v komentáři na jeho řádku:
+Význam každého nalezeného problému vysvětluje komentář na příslušném řádku:
 
 ```php .[before]
 final class SignPresenter extends Presenter
@@ -111,7 +111,7 @@ final class SignPresenter extends Presenter
 }
 ```
 
-Po opravě:
+A takto vypadá kód po automatické opravě:
 
 ```php .[after]
 final class SignPresenter extends Presenter
@@ -147,20 +147,20 @@ final class SignPresenter extends Presenter
 }
 ```
 
-Každý z pěti nálezů potřeboval vědět něco, co v souboru není. Šestý, který `dresscode check` vypíše navíc, je jen důsledkem prvního: preset `nette` píše v souboru bez jmenného prostoru globální jména bez úvodního lomítka, a tak z `#[\Override]` udělá `#[Override]`.
+Každý z pěti nálezů potřeboval vědět něco, co ze samotného textu souboru nelze vyčíst. Šesté hlášení, které `dresscode check` navíc vypíše, je pouhým důsledkem prvního: preset `nette` píše v souboru bez namespace globální názvy bez úvodního lomítka, takže z `#[\Override]` udělá čisté `#[Override]`.
 
-- **Zastaralé API** přepisuje rozhodnutí `upgrading.declarations.deprecatedMember` podle anotace `@deprecated` v kódu knihovny. Rozhoduje přitom třída, která konstantu nebo metodu deklaruje, ne zápis, takže se `$form::FILLED` přepíše stejně jako `Form::FILLED` a hláška u `setAttribute()` jmenuje třídu `BaseControl`, i když se metoda volá na textovém poli. Zastaralé třídy stejně přepisuje `upgrading.declarations.deprecatedClass`. Typy potřebují i mapy, které přepisují kód podle dat balíčků pro upgrade (`upgrading.api.replacedMembers`, `replacedCalls`, `forbiddenMembers` a `nette.flagsAsNamedArguments`), a `upgrading.api.replacedClasses` se s nimi navíc ujistí, že třída, kterou zapíše, v projektu existuje. Jak to funguje u celých knihoven, popisuje [Jak funguje upgrade knihoven |upgrading-libraries].
-- **`#[\Override]`** z PHP 8.3 doplní `upgrading.classes.Override: required` k metodě, která přepisuje metodu rodiče. PHP pak samo ohlásí chybu, kdyby rodič metodu přejmenoval a vaše metoda by potichu přestala cokoli přepisovat. Implementaci abstraktní metody nebo metody rozhraní rozhodnutí vynechá, tu PHP pohlídá i bez atributu.
-- **Jméno třídy v řetězci** přepíše `literals.classNameInString` na `::class` jen tehdy, když třída, rozhraní nebo enum toho jména v projektu opravdu existuje. Editor pak jméno najde, až budete třídu přejmenovávat. Pravidlo `class_keyword` PHP CS Fixeru podle vlastní dokumentace tohle poznat nemůže, protože nad tokeny neví, jaké třídy projekt má.
-- **Test prázdného řetězce** `strlen($name) === 0` přepíše `hygiene.strlenEmptyTest` na `$name === ''` jen tam, kde je `$name` určitě řetězec. U jiné hodnoty by se oba zápisy chovaly jinak.
+- **Zastaralé API** přepisuje rozhodnutí `upgrading.declarations.deprecatedMember` podle anotací `@deprecated` přímo v kódu knihovny. Přitom se řídí třídou, která konstantu či metodu skutečně deklaruje (nikoliv tím, jak je zapsána v kódu) – zápis `$form::FILLED` se tedy přepíše naprosto stejně jako `Form::FILLED` a hláška u `setAttribute()` správně jmenuje třídu `BaseControl`, přestože se metoda volá nad instancí textového pole. Zastaralé třídy přepisuje obdobně pravidlo `upgrading.declarations.deprecatedClass`. Typovou analýzu nutně potřebují i mapy přepisující kód podle dat migračních balíčků (`upgrading.api.replacedMembers`, `replacedCalls`, `forbiddenMembers` a `nette.flagsAsNamedArguments`), a pravidlo `upgrading.api.replacedClasses` si díky typům navíc ověří, zda nově zapisovaná třída v projektu reálně existuje (podrobnosti přináší stránka [Jak funguje upgrade knihoven |upgrading-libraries]).
+- **Atribut `#[\Override]`** z PHP 8.3 doplní pravidlo `upgrading.classes.Override: required` ke každé metodě, která přepisuje metodu rodičovské třídy. PHP pak samo nahlásí fatální chybu, pokud by rodič metodu v budoucnu přejmenoval a vaše metoda by potichu přestala cokoliv přepisovat. Implementaci abstraktních metod či metod rozhraní pravidlo záměrně vynechává, protože jejich dodržení hlídá PHP striktně i bez atributu.
+- **Názvy tříd v řetězcích** převede pravidlo `literals.classNameInString` na bezpečný zápis `::class` výhradně tehdy, pokud třída, rozhraní či enum daného jména v projektu skutečně existuje. IDE pak název spolehlivě najde při jakémkoliv budoucím refaktoringu. Ekvivalentní pravidlo `class_keyword` v PHP CS Fixeru tuto jistotu podle své vlastní dokumentace nabídnout nemůže, protože nad pouhými tokeny netuší, jaké třídy projekt obsahuje.
+- **Test na prázdný řetězec** `strlen($name) === 0` přepíše pravidlo `hygiene.strlenEmptyTest` na `$name === ''` pouze tam, kde je proměnná `$name` prokazatelně řetězcem. U jiného datového typu by se oba zápisy mohly chovat odlišně.
 
-K tomu `classes.overridingMethod.parentCallOnly` smaže metodu, která jen předá své parametry stejnojmenné metodě rodiče. Typy prozradí, jestli ji volající od rodičovské vůbec rozezná: rodič ji musí deklarovat se stejnou viditelností, parametry i návratovým typem. Oprava je riziková (risky fix), protože rodič, který čte `func_get_args()`, by pak dostal i argumenty navíc a ze stack trace by zmizel jeden řádek; udělá se, až rozhodnutí uvedete v klíči `fixRisky`.
+Typy využívá i pravidlo `classes.overridingMethod.parentCallOnly`, které maže metody, jež pouze beze změny přeposílají parametry metodě předka. Typová analýza prověří, zda volající kód vůbec může takovou metodu od rodičovské odlišit: rodič ji musí deklarovat se stejnou viditelností, shodnými parametry i návratovým typem. Oprava je riziková (risky fix), protože pokud předek čte `func_get_args()`, dostal by po smazání metody i případné argumenty navíc a ze stack trace zmizí jeden řádek. Provede se tedy až po schválení v klíči `fixRisky`.
 
-Bez typů se neobejdou ani rozhodnutí, která po přechodu na novou verzi knihovny hlídají dědičnost: `classes.overridingMethod.signature` přizpůsobí metodu potomka signatuře předka, `mistakes.finalParent` ohlásí potomka třídy, která se stala `final`, a `mistakes.unimplementedAbstractMethod` abstraktní metodu, kterou potomek neimplementuje. Z balíčku `dresscode/upgrade-nette` je potřebují `nette.linkArguments` a `nette.monitorCallbacks`.
+Bez typů se neobejdou ani kontroly hlídající správnou dědičnost po upgradu knihoven: `classes.overridingMethod.signature` přizpůsobí metodu potomka nové signatuře předka, `mistakes.finalParent` nahlásí potomka třídy, která se nově stala `final`, a `mistakes.unimplementedAbstractMethod` odhalí novou abstraktní metodu, kterou potomek dosud neimplementuje. Z balíčku `dresscode/upgrade-nette` na typech staví pravidla `nette.linkArguments` a `nette.monitorCallbacks`.
 
-Několik dalších rozhodnutí funguje i bez typů, ale s nimi toho udělají víc. Opravu, která je riziková jen kvůli neznámému typu hodnoty, udělá DressCode s typy bezpečně: `upgrading.functions.arraySearchFunctions` pozná, že cyklus jde přes pole, a přes objekt ho nechá být; `expressions.comparison.loose`, `upgrading.syntax.match` a `mistakes.strictArgument` poznají, že se porovnávají celá čísla, pravdivostní hodnoty nebo případy enumu, u kterých dá volné i přísné porovnání totéž; `expressions.assignment.addingOne` číslo, `upgrading.functions.get_debug_type` řetězec nebo pole, `expressions.assignment.targetInValue` obyčejnou vlastnost, kterou `??=` smí nechat nezapsanou, a `expressions.coalesce` vlastnost nebo pole, ke kterým se nepřistupuje přes magické metody. `upgrading.syntax.pipe` z typů pozná, jestli metoda nebere parametr referencí; bez nich je jeho oprava volání metody riziková. `classes.staticMethod` pozná, která třída je opravdu předkem. `upgrading.api.attributeForMember` a z balíčku `dresscode/upgrade-laravel` rozhodnutí `laravel.castsMethod` a `laravel.scopeAttribute` bez typů poznají jen třídu, která předka jmenuje sama v `extends` nebo `implements`; s typy i tu, která od něj dědí přes další třídu, třeba model odvozený od vašeho `BaseModel`. `upgrading.api.attributeForMember` navíc s typy ohlásí rozhraní, které třída zdědila od rodiče, a atribut, jehož konstruktoru by chyběl povinný argument. Atribut s chybějícím povinným argumentem ohlásí s typy i `upgrading.api.attributeForAnnotation`, a když je klíčem mapy maska jmenného prostoru, také cílovou třídu, která neexistuje nebo atributem není.
+Celá řada dalších pravidel funguje i bez typů, ale s nimi toho dokáže podstatně více. Opravy, které by byly rizikové kvůli neznámému typu hodnoty, provede DressCode s typy zcela bezpečně: `upgrading.functions.arraySearchFunctions` pozná, že cyklus prochází pole, a cyklus přes objekt nechá na pokoji; pravidla `expressions.comparison.loose`, `upgrading.syntax.match` a `mistakes.strictArgument` s jistotou určí, že se porovnávají celá čísla, booleany nebo enumy (u nichž volné i striktní porovnání dává identický výsledek); `expressions.assignment.addingOne` bezpečně rozpozná číslo; `upgrading.functions.get_debug_type` odliší řetězec a pole; `expressions.assignment.targetInValue` pozná běžnou vlastnost, kterou může operátor `??=` bezpečně vynechat; a `expressions.coalesce` rozpozná vlastnost či pole, k nimž se nepřistupuje přes magické metody. Pravidlo `upgrading.syntax.pipe` z typů ověří, zda metoda nepřebírá parametr referencí (bez typů je její přepis na pipe operátor rizikový). Pravidlo `classes.staticMethod` spolehlivě pozná skutečného předka. Rozhodnutí `upgrading.api.attributeForMember` (a pravidla `laravel.castsMethod` i `laravel.scopeAttribute` z balíčku `dresscode/upgrade-laravel`) poznají bez typů pouze třídu, která předka přímo jmenuje v `extends` či `implements`; s typy však odhalí i třídu, která od něj dědí nepřímo přes mezilehlou hierarchii (např. model odvozený z vašeho vlastního `BaseModel`). Pravidlo `upgrading.api.attributeForMember` navíc s typy správně ohlásí rozhraní zděděné po rodiči a atribut, jehož konstruktoru by chyběl povinný argument. Chybějící povinný parametr u atributu nahlásí s typy i `upgrading.api.attributeForAnnotation`, a pokud je klíčem mapy maska namespace, odhalí i cílovou třídu, která neexistuje nebo není atributem.
 
-Rozhodnutí, která se bez typů neobejdou, zvlášť jedno po druhém psát nemusíte: patří do [sad |configuration#Standardy a sady] `cleanup`, `deprecations` a `modernizations` a klíč `typeAnalysis` je zapne. Nepleťte si přitom sadu s klíčem: sada `types` říká, že chcete typy psát do kódu, klíč `typeAnalysis` říká, odkud DressCode zjišťuje typy, které v kódu už jsou. Standard `nette` rozhoduje i o hygieně kódu, takže mu stačí přidat klíč a sady `deprecations` a `modernizations`; ty v něm nejsou, protože co která verze zrušila a co jde v nové verzi napsat líp, je věc aktualizace, a tu spustíte, až ji budete chtít:
+Rozhodnutí vyžadující typy nemusíte v konfiguraci zapínat jednotlivě: jsou přirozenou součástí [sad |configuration#Standardy a sady] `cleanup`, `deprecations` a `modernizations` a klíč `typeAnalysis` jim jednoduše dodá potřebná data. Nepleťte si přitom sadu s klíčem: sada `types` říká, že chcete typové deklarace aktivně zapisovat do kódu; konfigurační klíč `typeAnalysis` určuje, odkud DressCode čerpá informace o typech, které v kódu už existují. Standard `nette` řeší hygienu kódu automaticky, takže mu stačí přidat klíč a sady `deprecations` a `modernizations` (ty v něm standardně nejsou, protože modernizace na nové verze PHP a knihoven je krok, který pouštíte podle vlastní potřeby):
 
 ```neon
 typeAnalysis: phpstan
@@ -171,7 +171,7 @@ use:
 	- modernizations
 ```
 
-S jiným standardem k němu sady přidáte:
+U jiného standardu připojíte sady vedle něj:
 
 ```neon
 typeAnalysis: phpstan
@@ -187,17 +187,17 @@ use:
 Jak to spolu funguje
 ====================
 
-DressCode kvůli typům neopouští svůj strom. Vytiskne ho, nechá PHPStan vytištěný text rozebrat a spočítat v něm typy, a každou odpověď připíše ke správnému uzlu podle její pozice v souboru. Pravidla se pak ptají přímo: co je tohle volání zač, kterou metodu ten přístup volá, co o ní říká její deklarace. PHPStan přitom nic nepřepisuje a nic nehlásí, jen odpovídá. Přepisuje dál DressCode, se všemi mezerami a komentáři na svém místě.
+DressCode kvůli typové analýze nikdy neopouští svůj bezztrátový syntaktický strom. Strom vytiskne do paměti, nechá PHPStan tento kód zanalyzovat a odvodit typy, a každou odpověď přesně přiřadí ke správnému uzlu podle jeho pozice v souboru. Jednotlivá pravidla se pak dotazují přímo uzlu: jaký objekt toto volání představuje, kterou konkrétní metodu volá a jak vypadá její deklarace. PHPStan sám o sobě nic nepřepisuje ani nehlásí – pouze dodává fakta. Vlastní úpravy provádí výhradně DressCode, se všemi mezerami, odsazením a komentáři na svých původních místech.
 
-Stojí to čas: každý soubor projde dvěma parsery a PHPStan pro něj počítá typy, takže běh s `typeAnalysis: phpstan` je znatelně pomalejší než běh bez typů. Cache výsledků ale platí dál, a tak to pocítíte hlavně při prvním běhu a po změně konfigurace.
+Tato analýza přirozeně něco stojí: každý soubor projde dvěma parsery a PHPStan pro něj musí spočítat typy. Běh s `typeAnalysis: phpstan` je proto znatelně pomalejší než kontrola čistě na úrovni stromu. Výsledky se však ukládají do cache, takže zpomalení pocítíte především při prvním spuštění a po zásadních změnách konfigurace.
 
-Cache přitom zná jen obsah souboru, ne to, odkud se typy vzaly. Když metoda ve vaší třídě dostane `@deprecated`, soubory, které ji volají, se nezměnily a cache je přeskočí, dokud se nezmění samy. Stejně tak nepozná změnu `phpstan.neon`. Aktualizaci knihoven, PHPStanu a jeho rozšíření pozná, protože jejich verze do otisku cache patří. Po změně, kterou cache nevidí, spusťte běh s `--no-cache`, a kontrolu v CI, která rozhoduje o buildu, pouštějte s typy a bez cache.
+Cache se nicméně orientuje podle obsahu konkrétního souboru, nikoliv podle celkového kontextu projektu. Pokud metoda ve vaší třídě získá anotaci `@deprecated`, obsah souborů, které ji volají, se nezměnil – cache je proto přeskočí, dokud je neupravíte. Stejně tak cache nezachytí změnu v `phpstan.neon`. Aktualizaci knihoven, samotného PHPStanu či jeho pluginů naopak pozná spolehlivě, protože jejich verze tvoří součást otisku cache. Po změnách, které cache nemůže vidět, spusťte kontrolu s přepínačem `--no-cache`; v CI prostředí, kde se rozhoduje o úspěchu buildu, pouštějte kontrolu s typy a bez cache vždy.
 
 
 Bez PHPStanu
 ============
 
-Bez klíče `typeAnalysis` DressCode funguje dál, jen se neuplatní rozhodnutí, která typy potřebují. Když je napsal preset, sada nebo data balíčku, vynechají se potichu, takže standard `nette`, který několik takových rozhodnutí má, můžete mít i v projektu bez PHPStanu. `dresscode config` u nich uvede důvod:
+Bez direktivy `typeAnalysis` funguje DressCode naprosto normálně dál, pouze se neuplatní rozhodnutí, která typovou analýzu nezbytně potřebují. Pokud tato rozhodnutí pocházejí z presetu, sady nebo migračních dat balíčku, potichu se přeskočí. Standard `nette`, který několik takových rozhodnutí obsahuje, tak můžete bez obav používat i v projektu, kde PHPStan vůbec nemáte. Příkaz `dresscode config` u nich přehledně uvede důvod:
 
 /--pre .[terminal]
 classes:
@@ -211,7 +211,7 @@ literals:
 	classNameInString: forbidden                # dresscode/cleanup, no effect: types
 \--
 
-Když ale takové rozhodnutí napíšete do konfigurace sami, je to chyba konfigurace. Chtěli jste něco, co běh dát nemůže, a běh bez něj by vám lhal, že je kód v pořádku:
+Pokud byste však takové pravidlo zapsali do své konfigurace výslovně sami, skončí běh chybou konfigurace. Chtěli jste totiž chování, které běh bez PHPStanu nemůže garantovat, a kontrola by vám lživě tvrdila, že kód je v naprostém pořádku:
 
 /--pre .[terminal]
 Error: Decision `upgrading.declarations.deprecatedMember` needs the types of the code; set `typeAnalysis: phpstan` in the configuration and install `phpstan/phpstan` beside DressCode.
@@ -222,9 +222,9 @@ See https://dresscode.run/types#enable
 Kam dál
 =======
 
-- [Upgrade kódu |upgrade], kde typy přepisují kód po aktualizaci Nette a dalších knihoven.
-- [Přechod na novější PHP |upgrading-php], pro zbytek přepisů na novější verzi jazyka.
-- [Konfigurace |configuration], kde se klíč `typeAnalysis` skládá s presety a přepisy.
+- [Upgrade kódu |upgrade], kde typová analýza řídí automatický přepis kódu při aktualizaci Nette a dalších knihoven.
+- [Přechod na novější PHP |upgrading-php], přehled všech syntaktických modernizací na novější verze jazyka.
+- [Konfigurace |configuration], jak se direktiva `typeAnalysis` skládá s presety a přepisy pro části projektu.
 
 {{maintitle: Typy z PHPStanu pro bezpečnější opravy a upgrady PHP kódu}}
 {{description: S PHPStanem v projektu zná DressCode typy vašeho kódu: přepíše zastaralé API knihoven, doplní #[\Override] a pozná, že řetězec je jméno existující třídy. Stačí jeden řádek konfigurace.}}
