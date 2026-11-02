@@ -96,10 +96,13 @@ Sada `modernizations` přepíše kód na to, co přineslo PHP 8.6. Každá polo�
 |---|---|---|---|
 | `clamp()`, `upgrading.functions.clamp` | `max(0, min(5, $votes))` | `clamp($votes, 0, 5)` | opraví se; riziková, pokud nejsou obě meze čísla, protože `clamp()` odmítne minimum větší než maximum |
 | částečná aplikace, `upgrading.syntax.firstClassCallables` | `fn($x) => str_pad($x, 10, '-')` | `str_pad(?, 10, '-')` | opraví se; riziková, kde by se argument vyhodnotil dřív nebo předal referencí |
+| krok pipe operátoru, `upgrading.syntax.pipe` | `$s \|> trim(...)` | `$s \|> trim(?)` | opraví se |
 | `#[\Override]` na konstantě a případu výčtu, `upgrading.classes.Override` | `public const TABLE = 'children';` | `#[\Override] public const TABLE = 'children';` | v žádné sadě, zapněte si ho sami; potřebuje typy |
 | `readonly` s výchozí hodnotou, `mistakes.readonlyProperty` | `private int $limit = 10;` | `private readonly int $limit = 10;` | v žádné sadě; jen kde vlastnost nikdo nezapisuje |
 
 Částečná aplikace je totéž rozhodnutí jako first-class callable `strlen(...)` z PHP 8.1: closure (anonymní funkce), která jen předává své parametry jednomu volání, se změní na samotné volání se `?` místo každého parametru. Closure, která dělá víc, má typovaný parametr nebo parametr s výchozí hodnotou, nebo čte vnější rozsah, zůstane, jak je.
+
+Částečnou aplikací se zapisují i kroky pipe operátoru z PHP 8.5: `$s |> trim(...)` se změní na `$s |> trim(?)`, takže krok vypadá stejně jako ten s dalšími argumenty, `$s |> str_replace('a', 'b', ?)`. Pipe předává jedinou hodnotu a PHP oba zápisy přeloží na obyčejné volání funkce. Kód tedy dělá přesně totéž a oprava je bez rizika.
 
 .[note]
 Každé rozhodnutí ví, ve které verzi PHP jeho konstrukce přišla. Dokud `composer.json` dovoluje ještě PHP 8.5, přepisy na 8.6 tiše čekají a `dresscode config` u nich vypíše, že nemají účinek.
@@ -132,7 +135,7 @@ src/Rating.php:28:16: error: Function `is_integer()` is deprecated: since PHP 8.
 Rizikové opravy
 ===============
 
-Přepis, který může změnit, co kód dělá, se jen ohlásí a udělá se, až jeho rozhodnutí uvedete ve `fixRisky`. Oba nové přepisy takové případy mají. `clamp()` vyhodí chybu, když je minimum větší než maximum, kdežto `max($lo, min($x, $hi))` potichu něco vrátí, takže s mezemi, které nejsou čísla, oprava čeká. Částečná aplikace vyhodnotí argumenty, když vzniká, ne když se volá, takže čeká i `fn($x) => array_slice($x, 0, $this->limit)`:
+Přepis, který může změnit, co kód dělá, se jen ohlásí a udělá se, až jeho rozhodnutí uvedete ve `fixRisky`. Přepis na `clamp()` i přepis closure na částečnou aplikaci takové případy mají. `clamp()` vyhodí chybu, když je minimum větší než maximum, kdežto `max($lo, min($x, $hi))` potichu něco vrátí, takže s mezemi, které nejsou čísla, oprava čeká. Částečná aplikace vyhodnotí argumenty, když vzniká, ne když se volá, takže čeká i `fn($x) => array_slice($x, 0, $this->limit)`:
 
 ```neon
 fixRisky:

@@ -96,10 +96,13 @@ The set `modernizations` rewrites code to what PHP 8.6 brought. Each item is a d
 |---|---|---|---|
 | `clamp()`, `upgrading.functions.clamp` | `max(0, min(5, $votes))` | `clamp($votes, 0, 5)` | fixed; risky unless both bounds are numbers, because `clamp()` refuses a minimum above its maximum |
 | partial application, `upgrading.syntax.firstClassCallables` | `fn($x) => str_pad($x, 10, '-')` | `str_pad(?, 10, '-')` | fixed; risky where an argument would be evaluated earlier or passed by reference |
+| pipe operator step, `upgrading.syntax.pipe` | `$s \|> trim(...)` | `$s \|> trim(?)` | fixed |
 | `#[\Override]` on a constant and an enum case, `upgrading.classes.Override` | `public const TABLE = 'children';` | `#[\Override] public const TABLE = 'children';` | in no set, turn it on yourself; needs types |
 | `readonly` with a default value, `mistakes.readonlyProperty` | `private int $limit = 10;` | `private readonly int $limit = 10;` | in no set; only where nothing writes the property |
 
 Partial application is the same decision as the first-class callable `strlen(...)` from PHP 8.1: a closure that only forwards its parameters to one call becomes the call itself, with `?` in place of each parameter. A closure that does more, has a typed parameter or one with a default value, or reads the outer scope, stays as it is.
+
+The steps of the pipe operator from PHP 8.5 are written as partial applications too: `$s |> trim(...)` becomes `$s |> trim(?)`, so a step looks the same as one with more arguments, `$s |> str_replace('a', 'b', ?)`. The pipe passes a single value and PHP compiles both forms to a plain function call. The code therefore does exactly the same, and the fix carries no risk.
 
 .[note]
 Every decision knows the PHP version that brought its feature. While `composer.json` still allows PHP 8.5, the rewrites for 8.6 wait quietly, and `dresscode config` lists them as having no effect.
@@ -132,7 +135,7 @@ src/Rating.php:28:16: error: Function `is_integer()` is deprecated: since PHP 8.
 Risky Fixes
 ===========
 
-A rewrite that may change what the code does is only reported, and is made only once you list its decision in `fixRisky`. Both new rewrites have such cases. `clamp()` throws an error when the minimum is above the maximum, while `max($lo, min($x, $hi))` quietly returns something, so when the bounds are not numbers, the fix waits. A partial application evaluates its arguments when it is created, not when it is called, so `fn($x) => array_slice($x, 0, $this->limit)` waits as well:
+A rewrite that may change what the code does is only reported, and is made only once you list its decision in `fixRisky`. The rewrite to `clamp()` and the rewrite of a closure to a partial application both have such cases. `clamp()` throws an error when the minimum is above the maximum, while `max($lo, min($x, $hi))` quietly returns something, so when the bounds are not numbers, the fix waits. A partial application evaluates its arguments when it is created, not when it is called, so `fn($x) => array_slice($x, 0, $this->limit)` waits as well:
 
 ```neon
 fixRisky:
