@@ -10,9 +10,9 @@ Syntaktický strom místo pole tokenů
 
 Nástroje pro kontrolu stylu v PHP se přes dvacet let stavěly nad funkcí `token_get_all()`, tedy nad plochým seznamem značek: tady je `if`, tady závorka, tady proměnná, tady mezera. Jenže takový seznam vám neřekne, kde daný `if` končí, ani jestli znak `[` otevírá pole, nebo přístup k prvku. Každé pravidlo si strukturu kódu musí pracně domýšlet samo a značná část jeho kódu slouží jen jako obrana proti tomu, aby se nespletlo.
 
-DressCode proto soubor parsuje do **bezztrátového syntaktického stromu** (anglicky *lossless concrete syntax tree*). Každý uzel (node) přesně ví, co představuje: `IfNode` má svou podmínku a tělo, `TernaryNode` se skládá ze tří přesně definovaných částí. A v tomto stromu je zachyceno skutečně **všechno** z původního zdrojáku – včetně mezer, prázdných řádků a komentářů. Ty visí na jednotlivých tokenech jako takzvaná trivia. Když strom vytisknete, získáte původní soubor bajt po bajtu. Samotný strom je vyčleněn do samostatné knihovny [PhpSyntax |phpsyntax:], takže po něm může sáhnout jakýkoliv jiný nástroj, který se stylem kódu vůbec nesouvisí.
+DressCode proto soubor parsuje do **bezztrátového syntaktického stromu** (anglicky *lossless concrete syntax tree*). Každý uzel (node) přesně ví, co představuje: `IfNode` má svou podmínku a tělo, `TernaryNode` se skládá ze tří přesně definovaných částí. A v tomto stromu je zachyceno skutečně **všechno** z původního zdrojáku, včetně mezer, prázdných řádků a komentářů. Ty visí na jednotlivých tokenech jako takzvaná trivia. Když strom vytisknete, získáte původní soubor bajt po bajtu. Samotný strom je vyčleněn do samostatné knihovny [PhpSyntax |phpsyntax:], takže po něm může sáhnout jakýkoliv jiný nástroj, který se stylem kódu vůbec nesouvisí.
 
-Z této architektury vychází základní vlastnost celého nástroje: **pravidlo změní jen to, na co skutečně sáhne, a zbytek souboru zůstane přesně tak, jak byl.** Žádné kompletní přetištění souboru podle vlastních představ, žádné ztracené komentáře – výsledný diff odpovídá do puntíku provedené opravě. A protože pravidlo operuje nad konkrétním uzlem, jsou i hlášení maximálně přesná: když nástroj upozorní, že u ternárního operátoru chybí mezera, myslí tím přesně tento ternární operátor, nikoliv neurčité „něco kolem otazníku na řádku 12“.
+Z této architektury vychází základní vlastnost celého nástroje: **pravidlo změní jen to, na co skutečně sáhne, a zbytek souboru zůstane přesně tak, jak byl.** Žádné kompletní přetištění souboru podle vlastních představ, žádné ztracené komentáře: výsledný diff odpovídá do puntíku provedené opravě. A protože pravidlo operuje nad konkrétním uzlem, jsou i hlášení maximálně přesná: když nástroj upozorní, že u ternárního operátoru chybí mezera, myslí tím přesně tento ternární operátor, nikoliv neurčité "něco kolem otazníku na řádku 12".
 
 
 Jak vypadá pravidlo
@@ -38,7 +38,7 @@ public function enter(Node|Token $node, RuleContext $context): void
 }
 ```
 
-Jednotlivé podmínky se dají číst téměř jako běžné věty: jde o ternární operátor, má prostřední část, podmínku lze bezpečně vyhodnotit dvakrát, prostřední část je shodná s podmínkou, obojí leží na stejném řádku, není mezi nimi komentář a nikdo nález na tomto místě nepotlačil. Na otázky typu „lze tento výraz bezpečně přečíst podruhé?“ odpovídá přímo syntaktický strom, takže si pravidlo nemusí nic odvozovat samo. Právě proto má většina vestavěných pravidel pod sto řádků a [vlastní pravidlo napíšete za jediné odpoledne |custom-rule].
+Jednotlivé podmínky se dají číst téměř jako běžné věty: jde o ternární operátor, má prostřední část, podmínku lze bezpečně vyhodnotit dvakrát, prostřední část je shodná s podmínkou, obojí leží na stejném řádku, není mezi nimi komentář a nikdo nález na tomto místě nepotlačil. Na otázky typu "lze tento výraz bezpečně přečíst podruhé?" odpovídá přímo syntaktický strom, takže si pravidlo nemusí nic odvozovat samo. Právě proto má většina vestavěných pravidel pod sto řádků a [vlastní pravidlo napíšete za jediné odpoledne |custom-rule].
 
 
 Rozhodnutí místo pravidel
@@ -48,7 +48,7 @@ DressCode obsahuje přes dvě stě pravidel, ale v konfiguraci ani ve výpisech 
 
 Jedno pravidlo přitom může zastřešovat celou řadu rozhodnutí: například pravidlo řídící umístění složených závorek jich má přes deset (od `braces.position.class` až po `braces.position.closure`) a každé z nich má vlastní hodnotu. Vy tak pracujete s jednotným slovníkem napříč konfigurací, výpisy chyb, komentáři `dresscode:ignore`, přepínačem `--only`, klíčem `fixRisky` i nápovědou `dresscode explain`. Kde byste v jiných nástrojích složitě pátrali, které pravidlo a s jakým parametrem hlídá mezeru za `fn`, tady jednoduše napíšete `spacing.arrowFunction: 'fn($x) => $x'`.
 
-Rozhodnutí, které nikde neuvedete, nevyžaduje nic. Hodnota `keep` pak říká, že o dané věci nerozhodujete a kód má zůstat přesně tak, jak je. Pravidlo se spouští jen tam, kde některé z jeho rozhodnutí něco aktivně vyžaduje – nikdy ho tedy nezapínáte jménem třídy. Jak se rozhodnutí zapisují a skládají, popisuje stránka [Konfigurace |configuration]; kompletní seznam najdete na stránce [Pravidla |decisions/@home].
+Rozhodnutí, které nikde neuvedete, nevyžaduje nic. Hodnota `keep` pak říká, že o dané věci nerozhodujete a kód má zůstat přesně tak, jak je. Pravidlo se spouští jen tam, kde některé z jeho rozhodnutí něco aktivně vyžaduje, nikdy ho tedy nezapínáte jménem třídy. Jak se rozhodnutí zapisují a skládají, popisuje stránka [Konfigurace |configuration]; kompletní seznam najdete na stránce [Pravidla |decisions/@home].
 
 
 Nejdřív ohlásit, teprve pak opravit
@@ -105,7 +105,7 @@ Presety se skládají jako vrstvy přesně v tom pořadí, v jakém je klíč `u
 PER Coding Style a PSR-12 proti PHP CS Fixeru a PHP_CodeSnifferu
 ================================================================
 
-Napsat do dokumentace plnou podporu standardu je snadné. Skutečným testem je ale vzájemná konfrontace s konkurencí: kód Laravelu a Symfony 3.4 nejprve upravil `dresscode fix` s presetem `perCs`, poté výsledek zkontroloval PHP CS Fixer se svou oficiální sadou pro PER Coding Style – a následně proběhl celý test v opačném směru.
+Napsat do dokumentace plnou podporu standardu je snadné. Skutečným testem je ale vzájemná konfrontace s konkurencí: kód Laravelu a Symfony 3.4 nejprve upravil `dresscode fix` s presetem `perCs`, poté výsledek zkontroloval PHP CS Fixer se svou oficiální sadou pro PER Coding Style a následně proběhl celý test v opačném směru.
 
 | | Laravel, 1 696 souborů | Symfony 3.4, 4 097 souborů |
 |---|---|---|
@@ -116,7 +116,7 @@ Oněch několik málo míst, která PHP CS Fixer ještě upravil, představuje b
 
 Co naopak DressCode najde po Fixeru navíc, jsou striktní požadavky specifikace PER Coding Style: signatury, volání, podmínky, řetězená volání i pole rozložená do více řádků musí mít na každém řádku pouze jednu položku, heredoc musí držet odsazení okolního kódu a víceřádkové seznamy musí končit čárkou. PHP CS Fixer navíc implementuje starší PER Coding Style 3.0, zatímco DressCode verzi 3.1.
 
-Stejný test proběhl i pro PSR-12 proti PHP_CodeSnifferu: po spuštění `dresscode fix --use psr12` našel CodeSniffer v celém Laravelu pouhých 83 odchylek (nepočítaje řádky přesahující 120 znaků, u nichž PSR-12 vyžaduje pouze varování; DressCode je v presetu `psr12` hlásí také jen varováním přes [`file.longLines: warning` |decisions/file#file.longLines]). Naopak DressCode po spuštění opravného nástroje `phpcbf` odhalil ještě 772 problematických míst – mimo jiné chybějící viditelnost konstant, kterou PSR-12 přímo vyžaduje a `phpcbf` ji sice nahlásí, ale sám doplnit nedokáže.
+Stejný test proběhl i pro PSR-12 proti PHP_CodeSnifferu: po spuštění `dresscode fix --use psr12` našel CodeSniffer v celém Laravelu pouhých 83 odchylek (nepočítaje řádky přesahující 120 znaků, u nichž PSR-12 vyžaduje pouze varování; DressCode je v presetu `psr12` hlásí také jen varováním přes [`file.longLines: warning` |decisions/file#file.longLines]). Naopak DressCode po spuštění opravného nástroje `phpcbf` odhalil ještě 772 problematických míst, mimo jiné chybějící viditelnost konstant, kterou PSR-12 přímo vyžaduje a `phpcbf` ji sice nahlásí, ale sám doplnit nedokáže.
 
 Presety `perCs` a `psr12` jsou napsané striktně podle textu oficiálních specifikací, oddíl po oddílu, a nepřidávají nic navíc. Kompletní výpis obou najdete na stránce [Standardy a sady |php-coding-standards]. Kde specifikace ponechává prostor pro interpretaci, rozhoduje její text, nikoliv chování jiného nástroje.
 
@@ -128,7 +128,7 @@ Bez priorit: pravidla běží do ustálení
 
 Když dvě pravidla sahají na stejné místo v kódu, záleží na jejich pořadí. PHP CS Fixer to řeší ručně udržovanými prioritami: většina jeho fixerů nese číslo od −100 do 100 a v komentáři odstavec prózy vysvětlující, po kterém jiném fixeru musí běžet. Kdo si píše vlastní fixer, ten prioritu víceméně hádá.
 
-DressCode žádné priority nepotřebuje. Všechna pravidla spouští ve třech fázích (nejprve strukturální změny, poté formátování a nakonec úklid bílých znaků). Pokud některé pravidlo strom pozměnilo, projde se strom znovu – a tak dále, dokud se kód zcela neustálí. Od pravidla to vyžaduje dvě zásadní vlastnosti: musí být **idempotentní** (nad svým vlastním výstupem už nesmí nic měnit) a nesmí záviset na pořadí průchodu. Obojí se dá spolehlivě otestovat, na rozdíl od odhadování číselných priorit. A pokud by se dvě pravidla přetahovala o stejné místo, engine to spolehlivě pozná podle toho, že se strom vrátil do stavu, v němž už jednou byl, a vypíše, o která pravidla šlo.
+DressCode žádné priority nepotřebuje. Všechna pravidla spouští ve třech fázích (nejprve strukturální změny, poté formátování a nakonec úklid bílých znaků). Pokud některé pravidlo strom pozměnilo, projde se strom znovu, a tak dále, dokud se kód zcela neustálí. Od pravidla to vyžaduje dvě zásadní vlastnosti: musí být **idempotentní** (nad svým vlastním výstupem už nesmí nic měnit) a nesmí záviset na pořadí průchodu. Obojí se dá spolehlivě otestovat, na rozdíl od odhadování číselných priorit. A pokud by se dvě pravidla přetahovala o stejné místo, engine to spolehlivě pozná podle toho, že se strom vrátil do stavu, v němž už jednou byl, a vypíše, o která pravidla šlo.
 
 Z toho plyne důležitý důsledek: **to, co běh nahlásí, závisí na aktivních rozhodnutích v konfiguraci.** Pravidlo, které tvar kódu opraví dříve, vezme hlášení pravidlu, které by na něj narazilo později.
 
@@ -142,7 +142,7 @@ V praxi to znamená:
 
 - Hlášení o mezeře nese vždy cestu jednoho konkrétního rozhodnutí, i když se daného místa dotýkalo více pravidel. Právě tuto cestu pak můžete v konfiguraci upravit nebo potlačit.
 - Dvě rozhodnutí, která by si nárokovala tutéž mezeru protichůdným způsobem, představují chybu. Může k tomu dojít jen u pravidel z pluginu nebo u vlastních pravidel projektu; vestavěná pravidla jsou navržena tak, aby se nikdy nekřížila.
-- Odsazení řádků má jediného absolutního vlastníka – rozhodnutí `indentation.unit`. To odsazení odvozuje přímo z hloubky syntaktického stromu, nikoliv z toho, jak byl odsazený řádek nad ním. Jeden špatně odsazený řádek proto nestrhne lavinu chyb na všech následujících řádcích.
+- Odsazení řádků má jediného absolutního vlastníka: rozhodnutí `indentation.unit`. To odsazení odvozuje přímo z hloubky syntaktického stromu, nikoliv z toho, jak byl odsazený řádek nad ním. Jeden špatně odsazený řádek proto nestrhne lavinu chyb na všech následujících řádcích.
 
 Podrobnosti o tom, jak psát vlastní pravidla tohoto typu, najdete na stránce [Pravidla pro bílé znaky |whitespace-rules].
 
@@ -152,13 +152,13 @@ Verze PHP je vlastnost projektu
 
 Rozhodnutí, které zapisuje novější syntaxi PHP (například osmičkový zápis `0o755` z PHP 8.1), se nesmí aplikovat v projektu, který na této verzi ještě neběží. DressCode proto cílovou verzi neodvozuje z interpretu, na kterém sám zrovna běží, ale z parametrů projektu. Zjišťuje ji z klíče `targets` v konfiguraci (např. `targets: {php: '8.2'}`, přičemž část projektu může mít v přepisu jinou verzi), případně z nejnižší verze povolené v `require.php` v `composer.json` (zohlední i `config.platform.php`), a pokud tyto údaje chybí, předpokládá PHP 8.0 jako základní výchozí verzi. Starší verzi z konfigurace nebo z Composeru automaticky zvedne na PHP 8.0 a vypíše varování, protože pravidla počítají s tím, že prvky PHP 8.0 jsou vždy dostupné. Stejný soubor tak dostane naprosto shodný verdikt na jakémkoliv stroji. Rozhodnutí vyžadující novější syntaxi pod svou verzí tiše čeká, takže to nemusíte vy ani preset nijak hlídat.
 
-Funguje to i v opačném směru: jakmile cílovou verzi v Composeru zvednete, sada `modernizations` automaticky přepíše kód na novinky dané verze – od `str_contains()` z PHP 8.0 až po funkci `clamp()` z PHP 8.6. Celý postup rozebírá stránka [Přechod na novější PHP |upgrading-php].
+Funguje to i v opačném směru: jakmile cílovou verzi v Composeru zvednete, sada `modernizations` automaticky přepíše kód na novinky dané verze, od `str_contains()` z PHP 8.0 až po funkci `clamp()` z PHP 8.6. Celý postup rozebírá stránka [Přechod na novější PHP |upgrading-php].
 
 
 Typy zná PHPStan
 ================
 
-Syntaktický strom sice zná do detailu každý bajt souboru, ale netuší, jakého typu je proměnná, od koho třída dědí ani jakou signaturu má metoda v rozhraní. Na tyto otázky se DressCode ptá PHPStanu, pokud ho v projektu máte a konfigurace obsahuje direktivu `typeAnalysis: phpstan`. PHPStan sám o sobě nic nepřepisuje ani nehlásí – pouze odpovídá na dotazy. Jeho odpovědi se přiřadí k příslušným uzlům stromu a pravidla se na ně dotazují stejně přirozeně jako na strom samotný. Díky tomu lze bezpečně aplikovat rozhodnutí, která by bez typů nebyla spolehlivá: přepis zastaralého API knihoven, doplnění atributu `#[\Override]` u poděděných metod nebo převod názvů tříd v řetězcích na bezpečný zápis `::class`. Podrobnosti najdete na stránce [Typy z PHPStanu |phpstan-types].
+Syntaktický strom sice zná do detailu každý bajt souboru, ale netuší, jakého typu je proměnná, od koho třída dědí ani jakou signaturu má metoda v rozhraní. Na tyto otázky se DressCode ptá PHPStanu, pokud ho v projektu máte a konfigurace obsahuje direktivu `typeAnalysis: phpstan`. PHPStan sám o sobě nic nepřepisuje ani nehlásí, pouze odpovídá na dotazy. Jeho odpovědi se přiřadí k příslušným uzlům stromu a pravidla se na ně dotazují stejně přirozeně jako na strom samotný. Díky tomu lze bezpečně aplikovat rozhodnutí, která by bez typů nebyla spolehlivá: přepis zastaralého API knihoven, doplnění atributu `#[\Override]` u poděděných metod nebo převod názvů tříd v řetězcích na bezpečný zápis `::class`. Podrobnosti najdete na stránce [Typy z PHPStanu |phpstan-types].
 
 
 Jmenné prostory zná projekt
@@ -173,7 +173,7 @@ Co si z toho odnést
 - V konfiguraci píšete rozhodnutí, nikoliv pravidla: zadáváte cestu, kterou vidíte ve výpisech, a hodnotu určující styl.
 - Na pořadí klíčů v konfiguračním souboru nezáleží.
 - Když některé rozhodnutí nastavíte na `keep`, může se ozvat jiné rozhodnutí, které se k danému místu dříve nedostalo. Jde o stejné místo v kódu, jen jej nyní posuzuje jiné pravidlo.
-- Potlačení na řádku i výjimka pro celou cestu zastaví nejen zobrazení hlášky, ale i samotnou opravu. Baseline opravám nebrání – pouze skryje to, co zatím opravit nelze.
+- Potlačení na řádku i výjimka pro celou cestu zastaví nejen zobrazení hlášky, ale i samotnou opravu. Baseline opravám nebrání, pouze skryje to, co zatím opravit nelze.
 - Úprava, která by mohla změnit chování programu, se pouze ohlásí, dokud dané rozhodnutí neuvedete v seznamu `fixRisky`. Shrnutí na konci výpisu přesně vysvětlí, co opravě brání a jak postupovat.
 - S nastavením `nameResolution: certain` přestanou být rizikové opravy, které stály na odhadu globálních funkcí; s `typeAnalysis: phpstan` pak ty, které vyžadovaly znalost datových typů.
 - Se sadou `modernizations` stačí zvednout verzi PHP v `composer.json` a kód se sám zmodernizuje; na nic, co cílové PHP neumí, DressCode nesáhne.
@@ -190,7 +190,7 @@ Přehled pojmů, které se v dokumentaci pravidelně opakují. Anglické názvy 
 | sekce | section | první část cesty rozhodnutí, např. `spacing`; pluginy mají sekci pojmenovanou po sobě, projektová pravidla používají sekci `project` |
 | požadavek | requirement | rozhodnutí, které v kódu něco aktivně vynucuje, pokud nemá hodnotu `keep` |
 | parametr | parameter | rozhodnutí, které pouze upřesňuje chování požadavku a samo o sobě nic nezapíná; má výchozí hodnotu a nepřijímá `keep` |
-| `keep` | keep | univerzální hodnota „zde se nic nevynucuje“; přijímá ji každý požadavek a zapsaná u celé sekce vypne vše pod ní |
+| `keep` | keep | univerzální hodnota "zde se nic nevynucuje"; přijímá ji každý požadavek a zapsaná u celé sekce vypne vše pod ní |
 | pravidlo | rule | třída obsluhující jedno či více rozhodnutí: vyhledává jejich porušení a zpravidla nabízí i automatickou opravu |
 | porušení | violation | jeden konkrétní nález: soubor, řádek, sloupec, text chyby a cesta k rozhodnutí |
 | preset | preset | pojmenovaný soubor se stejnou strukturou jako konfigurace; projekt na něj odkazuje v klíči `use` |

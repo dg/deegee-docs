@@ -8,7 +8,7 @@ From writing your first test to running a custom rule across your codebase in a 
 What We Are Going to Write
 ==========================
 
-Every team has a few bespoke coding conventions that no standard covers because they belong to that team alone. Take this common example: an exception message is a complete sentence and must end with a period. A statement like `throw new InvalidArgumentException('The name must not be empty')` should therefore automatically become `'The name must not be empty.'`. For years, I watched for this manually in code reviews because writing a custom sniff for PHP_CodeSniffer was more trouble than it was worth. In DressCode, we can implement this cleanly in about fifty lines—and we’ll write them together.
+Every team has a few bespoke coding conventions that no standard covers because they belong to that team alone. Take this common example: an exception message is a complete sentence and must end with a period. A statement like `throw new InvalidArgumentException('The name must not be empty')` should therefore automatically become `'The name must not be empty.'`. For years, I watched for this manually in code reviews because writing a custom sniff for PHP_CodeSniffer was more trouble than it was worth. In DressCode, we can implement this cleanly in about fifty lines, and we'll write them together.
 
 
 The Fixture First
@@ -39,7 +39,7 @@ The Skeleton of the Rule
 
 A rule is a class extending `DressCode\NodeRule`, decorated with the `#[RuleInfo]` attribute specifying which execution stage it belongs to. There are three stages (`Stage`): `Structure` for structural code changes, `Formatting` for whitespace and line breaks, and `Finishing` for final cleanup. Because our rule modifies text content, it belongs in `Structure`.
 
-A rule has no public name. In DressCode, users never configure or enable rules directly—they configure **decisions** (configuration keys that define how code should look), and rules merely enforce them. Our decision is that exception messages must end with a period. The rule declares this via `getDecisions()`:
+A rule has no public name. In DressCode, users never configure or enable rules directly: they configure **decisions** (configuration keys that define how code should look), and rules merely enforce them. Our decision is that exception messages must end with a period. The rule declares this via `getDecisions()`:
 
 ```php
 namespace App\CodeStyle;
@@ -78,9 +78,9 @@ final class ExceptionMessagePeriodRule extends NodeRule
 }
 ```
 
-A `Decision` consists of three parts. The **path** `project.exceptionMessagePeriod` connects everything the user sees: they write it in their configuration, see it next to every finding in the terminal, use it in `dresscode:ignore` comments, and query it using `dresscode explain`. Project-specific rules operate in the `project` section, plugin rules use a section named after the plugin, and the engine uses its own built-in sections—ensuring paths never collide. The **domain** `Domain::state('required')` defines accepted values: the string `required` ("periods are mandatory") and the universal `keep` ("do not check"). Finally, the **description** is an English sentence without a trailing period that explains what the rule does; it is displayed by `dresscode explain` and in the generated catalogue.
+A `Decision` consists of three parts. The **path** `project.exceptionMessagePeriod` connects everything the user sees: they write it in their configuration, see it next to every finding in the terminal, use it in `dresscode:ignore` comments, and query it using `dresscode explain`. Project-specific rules operate in the `project` section, plugin rules use a section named after the plugin, and the engine uses its own built-in sections, ensuring paths never collide. The **domain** `Domain::state('required')` defines accepted values: the string `required` ("periods are mandatory") and the universal `keep` ("do not check"). Finally, the **description** is an English sentence without a trailing period that explains what the rule does; it is displayed by `dresscode explain` and in the generated catalogue.
 
-A decision like this is called a **requirement**: the rule runs wherever any configuration layer sets it to a value other than `keep`. Where no configuration mentions it, it requires nothing and does not run. Rules are therefore never enabled by class name—a project simply declares its desired code style, and the corresponding rule joins the run automatically.
+A decision like this is called a **requirement**: the rule runs wherever any configuration layer sets it to a value other than `keep`. Where no configuration mentions it, it requires nothing and does not run. Rules are therefore never enabled by class name: a project simply declares its desired code style, and the corresponding rule joins the run automatically.
 
 `NodeRule` is one of two rule types: it traverses syntax tree nodes and inspects them directly. The other type is `GapRule`, which doesn't visit nodes, but [submits declarative claims about whitespace |whitespace-rules] instead.
 
@@ -152,7 +152,7 @@ Assert::noError(fn() => RuleTester::run(ExceptionMessagePeriodRule::class, __DIR
 
 Nette Tester expects at least one assertion per test, which is why the call is wrapped in `Assert::noError()`. In PHPUnit, you would place the exact same call inside a test method. Any assertion failure throws a `DressCode\Testing\TestFailure` exception with a unified diff, highlighting exactly where the output diverged from expectations.
 
-Run the test now, and it will pass. If it fails, the diff reveals the exact line where the rule sees code differently than you do. That is often when you discover subtle edge cases—in our case, `rtrim()` was missing in the first draft, and the fixture with trailing whitespace immediately prompted its addition.
+Run the test now, and it will pass. If it fails, the diff reveals the exact line where the rule sees code differently than you do. That is often when you discover subtle edge cases: in our case, `rtrim()` was missing in the first draft, and the fixture with trailing whitespace immediately prompted its addition.
 
 
 Enabling It in a Project
@@ -175,7 +175,7 @@ src/check.php
   error  8:39  The message of an exception must end with a period.  project.exceptionMessagePeriod
 \--
 
-The `dresscode fix` command repairs it automatically, `// dresscode:ignore project.exceptionMessagePeriod` suppresses it locally, and `dresscode explain project.exceptionMessagePeriod` displays its description, domain, and configuring layer—exactly like any built-in engine decision. When multiple projects need the same rule, wrap it in a [plugin |presets-and-plugins]; its decisions then simply relocate to the plugin's dedicated section.
+The `dresscode fix` command repairs it automatically, `// dresscode:ignore project.exceptionMessagePeriod` suppresses it locally, and `dresscode explain project.exceptionMessagePeriod` displays its description, domain, and configuring layer, exactly like any built-in engine decision. When multiple projects need the same rule, wrap it in a [plugin |presets-and-plugins]; its decisions then simply relocate to the plugin's dedicated section.
 
 
 Where to Go Next
@@ -183,7 +183,7 @@ Where to Go Next
 
 - When a rule needs additional options (such as a configurable list of exception name suffixes), it declares a **parameter** alongside its requirement: a companion decision that refines behavior and is read in `configure()`. See [A Rule in Detail |rule-contract] for parameter types and contract guidelines.
 - Our rule identifies exceptions simply by checking if their name ends with `Exception`. To verify inheritance with certainty, use the `NameResolver` analysis to resolve names against imports and namespaces; available analyses are documented in [PhpSyntax |phpsyntax:analyses].
-- Rules controlling spaces, indentation, and line breaks are written differently—submitting declarative claims instead of implementing `enter()`: [Whitespace Rules |whitespace-rules].
+- Rules controlling spaces, indentation, and line breaks are written differently, submitting declarative claims instead of implementing `enter()`: [Whitespace Rules |whitespace-rules].
 - If you are migrating an existing sniff from CodeSniffer or a fixer from PHP CS Fixer, check our porting guide: [Porting a Rule from Another Tool |porting-rules].
 
 {{maintitle: Write Your Own PHP Code Style Rule}}

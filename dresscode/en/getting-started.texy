@@ -2,7 +2,7 @@ Getting Started with DressCode
 ******************************
 
 .[perex]
-Get DressCode up and running in under a minute and test it on your codebase without modifying a single file. You will immediately see where your code deviates from a coding standard such as [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/] or Nette, what automated fixes would look like, and how modernizing to a newer PHP version would improve your code. DressCode formats your code and upgrades it to newer PHP and library APIs—all in a single pass.
+Get DressCode up and running in under a minute and test it on your codebase without modifying a single file. You will immediately see where your code deviates from a coding standard such as [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/] or Nette, what automated fixes would look like, and how modernizing to a newer PHP version would improve your code. DressCode formats your code and upgrades it to newer PHP and library APIs, all in a single pass.
 
 
 Installation
@@ -23,7 +23,7 @@ composer create-project dresscode/dresscode temp/dresscode
 temp/dresscode/bin/dresscode check
 ```
 
-Alternatively, you can install DressCode directly into your project as a development dependency (`composer require --dev dresscode/dresscode`) and run it from `vendor/bin/dresscode`. Choose this approach whenever your project already uses PHPStan: DressCode queries PHPStan directly for type information, allowing it to reliably rewrite deprecated library APIs based on what a variable actually is (see [Types from PHPStan |phpstan-types]). Keep in mind that DressCode itself requires PHP 8.4 to 8.6, meaning your local project environment must run on one of these versions—even if the codebase itself targets an older PHP.
+Alternatively, you can install DressCode directly into your project as a development dependency (`composer require --dev dresscode/dresscode`) and run it from `vendor/bin/dresscode`. Choose this approach whenever your project already uses PHPStan: DressCode queries PHPStan directly for type information, allowing it to reliably rewrite deprecated library APIs based on what a variable actually is (see [Types from PHPStan |phpstan-types]). Keep in mind that DressCode itself requires PHP 8.4 to 8.6, meaning your local project environment must run on one of these versions, even if the codebase itself targets an older PHP.
 
 Here is the most common point of confusion: **the PHP version running DressCode and the target PHP version of your project are two entirely independent things.** When DressCode runs globally or outside your project, it can run on PHP 8.5 while inspecting code written for PHP 8.1. It reads your project's target version directly from `require.php` in `composer.json` and respects it strictly, so it will never inject syntax that your target PHP cannot compile. All versions from PHP 8.0 upward are supported; older PHP versions are not supported and DressCode will warn you if you attempt to target them.
 
@@ -40,7 +40,7 @@ DressCode handles several distinct tasks, and each has its own dedicated guide. 
 - **Update your libraries:** [Upgrade Your Code Step by Step |upgrade] walks you through estimating effort, planning the steps, and executing the upgrade. DressCode includes detailed migration metadata for [Nette |upgrading-nette], [Symfony |upgrading-symfony], [Laravel |upgrading-laravel], and [Dibi and Texy |upgrading-dibi-and-texy].
 - **Switch from another tool:** [Switch to DressCode Step by Step |migration] guides you through converting existing configurations from PHP CS Fixer, PHP_CodeSniffer, or Laravel Pint.
 
-If you’d rather take the tool for a spin first, read on. In the next few sections, you will run three commands on your codebase—and none of them will modify a single byte.
+If you'd rather take the tool for a spin first, read on. In the next few sections, you will run three commands on your codebase, and none of them will modify a single byte.
 
 
 Check Your PHP Code Without Changing It
@@ -90,7 +90,7 @@ src/Users.php
   error  22:18  Method `Acme\Mail\Mailer::sendMessage()` is deprecated: use send().  upgrading.declarations.deprecatedMember
 \--
 
-The `Settings` class overrides `ArrayObject::offsetGet()` and names its parameter `$name`. While PHP allows this at runtime, a call like `$settings->offsetGet(key: 'theme')`—which works on every standard `ArrayObject`—will suddenly fail with `Unknown named parameter $key`. Renaming the parameter automatically would break calls that already use `name:`, making this a risky fix (a fix that can alter runtime behavior). That's why the finding explains the exact risk involved.
+The `Settings` class overrides `ArrayObject::offsetGet()` and names its parameter `$name`. While PHP allows this at runtime, a call like `$settings->offsetGet(key: 'theme')`, which works on every standard `ArrayObject`, will suddenly fail with `Unknown named parameter $key`. Renaming the parameter automatically would break calls that already use `name:`, making this a risky fix (a fix that can alter runtime behavior). That's why the finding explains the exact risk involved.
 
 Although both `in_array()` calls produce the same message, the fixer handles them completely differently. On line 12, static type analysis confirms that an `int` is being searched for in a `list<int>`; a strict comparison produces the exact same result, so `fix` appends `true` safely and automatically. On line 17, the value is of the generic type `mixed`: this fix is deferred until you [explicitly permit it |configuration#risky-fixes], and until then it remains an informative finding.
 
@@ -133,7 +133,7 @@ Nothing is written to disk. Review the diff just as you would review a pull requ
 Preview an Upgrade to a Newer PHP
 =================================
 
-DressCode doesn't just format code—it also modernizes it for newer PHP versions. That is the job of the `modernizations` set. You can test it on its own without any formatting standard, so the diff isolates syntactic modernizations:
+DressCode doesn't just format code, it also modernizes it for newer PHP versions. That is the job of the `modernizations` set. You can test it on its own without any formatting standard, so the diff isolates syntactic modernizations:
 
 ```shell
 dresscode check src --use modernizations --diff

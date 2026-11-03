@@ -2,7 +2,7 @@ Upgrade Your Code Step by Step
 ******************************
 
 .[perex]
-How much effort will it actually take to upgrade to a newer Nette, Symfony, Laravel, or modern PHP? DressCode measures the scope before touching a single line of code: calculating what it can rewrite automatically, what must wait until dependencies are raised in `composer.json`, and what requires manual attention. It then builds a step-by-step upgrade plan and executes it—including dependency updates via Composer. And if any step breaks your test suite, it reverts the changes immediately.
+How much effort will it actually take to upgrade to a newer Nette, Symfony, Laravel, or modern PHP? DressCode measures the scope before touching a single line of code: calculating what it can rewrite automatically, what must wait until dependencies are raised in `composer.json`, and what requires manual attention. It then builds a step-by-step upgrade plan and executes it, including dependency updates via Composer. And if any step breaks your test suite, it reverts the changes immediately.
 
 If you haven't installed DressCode yet, [Getting Started |getting-started#Installation] shows how to set it up. The whole process is driven by three commands: `dresscode upgrade estimate` measures the work, `upgrade plan` builds the execution plan, and `upgrade run` carries it out. If you have already bumped your dependencies manually, the direct command [`upgrade today` |#When You Have Already Raised the Versions] is all you need. Every option is detailed in the [command line reference |cli#upgrade].
 
@@ -38,7 +38,7 @@ The first descriptor specifies **when** an edit can safely be made. The flag `wo
 
 The second descriptor identifies **who** handles the rewrite. DressCode resolves `automatic` items completely on its own. Items flagged as `manual` represent developer tasks: places where a human must evaluate the context and choose a replacement (the accompanying report explains exactly what to write). Locations marked `unknown types` are waiting on static analysis from PHPStan, while `uncertain names` indicates that the engine must confirm which function a call actually targets.
 
-The `Today` line highlights what running [`upgrade today` |#When You Have Already Raised the Versions] can fix right now. The `Composer` line warns of potential conflicts in `composer.lock`: if another package blocks the target version, it is listed here along with its conflicting constraint. The `Moves` line shows which packages a constraint bump would advance to a new major version, based on a Composer dry run. Any transition where migration data is unavailable is marked `(no data)`—a step you will need to handle without automated assistance. If data covers a library only up to an earlier minor release, you will see `(data up to 4.1)`. The final `Data` line lists all libraries covered by available migration packages and their maximum supported versions.
+The `Today` line highlights what running [`upgrade today` |#When You Have Already Raised the Versions] can fix right now. The `Composer` line warns of potential conflicts in `composer.lock`: if another package blocks the target version, it is listed here along with its conflicting constraint. The `Moves` line shows which packages a constraint bump would advance to a new major version, based on a Composer dry run. Any transition where migration data is unavailable is marked `(no data)`, a step you will need to handle without automated assistance. If data covers a library only up to an earlier minor release, you will see `(data up to 4.1)`. The final `Data` line lists all libraries covered by available migration packages and their maximum supported versions.
 
 The estimate command is entirely passive and modifies no files. It only makes three queries: asking Packagist which upgrade packages exist (cached for up to 24 hours), asking Composer whether anything in the lockfile blocks the target (no network needed), and asking Composer what versions would change on an update (which requires network access; use `--offline` to skip this and rely on local cache). Files that cannot be parsed due to syntax errors are listed under `Unverified` and excluded from the count. If the estimate encounters an unparseable file, lacks migration data, or cannot query Composer, it exits with code 2 so incomplete data is never mistaken for a clean bill of health. Omitting the target proposes the latest versions known to the data sets; running `dresscode upgrade estimate php` does the same strictly for PHP.
 
@@ -249,16 +249,16 @@ Libraries (projects configured with `"type": "library"` lacking their own `compo
 What Is Left to You
 ===================
 
-A high-quality upgrade consists of automated rewrites paired with an exhaustive list of remaining tasks—and that list represents half the value of the tool. DressCode never guesses: where a clean automated replacement does not exist, or where a developer must decide the architecture, it flags the location and provides instructions:
+A high-quality upgrade consists of automated rewrites paired with an exhaustive list of remaining tasks, and that list represents half the value of the tool. DressCode never guesses: where a clean automated replacement does not exist, or where a developer must decide the architecture, it flags the location and provides instructions:
 
 ```
 Constant `Nette\Application\IRouter::SECURED` is forbidden: write the protocol, `https://`, into the mask of the route.
 Method `Nette\Http\UrlScript::setPath()` is forbidden: the class is immutable; take a changed copy with `withPath()`.
 ```
 
-Every message is an actionable directive. You can work through the list manually, or hand it directly to an AI agent: `upgrade today -f agent` formats findings specifically for LLM consumption, while `--format json` outputs estimates, plans, runs, and tasks as structured data (see [AI Agents |ai-agents#Upgrading with an Agent]). DressCode also reports locations where migration data provides a fix that cannot safely be applied in context—such as an edit that would discard the receiver expression of a method call, or where comments sit between arguments. The message states the reason, leaving the code untouched.
+Every message is an actionable directive. You can work through the list manually, or hand it directly to an AI agent: `upgrade today -f agent` formats findings specifically for LLM consumption, while `--format json` outputs estimates, plans, runs, and tasks as structured data (see [AI Agents |ai-agents#Upgrading with an Agent]). DressCode also reports locations where migration data provides a fix that cannot safely be applied in context, such as an edit that would discard the receiver expression of a method call, or where comments sit between arguments. The message states the reason, leaving the code untouched.
 
-**Risky fixes** wait for explicit approval. Certain syntactic transformations can alter runtime behavior—such as reading a property on the left of `??`, where PHP first evaluates whether the property is initialized. In a plan, these are categorized as manual tasks. Decisions you trust globally can be approved via the [`fixRisky` |configuration#risky-fixes] configuration key, and running `dresscode upgrade today --ask-risky` lets you review and approve risky fixes one by one with inline diffs.
+**Risky fixes** wait for explicit approval. Certain syntactic transformations can alter runtime behavior, such as reading a property on the left of `??`, where PHP first evaluates whether the property is initialized. In a plan, these are categorized as manual tasks. Decisions you trust globally can be approved via the [`fixRisky` |configuration#risky-fixes] configuration key, and running `dresscode upgrade today --ask-risky` lets you review and approve risky fixes one by one with inline diffs.
 
 **What migration data cannot see.** Migration metadata describes API signatures, not runtime behavior shifts, template syntax, or NEON configuration files; consult official library upgrade guides for those areas. Furthermore, if a library removes an undocumented internal symbol without a deprecation record, it will only be caught by PHPStan.
 
@@ -339,13 +339,13 @@ Your Style Stays
 
 A project without a `dresscode.neon` has no defined style, and `upgrade today` will touch only deprecated APIs (the multi-step upgrade plan requires a configuration and directs you to `dresscode init` if none is found). When a configuration exists, everything relevant to upgrading applies: `paths`, `excludePaths`, target PHP versions, `fixRisky`, baselines, `overrides`, and custom [replacement maps |upgrading-libraries#Your Own Renames in a Project]. For formatting rules, however, it applies only rules that your code already adheres to completely: DressCode tests your code against your configured style and drops any formatting rule that is violated anywhere in the project. Newly inserted code matches your real conventions, and modified files are spared unrelated reformatting.
 
-This filtering is project-wide: a single line exceeding length limits anywhere disables `file.longLines` across the entire upgrade run. If you want to reformat your codebase as well, run `dresscode fix` afterward—ideally as a separate, dedicated commit.
+This filtering is project-wide: a single line exceeding length limits anywhere disables `file.longLines` across the entire upgrade run. If you want to reformat your codebase as well, run `dresscode fix` afterward, ideally as a separate, dedicated commit.
 
 
 Missing Data
 ------------
 
-The `upgrade` command discovers available upgrade packages from Packagist (currently covering packages under the official `dresscode` vendor). It queries at most once per day and caches responses locally, allowing it to work offline (if offline with an empty cache, it simply offers no new packages). The estimate highlights missing packages, and `upgrade today` prompts to install them—provided your project requires that library directly in `require` or `require-dev`:
+The `upgrade` command discovers available upgrade packages from Packagist (currently covering packages under the official `dresscode` vendor). It queries at most once per day and caches responses locally, allowing it to work offline (if offline with an empty cache, it simply offers no new packages). The estimate highlights missing packages, and `upgrade today` prompts to install them, provided your project requires that library directly in `require` or `require-dev`:
 
 /--pre .[terminal]
 The libraries of the project have upgrading data in `dresscode/upgrade-nette`, which DressCode does not have.
@@ -385,7 +385,7 @@ use:
 	- upgrade-nette
 ```
 
-Official packages from the `dresscode` vendor can be written using their short names in `use` just like built-in sets (the full package name `dresscode/upgrade-nette` works as well). Migration data applies even without the package name in `use`; naming it enables the executable rules bundled with the package—such as converting Nette's `Json::PRETTY` flag to a named argument. If omitted from `use`, both `check` and `fix` will display a one-time reminder:
+Official packages from the `dresscode` vendor can be written using their short names in `use` just like built-in sets (the full package name `dresscode/upgrade-nette` works as well). Migration data applies even without the package name in `use`; naming it enables the executable rules bundled with the package, such as converting Nette's `Json::PRETTY` flag to a named argument. If omitted from `use`, both `check` and `fix` will display a one-time reminder:
 
 /--pre .[terminal]
 Warning: Package `dresscode/upgrade-nette` brings rules that run only where `use` names it, as `upgrade-nette`, and in `dresscode upgrade`; skipped, with what its upgrading files set for them.
@@ -417,9 +417,9 @@ overrides:
 				deprecatedMember: keep
 ```
 
-Setting `packages: no` removes package migration data for those files, while `deprecatedMember: keep` disables rewrites driven by `@deprecated` annotations; code style and the remainder of the set remain fully active. For a single line, `// dresscode:ignore upgrading` is sufficient (see [Suppressions |suppressions-and-baseline]). Findings reported in these tests are expected—they confirm that legacy compatibility paths remain exercised.
+Setting `packages: no` removes package migration data for those files, while `deprecatedMember: keep` disables rewrites driven by `@deprecated` annotations; code style and the remainder of the set remain fully active. For a single line, `// dresscode:ignore upgrading` is sufficient (see [Suppressions |suppressions-and-baseline]). Findings reported in these tests are expected: they confirm that legacy compatibility paths remain exercised.
 
-Internal implementation code inside a class is never rewritten by migration data, which describes how classes are consumed externally rather than how they are built internally. When `nette/application` data indicates that writes to `$request->post` should become `setPost($value)`, the line `$this->post = $post` inside `Request::setPost()` remains untouched—otherwise the method would recursively call itself. Subclasses, however, are external consumers and are upgraded normally. Metadata for magic properties (`__get()` and `__set()`) also applies to private property access from outside, since PHP routes external access to private properties through magic methods as well.
+Internal implementation code inside a class is never rewritten by migration data, which describes how classes are consumed externally rather than how they are built internally. When `nette/application` data indicates that writes to `$request->post` should become `setPost($value)`, the line `$this->post = $post` inside `Request::setPost()` remains untouched; otherwise the method would recursively call itself. Subclasses, however, are external consumers and are upgraded normally. Metadata for magic properties (`__get()` and `__set()`) also applies to private property access from outside, since PHP routes external access to private properties through magic methods as well.
 
 To upgrade in stages (for example, upgrading Nette first and PHP later), specify a single target in your estimate and plan, or restrict `upgrade today` with `--only` to a single package and its rules:
 

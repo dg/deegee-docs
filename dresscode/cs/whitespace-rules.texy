@@ -14,7 +14,7 @@ Pojmem **mezera mezi tokeny** zde označujeme veškerý prostor ve zdrojovém k�
 $sum = $a + $b;
 ```
 
-Tento krátký řádek obsahuje v tomto smyslu přesně pět mezer: mezi `$sum` a `=`, mezi `=` a `$a`, mezi `$a` a `+`, mezi `+` a `$b` a konečně mezi `$b` a `;`. I ta poslední je plnohodnotnou mezerou mezi tokeny, jen v ní zrovna nic nestojí – a i o ní může pravidlo prohlásit, že má zůstat prázdná.
+Tento krátký řádek obsahuje v tomto smyslu přesně pět mezer: mezi `$sum` a `=`, mezi `=` a `$a`, mezi `$a` a `+`, mezi `+` a `$b` a konečně mezi `$b` a `;`. I ta poslední je plnohodnotnou mezerou mezi tokeny, jen v ní zrovna nic nestojí, a i o ní může pravidlo prohlásit, že má zůstat prázdná.
 
 Pravidlo pro bílé znaky (odvozené od třídy `GapRule`) o takovém místě pouze řekne, jak má vypadat. Samo do něj nic nezapisuje, nic z něj nemaže ani v něm nic nevyhledává.
 
@@ -43,13 +43,13 @@ Objekt nároku `Claim` se skládá ze čtyř nezávislých složek a pravidlo z 
 
 Pro nejčastější nároky jsou připraveny tovární metody: `Claim::noSpace()`, `singleSpace()`, `singleSpaceOrTabs()`, `atLeastOneSpace()`, `atLeastOneSpaceOrTabs()`, `sameLine()`, `nextLine()` a `blankLines()`, která přijímá jak pevný počet (`blankLines(1)`), tak rozsah (`blankLines([1, 2])`). Všechny tyto metody (s výjimkou `blankLines()` s rozsahem) vracejí sdílené instance, takže nealokují zbytečnou paměť. Kombinovaný nárok na více složek současně nebo nárok s textovým odůvodněním vytvoříte přímo konstruktorem: `new Claim(Space::None, line: Line::Same)` nebo `new Claim(line: Line::Next, because: 'the line is 135 characters long')`. Uvedené odůvodnění jádro automaticky připojí za čárku k chybové hlášce.
 
-Prázdné řádky se počítají **nad** komentářem, který stojí na samostatných řádcích před tokenem – komentář totiž logicky patří ke kódu pod sebou. Výjimku tvoří komentář těsně před zavírací závorkou bloku nebo před koncem souboru: ten se váže ke kódu nad sebou. Řádky mezi posledním komentářem a samotným tokenem řídí samostatná složka `blankLinesBelowComment`; tu využívá například pravidlo hlídající odstup mezi phpDoc komentářem a deklarací třídy či metody.
+Prázdné řádky se počítají **nad** komentářem, který stojí na samostatných řádcích před tokenem: komentář totiž logicky patří ke kódu pod sebou. Výjimku tvoří komentář těsně před zavírací závorkou bloku nebo před koncem souboru: ten se váže ke kódu nad sebou. Řádky mezi posledním komentářem a samotným tokenem řídí samostatná složka `blankLinesBelowComment`; tu využívá například pravidlo hlídající odstup mezi phpDoc komentářem a deklarací třídy či metody.
 
 
 Kde nárok platí
 ===============
 
-Pravidlo dědí od `GapRule`, nese atribut `#[RuleInfo]` jako každé jiné pravidlo a v metodě `getClaims()` deklaruje, u kterých slotů jakých uzlů vznáší své nároky – a to vždy zvlášť pro mezeru před hodnotou slotu a za ní:
+Pravidlo dědí od `GapRule`, nese atribut `#[RuleInfo]` jako každé jiné pravidlo a v metodě `getClaims()` deklaruje, u kterých slotů jakých uzlů vznáší své nároky, a to vždy zvlášť pro mezeru před hodnotou slotu a za ní:
 
 ```php
 #[RuleInfo(Stage::Formatting)]
@@ -86,13 +86,13 @@ final class ReturnBlankLinesRule extends GapRule
 }
 ```
 
-Klíčem první úrovně je třída uzlu, případně zástupný znak `*` pro jakýkoliv uzel, který daný slot obsahuje. Klíčem druhé úrovně je název slotu (`'body'`), případně zápis `slot:item` pro každou položku seznamu (`'statements:item'`, `'items:item'`) nebo `slot:separator` pro oddělovače seznamu (`'items:separator'`). Pod zástupným klíčem `*` znamená `'*:item'` položky a `'*:separator'` oddělovače úplně každého seznamu v kódu – přesně takto si rozhodnutí `spacing.comma` nárokuje mezery kolem všech čárek. Hodnotou je dvouprvkové pole nároků `[před, za]`: každým prvkem může být pevný objekt `Claim`, hodnota `null` (pokud pravidlo v daném místě nic nežádá), nebo uzávěra (closure), která obdrží instanci `Gap` a vrátí nárok či `null`. Nárok definovaný u slotu obsahujícího celý podstrom platí pro mezeru před jeho prvním tokenem (před) nebo za jeho posledním tokenem (za).
+Klíčem první úrovně je třída uzlu, případně zástupný znak `*` pro jakýkoliv uzel, který daný slot obsahuje. Klíčem druhé úrovně je název slotu (`'body'`), případně zápis `slot:item` pro každou položku seznamu (`'statements:item'`, `'items:item'`) nebo `slot:separator` pro oddělovače seznamu (`'items:separator'`). Pod zástupným klíčem `*` znamená `'*:item'` položky a `'*:separator'` oddělovače úplně každého seznamu v kódu: přesně takto si rozhodnutí `spacing.comma` nárokuje mezery kolem všech čárek. Hodnotou je dvouprvkové pole nároků `[před, za]`: každým prvkem může být pevný objekt `Claim`, hodnota `null` (pokud pravidlo v daném místě nic nežádá), nebo uzávěra (closure), která obdrží instanci `Gap` a vrátí nárok či `null`. Nárok definovaný u slotu obsahujícího celý podstrom platí pro mezeru před jeho prvním tokenem (před) nebo za jeho posledním tokenem (za).
 
 Název slotu se uvádí jako řetězec, takže jej automatický refaktoring v IDE nepřejmenuje spolu s vlastností třídy. Případný překlep však v tichosti neprojde: nárok na neexistující slot (např. `'statemnts:item'`) jádro okamžitě při sestavování pravidel odmítne výjimkou `ConfigurationException` (<code>''Rule `Acme\CodeStyle\ReturnBlankLinesRule` claims the whitespace of `*.statemnts:item`, but no node has a slot `statemnts`.''</code>). Přesné názvy všech slotů najdete v [přehledu uzlů |phpsyntax:nodes].
 
-Ukázka výše vyjadřuje jasné pravidlo: před každým příkazem `return` v seznamu příkazů, který není na prvním místě v bloku, musí být tolik prázdných řádků, kolik určuje rozhodnutí `acme.blankLinesBeforeReturn`. Instanci nároku si pravidlo připraví jednou v metodě `configure()` a v uzávěře ji pouze vrací – nevytváří ji tedy zbytečně u každé mezery znovu. Pravidlo neprochází žádné uzly, protože `GapRule` procházení stromu vůbec nepoužívá; veškerou práci odvede jádro na základě sesbíraných nároků ve fázi `Formatting`. Právě proto musí atribut `RuleInfo` u pravidel pro bílé znaky uvádět výhradně `Stage::Formatting` (jinou fázi jádro odmítne jako chybu konfigurace). Při nastavení hodnoty `1` zní vygenerované hlášení `Expected 1 blank line before the return, 0 found.` – větu automaticky poskládá samotné jádro podle kontextu a ve výpisu k ní připojí cestu `acme.blankLinesBeforeReturn`. Stejným mechanismem vznikají hlášky jako <code>''Expected a single space before the `=` operator.''</code> nebo `Expected a line break before the opening brace.`. Autor pravidla texty chybových hlášení vůbec nepíše.
+Ukázka výše vyjadřuje jasné pravidlo: před každým příkazem `return` v seznamu příkazů, který není na prvním místě v bloku, musí být tolik prázdných řádků, kolik určuje rozhodnutí `acme.blankLinesBeforeReturn`. Instanci nároku si pravidlo připraví jednou v metodě `configure()` a v uzávěře ji pouze vrací, nevytváří ji tedy zbytečně u každé mezery znovu. Pravidlo neprochází žádné uzly, protože `GapRule` procházení stromu vůbec nepoužívá; veškerou práci odvede jádro na základě sesbíraných nároků ve fázi `Formatting`. Právě proto musí atribut `RuleInfo` u pravidel pro bílé znaky uvádět výhradně `Stage::Formatting` (jinou fázi jádro odmítne jako chybu konfigurace). Při nastavení hodnoty `1` zní vygenerované hlášení `Expected 1 blank line before the return, 0 found.`, větu automaticky poskládá samotné jádro podle kontextu a ve výpisu k ní připojí cestu `acme.blankLinesBeforeReturn`. Stejným mechanismem vznikají hlášky jako <code>''Expected a single space before the `=` operator.''</code> nebo `Expected a line break before the opening brace.`. Autor pravidla texty chybových hlášení vůbec nepíše.
 
-Uzávěra obdrží v objektu `Gap` hraniční token mezery, hodnotu slotu či položku seznamu, její pořadový index a celkový styl souboru včetně maximální délky řádku. Na základě těchto dat se pak může dynamicky rozhodnout – například vynechat tečku pro spojování řetězců a uplatnit nárok jen na ostatní binární operátory:
+Uzávěra obdrží v objektu `Gap` hraniční token mezery, hodnotu slotu či položku seznamu, její pořadový index a celkový styl souboru včetně maximální délky řádku. Na základě těchto dat se pak může dynamicky rozhodnout, například vynechat tečku pro spojování řetězců a uplatnit nárok jen na ostatní binární operátory:
 
 ```php
 public function getClaims(): array
@@ -113,7 +113,7 @@ Pravidlo s jediným požadavkem hlásí nálezy automaticky pod ním. Pravidlo o
 Rozhodnutí, které musí být pokaždé stejné
 =========================================
 
-Nárok závislý na celkovém tvaru konstrukce (např. zda je seznam již rozložený na více řádků nebo zda řádek přesahuje povolenou délku) musí vrátit pro každou mezeru téže konstrukce naprosto stejnou odpověď – bez ohledu na to, jak jádro mezitím upravilo předchozí mezery. Jinak by první čárka seznam zalomila a druhá by jej zase slepila dohromady. Proto se takové vyhodnocení provádí pro celý uzel pouze jednou:
+Nárok závislý na celkovém tvaru konstrukce (např. zda je seznam již rozložený na více řádků nebo zda řádek přesahuje povolenou délku) musí vrátit pro každou mezeru téže konstrukce naprosto stejnou odpověď, bez ohledu na to, jak jádro mezitím upravilo předchozí mezery. Jinak by první čárka seznam zalomila a druhá by jej zase slepila dohromady. Proto se takové vyhodnocení provádí pro celý uzel pouze jednou:
 
 ```php
 public function getClaims(): array
@@ -134,7 +134,7 @@ public function getClaims(): array
 
 Metoda `once()` vyhodnotí předanou funkci u první mezery daného uzlu, výsledek si uloží a u všech zbývajících mezer téhož uzlu pak až do konce průchodu vrací tutéž uloženou odpověď. Pomocnou metodu `isBroken()` si napíšete sami; seznam v ní považujte za víceřádkový ve chvíli, kdy kterákoliv položka nebo zavírací závorka začíná na novém řádku, aby se pravidlo uplatnilo konzistentně na celý zbytek seznamu. Nad voláním `foo($a, $b,` s argumentem `$c)` na dalším řádku tak pravidlo odřádkuje každý argument zvlášť a nahlásí jediné souhrnné porušení `Expected a line break before the argument.`, zatímco jednořádkové `bar($a, $b)` ponechá beze změny.
 
-Rozhodnutí přijaté přes `once()`, jehož výsledkem není `null`, `false` ani prázdné pole, se současně vykazuje jako jediné porušení pro celou konstrukci, nikoliv jako samostatná chyba pro každou mezeru: špatně je totiž celkový tvar konstrukce, ne každý její dílčí zlom. Podmínka roztažená na pěti řádcích tak vygeneruje jediný nález umístěný na pozici prvního problému – na tomto řádku jej proto dokáže umlčet jediný komentář `dresscode:ignore` a baseline si jej pamatuje pod jedním společným otiskem. Samotné opravy v kódu přitom proběhnou na všech místech stejně, jako kdyby se každá mezera hlásila zvlášť.
+Rozhodnutí přijaté přes `once()`, jehož výsledkem není `null`, `false` ani prázdné pole, se současně vykazuje jako jediné porušení pro celou konstrukci, nikoliv jako samostatná chyba pro každou mezeru: špatně je totiž celkový tvar konstrukce, ne každý její dílčí zlom. Podmínka roztažená na pěti řádcích tak vygeneruje jediný nález umístěný na pozici prvního problému: na tomto řádku jej proto dokáže umlčet jediný komentář `dresscode:ignore` a baseline si jej pamatuje pod jedním společným otiskem. Samotné opravy v kódu přitom proběhnou na všech místech stejně, jako kdyby se každá mezera hlásila zvlášť.
 
 
 Kdo vyhraje .[#who-wins]
@@ -144,7 +144,7 @@ Jádro skládá nároky z obou stran mezery složku po složce podle pevných ar
 
 - nárok vázaný na konkrétní třídu uzlu má přednost před obecným nárokem `*`,
 - nárok vnitřního slotu má přednost před nárokem nadřazeného předka,
-- u vodorovné mezery vítězí přísnější požadavek nad volnějším – u příkazu `return;` tak vyhraje `Expected no whitespace` nad `Expected at least one space`,
+- u vodorovné mezery vítězí přísnější požadavek nad volnějším: u příkazu `return;` tak vyhraje `Expected no whitespace` nad `Expected at least one space`,
 - u zalomení řádku má `Line::Next` vždy přednost před `Line::Same`,
 - u počtu prázdných řádků se uplatní průnik obou rozsahů, a pokud jsou rozsahy neslučitelné, zvítězí ten užší z nich.
 
@@ -156,6 +156,6 @@ Vynucené zalomení řádku provede jádro okamžitě a přesný počet prázdn�
 Testování pravidla pro bílé znaky
 =================================
 
-Pravidlo pro bílé znaky se testuje naprosto stejně jako každé jiné pravidlo – pomocí třídy `RuleTester` nad [fixturami |testing-rules]. Kontrolované chybové hlášky v souboru `.violations` jsou ty, které automaticky poskládalo jádro.
+Pravidlo pro bílé znaky se testuje naprosto stejně jako každé jiné pravidlo, pomocí třídy `RuleTester` nad [fixturami |testing-rules]. Kontrolované chybové hlášky v souboru `.violations` jsou ty, které automaticky poskládalo jádro.
 
-Co `GapRule` z principu neumí, je sahat na samotné tokeny: skládá se výhradně z nároků na mezery a nic jiného nedělá. Pokud jedna jazyková konstrukce vyžaduje jak formátování mezer, tak modifikaci tokenů, vznikne dvojice pravidel (každé s vlastním rozhodnutím): jedno `GapRule` a jedno [`NodeRule` |rule-contract]. Přesně takto jsou řešeny například atributy: `spacing.attribute` si nárokuje mezery uvnitř `#[...]`, zatímco `classes.emptyParentheses.attribute` přidává či maže prázdné závorky za názvem atributu. Může se to zdát jako zbytečné dělení – ale jen do chvíle, než v projektu potřebujete jedno z těchto dvou chování vypnout pomocí `keep`.
+Co `GapRule` z principu neumí, je sahat na samotné tokeny: skládá se výhradně z nároků na mezery a nic jiného nedělá. Pokud jedna jazyková konstrukce vyžaduje jak formátování mezer, tak modifikaci tokenů, vznikne dvojice pravidel (každé s vlastním rozhodnutím): jedno `GapRule` a jedno [`NodeRule` |rule-contract]. Přesně takto jsou řešeny například atributy: `spacing.attribute` si nárokuje mezery uvnitř `#[...]`, zatímco `classes.emptyParentheses.attribute` přidává či maže prázdné závorky za názvem atributu. Může se to zdát jako zbytečné dělení, ale jen do chvíle, než v projektu potřebujete jedno z těchto dvou chování vypnout pomocí `keep`.

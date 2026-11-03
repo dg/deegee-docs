@@ -14,7 +14,7 @@ In DressCode, a **gap** refers to everything in source code that sits between tw
 $sum = $a + $b;
 ```
 
-This short line contains exactly five gaps: between `$sum` and `=`, between `=` and `$a`, between `$a` and `+`, between `+` and `$b`, and finally between `$b` and `;`. That final gap is just as real as the others, even though it currently holds nothing—and a rule can assert a requirement over it just the same: that it must remain empty.
+This short line contains exactly five gaps: between `$sum` and `=`, between `=` and `$a`, between `$a` and `+`, between `+` and `$b`, and finally between `$b` and `;`. That final gap is just as real as the others, even though it currently holds nothing, and a rule can assert a requirement over it just the same: that it must remain empty.
 
 A whitespace rule (derived from `DressCode\GapRule`) states what such a gap should look like. It never appends, deletes, or searches within token text directly.
 
@@ -49,7 +49,7 @@ Blank lines are measured **above** comments that occupy their own lines precedin
 Where a Claim Applies
 =====================
 
-A whitespace rule extends `GapRule`, carries the `#[RuleInfo]` attribute like any other rule, and in `getClaims()` declares which slots across which nodes it claims—specifying claims independently for the gap before and after the slot value:
+A whitespace rule extends `GapRule`, carries the `#[RuleInfo]` attribute like any other rule, and in `getClaims()` declares which slots across which nodes it claims, specifying claims independently for the gap before and after the slot value:
 
 ```php
 #[RuleInfo(Stage::Formatting)]
@@ -86,13 +86,13 @@ final class ReturnBlankLinesRule extends GapRule
 }
 ```
 
-The first-level key is a node class, or the wildcard `*` to match any node containing that slot. The second-level key is the slot name (`'body'`), or `slot:item` for every element of a list (`'statements:item'`, `'items:item'`), or `slot:separator` for list delimiters (`'items:separator'`). Under `*`, `'*:item'` matches elements and `'*:separator'` matches delimiters across every list in the entire language—which is how `spacing.comma` claims whitespace around all commas. The value is a two-element array `[before, after]`, where each element is a static `Claim`, `null` (if unconstrained), or a closure accepting a `Gap` and returning a claim or `null`. A claim on a slot containing an AST node applies to the gap before its first token or after its final token.
+The first-level key is a node class, or the wildcard `*` to match any node containing that slot. The second-level key is the slot name (`'body'`), or `slot:item` for every element of a list (`'statements:item'`, `'items:item'`), or `slot:separator` for list delimiters (`'items:separator'`). Under `*`, `'*:item'` matches elements and `'*:separator'` matches delimiters across every list in the entire language, which is how `spacing.comma` claims whitespace around all commas. The value is a two-element array `[before, after]`, where each element is a static `Claim`, `null` (if unconstrained), or a closure accepting a `Gap` and returning a claim or `null`. A claim on a slot containing an AST node applies to the gap before its first token or after its final token.
 
 Slot names are strings, meaning an IDE refactoring won't automatically rename them if an internal property changes. However, typos are caught immediately: a claim referencing an invalid slot (like `'statemnts:item'`) triggers a `ConfigurationException` when rules are assembled (<code>''Rule `Acme\CodeStyle\ReturnBlankLinesRule` claims the whitespace of `*.statemnts:item`, but no node has a slot `statemnts`.''</code>). See the [node reference |phpsyntax:nodes] for all slot names.
 
-The example above states: before every `return` statement in a statements list that is not the first statement in its block, there must be as many blank lines as specified by `acme.blankLinesBeforeReturn`. The rule builds its claim instance once in `configure()` from the configured value and returns it from the closure without reallocating it per gap. The rule never visits nodes directly because `GapRule` has no traversal methods; the engine handles all whitespace formatting from claims during the `Formatting` stage. This is why the `RuleInfo` attribute for a whitespace rule must specify `Stage::Formatting` exclusively (any other stage is rejected as an error). Given the value `1`, the generated report reads `Expected 1 blank line before the return, 0 found.`—the engine composes the message automatically from the context, appending the path `acme.blankLinesBeforeReturn`. Messages like <code>''Expected a single space before the `=` operator.''</code> or `Expected a line break before the opening brace.` are assembled identically. Rule authors never write error strings manually.
+The example above states: before every `return` statement in a statements list that is not the first statement in its block, there must be as many blank lines as specified by `acme.blankLinesBeforeReturn`. The rule builds its claim instance once in `configure()` from the configured value and returns it from the closure without reallocating it per gap. The rule never visits nodes directly because `GapRule` has no traversal methods; the engine handles all whitespace formatting from claims during the `Formatting` stage. This is why the `RuleInfo` attribute for a whitespace rule must specify `Stage::Formatting` exclusively (any other stage is rejected as an error). Given the value `1`, the generated report reads `Expected 1 blank line before the return, 0 found.`, and the engine composes the message automatically from the context, appending the path `acme.blankLinesBeforeReturn`. Messages like <code>''Expected a single space before the `=` operator.''</code> or `Expected a line break before the opening brace.` are assembled identically. Rule authors never write error strings manually.
 
-The closure receives a `Gap` object providing the boundary token, the slot value or list item, its index in the list, and the file's style configuration (including line length limits). Closures can evaluate conditions dynamically—for example, treating concatenation dots differently from other binary operators:
+The closure receives a `Gap` object providing the boundary token, the slot value or list item, its index in the list, and the file's style configuration (including line length limits). Closures can evaluate conditions dynamically, for example, treating concatenation dots differently from other binary operators:
 
 ```php
 public function getClaims(): array
@@ -113,7 +113,7 @@ Rules with a single requirement report under it automatically. Rules governing m
 A Decision That Must Be the Same Every Time
 ===========================================
 
-Claims that depend on the overall layout of code (such as whether an argument list is multiline, or whether a line exceeds length limits) must return the identical answer for every gap across that construct—regardless of how the engine modified earlier gaps in the meantime. Otherwise, the first comma might wrap the list and the second comma would immediately collapse it back onto one line. Such evaluations are therefore computed once per construct:
+Claims that depend on the overall layout of code (such as whether an argument list is multiline, or whether a line exceeds length limits) must return the identical answer for every gap across that construct, regardless of how the engine modified earlier gaps in the meantime. Otherwise, the first comma might wrap the list and the second comma would immediately collapse it back onto one line. Such evaluations are therefore computed once per construct:
 
 ```php
 public function getClaims(): array
@@ -144,7 +144,7 @@ The engine merges claims from both sides of a gap component by component, using 
 
 - A claim targeting a specific node class takes precedence over a wildcard `*` claim,
 - A claim on an inner child slot takes precedence over an ancestor slot claim,
-- For horizontal spacing, the stricter requirement wins over the looser one—for `return;`, `Expected no whitespace` wins over `Expected at least one space`,
+- For horizontal spacing, the stricter requirement wins over the looser one: for `return;`, `Expected no whitespace` wins over `Expected at least one space`,
 - For line breaks, `Line::Next` always takes precedence over `Line::Same`,
 - For blank line counts, the intersection of both allowed ranges applies; if the ranges are mutually exclusive, the narrower range wins.
 
