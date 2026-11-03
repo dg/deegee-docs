@@ -2,23 +2,23 @@ How DressCode Works
 *******************
 
 .[perex]
-Checking and fixing PHP code in DressCode rests on a single fundamental idea: the engine doesn't see code as a flat array of tokens, but as a lossless concrete syntax tree where every single space, line break, and comment is preserved. This single architectural difference explains why automated fixes only touch what they need to, why your configuration describes your code rather than internal rules, and why the engine never needs manual priority numbers. At the end of this page, a glossary breaks down all key terms used across the documentation.
+Checking and fixing PHP code style in DressCode rests on a single fundamental idea: the engine doesn't see code as a flat array of tokens, but as a lossless concrete syntax tree where every single space, line break, and comment is preserved. This single architectural difference explains why automated fixes only touch what they need to, why your configuration describes your code rather than internal rules, and why the engine never needs manual priority numbers. At the end of this page, a glossary breaks down all key terms used across the documentation.
 
 
 A Syntax Tree Instead of an Array of Tokens
 ===========================================
 
-For two decades, PHP code style tools relied on the built-in `token_get_all()` function, operating on a flat, linear list: here is an `if`, here a parenthesis, here a variable, here a space. That list cannot tell you where a given `if` block ends, nor whether a `[` bracket opens an array or accesses an offset. Every rule had to reconstruct the code's structure on its own, spending half its logic just guarding against false positives.
+For two decades, PHP code style tools relied on the built-in `token_get_all()` function, operating on a flat, linear list: here is an `if`, here a parenthesis, here a variable, here a space. That list cannot tell you where a given `if` block ends, nor whether a `[` bracket opens an array or accesses an offset. Every rule had to reconstruct the code's structure on its own, spending a large part of its code just guarding against getting it wrong.
 
-DressCode instead parses every file into a **lossless syntax tree** (more precisely, a *lossless concrete syntax tree*). Every node understands its exact semantic role: an `IfNode` has an explicit condition and body, while a `TernaryNode` consists of three distinct components. Most importantly, the tree preserves **everything** from the original source file: spaces, empty lines, and comments. These attach directly to tokens as what compilers call *trivia*. When you print the tree back to a string, you get your original file byte for byte. The syntax tree is packaged as a standalone library, [PhpSyntax |phpsyntax:], with zero external dependencies, ready to be used by any tool that has nothing to do with code style.
+DressCode instead parses every file into a **lossless syntax tree** (more precisely, a *lossless concrete syntax tree*). Every node understands its exact semantic role: an `IfNode` has an explicit condition and body, while a `TernaryNode` consists of three distinct components. Most importantly, the tree preserves **everything** from the original source file: spaces, blank lines, and comments. These attach directly to tokens as what compilers call *trivia*. When you print the tree back to a string, you get your original file byte for byte. The syntax tree is packaged as a standalone library, [PhpSyntax |phpsyntax:], with zero external dependencies, ready to be used by any tool that has nothing to do with code style.
 
-This architecture gives DressCode its defining property: **a rule modifies only what it touches, leaving the rest of the file completely unchanged.** The tool never reformats an entire file according to an internal template, never drops comments, and produces diffs that match the exact scope of the fix. Because rules operate on specific semantic nodes, error reports are exceptionally precise: when DressCode flags a missing space around a ternary operator, it points to that exact operator, not an ambiguous "something near line 12."
+This architecture gives DressCode its defining property: **a rule modifies only what it touches, leaving the rest of the file completely unchanged.** The tool never reformats an entire file according to an internal template, never drops comments, and produces diffs that match the exact scope of the fix. Because rules operate on specific semantic nodes, reports are exceptionally precise: when DressCode flags a missing space around a ternary operator, it points to that exact operator, not an ambiguous "something around the question mark on line 12."
 
 
 What a Rule Looks Like
 ======================
 
-A rule is a compact class that declares which node types it inspects and evaluates a targeted set of conditions for each. Here is the actual implementation of the rule that shortens `$a ? $a : $b` to `$a ?: $b`:
+A rule is a compact class that declares which node types it inspects and evaluates a targeted set of conditions for each. Here is the body of the rule that shortens `$a ? $a : $b` to `$a ?: $b`:
 
 ```php
 public function enter(Node|Token $node, RuleContext $context): void
@@ -44,21 +44,21 @@ You can read those conditions almost like plain English sentences: the node is a
 Decisions Instead of Rules
 ==========================
 
-DressCode includes over two hundred rules, but you won't encounter a single one in your configuration or in terminal reports. A rule is merely an implementation detail. What you actually configure, inspect, and suppress is a **decision**: a key that identifies a specific construct in the code, paired with a value that dictates how it should be written. The rule from the example above serves the decision `expressions.ternary.short`, and every violation is reported under this path.
+DressCode includes over two hundred rules, but you won't encounter a single one in your configuration or in the output. A rule is merely an implementation detail. What you actually configure, inspect, and suppress is a **decision**: a key that identifies a specific construct in the code, paired with a value that dictates how it should be written. The rule from the example above serves the decision `expressions.ternary.short`, and every violation is reported under this path.
 
-A single rule can govern multiple decisions: for instance, the rule controlling brace placement manages over ten distinct decisions (from `braces.position.class` to `braces.position.closure`), each with its own independent value. This provides a single, consistent vocabulary across configuration files, error outputs, `dresscode:ignore` comments, the `--only` filter, the `fixRisky` key, and `dresscode explain`. Instead of searching through manuals for the rule name and option governing spaces after `fn`, you simply write `spacing.arrowFunction: 'fn($x) => $x'`.
+A single rule can govern multiple decisions: for instance, the rule controlling brace placement manages over ten distinct decisions (from `braces.position.class` to `braces.position.closure`), each with its own independent value. This provides a single, consistent vocabulary across configuration files, the output, `dresscode:ignore` comments, the `--only` option, the `fixRisky` key, and `dresscode explain`. Instead of searching another tool's manual for the rule name and option governing spaces after `fn`, you simply write `spacing.arrowFunction: 'fn($x) => $x'`.
 
-A decision that isn't configured requires nothing. The value `keep` explicitly specifies that the construct is unconstrained and should remain as-is. Rules only run when one of their decisions actively demands it, meaning you never enable rules by class name. The [Configuration |configuration] page details how decisions are combined, and the [Rules |decisions/@home] catalogue lists every available option.
+A decision that isn't configured requires nothing. The value `keep` explicitly specifies that the construct is unconstrained and should remain as-is. Rules only run when one of their decisions actively demands it, meaning you never enable rules by class name. The [Configuration |configuration] page details how decisions are written and combined, and the [Rules |decisions/@home] catalogue lists every decision.
 
 
 Report First, Fix Second
 ========================
 
-In the rule example above, `report()` is called directly inside the condition. This is a strict architectural contract enforced by the engine: **code may only be modified after a rule has reported the violation and the engine has accepted that report.** The engine pairs every tree mutation with an accepted report; any rule that mutates code silently violates the contract, triggering an immediate engine error.
+In the rule example above, `report()` is called directly inside the condition. This is a strict architectural contract enforced by the engine: **code may only be modified after a rule has reported the violation and the engine has accepted that report.** The engine pairs every tree mutation with an accepted report; any rule that mutates code silently violates the contract, and DressCode tells you so.
 
-Because of this, suppressions carry absolute weight. When you add a `// dresscode:ignore` comment or set a decision to `keep` for a specific path, the error message doesn't merely disappear from the terminal: the fix is completely bypassed. This does not rely on the good intentions of rule authors: any rule attempting to fix a suppressed node will fail its own test suite.
+Because of this, suppressions carry absolute weight. When you add a `// dresscode:ignore` comment or set a decision to `keep` for a specific path, the message doesn't merely disappear from the output: the fix is completely bypassed. This does not rely on the good intentions of rule authors: any rule attempting to fix a suppressed node will fail its own test suite.
 
-**Risky fixes** follow the exact same mechanism. A fix that could alter runtime behavior is flagged as risky. Until the project explicitly allows it, the engine rejects the report, and the rule leaves the code untouched. Risk is always evaluated per occurrence rather than per rule: `mistakes.strictArgument` safely appends `$strict = true` to `in_array()` when static analysis proves an integer is being searched for inside a list of integers; elsewhere, it is treated as risky because the code might depend on loose comparisons. The same rule, in the same pass, applies safe fixes immediately while flagging risky ones with an explanation of what would resolve them: type information from [PHPStan |phpstan-types], name certainty via [`nameResolution` |php-functions-in-namespaces#name-resolution], or manual review where an edit inherently alters behavior. Where a fix depends on information unavailable to DressCode, it is reported as a warning; an edit that changes behavior by design is treated as an error. Where a rule knows an edit would break the code, it stays silent. Permission is granted by listing the decision in your project's `fixRisky` configuration key, or temporarily with the `--fix-risky` CLI option.
+**Risky fixes** follow the exact same mechanism. A fix that could alter runtime behavior is flagged as risky. Until the run explicitly allows it, the engine rejects the report, and the rule leaves the code untouched. Risk is always evaluated per occurrence rather than per rule: `mistakes.strictArgument` safely appends `$strict = true` to `in_array()` when static analysis proves an integer is being searched for inside a list of integers; elsewhere, it is treated as risky because the code might depend on loose comparisons. The same rule, in the same pass, applies safe fixes immediately while flagging risky ones with an explanation of what would resolve them: type information from [PHPStan |phpstan-types], name certainty via [`nameResolution` |php-functions-in-namespaces#name-resolution], or manual review where a fix inherently alters behavior. Where a fix depends on information unavailable to DressCode, it is reported as a warning; a fix that changes behavior by design is treated as an error. Where a rule knows a fix would break the code, it stays silent. Permission is granted by listing the decision in your project's `fixRisky` configuration key, and the `--fix-risky` option allows all risky fixes for one run.
 
 
 Standards and Sets
@@ -70,7 +70,7 @@ DressCode enforces no personal opinions on code style. Instead, it offers a cata
 |---|---|
 | `psr12` | [PSR-12 |https://www.php-fig.org/psr/psr-12/], section by section |
 | `perCs` | [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/] in full, the modern successor to PSR-12 |
-| `nette` | [Nette Coding Standard |https://doc.nette.org/en/contributing/coding-standard], which is PER Coding Style with tabs and Nette library conventions |
+| `nette` | [Nette Coding Standard |https://doc.nette.org/en/contributing/coding-standard], which is PER Coding Style with tabs and a few deviations |
 | `symfony` | Symfony Coding Standards, following PHP CS Fixer's `@Symfony` set |
 | `laravel` | The default style of [Laravel Pint |https://laravel.com/docs/pint], matching its `laravel` preset |
 
@@ -82,10 +82,10 @@ A **set** is a preset focused on a single intent rather than visual formatting, 
 | `modernizations` | Adopts modern PHP syntax supported by your target PHP version |
 | `types` | Adds and standardizes type declarations where PHP evaluates them |
 | `deprecations` | Resolves or reports features deprecated or removed by PHP or libraries |
-| `correctness` | Fixes constructs that are almost certainly bugs |
+| `correctness` | Targets constructs that are most likely mistakes |
 | `compilerOptimizations` | Formats global names for compile-time optimization by the PHP engine |
 
-A project picks one standard, appends the desired sets in the `use` key, and specifies individual overrides key by key:
+A project picks one standard, appends the desired sets in the `use` key, and specifies individual differences key by key:
 
 ```neon
 use:
@@ -97,28 +97,28 @@ blankLines:
 	aroundMethods: 1
 ```
 
-Sets grow alongside DressCode: when a new version introduces another modernization rule, its set provides it automatically without requiring changes to your configuration file. A decision requiring a newer PHP version or static types waits silently until your project meets its requirements. Where a standard deviates from a specification, that choice is exposed as an explicit decision rather than hidden hardcoding, making the same value available to custom presets. The `nette` standard layers tabs, library layouts, code hygiene, and Nette-specific conventions (naming schemes, class member ordering, and docblock structure) over PER Coding Style.
+Sets grow alongside DressCode: when a new version introduces another decision, its set provides it automatically without requiring changes to your configuration file. A decision requiring a newer PHP version or static types waits silently until your project meets its requirements. Where a standard deviates from a specification, that choice is exposed as an explicit decision rather than hidden hardcoding, making the same value available to custom presets. The `nette` standard layers tabs, library layouts, code hygiene, and Nette-specific conventions (naming schemes, class member ordering, and docblock content) over PER Coding Style.
 
-Presets stack as layers in the order specified under `use`: children inherit from parents and override only what they explicitly set. Your project configuration forms a layer above them, and directory-specific overrides form further layers on top. See [Configuration |configuration#Layers] for a detailed breakdown.
+Presets stack as layers in the order specified under `use`: children inherit from parents and change only what they explicitly set. Your project configuration forms a layer above them, and overrides for parts of the project form further layers on top. See [Configuration |configuration#Layers] for a detailed breakdown.
 
 
 PER Coding Style and PSR-12 Compared to PHP CS Fixer and PHP_CodeSniffer
 ========================================================================
 
-Claiming full standard compliance is easy. Putting that claim to the test against the competition is what actually counts: we formatted the codebases of Laravel and Symfony 3.4 using `dresscode fix` with the `perCs` preset, ran PHP CS Fixer with its official PER Coding Style set over the result, and then reversed the test.
+Claiming full standard compliance is easy. Letting another tool check the result is what actually counts: we formatted the codebases of Laravel and Symfony 3.4 using `dresscode fix` with the `perCs` preset, ran PHP CS Fixer with its official PER Coding Style set over the result, and then reversed the test.
 
 | | Laravel, 1,696 files | Symfony 3.4, 4,097 files |
 |---|---|---|
 | PHP CS Fixer still changes after DressCode | 9 places in 7 files | 29 places in 16 files |
 | DressCode still finds after PHP CS Fixer | 1,201 places | 7,497 places |
 
-The handful of places PHP CS Fixer still adjusted are either conscious design choices in DressCode or specific conventions of Fixer. DressCode keeps assignment `=` operators at the end of lines and leaves operators followed by comments in place, whereas PHP CS Fixer moves both. For assignments, Fixer adheres to the literal wording of section 6.4, where DressCode chooses a more practical interpretation. The remaining differences stem from Fixer's own formatting habits: breaking lines inside parenthesized expressions and re-indenting comments above `} elseif`.
+The handful of places PHP CS Fixer still adjusted are either conscious design choices in DressCode or specific conventions of PHP CS Fixer. DressCode keeps assignment `=` operators at the end of lines and leaves operators followed by comments in place, whereas PHP CS Fixer moves both. For assignments, PHP CS Fixer adheres to the literal wording of section 6.4, where DressCode chooses differently. The remaining differences stem from PHP CS Fixer's own formatting habits: breaking lines inside parenthesized expressions and re-indenting comments above `} elseif`.
 
 What DressCode detects after PHP CS Fixer are strict requirements of the PER Coding Style specification: multiline signatures, calls, conditions, method chains, and arrays must have exactly one item per line, heredocs must preserve surrounding indentation, and multiline lists must end with a trailing comma. Furthermore, PHP CS Fixer implements the older PER Coding Style 3.0, whereas DressCode implements 3.1.
 
-Running the same comparison for PSR-12 against PHP_CodeSniffer: after running `dresscode fix --use psr12`, CodeSniffer reported just 83 issues across all of Laravel (excluding lines over 120 characters, which PSR-12 classifies as a soft limit; DressCode also treats them as warnings in the `psr12` standard via [`file.longLines: warning` |decisions/file#file.longLines]). In the opposite direction, running DressCode after `phpcbf` revealed 772 remaining violations, including missing constant visibility, which PSR-12 requires and `phpcbf` reports, but cannot fix on its own.
+Running the same comparison for PSR-12 against PHP_CodeSniffer: after running `dresscode fix --use psr12`, PHP_CodeSniffer reported just 83 findings across all of Laravel (excluding lines over 120 characters, which PSR-12 classifies as a soft limit; DressCode also treats them as warnings in the `psr12` standard via [`file.longLines: warning` |decisions/file#file.longLines]). In the opposite direction, running DressCode after `phpcbf` revealed 772 remaining violations, including missing constant visibility, which PSR-12 requires and `phpcbf` reports, but cannot fix on its own.
 
-The `perCs` and `psr12` presets are written directly from the specification texts, section by section, adding no personal conventions; both are shown in full on the [Standards and Sets |php-coding-standards] page. Where a specification leaves room for interpretation, its text decides, not the quirks of other tools.
+The `perCs` and `psr12` presets are written directly from the specification texts, section by section, adding no personal conventions; both are shown in full on the [Standards and Sets |php-coding-standards] page. Where a specification leaves room for interpretation, its text decides, not the behavior of another tool.
 
 Measured in October 2026 against PHP CS Fixer 3.95 with the `@PER-CS3x0` set and PHP_CodeSniffer 4.0 with the `PSR12` standard.
 
@@ -136,13 +136,13 @@ One key consequence to remember: **what a run reports depends on which decisions
 Whitespace Has a Single Owner
 =============================
 
-Spaces, line breaks, and empty lines are frequent sources of conflicts in style tools: one rule wants a space after a comma, another aligns table columns, and a third wraps long lines. In DressCode, **no rule touches whitespace directly**. Instead, rules submit declarative claims (the `Claim` class in the API): requesting a single space, a line break, or two blank lines between two tokens. The engine collects all claims, settles conflicts centrally, applies the whitespace, and attributes the report to the decision whose claim won.
+Spaces, line breaks, and blank lines are frequent sources of conflicts in style tools: one rule wants a space after a comma, another aligns table columns, and a third wraps long lines. In DressCode, **no rule touches whitespace directly**. Instead, rules submit declarative claims (the `Claim` class in the API): requesting a single space, a line break, or two blank lines between two tokens. The engine collects all claims, settles conflicts centrally, applies the whitespace, and attributes the report to the decision whose claim won.
 
 What this means in practice:
 
-- Every whitespace report is attributed directly to a single, specific decision path, even if multiple rules inspected that gap. That exact path is what you configure or suppress.
-- Two decisions attempting to claim the same gap in incompatible ways represent an engine bug. This can only happen with custom rules or plugin rules; built-in rules are designed never to conflict.
-- Line indentation is exclusively owned by the `indentation.unit` decision, which computes indentation directly from syntax tree depth rather than copying the line above. A single improperly indented line will never cascade errors down the rest of the file.
+- Every whitespace report is attributed directly to a single, specific decision path, even if multiple rules inspected that place. That exact path is what you configure or suppress.
+- Two decisions attempting to claim the same space are a bug. This can only happen with custom rules or plugin rules; built-in rules are designed never to conflict.
+- Line indentation is exclusively owned by the `indentation.unit` decision, which computes indentation directly from the syntax tree rather than copying the line above. A single improperly indented line will never cascade findings down the rest of the file.
 
 For details on authoring these rules, see [Whitespace Rules |whitespace-rules].
 
@@ -150,31 +150,31 @@ For details on authoring these rules, see [Whitespace Rules |whitespace-rules].
 The PHP Version Belongs to the Project
 ======================================
 
-A decision that emits modern PHP syntax (such as the octal literal `0o755` introduced in PHP 8.1) must never run on a codebase that doesn't yet support it. DressCode determines the target PHP version from the project itself, never from the PHP runtime executing the tool: reading it from `targets` in the configuration (e.g. `targets: {php: '8.2'}`), from the minimum version allowed by `require.php` in `composer.json` (taking `config.platform.php` into account), or defaulting to PHP 8.0. Target versions older than PHP 8.0 are bumped to 8.0 with a warning, as rules assume modern baseline syntax is always available. A file will therefore produce the exact same verdict on any machine. Decisions targeting newer syntax wait silently in the background until your project raises its version constraint.
+A decision that emits modern PHP syntax (such as the octal literal `0o755` introduced in PHP 8.1) must never run on a codebase that doesn't yet support it. DressCode determines the target PHP version from the project itself, never from the PHP runtime executing the tool: reading it from `targets` in the configuration (e.g. `targets: {php: '8.2'}`; a part of the project can have a different one in an override), from the minimum version allowed by `require.php` in `composer.json` (taking `config.platform.php` into account), or defaulting to PHP 8.0. Target versions older than PHP 8.0 are bumped to 8.0 with a warning, as rules assume everything PHP 8.0 supports is always available. A file will therefore produce the exact same verdict on any machine. Decisions targeting newer syntax wait silently until your project raises its target version, so neither the preset nor you have to watch for it.
 
-The reverse works just as smoothly: when you bump your PHP version in `composer.json`, the `modernizations` set automatically updates your code to take advantage of the new version's features, from `str_contains()` in PHP 8.0 to `clamp()` in PHP 8.6. See [Upgrading to a Newer PHP |upgrading-php] for details.
+The reverse works just as smoothly: when you raise your target PHP version, the `modernizations` set automatically updates your code to take advantage of the new version's features, from `str_contains()` in PHP 8.0 to `clamp()` in PHP 8.6. See [Upgrading to a Newer PHP |upgrading-php] for details.
 
 
 PHPStan Knows the Types
 =======================
 
-The syntax tree understands every byte of source code, but it cannot determine what type a variable holds, what interfaces a parent class implements, or what a method's return declaration specifies. For semantic analysis, DressCode queries PHPStan whenever your project includes it and your configuration enables `typeAnalysis: phpstan`. PHPStan modifies and reports nothing; it merely answers type queries. Its answers attach directly to the nodes of the syntax tree, allowing rules to inspect types as easily as syntax. This enables decisions that are unsafe without static types: updating deprecated library APIs, inserting `#[\Override]` on overriding methods, or converting class name strings into safe `::class` references. See [Types from PHPStan |phpstan-types] for more.
+The syntax tree understands every byte of source code, but it cannot determine what type a variable holds, what a class inherits, or what the declaration of a method says about it. For semantic analysis, DressCode queries PHPStan whenever your project includes it and your configuration enables `typeAnalysis: phpstan`. PHPStan modifies and reports nothing; it merely answers type queries. Its answers attach directly to the nodes of the syntax tree, allowing rules to inspect types as easily as syntax. This enables decisions that are unsafe without static types: updating deprecated library APIs, inserting `#[\Override]` on overriding methods, or converting class name strings into safe `::class` references. See [Types from PHPStan |phpstan-types] for more.
 
 
 The Project Knows Its Namespaces
 ================================
 
-Under standard PHP semantics, an unqualified call to `strlen()` inside the namespace `App` resolves to `App\strlen()` if declared at runtime, falling back to the global `strlen()` otherwise. Looking at an isolated file, a static analysis tool cannot know if a local function exists, making any assumption about global functions risky. DressCode lets your project resolve this ambiguity explicitly: the `namespaces` key lists functions and constants declared in your namespaces, and `nameResolution: certain` confirms that no other local declarations exist. This certainty is passed to the shared `NameResolver` analysis, allowing all rules (including your custom ones) to treat unqualified calls as global without flagging them as risky. See [Functions and Constants in Namespaces |php-functions-in-namespaces] for the full story.
+Under standard PHP semantics, an unqualified call to `strlen()` inside the namespace `App` resolves to `App\strlen()` if declared at runtime, falling back to the global `strlen()` otherwise. Looking at an isolated file, a static analysis tool cannot know if a local function exists, making any assumption about global functions risky. DressCode lets your project resolve this ambiguity explicitly: the `namespaces` key lists functions and constants declared in your namespaces, and `nameResolution: certain` confirms that no other local declarations exist. This certainty is passed to the shared `NameResolver` analysis, so every rule benefits from it, including your custom ones, and fixes that were risky only because of this doubt stop being risky. See [Functions and Constants in Namespaces |php-functions-in-namespaces] for the full story.
 
 
 What to Take Away
 =================
 
-- You configure decisions, not rules: you specify the path you see in terminal reports and the value defining your desired style.
+- You configure decisions, not rules: you specify the path you see in the output and the value defining your desired style.
 - Key ordering in configuration files does not matter.
-- Setting a decision to `keep` may reveal findings from another decision that previously ran behind it. It is the same location in the code, now inspected by a different rule.
-- Local suppressions and path exclusions disable fixes completely, not just error messages. Baselines do not prevent fixes; they merely hide existing technical debt from reports.
-- Fixes that can alter runtime behavior are reported as risky until you explicitly approve the decision in `fixRisky`. Terminal summaries explain what would make the fix safe.
+- Setting a decision to `keep` may reveal findings from another decision whose rule never got that far. It is the same location in the code, now reported by a different decision.
+- Suppressing a decision on a line or turning it off for a path stops the fix too, not just the message. Baselines do not prevent fixes; they only stop reporting what cannot be fixed yet.
+- Fixes that can alter runtime behavior are reported as risky until you explicitly approve the decision in `fixRisky`. The summary explains what would make the fix safe and how to tell DressCode.
 - Specifying `nameResolution: certain` clears risk from fixes that assumed global functions; enabling `typeAnalysis: phpstan` clears risk from fixes that required static types.
 - With the `modernizations` set enabled, bumping your PHP version in `composer.json` automatically updates your syntax; DressCode never introduces features your target version cannot execute.
 
@@ -182,36 +182,36 @@ What to Take Away
 Glossary
 ========
 
-Terms that appear throughout the documentation and codebase. The second column shows where you will encounter each term in practice.
+Terms that appear throughout the documentation, in class names, in the configuration and in the tool's messages. The second column shows where you will encounter each term in practice.
 
 | term | where you meet it | what it is |
 |---|---|---|
-| decision | `braces.position.class` | A configuration key with a path (`spacing.call`), an allowed range of values, and a description. It names a construct in code, and its value defines how it should be written. Violations are reported under this path, and the same path is used to suppress warnings or permit risky fixes. |
-| section | `spacing:` | The first segment of a decision path (e.g. `spacing`). Plugins use sections named after their package; custom project rules use the `project` section. |
+| decision | `braces.position.class` | A configuration key with a path (`spacing.call`), an allowed range of values, and a description. It names a construct in code, and its value defines how it should be written. Violations are reported under this path, and the same path is used to suppress findings or permit risky fixes. |
+| section | `spacing:` | The first segment of a decision path (e.g. `spacing`). Plugins use sections named after them; custom project rules use the `project` section. |
 | requirement | `casing.keyword` | A decision that actively enforces a convention whenever its value is not `keep`. |
 | parameter | `controlFlow.trailingIfMinStatements` | A decision that merely refines a requirement without activating any rules on its own. Has a default value and does not accept `keep`. |
 | `keep` | `spacing: keep` | The universal value meaning "nothing is enforced here." Accepted by all requirements; applied to a section, it disables all decisions below it. |
 | rule | `NodeRule`, `GapRule` | A class that implements one or more decisions: detecting violations and typically providing automated fixes. |
-| violation | `check` output | A single finding: file, line, column, error message, and associated decision path. |
+| violation | `check` output | A single finding: file, line, column, message, and associated decision path. |
 | preset | `use:`, `--use` | A named configuration file containing reusable decisions. Referenced in the `use` key. |
-| standard | `use: perCs` | A preset defining the overall visual formatting of a codebase: `perCs`, `psr12`, `nette`, `symfony`, `laravel`. |
+| standard | `use: perCs` | A preset defining the overall visual formatting of a codebase, which a project takes as its base: `perCs`, `psr12`, `nette`, `symfony`, `laravel`. |
 | set | `use: [perCs, cleanup]` | A preset focused on a specific intent rather than formatting, designed to layer over any standard: `cleanup`, `modernizations`, `types`, `deprecations`, `correctness`, `compilerOptimizations`. |
 | types | `typeAnalysis: phpstan` | Type information inferred by PHPStan for expressions, classes, and methods. Enabled with `typeAnalysis: phpstan`. |
-| profile | `dresscode config` | The resolved configuration governing how a file is processed: presets, decisions, target PHP/library versions, namespaces, and allowed risky fixes. |
+| profile | `dresscode config` | The resolved configuration governing how a file is processed: presets, decisions, target PHP/library versions, namespaces, allowed risky fixes, and the severity of violations. Both the project and an override have one. |
 | override | `overrides:` | A scoped profile applied only to files matching specified path patterns. |
-| plugin | `Plugin` | A class implementing `Plugin`, distributed via Composer or configured in `use`. Provides rules, presets, analyses, and path filters without deciding style on its own. |
-| risky fix | `fixRisky:`, `--fix-risky` | An automated fix that could alter runtime behavior. Executed only when permitted via `fixRisky` or `--fix-risky`; otherwise reported as a warning or error. |
+| plugin | `Plugin` | A class implementing `Plugin`, distributed via Composer or configured in `use`. Provides rules, presets, analyses, excluded paths, and a file filter without deciding style on its own. |
+| risky fix | `fixRisky:`, `--fix-risky` | An automated fix that could alter runtime behavior. Executed only when permitted via `fixRisky` or `--fix-risky`; otherwise reported: as a warning where types or `nameResolution` would decide it, and as an error elsewhere. |
 | suppression | `// dresscode:ignore` | Silencing a decision for a single line, block, or file using a comment directive. |
-| baseline | `dresscode baseline` | A file recording existing violations that cannot yet be fixed. Allows adopting strict rules while reporting only newly introduced issues. |
+| baseline | `dresscode baseline` | A file recording existing violations that cannot yet be fixed. Allows turning on strict decisions while reporting only new violations. |
 | engine | - | The core orchestrator that executes rules, settles whitespace claims, and builds outputs. |
 | pass | - | A single traversal of the syntax tree by all rules within a given stage. |
 | stage | `Stage` | Execution stages: `Structure` (code changes), `Formatting` (whitespace and breaks), and `Finishing` (final cleanup). |
 | token | `Token` | The smallest atomic unit of source code: keywords, punctuation, identifiers, operators. |
 | node | `Node` | A syntax tree element representing a complete language construct: `IfNode`, `ClassNode`, `ArrayNode`. |
 | slot | `$if->condition` | A named child position in a node holding a token or sub-node. `IfNode` has `condition` and `body` slots. |
-| trivia | `Trivia` | Whitespace and comments. They do not form AST nodes; they attach directly to surrounding tokens. |
+| trivia | `Trivia` | Whitespace and comments. They are not nodes; they attach directly to surrounding tokens. |
 | gap | `Gap` | The span between two adjacent tokens, which may contain spaces, line breaks, or comments. |
-| claim | `Claim` | A declarative requirement submitted by a whitespace rule for a specific gap, resolved centrally by the engine. |
+| claim | `Claim` | What a whitespace rule asks for in a specific gap, resolved centrally by the engine. |
 | fixture | `RuleTester` | A paired set of files containing code before and after a fix, used for automated rule testing. |
 | lossless CST | PhpSyntax | A concrete syntax tree that preserves every space and comment, capable of regenerating the original file byte for byte. |
 

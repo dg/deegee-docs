@@ -2,7 +2,7 @@ Functions and Constants in Namespaces
 *************************************
 
 .[perex]
-An unqualified call to `strlen()` inside a namespace can represent two entirely different functions in PHP, and looking at a single isolated file, it is impossible to know which one is intended. Because of this, traditional code style tools have to guess on dozens of common fixes, and the PHP engine itself cannot take the compiler shortcuts that make such calls two to three times faster. In most cases, a single line of configuration is all it takes to tell DressCode what exists in your namespaces: automated fixes immediately stop being risky, and your code can be formatted so the PHP engine executes it along the fastest possible path.
+An unqualified call to `strlen()` inside a namespace can represent two entirely different functions in PHP, and looking at a single isolated file, it is impossible to know which one is intended. Because of this, code style tools have to guess on a whole range of common fixes, and the PHP engine itself cannot take the compiler shortcuts that make such calls two to three times faster. In most cases, a single line of configuration is all it takes to tell DressCode what exists in your namespaces: automated fixes immediately stop being risky, and your code can be formatted so the PHP engine executes it along the fastest possible path.
 
 
 One Name, Two Meanings
@@ -29,7 +29,7 @@ function is_null(mixed $value): bool
 }
 ```
 
-and the call above suddenly does something completely different. The file containing the call doesn't matter in the slightest: the only thing that decides behavior is whether that second file happened to be loaded during the request.
+and the call above suddenly does something completely different. The file containing the call doesn't matter in the slightest: the only thing that decides behavior is whether that second file has been loaded.
 
 Constants behave in the exact same way: `PHP_EOL` inside the namespace `App` resolves to `App\PHP_EOL` if defined, and to the global `PHP_EOL` otherwise. Classes do not work this way: an unqualified `Exception` inside `App` always unequivocally means `App\Exception`, and the global class must be written as `\Exception` or imported via `use`.
 
@@ -37,9 +37,9 @@ Constants behave in the exact same way: `PHP_EOL` inside the namespace `App` res
 A Bit of History
 ================
 
-Namespaces arrived in PHP 5.3, and their design was born through painful compromise. The release was originally scheduled for the fall of 2008, with the first alpha appearing in August, yet core PHP developers were still fiercely debating how namespaces should actually function well into October. That was also when the historic decision was made to swap the originally considered `::` separator for the backslash `\`, because double colons could not be reliably distinguished from static method calls by the parser. PHP 5.3.0 finally shipped on June 30, 2009, nine months behind schedule.
+Namespaces arrived in PHP 5.3, and their design was born through painful compromise. The release was originally scheduled for the fall of 2008, with the first alpha appearing in August, yet core PHP developers were still fiercely debating how namespaces should actually function well into October. That was also when the historic decision was made to swap the original `::` separator for the backslash `\`, because double colons could not be reliably distinguished from static method calls by the parser. PHP 5.3.0 finally shipped on June 30, 2009, nine months behind schedule.
 
-One of the hardest questions was this: what should an identifier mean when it has no namespace prefix? The proposal from October 30, 2008 chose completely different answers for classes and for functions. Classes were denied a fallback to the global namespace because, when combined with autoloading, it would have resulted in a catastrophic performance penalty: on every single `new Exception`, PHP would have first attempted to load `App\Exception`. Functions and constants, however, have no autoloading, so that performance risk did not exist. And because the vast majority of PHP's standard library consists of global functions, they were granted a silent runtime fallback to the global scope. Code written prior to namespaces could thus move into a namespace without developers having to prepend a backslash to every `strlen()` or `in_array()`.
+One of the hardest questions was this: what should a name mean when it has no namespace prefix? The proposal from October 30, 2008 chose completely different answers for classes and for functions. Classes were denied a fallback to the global namespace because, when combined with autoloading, it would have resulted in a catastrophic performance penalty: on every single `new Exception`, PHP would have first attempted to load `App\Exception`. Functions and constants, however, have no autoloading, so that performance risk did not exist. And because the vast majority of PHP's standard library consists of global functions, they were granted a silent runtime fallback to the global namespace. Code written prior to namespaces could thus move into a namespace without developers having to prepend a backslash to every `strlen()` or `in_array()`.
 
 It was a pragmatic compromise for its era. The enduring cost, however, is that the meaning of an unqualified function call is not a static property of the file, but a dynamic property of the entire running program.
 
@@ -47,7 +47,7 @@ It was a pragmatic compromise for its era. The enduring cost, however, is that t
 Why Tools Struggle with It
 ==========================
 
-Static analysis and style fixers inspect individual files in isolation, not a running process. Faced with `is_null($x)` inside a namespace, a tool encounters the exact same ambiguity you faced above, and it cannot know the answer with certainty. Yet a whole range of widely desired modernizations assume the call is definitely the built-in PHP function:
+Code style tools inspect individual files in isolation, not a running process. Faced with `is_null($x)` inside a namespace, a tool encounters the exact same ambiguity you faced above, and it cannot know the answer with certainty. Yet a whole range of useful fixes assume the call is definitely the built-in PHP function:
 
 - rewriting `is_null($x)` to `$x === null`,
 - `intval($x)` to a typecast `(int) $x`,
@@ -66,7 +66,7 @@ Let's Be Pragmatic
 
 How many custom functions and constants do you actually declare in your namespaces? In almost all codebases, the answer is very few, and often none at all. Functions in PHP **cannot be autoloaded**: for a function to be callable, its file must be explicitly loaded ahead of time via `require` or a `files` entry in `composer.json`. That is why application logic moved permanently into classes long ago, leaving namespaced functions a rare edge case. Function autoloading has been proposed for PHP multiple times, but has never become part of the language.
 
-This is also an excellent reason never to rely on unqualified calls for namespaced functions: if the file containing the function fails to load, PHP raises no error: it silently calls the global function of the same name, if one exists. An explicit import `use function App\is_null;` won't autoload the file either, but it guarantees that an uninitialized call fails immediately and clearly with `Call to undefined function App\is_null()`.
+This is also an excellent reason never to rely on unqualified calls for namespaced functions: if the file containing the function happens not to be loaded, PHP raises no error: it silently calls the global function of the same name, if one exists. An explicit import `use function App\is_null;` won't autoload the file either, but it guarantees that the call fails immediately and clearly with `Call to undefined function App\is_null()`.
 
 The reality is clear: the theoretical ambiguity affects everyone, but real custom functions in namespaces are exceedingly rare. All you need to do is enumerate them.
 
@@ -74,7 +74,7 @@ The reality is clear: the theoretical ambiguity affects everyone, but real custo
 Tell DressCode What Is What .[#name-resolution]
 ===============================================
 
-In the vast majority of projects, you declare no custom functions or constants in namespaces at all. When that is the case, a single configuration line is all you need:
+In the most common case, you declare no custom functions or constants in namespaces at all. When that is the case, a single configuration line is all you need:
 
 ```neon
 nameResolution: certain
@@ -82,7 +82,7 @@ nameResolution: certain
 
 This single setting tells DressCode that every unqualified function or constant name that a file neither imports nor declares locally is guaranteed to be global. Not "probably," but with absolute certainty.
 
-If you do declare some custom functions or constants in namespaces, list them under the `namespaces` key: functions under `functions` and constants under `constants`. Syntax matches standard `use` statements, including grouped brackets. Wrap grouped entries in quotes so NEON doesn't parse them as maps:
+If you do declare some custom functions or constants in namespaces, list them under the `namespaces` key: functions under `functions` and constants under `constants`. Syntax matches standard `use` statements, including groups in braces. Wrap grouped entries in quotes so NEON doesn't parse them as maps:
 
 ```neon
 nameResolution: certain
@@ -97,44 +97,44 @@ namespaces:
 
 DressCode then treats any function in that list as belonging to its namespace wherever it is invoked without an import. For functions, letter case does not matter at all; for constants, case matters only in the constant's own name (not in the namespace path), matching PHP's native behavior.
 
-The lists and the `nameResolution` directive represent two separate concepts, which is why each has its own key. The list is a statement of fact: this function exists. The `nameResolution` directive is a decision: nothing else exists.
+The lists and `nameResolution` represent two separate concepts, which is why each has its own key. The list is a statement of fact: this function exists. `nameResolution` is a decision: nothing else exists there.
 
 | `nameResolution` | what it means |
 |---|---|
 | `certain` | The lists are complete; anything not listed is guaranteed to be global. |
 | `uncertain` | The lists may be incomplete; identical to omitting the key. |
 
-Under `uncertain`, DressCode acts with extreme caution: it assumes an unqualified identifier is global, but treats any automated fix relying on that assumption as [risky |configuration#risky-fixes]. It reports the fix as a warning with an explanation on the line below the violation (e.g. <code>''the namespace may declare `is_null()`''</code>), making the fix only when you approve the decision in `fixRisky` or pass `--fix-risky`. That is why `uncertain` is the default: placing a rule in your configuration does not imply blanket consent to alter code behavior. The moment you configure `certain`, however, these fixes stop being risky.
+Under `uncertain`, DressCode acts with extreme caution: it assumes an unqualified name is global, but treats any automated fix relying on that assumption as [risky |configuration#risky-fixes]. It reports the fix as a warning with an explanation on the line below the violation (e.g. <code>''the namespace may declare `is_null()`''</code>), making the fix only when you list the decision in `fixRisky` or pass `--fix-risky`. That is why `uncertain` is the default: placing a decision in your configuration does not imply blanket consent to alter code behavior. The moment you configure `certain`, however, these fixes stop being risky.
 
 
 Every Rule Benefits
 ===================
 
-What matters most is *where* this knowledge is applied. DressCode doesn't pass this setting to individual rules in isolation; it provides it to the shared `NameResolver` analysis, which resolves names across the entire tool. Built-in rules query it, and so can [your custom rules |rule-contract#Analyses]. The domain knowledge lives in one central place, so no rule has to maintain its own ad-hoc whitelist.
+What matters most is *where* this knowledge is applied. DressCode doesn't pass this setting to individual decisions in isolation; it provides it to the shared `NameResolver` analysis, which resolves names across the entire tool. Built-in rules query it, and so can [your custom rules |rule-contract#Analyses]. The domain knowledge lives in one central place, so no rule has to maintain its own list of exceptions.
 
 Rules query the analysis on two points:
 
-- **What an identifier represents.** Calling `isGlobalFunctionCall($node, 'is_null')` returns `true` for the global function, while recognizing that `App\is_null()` from your list is not global. Under `certain`, this answer is definitive; otherwise, it is treated as an assumption.
-- **How certain the resolution is.** Calling `getUnqualifiedResolution('is_null', SymbolKind::Function, $node)` specifies where the name points: definitively to the global scope (`Global`), definitively to the namespace (`Namespaced`), or to the global scope only assuming the namespace doesn't declare it elsewhere (`Uncertain`). A rule flags its fix as risky exclusively for occurrences marked `Uncertain`, and therefore never in a project configured with `certain`.
+- **What a name represents.** Calling `isGlobalFunctionCall($node, 'is_null')` returns `true` for the global function, while recognizing that `App\is_null()` from your list is not global. Under `certain`, this answer is definitive; otherwise, it is treated as an assumption.
+- **How certain the resolution is.** Calling `getUnqualifiedResolution('is_null', SymbolKind::Function, $node)` specifies where the name points: definitively to the global namespace (`Global`), definitively to the namespace (`Namespaced`), or to the global namespace only assuming the namespace doesn't declare it elsewhere (`Uncertain`). A rule flags its fix as risky exclusively for occurrences marked `Uncertain`, and therefore never in a project configured with `certain`.
 
-This works just as reliably in reverse, when a rule writes a function name into code itself. The rule `hygiene.aliasFunctions` replaces `sizeof()` with `count()` and writes the new name matching the original formatting: `\sizeof()` becomes `\count()`, and bare `sizeof()` becomes bare `count()`. However, if the file imports or declares its own `count`, or if the configuration declares `count()` in that namespace, it emits `\count()`, ensuring the rewritten code calls the exact same function as before.
+This works just as reliably in reverse, when a rule writes a function name into code itself. The decision `hygiene.aliasFunctions` replaces `sizeof()` with `count()` and writes the new name matching the original formatting: `\sizeof()` becomes `\count()`, and bare `sizeof()` becomes bare `count()`. However, if the file imports or declares its own `count`, or if the configuration declares `count()` in that namespace, it emits `\count()`, ensuring the rewritten code calls the exact same function as before.
 
-All rules read every identifier with identical consistency, regardless of which rule queries it first.
+All rules read every name with identical consistency, regardless of which rule queries it.
 
 
 A New Function Does Not Slip Through
 ====================================
 
-A static list would be a liability if it went stale. That is why DressCode guards the list itself: the moment your configuration specifies `nameResolution: certain`, an internal validation check activates under `namespaces.functions` and `namespaces.constants`. If DressCode encounters a newly declared function in a namespace that is missing from the list, it flags it immediately (doing the same for `const` and `define('App\X', ...)` calls). It even accounts for conditional polyfills wrapped in `if (!function_exists(...))`. The moment anyone adds a function like `App\Utils\slugify()`, running `dresscode check` prompts them to update the configuration:
+A static list would be a liability if it went stale. That is why DressCode guards the list itself: the moment your configuration specifies `nameResolution: certain`, an internal validation check activates under `namespaces.functions` and `namespaces.constants`. If DressCode encounters a newly declared function in a namespace that is missing from the list, it flags it immediately (doing the same for `const` and `define('App\X', ...)` calls). It even accounts for declarations inside conditions, such as a polyfill wrapped in `if (!function_exists(...))`. The moment anyone adds a function like `App\Utils\slugify()`, running `dresscode check` prompts them to update the configuration:
 
 /--pre .[terminal]
 src/Utils/helpers.php
   error  12:10  Function `App\Utils\slugify()` must be listed in `namespaces.functions`.  namespaces.functions
 \--
 
-This check is completely reliable because, unlike calls, declarations can be identified statically: they exist directly in the files DressCode inspects. Just be mindful of excluded paths. If you declare a function in a test directory that DressCode skips, and production code calls it without an import, add it to the list manually. Under `uncertain`, this validator stays silent because there is nothing to enforce. Under `certain`, not even `--only` can turn it off: fixes that rely on complete lists cannot afford to lose the check that keeps them complete.
+This check is enough because, unlike calls, declarations can be identified statically: they exist directly in the files DressCode inspects. Just be mindful of excluded paths. If you declare a function in a test directory that DressCode skips, and the code calls it without an import, add it to the list manually. Under `uncertain`, this check stays silent because there is nothing to enforce. Under `certain`, not even `--only` can turn it off: fixes that rely on complete lists cannot afford to lose the check that keeps them complete.
 
-You don't need to assemble your initial list by hand either. Running [`dresscode init` |generate-configuration] scans your entire project, discovers all functions and constants declared in namespaces, and writes their lists alongside `nameResolution: certain`. If any file fails to parse (making its declarations unknown), `init` avoids writing `certain` and names the unverified file in a comment.
+You don't need to assemble your initial list by hand either. Running [`dresscode init` |generate-configuration] scans all files in your project paths, discovers all functions and constants declared in namespaces, and writes their lists alongside `nameResolution: certain`. If any file fails to parse (making its declarations unknown), `init` avoids writing `certain` and names the unverified file in a comment.
 
 .[note]
 In future releases, `dresscode fix` may automatically append newly discovered declarations directly into the configuration file rather than merely reporting them.
@@ -153,7 +153,7 @@ overrides:
 	  nameResolution: uncertain
 ```
 
-DressCode will then inspect files in `tests` cautiously: fixes requiring global functions will only be reported as risky warnings, and the unlisted-declaration validator remains silent. Production files in `src` continue to benefit fully from complete certainty. This separation works because production code never calls test helpers, meaning those functions have zero influence on identifier resolution in `src`.
+DressCode will then inspect files in `tests` cautiously: fixes requiring global functions will only be reported as risky warnings, and the check for unlisted declarations remains silent. Production files in `src` continue to benefit fully from the certainty. This separation works because production code never calls test helpers, meaning those functions have zero influence on name resolution in `src`.
 
 One exception deserves careful attention: the mocked function pattern discussed [above |#Why Tools Struggle with It]. If a test declares `App\time()` to force production code in the `App` namespace to invoke a mock, that change in behavior targets calls in `src`, not in the tests. Such a function definitely belongs in the project's root `namespaces.functions` list so that rules in `src` leave it alone.
 
@@ -165,13 +165,13 @@ Sometimes you write application code directly inside a framework's namespace bec
 
 DressCode understands these framework helpers natively: whenever a project installs `symfony/dependency-injection`, it automatically adds those functions to the internal `namespaces.functions` list without requiring a single line of configuration, regardless of which coding standard you use. Running `dresscode config` lists them under the `Names` line, attributed to `DressCode for symfony/dependency-injection`.
 
-Other packages can supply their own namespace lists through the `namespaces` key in their [migration data files |replacement-maps], merging seamlessly with your configuration. However, neither a package nor a preset can set the `nameResolution` directive: they understand the framework, but they cannot speak for your own application code.
+Other packages can supply their own namespace lists through the `namespaces` key in their [data files |replacement-maps], merging seamlessly with your configuration. However, neither a package nor a preset can set the `nameResolution` key: they understand the framework, but they cannot speak for your own application code.
 
 
 Faster Calls When the Name Is Certain
 =====================================
 
-Before PHP executes your code, it compiles it into bytecode instructions for its virtual machine (the Zend Engine). For dozens of built-in functions and constants, the compiler can take major shortcuts: replacing a call with a single CPU instruction, computing results ahead of time during compilation, or executing the function without the overhead of call-frame allocation. Let's look at what PHP does under the hood, what commonly prevents these optimizations, and how DressCode formats code so the engine can run at full speed.
+Before PHP executes your code, it compiles it into bytecode instructions for its virtual machine (the Zend Engine). For dozens of built-in functions and constants, the compiler can take major shortcuts: replacing a call with a single instruction, computing results ahead of time during compilation, or executing the function without the overhead of call-frame allocation. Let's look at what PHP does under the hood, what commonly prevents these optimizations, and how DressCode formats code so the engine can use these shortcuts.
 
 
 What PHP Does with Code Before Running It
@@ -179,12 +179,12 @@ What PHP Does with Code Before Running It
 
 PHP never executes raw source code directly as it appears in your editor. First, it compiles it into a sequence of low-level instructions called opcodes, which are subsequently executed by the Zend Engine virtual machine. With OPcache enabled (the standard configuration in production environments), compiled opcodes are stored in shared memory so files do not have to be recompiled on every HTTP request; before saving them, the OPcache Optimizer runs several optimization passes over the bytecode.
 
-A standard userland function call involves significant work for the virtual machine. For example, `$len = foo($s);` compiles roughly to:
+A standard function call involves significant work for the virtual machine. For example, `$len = foo($s);` compiles roughly to:
 
 ```
 INIT_FCALL "foo"     prepare the call
 SEND_VAR $s          pass the argument
-DO_ICALL             execute the function
+DO_ICALL             call the function
 ```
 
 The virtual machine must allocate a new call frame on the execution stack, copy the arguments into it, and transfer control to the C function, which must then parse and validate those arguments. For a heavy function doing database work, this overhead is negligible. For an elementary function like `strlen()`, which merely reads a string's length directly from its memory header, the call-frame overhead is many times more expensive than the actual operation itself.
@@ -218,7 +218,7 @@ SEND_VAR_EX $s
 V1 = DO_FCALL_BY_NAME
 ```
 
-The compiler uses its direct opcode shortcuts only when the identifier is completely unambiguous: when written with a leading backslash as `\strlen()`, when imported explicitly via `use function strlen;`, or when the file contains no namespace declaration at all.
+The compiler uses its direct opcode shortcuts only when the name is completely unambiguous: when written with a leading backslash as `\strlen()`, when imported explicitly via `use function strlen;`, or when the file contains no namespace declaration at all.
 
 How much difference does this make in practice? Here is a benchmark of twenty million iterations in a tight loop on PHP 8.5 (with OPcache enabled and JIT disabled):
 
@@ -229,7 +229,7 @@ How much difference does this make in practice? Here is a benchmark of twenty mi
 | `is_array($s)` | 473 ms |
 | `\is_array($s)` | 151 ms |
 
-With the shortcut enabled, calls run two to three times faster. In absolute terms, this represents roughly ten to fifteen nanoseconds per call: imperceptible in an isolated web request, but immediately noticeable in loops processing hundreds of thousands of items.
+With the shortcut enabled, calls run two to three times faster. In absolute terms, this represents roughly ten to fifteen nanoseconds per call: imperceptible in an isolated web request, but noticeable in loops processing hundreds of thousands of items.
 
 
 What OPcache Computes in Advance
@@ -246,7 +246,7 @@ function separator(): string
 
 compiles directly to a simple `RETURN "---"`. This constant folding works across variables as well: the code `$sep = ', '; return \implode($sep, ['a', 'b']);` leaves only the finished string `"a, b"` in the compiled opcode stream. PHP 8.4 can precompute over 170 deterministic functions whose outputs depend strictly on their inputs, including `str_repeat()`, `implode()`, `strtoupper()`, `substr()`, `trim()`, and `version_compare()`.
 
-OPcache gives special treatment to environment-checking functions: `function_exists('mb_strlen')`, `extension_loaded('intl')`, `is_callable('strlen')`, `defined('PHP_EOL')`, and `constant('PHP_INT_SIZE')`. When the answer is statically knowable, it replaces the call with `true` or the constant's literal value directly. For `function_exists()`, however, it does this strictly when the function exists: a missing function could be declared later by an autoloader or dynamic include, so negative checks must still be evaluated at runtime.
+OPcache gives special treatment to environment-checking functions: `function_exists('mb_strlen')`, `extension_loaded('intl')`, `is_callable('strlen')`, `defined('PHP_EOL')`, and `constant('PHP_INT_SIZE')`. When the answer is statically knowable, it replaces the call with `true` or the constant's literal value directly. For `function_exists()`, however, it does this only when the function exists: a missing function could be declared later, for example after another file is loaded, so negative checks must still be evaluated at runtime.
 
 Here too, the exact same condition applies: the compiler must have certainty regarding the function being called.
 
@@ -254,11 +254,11 @@ Here too, the exact same condition applies: the compiler must have certainty reg
 Constants Are Substituted Directly
 ==================================
 
-Built-in constants provided by PHP or its extensions (such as `PHP_EOL`, `PHP_INT_MAX`, `PHP_VERSION_ID`, or `E_ALL`) never change at runtime. The compiler therefore inlines their literal values directly, allowing `'a' . \PHP_EOL` to compile into a single concatenated string literal. Much more important than saving a hash table lookup, however, is what this inlining enables next: the OPcache Optimizer factors inlined constants into its branch analysis and completely eliminates dead code paths:
+Built-in constants provided by PHP or its extensions (such as `PHP_EOL`, `PHP_INT_MAX`, `PHP_VERSION_ID`, or `E_ALL`) never change at runtime. The compiler therefore inlines their literal values directly, allowing `'a' . \PHP_EOL` to compile into a single concatenated string literal. Much more important than saving the load of the constant, however, is what this inlining enables next: the OPcache Optimizer factors inlined constants into its branch analysis and completely eliminates dead code paths:
 
 ```php
 if (\PHP_VERSION_ID >= 80400) {
-	// code for modern PHP
+	// code for new PHP
 } else {
 	// code for older PHP
 }
@@ -274,9 +274,9 @@ User-defined global constants are not inlined by OPcache because their values ca
 Only Where the Compiler Makes Use of It
 ---------------------------------------
 
-The simplest, naive approach would be to prepend a backslash or add an import statement for every single constant PHP defines. That is what typical tools do: blindly backslashing every built-in constant they encounter. But substituting a value in isolation merely saves a hash lookup (about 2.5 nanoseconds in our testing). The real performance dividend arrives only when the compiler can actively compute with that value downstream: in a condition whose dead branch can be purged, or inside a compound expression evaluated ahead of time, such as `ENT_QUOTES | ENT_HTML5`.
+The simplest approach would be to prepend a backslash or add an import statement for every single constant PHP defines. That is what typical tools do: backslashing every built-in constant they encounter. But substituting a value in isolation merely saves loading the constant (about 2.5 nanoseconds in our testing). The real performance dividend arrives only when the compiler can actively compute with that value downstream: in a condition whose dead branch can be purged, or inside a compound expression evaluated ahead of time, such as `ENT_QUOTES | ENT_HTML5`.
 
-DressCode therefore inspects the surrounding syntactic context of each constant. A reference to `PHP_VERSION_ID` inside `if (PHP_VERSION_ID >= 80400)` automatically receives an import, because doing so purges an entire dead branch from compiled memory. Conversely, passing `E_USER_DEPRECATED` into `trigger_error()` remains untouched, because an import there would add nothing but visual noise to the file header.
+DressCode therefore inspects the surrounding syntactic context of each constant. A reference to `PHP_VERSION_ID` inside `if (PHP_VERSION_ID >= 80400)` automatically receives an import, because doing so purges an entire dead branch from compiled memory. Conversely, `E_USER_DEPRECATED` passed into `trigger_error()` remains untouched, because an import there would add nothing but visual noise to the file header.
 
 We verified this behavior across a large open-source codebase of nearly three thousand files. Bare PHP constants appeared across 627 locations, yet the compiler could actively optimize downstream expressions in only 117 of them. A blanket import-all strategy would have added 457 new import lines across 136 files. DressCode added only 82 lines across 40 files (over five times fewer) while capturing every single location where compiler optimizations actually make a difference.
 
@@ -284,7 +284,7 @@ We verified this behavior across a large open-source codebase of nearly three th
 Calls Without a Frame
 ---------------------
 
-PHP 8.4 introduced another major optimization, this time for nineteen of the most frequently used standard functions: `str_contains()`, `str_starts_with()`, `strpos()`, `strstr()`, `substr()`, `str_replace()`, `strtr()`, `trim()`, `implode()`, `in_array()`, `preg_match()`, `preg_replace()`, `min()`, `max()`, `class_exists()`, `property_exists()`, `dirname()`, `dechex()`, and `is_numeric()`. Each provides an internal optimized variant that receives parameters directly via CPU registers without allocating a stack frame. The PHP engine refers to these as frameless functions.
+PHP 8.4 introduced another major optimization, this time for nineteen frequently used standard functions: `str_contains()`, `str_starts_with()`, `strpos()`, `strstr()`, `substr()`, `str_replace()`, `strtr()`, `trim()`, `implode()`, `in_array()`, `preg_match()`, `preg_replace()`, `min()`, `max()`, `class_exists()`, `property_exists()`, `dirname()`, `dechex()`, and `is_numeric()`. Each provides an internal optimized variant that receives parameters directly, without a call frame. The PHP engine refers to these as frameless functions.
 
 This optimization is unique in that it works even with unqualified calls inside namespaces. The compiler generates both execution paths and resolves between them upon first execution:
 
@@ -295,7 +295,7 @@ INIT_NS_FCALL_BY_NAME "App\str_contains"       generic call
 V1 = FRAMELESS_ICALL_2(str_contains) $s "x"    call without a frame
 ```
 
-The engine remembers whether `App\str_contains()` exists in OPcache after the first pass, meaning every subsequent call costs only a single unconditional jump. An explicit import adds virtually no performance advantage here.
+The engine remembers whether `App\str_contains()` exists after the first pass, meaning every subsequent call costs only a single jump. An explicit import adds virtually no performance advantage here.
 
 
 What Turns the Shortcuts Off
@@ -316,10 +316,10 @@ The second row shows the frameless call; the third row shows the direct instruct
 Unpacked arguments (e.g. `\strlen(...$args)`) disable the shortcuts as well, because the compiler cannot determine the argument count ahead of time. Furthermore, frameless calls are only available for specific argument counts: `preg_match($pattern, $s)` runs frameless, whereas passing the matches array via `preg_match($pattern, $s, $matches)` requires a standard call frame.
 
 
-Keep Expectations Realistic
----------------------------
+Don't Expect Miracles
+---------------------
 
-These shortcuts accelerate individual calls by nanoseconds. In typical web applications that spend most of their lifecycle waiting on database queries, network latency, or disk I/O, micro-optimizing function calls won't visibly shift page response times. You will, however, see immediate benefits in code running in tight loops: parsers, template rendering engines, bulk array processing pipelines, or foundation libraries invoked hundreds of thousands of times per request. Best of all, it costs you nothing: DressCode applies these optimizations automatically, leaving your code clean and readable, adding just a few imports where they matter, and using `true` instead of `strict: true`.
+These shortcuts accelerate individual calls by nanoseconds. In typical web applications that spend most of their lifecycle waiting on database queries, network latency, or disk I/O, micro-optimizing function calls won't visibly shift page response times. You will, however, see immediate benefits in code running in tight loops: parsers, template rendering engines, bulk array processing pipelines, or foundation libraries invoked thousands of times per request. Best of all, it costs you nothing: DressCode applies these optimizations automatically, leaving your code clean and readable, adding just a few imports where they matter, and using `true` instead of `strict: true`.
 
 
 The Set compilerOptimizations
@@ -332,9 +332,9 @@ use:
 	- compilerOptimizations
 ```
 
-No coding standard enables this set by default. The set selectively imports functions that the compiler handles specially, strictly where at least one invocation with the supplied arguments will genuinely benefit from optimization. It imports constants where the compiler can actively precompute expressions (allowing backslashes as an alternative for constants). All other global functions and constants remain bare, since qualifying them adds zero performance gain. And for calls the compiler optimizes, it converts safe named arguments back into positional ones while flagging unpacked arguments.
+No coding standard enables this set by default. The set selectively imports functions that the compiler handles specially, only where at least one invocation with the supplied arguments will genuinely benefit from optimization. It imports constants where the compiler can actively precompute expressions (allowing backslashes as an alternative for constants). It writes all other global functions and constants bare, since qualifying them adds zero performance gain. And for calls the compiler optimizes, it converts safe named arguments back into positional ones while flagging unpacked arguments.
 
-The set comprises four decisions from the [`qualification` |decisions/qualification] section: `function.global: bare`, `function.optimized: imported`, `constant.global: bare`, and `constant.optimized: [imported, backslashed]`. If you prefer backslashes over import statements, configure `backslashed` for optimized identifiers (see the [next section |#How Global Names Are Written] for details).
+The set comprises four decisions from the [`qualification` |decisions/qualification] section: `function.global: bare`, `function.optimized: imported`, `constant.global: bare`, and `constant.optimized: [imported, backslashed]`. If you prefer backslashes over import statements, configure `backslashed` for optimized names (see the [next section |#How Global Names Are Written] for details).
 
 Calls that can be replaced directly by native language constructs (such as `is_null($x)` by `$x === null`, or `intval($x)` by `(int) $x`) are not handled by this set. Those refactorings belong to decisions in the [`hygiene` |decisions/hygiene] section: language constructs need no compiler shortcuts, run at maximum speed by design, and are unaffected by namespaces. The `nette` standard enables them out of the box.
 
@@ -383,17 +383,17 @@ class Access
 }
 ```
 
-Imports were added for `strlen()` (which PHP always optimizes) and `PHP_VERSION_ID` (which the compiler evaluates to eliminate the dead branch). The `in_array()` call remained bare: an import would only benefit an array written directly as a literal, whereas `$roles` is a variable, and PHP 8.4's frameless call functions reliably with bare names. However, the named argument `strict` was removed because it disabled that frameless call. And `E_USER_DEPRECATED`, passed merely as a function argument, remained bare: an import would have saved nothing beyond a single hash lookup. The [measurements above |#Only Where the Compiler Makes Use of It] show why this targeted approach is superior to blanket imports.
+Imports were added for `strlen()` (which PHP always optimizes) and `PHP_VERSION_ID` (which the compiler evaluates to eliminate the dead branch). The `in_array()` call remained bare: an import would only benefit an array written directly as a literal, whereas `$roles` is a variable, and PHP 8.4's frameless call functions reliably with bare names. However, the named argument `strict` was removed because it disabled that frameless call. And `E_USER_DEPRECATED`, passed merely as a function argument, remained bare: an import would have saved nothing beyond loading the constant. The [measurements above |#Only Where the Compiler Makes Use of It] show why this targeted approach is superior to blanket imports.
 
-All of these automated edits depend on these being genuine global PHP functions. If your configuration does not specify `nameResolution: certain`, DressCode reports them as risky fixes and requires explicit approval (see [Tell DressCode What Is What |#name-resolution]).
+All of these automated edits depend on these being genuine global PHP functions. If your configuration does not specify `nameResolution: certain`, DressCode reports them as risky fixes and requires explicit permission (see [Tell DressCode What Is What |#name-resolution]).
 
-The set optimizes code regardless of your current target PHP version. Functions optimized only by newer PHP releases are qualified proactively: older runtimes simply ignore the shortcut without breaking, and the moment you upgrade PHP, your code is immediately primed to run at maximum speed. Named arguments are converted strictly when they already sit in their natural positional slots, preserving call semantics completely.
+The set optimizes code regardless of your current target PHP version. Functions optimized only by newer PHP releases are qualified proactively: older runtimes simply ignore the shortcut without breaking, and the moment you upgrade PHP, your code is immediately primed to run at maximum speed. Named arguments are converted only when they already sit in their natural positional slots, preserving call semantics completely; here too it ignores the PHP version, because a positional argument is correct everywhere.
 
 
 How Global Names Are Written
 ============================
 
-How global functions and constants are written in code is controlled by the [`qualification` |decisions/qualification] section. Every identifier can be represented in three ways, and each decision key accepts one of three values: `bare` leaves the name bare relying on runtime fallback, `imported` requires an explicit `use function` or `use const` import, and `backslashed` mandates a leading backslash.
+How global functions and constants are written in code is controlled by the [`qualification` |decisions/qualification] section. Every name can be represented in three ways, and each decision key accepts one of three values: `bare` leaves the name bare relying on runtime fallback, `imported` requires an explicit `use function` or `use const` import, and `backslashed` mandates a leading backslash.
 
 ```neon
 qualification:
@@ -428,13 +428,13 @@ Keys in the section proceed from general to specific:
 | `constant.optimized` | Constants the compiler evaluates downstream: inside conditions or constant expressions. |
 | `function.currentNamespace`, `constant.currentNamespace` | Functions and constants belonging to the file's own namespace. |
 
-The `function.optimized` key evaluates arguments dynamically: PHP always optimizes `strlen()`, but `dirname()`, `defined()`, and `function_exists()` are optimized only with constant arguments; `sprintf()` is optimized only with format strings containing matching `%s` and `%d` specifiers; and `in_array()` is optimized only with inline array literals. A function qualifies for this rule as soon as a namespace calls it in an optimizable way at least once, after which every reference to that function in the namespace is formatted consistently. A function never invoked in an optimizable way falls back to `function.global`, preventing unhelpful imports from cluttering the file. The `constant.optimized` decision is similarly context-aware, looking at how the constant is used rather than its name. Setting `bare` on these keys indicates that the project prioritizes clean, unadorned code over compiler shortcuts. Each identifier is governed by exactly one key: if `function.optimized` is set to `keep`, optimized functions remain untouched, and `function.global: bare` strips leading backslashes from `\array_map()` while leaving `\strlen()` and `\count()` intact.
+For some functions, `function.optimized` depends on the arguments: PHP always optimizes `strlen()`, but `dirname()`, `defined()`, and `function_exists()` are optimized only with constant arguments; `sprintf()` is optimized only with a constant format string that contains nothing but `%s` and `%d` specifiers, one for each passed value; and `in_array()` is optimized only with inline array literals. A function falls under this key as soon as a namespace calls it in an optimizable way at least once, after which every reference to that function in the namespace is formatted consistently. A function never invoked in an optimizable way falls back to `function.global`, preventing unhelpful imports from cluttering the file. The `constant.optimized` decision is similarly context-aware, looking at how the constant is used rather than its name. Setting `bare` on these keys indicates that the project prioritizes clean, unadorned code over compiler shortcuts. Each name is governed by exactly one key: if `function.optimized` is set to `keep`, optimized functions remain untouched, and `function.global: bare` strips leading backslashes from `\array_map()` while leaving `\strlen()` and `\count()` intact.
 
-DressCode inserts imports matching the style your file already uses: integrating into existing multi-name statements, into grouped imports for that namespace, and in correct alphabetical order so that rules in the [`imports` |decisions/imports] section have nothing to complain about. If the file already imports the function under an alias, it reuses that alias. Where an import cannot be added (for instance, due to a naming collision), it falls back to a leading backslash. Conversely, it strips backslashes only where a bare name safely reaches the global function, and automatically removes orphaned imports that are no longer referenced.
+DressCode inserts imports matching the style your file already uses: integrating into existing multi-name statements, into grouped imports for that namespace, and in correct alphabetical order so that decisions in the [`imports` |decisions/imports] section have nothing to complain about. If the file already imports the function under an alias, it reuses that alias. Where an import cannot be added (for instance, due to a naming collision), it falls back to a leading backslash. Conversely, it strips backslashes only where a bare name safely reaches the global function, and automatically removes orphaned imports that are no longer referenced.
 
 This brings us full circle to namespaces. An import statement `use function strlen;` permanently binds calls to the global function. If your project had its own `App\strlen()`, adding that import would break runtime behavior. Under `uncertain`, DressCode therefore treats any transition between bare names and imports or backslashes as risky. Under `certain`, it knows `App\strlen()` does not exist and applies the import safely. Naturally, it never imports a function listed in `namespaces.functions`.
 
-Classes do not suffer from this ambiguity: an unqualified class name in a namespace never falls back to the global scope at runtime. The keys `class.otherNamespace` and `class.global` therefore only choose between an import and a backslash, and none of their automated fixes are risky. Identifiers without a leading backslash (such as `Model\User` when `use App\Model;` is present) are left alone, as they resolve relative to imports or the file's namespace. In a file without a namespace, leading backslashes are always redundant, and `qualification.leadingBackslash` cleanly removes them.
+Classes do not suffer from this ambiguity: an unqualified class name in a namespace never falls back to the global namespace at runtime. The keys `class.otherNamespace` and `class.global` therefore only choose between an import and a backslash, and none of their automated fixes are risky. Identifiers without a leading backslash (such as `Model\User` when `use App\Model;` is present) are left alone, as they resolve relative to imports or the file's namespace. In a file without a namespace, leading backslashes are always redundant, and `qualification.leadingBackslash` cleanly removes them.
 
 
 Summary
@@ -442,9 +442,9 @@ Summary
 
 - In PHP, an unqualified function or constant inside a namespace resolves either locally or globally, and an isolated file cannot tell which.
 - Set `nameResolution: certain` in your configuration (and list custom names under `namespaces` if you have any). All rules will behave with complete certainty, and fixes relying on global names stop being risky.
-- Test suites declaring local helper functions can be scoped using an override with `nameResolution: uncertain`.
-- Without `certain`, DressCode acts conservatively, applying such fixes only with explicit consent in `fixRisky` or via `--fix-risky`.
-- Newly declared functions in namespaces are automatically tracked and validated under `namespaces.functions`; `dresscode init` generates your initial whitelist.
+- Parts of the project where the lists are not complete, such as tests with helper functions, can use an override with `nameResolution: uncertain`.
+- Without `certain`, DressCode acts conservatively, applying such fixes only with explicit permission in `fixRisky` or via `--fix-risky`.
+- Newly declared functions in namespaces are automatically tracked and validated under `namespaces.functions`; `dresscode init` generates your initial lists.
 - Always call namespaced functions using an explicit `use function` import. If the file is not loaded, you will find out immediately via a clear fatal error.
 - PHP compiles source code into bytecode and offers shortcuts for dozens of functions and constants: single-opcode execution, compile-time evaluation, and frameless calls.
 - Nearly all shortcuts require unambiguous names: `\strlen()`, `use function strlen;`, or files without namespaces. The same holds for constants like `PHP_VERSION_ID`.
