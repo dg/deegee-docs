@@ -14,7 +14,7 @@ Every team has a few bespoke coding conventions that no standard covers because 
 The Fixture First
 =================
 
-Every rule in DressCode is developed and tested against fixtures: paired files containing code before and after an automated fix. A complete fixture is composed of three files: `.code` containing the input code, `.expected` containing the expected output after the fix, and `.violations` listing the exact line numbers and error messages the rule must report. A fixture is the most unambiguous specification you can write, so we begin right there in `tests/fixtures/exceptionMessagePeriod/basic.code`:
+Every rule in DressCode is developed and tested against fixtures: paired files containing code before and after an automated fix. One fixture has up to three files: `.code` containing the input code, `.expected` containing the expected output after the fix, and `.violations` listing the exact line numbers and messages the rule must report. A fixture is the most unambiguous specification you can write, so we begin right there in `tests/fixtures/exceptionMessagePeriod/basic.code`:
 
 ```php
 <?php
@@ -26,7 +26,7 @@ throw new LogicException('Unreachable ');
 $logger->log('Started');
 ```
 
-Right here, we define the exact boundaries of what our rule should and shouldn't do: line 2 is already valid; line 3 contains an interpolated string that we intentionally leave untouched (we can't predict what `$id` will evaluate to); line 4 has trailing whitespace that the period should absorb; and line 5 isn't an exception at all. The `basic.expected` file contains the exact same code with periods added on lines 3 and 6, while `basic.violations` specifies the expected reports:
+Right here, we define the exact boundaries of what our rule should and shouldn't do: the second line is already valid; the third contains an interpolated string that we intentionally leave untouched (we can't predict what `$id` will evaluate to); the fourth has trailing whitespace that the period should absorb; and the fifth isn't an exception at all. The `basic.expected` file contains the exact same code with periods added on lines 3 and 6, while `basic.violations` specifies the expected reports:
 
 ```
 3: The message of an exception must end with a period.
@@ -78,7 +78,7 @@ final class ExceptionMessagePeriodRule extends NodeRule
 }
 ```
 
-A `Decision` consists of three parts. The **path** `project.exceptionMessagePeriod` connects everything the user sees: they write it in their configuration, see it next to every finding in the terminal, use it in `dresscode:ignore` comments, and query it using `dresscode explain`. Project-specific rules operate in the `project` section, plugin rules use a section named after the plugin, and the engine uses its own built-in sections, ensuring paths never collide. The **domain** `Domain::state('required')` defines accepted values: the string `required` ("periods are mandatory") and the universal `keep` ("do not check"). Finally, the **description** is an English sentence without a trailing period that explains what the rule does; it is displayed by `dresscode explain` and in the generated catalogue.
+A `Decision` consists of three parts. The **path** `project.exceptionMessagePeriod` connects everything the user sees: they write it in their configuration, see it next to every finding in the terminal, use it in `dresscode:ignore` comments, and query it using `dresscode explain`. Project-specific rules operate in the `project` section, plugin rules use a section named after the plugin, and the engine uses its twenty or so built-in sections, ensuring paths never collide. The **domain** `Domain::state('required')` defines accepted values: the string `required` ("periods are mandatory") and, like every decision that requires something, `keep` ("do not check"). Finally, the **description** is an English sentence without a trailing period that explains what the rule does where the key is not `keep`; it is displayed by `dresscode explain` and in the generated catalogue.
 
 A decision like this is called a **requirement**: the rule runs wherever any configuration layer sets it to a value other than `keep`. Where no configuration mentions it, it requires nothing and does not run. Rules are therefore never enabled by class name: a project simply declares its desired code style, and the corresponding rule joins the run automatically.
 
@@ -118,13 +118,13 @@ public function enter(Node|Token $node, RuleContext $context): void
 }
 ```
 
-Read the checks from the top down: this is a `new` instantiation with an explicit class name (not `new $class` or an anonymous class), and the class name ends with `Exception`. The first argument is a plain string without interpolation: an interpolated string in double quotes produces a completely different AST node, so line 3 of our fixture is filtered out automatically without any special conditions. That string uses single quotes, is non-empty, and its trimmed value doesn't already end with a period.
+Read the checks from the top down: this is a `new` instantiation with an explicit class name (not `new $class` or an anonymous class), and the class name ends with `Exception`. The first argument is a plain string without interpolation: an interpolated string in double quotes produces a completely different node, so the third line of our fixture is filtered out automatically without any special conditions. That string uses single quotes, is non-empty, and its trimmed value doesn't already end with a period.
 
 And the crucial final check: **nobody suppressed the decision at this location.** The `$context->report()` method returns `false` if the construct is [suppressed |suppressions-and-baseline] by a `dresscode:ignore` comment on the same line or above it, or by a `dresscode:disable`/`dresscode:enable` block. In that scenario, the code must not change. That is why `report()` sits at the end of the `if` condition rather than before it. You don't need to pass the decision path manually: a rule with a single requirement reports under it automatically.
 
 Only after passing all these guards do we apply the fix: a single call to `setValue()`. We don't overwrite raw token text; we update the string's semantic value, letting the node handle quotes and escaping automatically. The rest of the file remains byte-for-byte identical.
 
-Notice what this rule never has to deal with: no parenthesis counting, no hunting for argument boundaries, and no special handling for inline comments nested inside the call. The syntax tree handles all of that. On a flat array of tokens, most of your code would be spent defending against things that can appear between `new` and the string literal; in an AST, that problem never arises.
+Notice what this rule never has to deal with: no parenthesis counting, no hunting for argument boundaries, and no special handling for inline comments nested inside the call. The syntax tree handles all of that. On a flat array of tokens, most of your code would be spent defending against things that can appear between `new` and the string literal; in the tree, that problem never arises.
 
 
 Testing the Rule
@@ -137,7 +137,7 @@ project:
 	exceptionMessagePeriod: required
 ```
 
-The `RuleTester` utility takes the rule class and the fixtures directory, automatically verifying everything you might otherwise forget to test: that the output matches `.expected`, that reported errors match `.violations`, that running the rule on its own output mutates nothing further (idempotence), that comments are fully preserved, that `dresscode:ignoreFile` is respected, and that nothing was modified without being reported. In Nette Tester, a test looks like this:
+The `RuleTester` utility takes the rule class and the fixtures directory, automatically verifying everything you might otherwise forget to test: that the output matches `.expected`, that reported findings match `.violations`, that running the rule on its own output mutates nothing further (idempotence), that comments are fully preserved, that `dresscode:ignoreFile` is respected, and that nothing was modified without being reported. In Nette Tester, a test looks like this:
 
 ```php
 use App\CodeStyle\ExceptionMessagePeriodRule;
@@ -181,8 +181,8 @@ The `dresscode fix` command repairs it automatically, `// dresscode:ignore proje
 Where to Go Next
 ================
 
-- When a rule needs additional options (such as a configurable list of exception name suffixes), it declares a **parameter** alongside its requirement: a companion decision that refines behavior and is read in `configure()`. See [A Rule in Detail |rule-contract] for parameter types and contract guidelines.
-- Our rule identifies exceptions simply by checking if their name ends with `Exception`. To verify inheritance with certainty, use the `NameResolver` analysis to resolve names against imports and namespaces; available analyses are documented in [PhpSyntax |phpsyntax:analyses].
+- When a rule needs additional values (such as a configurable list of exception name suffixes), it declares a **parameter** alongside its requirement: a companion decision that refines behavior and is read in `configure()`. See [A Rule in Detail |rule-contract] for how to do it, the domains, and everything a rule must follow.
+- Our rule identifies exceptions simply by checking if their name ends with `Exception`. If you need more than that, use the `NameResolver` analysis to resolve names against imports and namespaces; available analyses are documented in [PhpSyntax |phpsyntax:analyses].
 - Rules controlling spaces, indentation, and line breaks are written differently, submitting declarative claims instead of implementing `enter()`: [Whitespace Rules |whitespace-rules].
 - If you are migrating an existing sniff from CodeSniffer or a fixer from PHP CS Fixer, check our porting guide: [Porting a Rule from Another Tool |porting-rules].
 

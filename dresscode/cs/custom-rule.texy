@@ -14,7 +14,7 @@ Snad každý tým má pár specifických pravidel, která žádný obecný stand
 Nejdřív fixtura
 ===============
 
-Každé pravidlo se v DressCode vyvíjí a testuje nad fixturami (fixtures), tedy nad dvojicemi souborů s kódem před opravou a po ní. Jednu kompletní fixturu tvoří trojice souborů: `.code` s původním kódem, `.expected` s očekávaným výsledkem po automatické opravě a `.violations` s přesným seznamem řádků a chybových zpráv, které má pravidlo nahlásit. Fixtura představuje to nejlepší a nejjednoznačnější zadání, jaké si můžete připravit. Začněme tedy přímo s ní v souboru `tests/fixtures/exceptionMessagePeriod/basic.code`:
+Každé pravidlo se v DressCode vyvíjí a testuje nad fixturami (fixtures), tedy nad dvojicemi souborů s kódem před opravou a po ní. Jednu fixturu tvoří až trojice souborů: `.code` s původním kódem, `.expected` s očekávaným výsledkem po automatické opravě a `.violations` s přesným seznamem řádků a zpráv, které má pravidlo nahlásit. Fixtura představuje to nejlepší a nejjednoznačnější zadání, jaké si můžete připravit. Začněme tedy přímo s ní v souboru `tests/fixtures/exceptionMessagePeriod/basic.code`:
 
 ```php
 <?php
@@ -37,9 +37,9 @@ Už na těchto několika řádcích přesně definujeme hranice chování našeh
 Kostra pravidla
 ===============
 
-Pravidlo je třída dědící od `DressCode\NodeRule` doplněná o atribut `#[RuleInfo]`, který určuje, ve které fázi průchodu pravidlo běží. Fáze (`Stage`) jsou přesně tři: `Structure` pro strukturální změny kódu, `Formatting` pro bílé znaky a zalomení řádků a `Finishing` pro závěrečné začištění. Naše pravidlo upravuje textový obsah, takže logicky patří do fáze `Structure`.
+Pravidlo je třída dědící od `DressCode\NodeRule` doplněná o atribut `#[RuleInfo]`, který určuje, ve které fázi pravidlo běží. Fáze (`Stage`) jsou přesně tři: `Structure` pro strukturální změny kódu, `Formatting` pro bílé znaky a zalomení řádků a `Finishing` pro závěrečné začištění. Naše pravidlo upravuje textový obsah, takže logicky patří do fáze `Structure`.
 
-Samotné pravidlo žádné veřejné jméno nemá. Uživatel v DressCode pravidla nikdy přímo nepíše ani nezapíná: definuje **rozhodnutí** (decision), tedy konfigurační klíč vyjadřující, jak má kód vypadat, a pravidlo toto rozhodnutí pouze vymáhá. Naším rozhodnutím je, že text výjimky končí tečkou. Pravidlo jej ohlásí metodou `getDecisions()`:
+Samotné pravidlo žádné veřejné jméno nemá. Uživatel v DressCode pravidla nikdy přímo nepíše ani nezapíná: zapisuje **rozhodnutí** (decision), tedy konfigurační klíč vyjadřující, jak má kód vypadat, a pravidlo toto rozhodnutí pouze vymáhá. Naším rozhodnutím je, že text výjimky končí tečkou. Pravidlo jej ohlásí metodou `getDecisions()`:
 
 ```php
 namespace App\CodeStyle;
@@ -78,11 +78,11 @@ final class ExceptionMessagePeriodRule extends NodeRule
 }
 ```
 
-Objekt `Decision` se skládá ze tří částí. **Cesta** `project.exceptionMessagePeriod` propojuje vše, s čím se uživatel setká: zapíše ji do konfigurace, najde ji u každého nálezu v terminálu, použije ji v komentáři `dresscode:ignore` a může se na ni dotázat příkazem `dresscode explain`. Projektová pravidla rozhodují v sekci `project`, pravidla pluginu v sekci pojmenované podle pluginu a jádro DressCode ve svých vlastních sekcích, cesty se tedy nikdy nemohou srazit. **Obor hodnot** `Domain::state('required')` definuje povolené hodnoty: slovo `required` ("tečka je povinná") a samozřejmě univerzální `keep` ("nekontrolovat"). A **popis** je anglická věta bez tečky na konci, která vystihuje chování pravidla; využívá ji `dresscode explain` i generovaný katalog.
+Objekt `Decision` se skládá ze tří částí. **Cesta** `project.exceptionMessagePeriod` propojuje vše, s čím se uživatel setká: zapíše ji do konfigurace, najde ji u každého nálezu v terminálu, použije ji v komentáři `dresscode:ignore` a může se na ni dotázat příkazem `dresscode explain`. Projektová pravidla rozhodují v sekci `project`, pravidla pluginu v sekci pojmenované podle pluginu a jádro DressCode ve svých dvou desítkách sekcí, cesty se tedy nikdy nemohou srazit. **Obor hodnot** `Domain::state('required')` definuje povolené hodnoty: slovo `required` ("tečka je povinná") a jako u každého rozhodnutí, které něco vyžaduje, i `keep` ("nekontrolovat"). A **popis** je anglická věta bez tečky na konci, která říká, co pravidlo dělá tam, kde klíč není `keep`; využívá ji `dresscode explain` i generovaný katalog.
 
 Takovému rozhodnutí říkáme **požadavek** (requirement): pravidlo se automaticky aktivuje všude tam, kde jej některá vrstva konfigurace nastaví na jinou hodnotu než `keep`. Kde jej nikdo nezmíní, tam pravidlo nevyžaduje nic a vůbec neběží. Pravidla se tedy nikdy nezapínají jménem třídy: projekt pouze deklaruje požadovaný stav kódu a příslušné pravidlo se k němu připojí samo.
 
-`NodeRule` je jednou ze dvou základních podob pravidla: prochází uzly syntaktického stromu a pracuje s nimi. Druhou podobou je `GapRule`, které namísto procházení uzlů [vznáší centrální nároky na bílé znaky |whitespace-rules].
+`NodeRule` je jednou ze dvou základních podob pravidla: prochází uzly syntaktického stromu a pracuje s nimi. Druhou podobou je `GapRule`, které namísto procházení uzlů [vznáší nároky na bílé znaky |whitespace-rules].
 
 Metoda `getVisitedNodes()` vrací seznam uzlů, které vás zajímají. Jádro pak metodu `enter()` volá výhradně pro ně. Nás zajímá operátor `new`, reprezentovaný třídou `NewNode`. Jaké uzly existují a jaké sloty nabízejí, najdete v [přehledu uzlů |phpsyntax:nodes]: uzel `NewNode` disponuje sloty `newKeyword`, `class` a `arguments`.
 
@@ -118,13 +118,13 @@ public function enter(Node|Token $node, RuleContext $context): void
 }
 ```
 
-Čtěte podmínky pěkně shora: jde o instanciaci `new` s přímým názvem třídy (nikoliv tedy `new $class` ani anonymní třída) a název třídy končí na `Exception`. První předaný argument je obyčejný neinterpolovaný řetězec: interpolovaný řetězec v uvozovkách tvoří v AST zcela jiný uzel než `StringNode`, takže třetí řádek naší fixtury odpadne sám bez jakékoliv zvláštní podmínky. Tento řetězec je zapsaný v jednoduchých uvozovkách, není prázdný a jeho oříznutá hodnota dosud nekončí tečkou. 
+Čtěte podmínky pěkně shora: jde o instanciaci `new` s přímým názvem třídy (nikoliv tedy `new $class` ani anonymní třída) a název třídy končí na `Exception`. První předaný argument je obyčejný neinterpolovaný řetězec: interpolovaný řetězec v uvozovkách tvoří ve stromu zcela jiný uzel než `StringNode`, takže třetí řádek naší fixtury odpadne sám bez jakékoliv zvláštní podmínky. Tento řetězec je zapsaný v jednoduchých uvozovkách, není prázdný a jeho oříznutá hodnota dosud nekončí tečkou.
 
 A klíčová poslední podmínka: **nikdo toto rozhodnutí na daném místě nepotlačil.** Volání `$context->report()` vrátí `false`, pokud je dané místo [potlačeno |suppressions-and-baseline] komentářem `dresscode:ignore` (přímo na řádku nebo nad konstrukcí), případně párem `dresscode:disable` a `dresscode:enable`. V takovém případě se kód nesmí nijak změnit. Právě proto stojí volání `report()` až na konci podmínky, a nikoliv samostatně před ní. Cestu rozhodnutí metodě předávat nemusíte: pravidlo s jediným požadavkem hlásí nálezy automaticky pod ním.
 
 Teprve za touto sérií kontrol následuje samotná oprava: jediné volání `setValue()`. Neupravujeme surový text tokenu, ale sémantickou hodnotu řetězce: o správné escapování i uvozovky se postará samotný uzel. Zbytek souboru zůstane netknutý do posledního bajtu.
 
-Všimněte si, co v celém pravidle vůbec nemusíme řešit: žádné počítání závorek, žádné hledání konce argumentů, žádné obcházení komentářů vložených doprostřed volání. To všechno za nás bezpečně vyřešil syntaktický strom. Nad plochým polem tokenů by většina kódu řešila, co všechno se může mezi `new` a řetězcem objevit; v AST taková otázka vůbec nevyvstane.
+Všimněte si, co v celém pravidle vůbec nemusíme řešit: žádné počítání závorek, žádné hledání konce argumentů, žádné obcházení komentářů vložených doprostřed volání. To všechno za nás bezpečně vyřešil syntaktický strom. Nad plochým polem tokenů by většina kódu řešila, co všechno se může mezi `new` a řetězcem objevit; ve stromu taková otázka vůbec nevyvstane.
 
 
 Test pravidla
@@ -150,7 +150,7 @@ Tester\Environment::setup();
 Assert::noError(fn() => RuleTester::run(ExceptionMessagePeriodRule::class, __DIR__ . '/fixtures/exceptionMessagePeriod'));
 ```
 
-Nette Tester vyžaduje v každém testu alespoň jednu aktivní aserci, proto volání balíme do `Assert::noError()`. V PHPUnit použijete totéž volání uvnitř běžné testovací metody. Jakékoliv selhání vyvolá výjimku `DressCode\Testing\TestFailure` s přehledným diffem, takže přesně uvidíte, kde se výsledek rozešel s očekáváním.
+Nette Tester vyžaduje v každém testu alespoň jednu aserci, proto volání balíme do `Assert::noError()`. V PHPUnit použijete totéž volání uvnitř běžné testovací metody. Jakékoliv selhání vyvolá výjimku `DressCode\Testing\TestFailure` s přehledným diffem, takže přesně uvidíte, kde se výsledek rozešel s očekáváním.
 
 Když test nyní spustíte, hladce projde. Pokud by neprošel, diff vám přesně ukáže řádek, kde pravidlo vidí kód jinak než vy. To bývá přesně ten moment, kdy odhalíte skryté hraniční případy: v našem příkladu to bylo volání `rtrim()`, které v první verzi pravidla chybělo a fixtura s mezerou na konci jej okamžitě vynutila.
 
@@ -158,7 +158,7 @@ Když test nyní spustíte, hladce projde. Pokud by neprošel, diff vám přesn�
 Zapnutí v projektu
 ==================
 
-Třídu pravidla můžete umístit kamkoliv, kde ji zachytí autoloader. Vlastní projektová pravidla je ideální ukládat například do složky `tools/CodeStyle/` registrované v sekci `autoload-dev` v `composer.json`, aby se závislost na `DressCode\NodeRule` nedostala do produkčního autoloadu. V konfiguraci pak pravidlo uvedete názvem třídy v klíči `rules`, čímž se jeho rozhodnutí zaregistruje do katalogu. Hodnotu mu pak nastavíte v sekci `project` stejně jako kterémukoliv vestavěnému pravidlu:
+Třídu pravidla můžete umístit kamkoliv, kde ji zachytí autoloader. Vlastní projektová pravidla je ideální ukládat například do složky `tools/CodeStyle/` registrované v sekci `autoload-dev` v `composer.json`, aby se závislost na `DressCode\NodeRule` nedostala do produkčního autoloadu. V konfiguraci pak pravidlo uvedete názvem třídy v klíči `rules`, čímž se jeho rozhodnutí zaregistruje do katalogu. Hodnotu mu pak nastavíte v sekci `project` stejně jako kterémukoliv vestavěnému rozhodnutí:
 
 ```neon
 rules:
@@ -175,14 +175,14 @@ src/check.php
   error  8:39  The message of an exception must end with a period.  project.exceptionMessagePeriod
 \--
 
-Příkaz `dresscode fix` jej automaticky opravuje, komentář `// dresscode:ignore project.exceptionMessagePeriod` jej potlačí a nápověda `dresscode explain project.exceptionMessagePeriod` vypíše popis, obor hodnot i informaci o tom, která vrstva konfigurace jej zapnula, a to přesně tak, jak jste zvyklí u všech vestavěných rozhodnutí jádra. A pokud stejné pravidlo potřebujete sdílet mezi více projekty, stačí jej zabalit do [pluginu |presets-and-plugins]; jeho rozhodnutí se pak pouze přestěhuje do vlastní pojmenované sekce.
+Příkaz `dresscode fix` jej automaticky opravuje, komentář `// dresscode:ignore project.exceptionMessagePeriod` jej potlačí a nápověda `dresscode explain project.exceptionMessagePeriod` vypíše popis, obor hodnot i informaci o tom, která vrstva konfigurace jej zapnula, a to přesně tak, jak jste zvyklí u všech vestavěných rozhodnutí jádra. A pokud stejné pravidlo potřebujete sdílet mezi více projekty, stačí jej zabalit do [pluginu |presets-and-plugins]; jeho rozhodnutí se pak pouze přestěhuje do sekce pluginu.
 
 
 Kam dál
 =======
 
-- Pokud má mít pravidlo doplňující nastavení (například konfigurovatelný seznam povolených přípon výjimek), ohlásí vedle požadavku také **parametr**, tedy další rozhodnutí, které chování pouze upřesňuje a jehož hodnoty pravidlo přečte v metodě `configure()`. Jak na to a jaké obory hodnot existují, popisuje stránka [Pravidlo do detailu |rule-contract].
-- Naše pravidlo poznává výjimku jednoduše podle názvu končícího na `Exception`. Pokud potřebujete stoprocentní jistotu dědičnosti, sáhněte po analýze `NameResolver`, která název spolehlivě přeloží podle importů a jmenného prostoru; dostupné analýzy popisuje [PhpSyntax |phpsyntax:analyses].
+- Pokud má mít pravidlo doplňující nastavení (například konfigurovatelný seznam povolených přípon výjimek), ohlásí vedle požadavku také **parametr**, tedy další rozhodnutí, které chování pouze upřesňuje a jehož hodnoty pravidlo přečte v metodě `configure()`. Jak na to, jaké obory hodnot existují a co všechno musí pravidlo dodržet, popisuje stránka [Pravidlo do detailu |rule-contract].
+- Naše pravidlo poznává výjimku jednoduše podle názvu končícího na `Exception`. Pokud potřebujete víc, sáhněte po analýze `NameResolver`, která název spolehlivě přeloží podle importů a jmenného prostoru; dostupné analýzy popisuje [PhpSyntax |phpsyntax:analyses].
 - Pravidla hlídající mezery, odsazení a zalomení řádků se píší odlišně, namísto metody `enter()` využívají deklarativní nároky: [Pravidla pro bílé znaky |whitespace-rules].
 - Pokud přepisujete existující sniff z CodeSnifferu nebo fixer z PHP CS Fixeru, oceníte praktického průvodce [Přepis pravidla z jiného nástroje |porting-rules].
 
