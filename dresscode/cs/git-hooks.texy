@@ -8,7 +8,7 @@ Pre-commit hook o šesti řádcích shellu zkontroluje styl PHP kódu přesně v
 Hook pre-commit
 ===============
 
-Do commitu nejde soubor z disku, ale jeho obsah v indexu, a po `git add -p` se ty dva liší. Hook proto bere obsah z indexu a předává ho přepínačem `--stdin`; formát `lines` k tomu vypíše jeden řádek na nález, a když je čisto, nic:
+Do commitu nejde soubor z disku, ale jeho obsah v indexu, tedy to, co jste do commitu přidali příkazem `git add`. Po `git add -p`, které přidá jen část změn souboru, se ty dva liší. Hook proto bere obsah z indexu a předává ho přepínačem `--stdin`; formát `lines` k tomu vypíše jeden řádek na nález, a když je čisto, nic:
 
 ```shell
 #!/bin/sh
@@ -19,18 +19,20 @@ done
 exit $status
 ```
 
-Uložte jako `.git/hooks/pre-commit` a nastavte spustitelný bit. Když je vše v pořádku, hook nic nevypíše a commit projde; jinak vypíše každé porušení na jeden řádek s cestou, řádkem, zprávou a cestou rozhodnutí a commit zastaví:
+Uložte jako `.git/hooks/pre-commit` a udělejte ho spustitelným: `chmod +x .git/hooks/pre-commit`. Máte-li DressCode nainstalovaný v projektu, napište ve skriptu místo `dresscode` cestu `vendor/bin/dresscode`.
+
+Když je vše v pořádku, hook nic nevypíše a commit projde; jinak vypíše každé porušení na jeden řádek s cestou, řádkem, zprávou a cestou rozhodnutí a commit zastaví:
 
 /--pre .[terminal]
 src/Cart.php:5:5: error: The import of `Gateway` is unused. [imports.unused]
 src/Cart.php:15:21: error: A plain string must be written with single quotes. [literals.quotes]
 \--
 
-Díky `--skip-excluded` hook přeskočí soubor, který konfigurace vylučuje v `excludePaths` nebo který neleží v jejích `paths`; bez něj by se se `--stdin` zkontroloval i ten.
+Díky `--skip-excluded` hook přeskočí soubor, který konfigurace vylučuje v `excludePaths` nebo který neleží v jejích `paths`. Bez něj by se zkontroloval i ten: DressCode zkontroluje kód ze standardního vstupu i soubor zadaný jménem, i když ho konfigurace vylučuje.
 
 Kdo chce hook, který rovnou opravuje, pustí `fix` nad pracovním stromem a opravené soubory přidá do indexu. Je to pohodlné, ale znamená to, že commit obsahuje změny, které vývojář neviděl. Mně je bližší první varianta: hook jen hlásí a opravu si pustím vědomě.
 
-S nástrojem `pre-commit` je to jeden záznam v konfiguraci. Nástroj předává DressCode jména souborů, a proto záznam potřebuje `--skip-excluded`, jinak by zkontroloval i soubor, který konfigurace vylučuje v `excludePaths`:
+S nástrojem `pre-commit` je to jeden záznam v konfiguraci. Nástroj předává DressCode jména souborů, a tak i tady patří k příkazu `--skip-excluded`:
 
 ```yaml
 repos:

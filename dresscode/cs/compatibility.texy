@@ -8,7 +8,7 @@ Minoritní verze DressCode smí do standardu přidat nové rozhodnutí, a `fix` 
 Standardy a sady
 ================
 
-Platí to pro standardy i sady a je to záměr: standard popisuje styl, ne seznam pravidel zmrazený ke dni instalace. Když se DressCode naučí hlídat další kus stylu, který standard předepisuje, dostanete ho s aktualizací.
+Minoritní verze smí přidat rozhodnutí do standardu i do sady, a je to záměr: standard popisuje styl, ne seznam pravidel zmrazený ke dni instalace. Když se DressCode naučí hlídat další kus stylu, který standard předepisuje, dostanete ho s aktualizací.
 
 Kdo chce mít změny pod kontrolou, má dvě cesty. Verzi DressCode zamkne v `composer.lock` a aktualizaci pustí vědomě, s diffem, který přinese. Nebo rozhodnutí, které mu nesedí, nastaví v konfiguraci na `keep`; hodnota z konfigurace přebije každý preset, i ten, který rozhodnutí dostal až v nové verzi. Co v konfiguraci stojí, se nezmění bez vašeho zásahu.
 
@@ -26,13 +26,27 @@ Formát `lines` drží svou gramatiku, jeden řádek na nález ve tvaru `cesta:�
 Veřejné API
 ===========
 
-Co je veřejné API, popisuje stránka [Rozšiřování DressCode |extending#Co je veřejné API]. Pro to, co tam stojí, platí:
+Na tyhle třídy se pravidlo, plugin i program, který DressCode vkládá do sebe, může spolehnout mezi minoritními verzemi:
+
+- **psaní pravidla**: `Rule` s potomky `NodeRule` a `GapRule`, `RuleInfo`, `RuleContext`, `Claim`, `Space`, `Line`, `Gap`, `LineSplits`, `Style` s podobou importů `ImportStyle`, `Violation` a výčty `Stage`, `Severity`, `Tristate`, `Risk` a `DecisionKind`;
+- **rozhodnutí**: `Decision`, `Domain` s obory v `Domains\` (`Words`, `Shapes`, `Count`, `Flag`, `Names`, `Text`, `GrammarEntry`, `Map`), hodnoty `Values` a `Value` s vrstvou, která hodnotu určila (`Config\Layer`, `Config\LayerKind`), a katalog `Config\Catalogue`;
+- **konfigurace**: `Config`, `Profile`, `Override`, `Plugin` a `PluginManifest`; presety jsou soubory NEON a jejich jména;
+- **pomocníci pravidel**: `GlobalCalls` (kterou globální funkci volání volá), `CodeWriter` (kód zapsaný v podobě, jakou soubor má), `QualifiedNames` (dvě poloviny plně kvalifikovaného jména) a gramatika map v `Upgrading\` (`MemberMap`, `MemberMapGrammar`, `MemberMapEntry`, `MemberPattern`, `MemberMapMatch`, `ArgumentPattern`, `ArgumentPatternItem`, `ArgumentBindings`, `FunctionPattern`); vestavěná pravidla v `Rules\` jen jménem a jmenným prostorem třídy, aby je šlo jmenovat v konfiguraci, jejich metody veřejné nejsou;
+- **analýzy a testování**: všechno v `Analyses\` kromě `Registry`, `PhpStan`, `Declarations`, `PhpSymbolsData` a `PhpSignaturesData`, dále `Testing\RuleTester` a `Testing\UpgradingTester` i s jejich výjimkou `Testing\TestFailure` a výsledek souboru `FileResult`, který vrací `UpgradingTester::runSample()`;
+- **příkazová řádka**: `Console\Application` pro program, který chce běh vložit do sebe (viz [DressCode uvnitř vlastního nástroje |extending#DressCode uvnitř vlastního nástroje]);
+- **výjimky**: `ConfigurationException`, `RuleException`, `ConvergenceException`;
+- z knihovny [PhpSyntax |phpsyntax:] všechno, co není označené `@internal`: `Parser`, `Lexer`, `Printer`, `Node`, `Token`, `Trivia`, uzly, analýzy, `Style`, `Indentation`, výčty a `ParseException`.
+
+Co je označené `@internal`, se může změnit kdykoli: jádro, načítání a řešení konfigurace, zbytek příkazové řádky, výstupní formáty a pomocníci, které si vestavěná pravidla sdílejí jen mezi sebou. Program, který chce DressCode spustit, ho proto spouští z příkazové řádky, nebo přes `Console\Application`. Oba seznamy hlídá test, takže kvůli třídě, která není ani v jednom, testy selžou, místo aby se nedopatřením stala veřejným API.
+
+Některé veřejné třídy vytváří jen jádro: `FileResult`, `ImportStyle`, `LineSplits` nebo `MemberMapMatch` pravidlo čte, ale nevytváří, a jejich konstruktor je proto `@internal`.
+
+Pro všechno, co je veřejné, platí:
 
 - **Jména parametrů jsou kontrakt.** Metody se volají i s pojmenovanými argumenty, a tak se parametr v minoritní verzi nepřejmenuje.
 - **Veřejný výčet smí přibrat case.** `Severity` nebo `Risk` mohou v minoritní verzi dostat novou hodnotu. `match` nad nimi v pravidle nebo pluginu proto potřebuje větev `default`.
 - **Nové třídy uzlů.** Strom PhpSyntaxu může v minoritní verzi dostat nový uzel pro novou syntaxi PHP, a tak `match` nad třídami uzlů potřebuje `default` taky.
 - **Pořadí pravidel se negarantuje.** Pravidla běží v pořadí registrace, ale to se v minoritní verzi změnit smí; pravidlo nesmí počítat s tím, že jiné pravidlo běží před ním nebo po něm. Co si pravidla předávají, je rozhodnutí, styl běhu nebo analýza souboru, viz [Pravidlo do detailu |rule-contract].
 
-Třída nebo metoda označená `@internal` k veřejnému API nepatří a změnit se smí kdykoli.
-
+{{maintitle: Zpětná kompatibilita DressCode: co se mezi verzemi nezmění}}
 {{description: Na co se mezi verzemi DressCode můžete spolehnout: co smí minoritní verze změnit ve standardech a sadách, ve výstupu pro nástroje a ve veřejném API.}}

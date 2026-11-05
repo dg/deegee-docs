@@ -10,25 +10,14 @@ Two moves have a page of their own: from Nette 2.4 to [Nette 3 |upgrade-to-nette
 Installation
 ============
 
+To upgrade an application that still runs on Nette 3 or on PHP older than 8.4, install DressCode globally, because DressCode itself needs PHP 8.4 and `nette/utils` 4.1 (see [Where DressCode Runs |upgrade#Where DressCode Runs]):
+
 ```shell
-composer require --dev dresscode/upgrade-nette phpstan/phpstan
-vendor/bin/dresscode upgrade today
+composer global require dresscode/dresscode dresscode/upgrade-nette phpstan/phpstan
+dresscode upgrade today
 ```
 
-These two lines are enough: `upgrade today` finds the data and the rules of the package on its own, needs no configuration, and leaves the style of the code as it is. [Upgrading Code |upgrade] describes how to go one major version at a time and what to do with what is left. The data of each library applies only when the project uses that library, and only for the versions the project has reached. Installed into the project like this, DressCode needs the project to run on PHP 8.4 to 8.6; see [Installation |getting-started#Installation].
-
-If you want every check to catch the old API too, add three things to the configuration: the types, the set `deprecations`, and the name of the package, which enables its rules in the section `nette`, as described in [How Upgrading Libraries Works |upgrading-libraries#Enabling It in the Configuration]:
-
-```neon
-typeAnalysis: phpstan
-
-use:
-	- nette           # your standard
-	- deprecations
-	- upgrade-nette
-```
-
-Together with the data, the set `deprecations` turns on the map `nette.flagsAsNamedArguments`, which converts flags to named arguments. The data also turns on two decisions, one for link destinations and one for component hooks: `nette.linkArguments` from `nette/application` 3.3 and `nette.monitorCallbacks` from `nette/component-model` 3.0. You do not have to add them to the configuration, and `upgrade today` runs them too. If you do not want one of them, turn it off in the section `nette` with the value `keep`.
+These two lines are enough: `upgrade today` finds the data and the rewrites of the package on its own, needs no configuration, and leaves the style of the code as it is. The data of each library applies only when the project uses that library, and only for the versions the project [has reached |upgrade#Lower Bounds Decide]. [Upgrading Code |upgrade] describes how to go one major version at a time and what to do with what is left. A project that already runs on PHP 8.4 to 8.6 and on the current versions can also add the package as a development dependency, `composer require --dev dresscode/upgrade-nette phpstan/phpstan`, and then run `vendor/bin/dresscode upgrade today`.
 
 
 What Gets Fixed
@@ -71,12 +60,10 @@ What the package fixes:
 - **renamed parameters** in calls with named arguments: `setExpiration(time: ...)` to `setExpiration(expire: ...)`, `Arrays::map(callback: ...)` to `Arrays::map(transformer: ...)`, also in `parent::__construct()` of a child class,
 - **the default value after `??`**: `getParameter('page', 1)` to `getParameter('page') ?? 1`, and the same for `getQuery()`, `getPost()`, `getCookie()`, `getHeader()` and `getOption()`,
 - **magic properties** to getters and setters: `$form->action`, `$control->caption`, `$section->user`, `$section['user']`,
-- **flags** to named arguments: `Json::encode($value, Json::PRETTY)` and `Json::decode()`, `Strings::match()`, `matchAll()`, `split()` and `Arrays::grep()` with the constants `PREG_*`, `Neon::encode()` with `Neon::BLOCK`, the router's `add()`, `prepend()` and `addRoute()` with `Router::ONE_WAY`, `User::setExpiration()` with `IUserStorage::CLEAR_IDENTITY`, and the Tester's `Job::run()` with `RUN_ASYNC`,
+- **flags** to named arguments: `Json::encode($value, Json::PRETTY)`, `Strings::match()` and other functions with the constants `PREG_*`, `Neon::encode()` with `Neon::BLOCK`, the router with `Router::ONE_WAY`,
 - **calls of a different shape**: `addUpload($name, $label, true)` to `addMultiUpload()`, `getValues(true)` to `getValues('array')`, `Callback::closure()` to `Closure::fromCallable()`,
 - **annotations** to attributes: `@persistent` and `@crossOrigin` in presenters, `@filter` and `@function` in Latte template parameter classes, and the attribute `#[CrossOrigin]` to `#[Requires(sameOrigin: false)]`,
 - **the component hooks** `attached()` and `detached()` to callbacks of `monitor()` in the constructor, and **the query string and fragment in a link destination**, `link('Product:show?id=1#reviews')`, to arguments.
-
-The map `nette.flagsAsNamedArguments` rewrites the flags according to the data; the decisions `nette.monitorCallbacks` and `nette.linkArguments` rewrite the hooks and the link destinations. Their rules come with the package. The rules of the DressCode engine do the rest, following the data.
 
 
 What Is Left to You
@@ -89,7 +76,25 @@ Method `Nette\Http\UrlScript::setPath()` is forbidden: the class is immutable; t
 Constant `Nette\Application\IRouter::SECURED` is forbidden: write the protocol, `https://`, into the mask of the route.
 ```
 
-What a library only quietly marks as deprecated is not in the data. With the types, DressCode reports it anyway, and where the annotation names the replacement, it rewrites the code through `upgrading.declarations.deprecatedMember`. The data does not capture changes in behavior, in NEON configuration or in the syntax of Latte templates at all; you will find those in the upgrade guides of the individual libraries.
+What a library only quietly marks as deprecated is not in the data. With the types, DressCode reports it anyway, and where the annotation names the replacement, it rewrites the code. The data does not capture changes in behavior, in NEON configuration or in the syntax of Latte templates at all; you will find those in the upgrade guides of the individual libraries.
+
+
+Keeping the Old API from Coming Back
+====================================
+
+If you want every check to catch the old API too, for example in continuous integration, add three things to the configuration: the types, the set `deprecations`, and the name of the package, which enables its rewrites in the section `nette` (see [Upgrading Code |upgrade#Keeping the Old API from Coming Back]):
+
+```neon
+typeAnalysis: phpstan
+
+use:
+	- nette           # your standard
+	- deprecations
+	- upgrade-nette
+```
+
+.[note]
+Together with the data, the set `deprecations` turns on the map `nette.flagsAsNamedArguments`, which converts flags to named arguments. The data also turns on the decisions for link destinations and for component hooks, `nette.linkArguments` from `nette/application` 3.3 and `nette.monitorCallbacks` from `nette/component-model` 3.0, so you do not have to add them to the configuration, and `upgrade today` runs them too. If you do not want one of them, turn it off in the section `nette` with the value `keep`.
 
 
 What the Package Covers

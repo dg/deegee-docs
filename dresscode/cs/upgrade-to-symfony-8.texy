@@ -4,7 +4,7 @@ Přechod na Symfony 8
 .[perex]
 V Symfony 8 se z `$application->add()` stalo `addCommand()`, constraint už nebere pole voleb a místo `#[TaggedIterator]` se píše `#[AutowireIterator]`. Symfony 8.0 odstranilo, co řada 7.x zavrhla, a vyžaduje PHP 8.4. Na upgrade ze Symfony 7.4 na 8 vás DressCode s balíčkem `dresscode/upgrade-symfony` připraví ještě na 7.4: přepíše váš kód na nové API a po přechodu pokračuje tím, co zavrhlo Symfony 8.1.
 
-Data balíčku nesou 217 změn, které Symfony zavrhlo ve verzích 7.1 až 7.4 a ve verzi 8.0 odstranilo: 152 z nich DressCode přepíše sám a zbylých 65 ohlásí. Symfony 7.4, které vyšlo spolu s 8.0 na konci listopadu 2025, má podle [UPGRADE-8.0.md |https://github.com/symfony/symfony/blob/8.0/UPGRADE-8.0.md] stejné funkce, a tak všechny náhrady najdete už v něm.
+Data balíčku nesou 217 změn, které Symfony zavrhlo ve verzích 7.1 až 7.4 a ve verzi 8.0 odstranilo: 152 z nich DressCode přepíše sám a zbylých 65 ohlásí. Symfony 7.4 má podle [UPGRADE-8.0.md |https://github.com/symfony/symfony/blob/8.0/UPGRADE-8.0.md] stejné funkce, a tak všechny náhrady najdete už v něm.
 
 
 Jak to vypadá
@@ -82,6 +82,28 @@ function nameConstraints(): array
 Čtyři změny ze tří verzí Symfony 7: z `#[TaggedIterator]` je `#[AutowireIterator]` (7.1); metoda `getDefaultName()` se přestěhovala do atributu `#[AsCommand]` a volby constraintů se staly pojmenovanými argumenty (7.3); z `add()` je `addCommand()` (7.4). Importy obou atributů DressCode přepsal také a kód dál běží na 7.4.
 
 
+Krok za krokem
+==============
+
+Balíčky Symfony se zvedají všechny najednou, a tak je v `composer.json` zvednete sami a kód přepíše `dresscode upgrade today`. DressCode potřebuje PHP 8.4. Pokud vaše aplikace na Symfony 7.4 běží na starším PHP, nainstalujte DressCode globálně, s PHPStanem a s daty pro Symfony:
+
+```shell
+composer global require dresscode/dresscode dresscode/upgrade-symfony phpstan/phpstan
+```
+
+Na PHP 8.4 a novějším může být vývojovou závislostí projektu, jak ukazuje [Instalace |upgrading-symfony#Instalace].
+
+1. Začněte na Symfony 7.4 s čistým pracovním stromem. Pusťte `dresscode upgrade today`, a pokud to poradí, ještě jednou. Projděte, co ohlásí, pusťte testy a PHPStan a commitněte.
+2. Zvedněte `require.php` aspoň na 8.4. Další běh `upgrade today` pak opraví nebo ohlásí i to, co PHP zavrhlo do verze 8.4, viz [Přechod na novější PHP |upgrading-php].
+3. Zvedněte balíčky Symfony v `composer.json` na `8.0.*`; se Symfony Flex i `extra.symfony.require`. Pusťte `composer update "symfony/*" -W --prefer-lowest` a znovu `dresscode upgrade today`, pak pusťte testy a commitněte.
+4. Stejně pokračujte na `8.1.*`. Teprve teď DressCode přepíše, co zavrhlo 8.1, třeba základní třídu `Extension` rozšíření bundlu.
+
+.[warning]
+Verzi každého balíčku DressCode čte z jeho omezení v `composer.json`. Když má balíček Symfony v `composer.json` jen `*` a verzi nechává na `extra.symfony.require`, DressCode dolní mez nevidí a změny toho balíčku jen ohlásí. Napište verzi do omezení, třeba `7.4.*`.
+
+Proč `--prefer-lowest` a proč po jedné verzi, vysvětluje [Upgrade kódu |upgrade#Po jedné hlavní verzi, ručně].
+
+
 Co se přepíše
 =============
 
@@ -118,7 +140,7 @@ Symfony 8.1 zavrhlo dalších 37 věcí a 22 z nich DressCode přepíše. Upla
 | `new ValidatorExtension($validator, false)` | `new ValidatorExtension($validator)` | `symfony/form` 8.1 |
 | `mirror($source, $target, options: ['copy_on_windows' => $follow])` | `mirror($source, $target, options: ['follow_symlinks' => $follow])` | `symfony/filesystem` 8.1 |
 
-Symfony 8.2 má vyjít v listopadu 2026 ([Symfony 8.2 |https://symfony.com/releases/8.2]). Data už nesou šest změn z jeho [UPGRADE-8.2.md |https://github.com/symfony/symfony/blob/8.2/UPGRADE-8.2.md] a DressCode je uplatní, jakmile projekt začne vyžadovat 8.2.
+Data už nesou i šest změn, které Symfony 8.2 ohlásilo v [UPGRADE-8.2.md |https://github.com/symfony/symfony/blob/8.2/UPGRADE-8.2.md], a DressCode je uplatní, jakmile projekt začne vyžadovat 8.2.
 
 
 Co se jen ohlásí
@@ -141,44 +163,22 @@ Method `Symfony\Component\Security\Core\User\UserInterface::eraseCredentials()` 
 | `Bundle::registerCommands()` | každý příkaz jako služba s `#[AsCommand]` nebo s tagem `console.command` | `symfony/http-kernel` 8.1 |
 | `ConstraintValidatorInterface::validate()` | `validateInContext()`, které bere i kontext validace | `symfony/validator` 8.1 |
 
-Takové místo potvrdíte komentářem `// dresscode:ignore <rozhodnutí> -- <důvod>`, nebo ho přepíšete; podrobnosti najdete v kapitole [Ruční úkoly po cestě |upgrade#Ruční úkoly po cestě]. Změny konfigurace v YAMLu, šablon Twig a chování data nezachytí; vypisuje je [UPGRADE-8.0.md |https://github.com/symfony/symfony/blob/8.0/UPGRADE-8.0.md].
+Takové místo potvrdíte komentářem `// dresscode:ignore <rozhodnutí> -- <důvod>`, nebo ho přepíšete; podrobnosti najdete v kapitole [Ruční úkoly po cestě |upgrade-plan#Ruční úkoly po cestě]. Změny konfigurace v YAMLu, šablon Twig a chování data nezachytí; vypisuje je [UPGRADE-8.0.md |https://github.com/symfony/symfony/blob/8.0/UPGRADE-8.0.md].
 
 
 Symfony 7.4 LTS, nebo 8.x
 =========================
 
-Symfony 7.4 je verze s dlouhodobou podporou (LTS). Opravy chyb dostává do listopadu 2028, bezpečnostní opravy do listopadu 2029 a běží na PHP 8.2 ([Symfony 7.4 |https://symfony.com/releases/7.4]). Verze 8.x potřebují PHP 8.4 a podporu mají kratší: u 8.0 skončila v červenci 2026, 8.1 je podporovaná do ledna 2027 ([Symfony 8.1 |https://symfony.com/releases/8.1]).
+Symfony 7.4 je verze s dlouhodobou podporou (LTS) a běží na PHP 8.2, kdežto verze 8.x potřebují PHP 8.4 a podporu mají kratší; jak dlouho, říká [Symfony 7.4 |https://symfony.com/releases/7.4].
 
 První krok je v obou případech stejný. Na 7.4 přepíše `dresscode upgrade today` všechno, co zavrhly verze 7.1 až 7.4, takže aplikace, která na LTS zůstane, má kód psaný pro API Symfony 8, nakolik data sahají, a pozdější přechod na 8.x je menší krok.
-
-
-Krok za krokem
-==============
-
-DressCode potřebuje PHP 8.4. Pokud vaše aplikace na Symfony 7.4 běží na starším PHP, nainstalujte DressCode globálně, s PHPStanem a s daty pro Symfony:
-
-```shell
-composer global require dresscode/dresscode dresscode/upgrade-symfony phpstan/phpstan
-```
-
-Na PHP 8.4 a novějším může být vývojovou závislostí projektu, jak ukazuje [Instalace |upgrading-symfony#Instalace].
-
-1. Začněte na Symfony 7.4 s čistým pracovním stromem. Pusťte `dresscode upgrade today`, a pokud to poradí, ještě jednou. Projděte, co ohlásí, pusťte testy a PHPStan a commitněte.
-2. Zvedněte `require.php` aspoň na 8.4. Další běh `upgrade today` pak opraví nebo ohlásí i to, co PHP zavrhlo do verze 8.4, viz [Přechod na novější PHP |upgrading-php].
-3. Zvedněte balíčky Symfony v `composer.json` na `8.0.*`; se Symfony Flex i `extra.symfony.require`. Pusťte `composer update "symfony/*" -W --prefer-lowest` a znovu `dresscode upgrade today`, pak pusťte testy a commitněte.
-4. Stejně pokračujte na `8.1.*`. Teprve teď DressCode přepíše, co zavrhlo 8.1, třeba základní třídu `Extension` rozšíření bundlu.
-
-.[warning]
-Verzi každého balíčku DressCode čte z jeho omezení v `composer.json`. Když má balíček Symfony v `composer.json` jen `*` a verzi nechává na `extra.symfony.require`, DressCode dolní mez nevidí a změny toho balíčku jen ohlásí. Napište verzi do omezení, třeba `7.4.*`.
-
-Proč `--prefer-lowest` a proč po jedné verzi, vysvětluje [Upgrade kódu krok za krokem |upgrade#Po jedné hlavní verzi, ručně].
 
 
 Kam dál
 =======
 
 - [Symfony |upgrading-symfony], všechny komponenty, které balíček pokrývá, i starší verze.
-- [Upgrade kódu krok za krokem |upgrade], celý postup s testy a commity.
+- [Upgrade kódu |upgrade], `upgrade today` podrobně, a [plán upgradu |upgrade-plan] s testy a commity.
 - [Přechod na novější PHP |upgrading-php], protože Symfony 8 potřebuje PHP 8.4.
 
 {{maintitle: Přechod ze Symfony 7.4 na 8: automatický přepis kódu}}

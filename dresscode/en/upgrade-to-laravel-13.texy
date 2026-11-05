@@ -2,7 +2,7 @@ Upgrade to Laravel 13
 *********************
 
 .[perex]
-The official [upgrade guide |https://laravel.com/docs/13.x/upgrade] estimates ten minutes for the move from Laravel 12 to 13. Laravel 13 was released on March 17, 2026, and in your PHP code it mostly changes names: the middleware `VerifyCsrfToken` is now `PreventRequestForgery`, and `$request->get()` is now `input()`. A queued job can also declare `#[Tries]` and `#[Timeout]` instead of properties. With the package `dresscode/upgrade-laravel`, DressCode makes all eleven API changes by itself, offers the attributes, and tells you what is left to you.
+The official [upgrade guide |https://laravel.com/docs/13.x/upgrade] estimates ten minutes for the move from Laravel 12 to 13. In your PHP code, Laravel 13 mostly changes names: the middleware `VerifyCsrfToken` is now `PreventRequestForgery`, and `$request->get()` is now `input()`. A queued job can also declare `#[Tries]` and `#[Timeout]` instead of properties. With the package `dresscode/upgrade-laravel`, DressCode makes all eleven API changes by itself, offers the attributes, and tells you what is left to you.
 
 
 What It Looks Like
@@ -31,6 +31,27 @@ $this->withoutMiddleware(PreventRequestForgery::class);
 ```
 
 Two of these lines would fail on Laravel 13: the events `JobAttempted` and `QueueBusy` no longer have the properties `$exceptionOccurred` and `$connection`. The other four still work, because Laravel 13 keeps the old names, most of them marked as deprecated. From the types of PHPStan, DressCode knows that `$request` is a request and `$items` a collection, so it rewrites `get()` only where it is called on a request.
+
+
+Step by Step
+============
+
+DressCode runs on PHP 8.4 or newer, while Laravel 13 needs PHP 8.3. If the application runs on PHP 8.4, add DressCode as a development dependency, with PHPStan, which tells it the types:
+
+```shell
+composer require --dev dresscode/upgrade-laravel phpstan/phpstan
+```
+
+If the application still has to be installed on PHP 8.2 or 8.3, install DressCode globally, as described in [Where DressCode Runs |upgrade#Where DressCode Runs].
+
+1. Start with a clean working tree. If `require.php` in `composer.json` still allows PHP 8.2, raise it to 8.3 first; [Upgrading to a newer PHP |upgrading-php] shows how.
+2. If the project has no `dresscode.neon`, write it with `dresscode init`: the plan rewrites the code in the style the configuration keeps, and `upgrade run` does not start without it.
+3. Measure how much work the upgrade takes: `dresscode upgrade estimate laravel/framework 13.0`. The line `Composer` says whether something in `composer.lock` refuses Laravel 13.
+4. Save the plan with the test command: `dresscode upgrade plan laravel/framework 13.0 --save --test-command "vendor/bin/phpunit --log-junit {junit}"`.
+5. Carry it out: `dresscode upgrade run`. The tests run after each step, and a step after which a test newly fails is undone. At the Composer step, DressCode asks whether it may raise `laravel/framework` to `^13.0`.
+6. Go through what is left for you, and run `upgrade run` again until the run ends with `UPGRADED`. Finally, read the upgrade guide for the changes in behavior and configuration.
+
+If you have already raised `laravel/framework` to `^13.0` yourself, a plain `dresscode upgrade today` is enough. [The Upgrade Plan Step by Step |upgrade-plan] describes the whole procedure with tests, commits and manual tasks.
 
 
 What Gets Rewritten
@@ -69,7 +90,7 @@ While `composer.json` allows `^12.0`, DressCode only reports these places, becau
 Laravel 13 Attributes
 =====================
 
-Laravel 13 lets a class declare with an attribute what it used to declare with a property. The [release notes |https://laravel.com/docs/13.x/releases] name the queue attributes `#[Tries]`, `#[Backoff]`, `#[Timeout]` and `#[FailOnTimeout]`, and add that there are more across Eloquent and other parts of the framework. The properties keep working, so the attributes are an offer, not a fix. The data of the package know 33 of them and write them in place of 33 properties and the method `getRouteKeyName()`. You get them with the rest of the data, and the name of the package in `use` adds its two rules, so the configuration is:
+Laravel 13 lets a class declare with an attribute what it used to declare with a property. The [release notes |https://laravel.com/docs/13.x/releases] name the queue attributes `#[Tries]`, `#[Backoff]`, `#[Timeout]` and `#[FailOnTimeout]`, and add that there are more across Eloquent and other parts of the framework. The properties keep working, so the attributes are an offer, not a fix. The data of the package know 33 of them and write them in place of 33 properties and the method `getRouteKeyName()`. You get them with the rest of the data, and the name of the package in `use` also enables its rewrites, so the configuration is:
 
 ```neon
 typeAnalysis: phpstan
@@ -121,7 +142,7 @@ The attributes cover queued jobs, listeners, mailables and notifications (`#[Con
 Property `Illuminate\Contracts\Queue\ShouldQueue::$tries` is replaced by the attribute `#[Illuminate\Queue\Attributes\Tries]`, but the class reads it itself.
 ```
 
-The data also turn on the rule that writes a local scope with the attribute `#[Scope]` of Laravel 12.4 instead of the prefix `scope` in its name. It is a risky fix, because DressCode cannot see a call of `scopePublished()` by its old name in another file, so it waits for `--fix-risky`. The model example on the page [Upgrading Laravel |upgrading-laravel#Laravel 13 Attributes] shows it.
+The data also turn on the rewrite that writes a local scope with the attribute `#[Scope]` of Laravel 12.4 instead of the prefix `scope` in its name. It is a risky fix, because DressCode cannot see a call of `scopePublished()` by its old name in another file, so it waits for `--fix-risky`. The model example on the page [Upgrading Laravel |upgrading-laravel#Models Written the New Way] shows it.
 
 If you do not want the attributes, turn them off in the configuration:
 
@@ -150,31 +171,11 @@ The rest of the [upgrade guide |https://laravel.com/docs/13.x/upgrade] is about 
 - the helper `array_first()` of the package `laravel/helpers`, which can clash with the function of the same name from the polyfill of PHP 8.5; DressCode leaves `array_first()` alone, because it cannot tell which of the two functions a call means, and the guide recommends `Arr::first()`.
 
 
-Step by Step
-============
-
-DressCode runs on PHP 8.4 or newer, while Laravel 13 needs PHP 8.3. If the application runs on PHP 8.4, add DressCode as a development dependency, with PHPStan, which tells it the types:
-
-```shell
-composer require --dev dresscode/upgrade-laravel phpstan/phpstan
-```
-
-If the application still has to be installed on PHP 8.2 or 8.3, install DressCode globally, as described in [Where DressCode Runs |upgrade#Where DressCode Runs].
-
-1. Start with a clean working tree. If `require.php` in `composer.json` still allows PHP 8.2, raise it to 8.3 first; [Upgrading to a newer PHP |upgrading-php] shows how.
-2. Measure how much work the upgrade takes: `dresscode upgrade estimate laravel/framework 13.0`. The line `Composer` says whether something in `composer.lock` refuses Laravel 13.
-3. Save the plan with the test command: `dresscode upgrade plan laravel/framework 13.0 --save --test-command "vendor/bin/phpunit --log-junit {junit}"`.
-4. Carry it out: `dresscode upgrade run`. The tests run after each step, and a step after which a test newly fails is undone. At the Composer step, DressCode asks whether it may raise `laravel/framework` to `^13.0`.
-5. Go through what is left for you, and run `upgrade run` again until the run ends with `UPGRADED`. Finally, read the upgrade guide for the changes in behavior and configuration.
-
-If you have already raised `laravel/framework` to `^13.0` yourself, a plain `dresscode upgrade today` is enough. [Upgrade Your Code Step by Step |upgrade] describes the whole procedure with tests, commits and manual tasks.
-
-
 Where to Go Next
 ================
 
 - [Upgrading Laravel |upgrading-laravel], what the package covers from Laravel 6 on, including `casts()` and `#[Scope]`.
-- [Upgrade Your Code Step by Step |upgrade], the estimate, the plan and the run in detail.
+- [The upgrade plan step by step |upgrade-plan], the estimate, the plan and the run in detail.
 - [Types from PHPStan |phpstan-types], so that methods are rewritten only on the right objects.
 
 {{maintitle: Upgrade Laravel 12 to 13 Automatically}}

@@ -19,7 +19,7 @@ Výjimky z pravidel osobně nemám rád a do kódu je nepíšu; když už, tak v
 
 Vedle nich stojí **baseline**, která není výjimka z rozhodnutí, ale z času: zapíše porušení, která dnes opravit neumíte, a hlásit se pak budou jen nová.
 
-Ať zvolíte kteroukoli úroveň, platí jedna věc: **potlačené porušení se neopraví.** Pravidlo smí kód změnit jen poté, co porušení ohlásilo a hlášení nebylo potlačené, a hlídá to jádro nástroje, ne autor pravidla. Potlačení tedy není jen ticho ve výpisu, ale skutečné vypnutí. Baseline je jiný případ a opravě nebrání nikdy, jak popisuje [její oddíl |#baseline].
+Ať zvolíte kteroukoli úroveň, platí jedna věc: **potlačené porušení se neopraví.** Potlačení není jen ticho ve výpisu, ale skutečné vypnutí. Baseline je jiný případ a opravě nebrání nikdy, jak popisuje [její oddíl |#baseline].
 
 
 Potlačení na řádku
@@ -53,33 +53,13 @@ foreach ($kinds as $kind) {
 }
 ```
 
-Funguje `//`, `#` i `/* */`. Cestu opíšete z výpisu, kde stojí u každého nálezu. Místo ní DressCode přijme i jméno pravidla PHP CS Fixeru nebo PHP_CodeSnifferu, které jeho rozhodnutí pokrývá, a rozumí komentářům `phpcs:ignore`, `phpcs:disable`, `phpcs:enable`, `phpcs:ignoreFile` a anotaci `@phpcsSuppress`, takže kdo přechází z jiného nástroje, nemusí do kódu vůbec sáhnout. Na cesty DressCode je pak přepíše [dresscode migrate suppressions |migration#3. Přepište komentáře]; stejně přepíše i komentář se jménem pravidla ze starší verze DressCode.
+Funguje `//`, `#` i `/* */`. Cestu opíšete z výpisu, kde stojí u každého nálezu. Místo ní DressCode přijme i jméno pravidla PHP CS Fixeru nebo PHP_CodeSnifferu, které jeho rozhodnutí pokrývá, a rozumí komentářům `phpcs:ignore`, `phpcs:disable`, `phpcs:enable`, `phpcs:ignoreFile` a anotaci `@phpcsSuppress`, takže kdo přechází z jiného nástroje, nemusí do kódu vůbec sáhnout. Na cesty DressCode je pak přepíše [dresscode migrate suppressions |migration#comments].
 
 Jméno, které žádnému rozhodnutí neodpovídá, nic nepotlačí, a běh na to upozorní, aby v kódu nezůstal komentář, který jen vypadá, že něco dělá:
 
 /--pre .[terminal]
   Comment `dresscode:ignore noIsNull` names `noIsNull`, which is no decision, section or rule, so it silences nothing.
 \--
-
-Má-li projekt už vlastní komentář, kterým označuje záměr, třeba `// intentionally ==` u porovnání, které se nemá zpřísnit, nemusíte ho přepisovat. Klíč `suppressionComments` přiřadí ke vzoru komentáře rozhodnutí, která na jeho řádku mlčí, jako by tam stálo `dresscode:ignore`:
-
-```neon
-suppressionComments:
-	'~\bintentionally\s+[!=]=~': expressions.comparison.loose
-```
-
-Vzor je regulární výraz i s oddělovači a porovnává se s textem jednoho komentáře, takže `^` znamená jeho začátek. Hodnotou je cesta, sekce nebo jejich seznam. Komentář na konci řádku platí pro řádek, komentář na vlastním řádku pro příkaz pod ním. Standard `nette` takovou mapu nese: `// intentionally ==` umlčí `expressions.comparison.loose` a `// @` umlčí `mistakes.errorSuppression`.
-
-Položka může nést i ukázku komentáře, který vzoru odpovídá, a pak se zapisuje jako mapa:
-
-```neon
-suppressionComments:
-	'~^//\s*@\s+\S~':
-		decisions: mistakes.errorSuppression
-		example: '// @ <why>'
-```
-
-Ukázku DressCode ověří: místo `<why>` dosadí slovo a komentář musí vzoru odpovídat. Formát `agent` ji nabídne agentovi u porušení toho rozhodnutí jako způsob, jak doloženou výjimku zachovat, se skutečným důvodem místo `<why>`; `dresscode config` ji vypíše u vzoru. Vyšší vrstva, která napíše stejný vzor, nahradí celou položku i s ukázkou.
 
 
 Potlačení v bloku
@@ -124,15 +104,31 @@ overrides:
 
 Zbytek konfigurace takový soubor zkontroluje normálně. Celé cesty vynechá `excludePaths`; obojí popisuje stránka [Konfigurace |configuration#Cesty].
 
-Často ale rozhodnutí pro tu cestu nemá zmizet, jen platit s jinou hodnotou: testy mají jiný odstup metod než zdrojový kód, ne žádný. I to umí přepis, který souborům odpovídajícím cestě dá vlastní hodnoty:
+Často ale rozhodnutí pro tu cestu nemá zmizet, jen platit s jinou hodnotou: testy mají jiný odstup metod než zdrojový kód, ne žádný. I to umí přepis, viz [Jiné hodnoty pro část projektu |configuration#Jiné hodnoty pro část projektu].
+
+
+Vlastní komentáře projektu
+==========================
+
+Má-li projekt už vlastní komentář, kterým označuje záměr, třeba `// intentionally ==` u porovnání, které se nemá zpřísnit, nemusíte ho přepisovat. Klíč `suppressionComments` přiřadí ke vzoru komentáře rozhodnutí, která na jeho řádku mlčí, jako by tam stálo `dresscode:ignore`:
 
 ```neon
-overrides:
-	-
-		paths: [tests/**.phpt]
-		blankLines:
-			aroundMethods: 2
+suppressionComments:
+	'~\bintentionally\s+[!=]=~': expressions.comparison.loose
 ```
+
+Vzor je regulární výraz i s oddělovači a porovnává se s textem jednoho komentáře, takže `^` znamená jeho začátek. Hodnotou je cesta, sekce nebo jejich seznam. Komentář na konci řádku platí pro řádek, komentář na vlastním řádku pro příkaz pod ním. Standard `nette` takovou mapu nese: `// intentionally ==` umlčí `expressions.comparison.loose` a `// @` umlčí `mistakes.errorSuppression`.
+
+Položka může nést i ukázku komentáře, který vzoru odpovídá, a pak se zapisuje jako mapa:
+
+```neon
+suppressionComments:
+	'~^//\s*@\s+\S~':
+		decisions: mistakes.errorSuppression
+		example: '// @ <why>'
+```
+
+Ukázku DressCode ověří: místo `<why>` dosadí slovo a komentář musí vzoru odpovídat. Formát `agent` ji nabídne agentovi u porušení toho rozhodnutí jako způsob, jak doloženou výjimku zachovat, se skutečným důvodem místo `<why>`; `dresscode config` ji vypíše u vzoru. Vyšší [vrstva |configuration#Vrstvy], která napíše stejný vzor, nahradí celou položku i s ukázkou.
 
 
 Baseline pro to, co zatím opravit nejde .[#baseline]
@@ -165,7 +161,9 @@ Error: The baseline is generated over code a fix leaves alone: a fix would chang
 See https://dresscode.run/suppressing#baseline
 \--
 
-Rizikové opravy, které mění chování kódu a které projekt nepřijal v klíči [`fixRisky` |configuration#risky-fixes], do baseline patří, protože je nástroj bez vašeho svolení neudělá. Rizikové opravy, o kterých by rozhodly typy nebo `nameResolution`, do ní nepatří: jsou to jen varování a zmizí, jakmile DressCode dodáte, co mu chybí. Přepínač `--only` příkaz `baseline` nemá, protože baseline vzniká z celé konfigurace, ne z několika rozhodnutí.
+Rizikové opravy, které mění chování kódu a které projekt nepřijal v klíči [`fixRisky` |configuration#risky-fixes], do baseline patří, protože je nástroj bez vašeho svolení neudělá.
+
+Rizikové opravy, o kterých by rozhodly [typy z PHPStanu |phpstan-types] nebo jistota o [funkcích ve jmenných prostorech |php-functions-in-namespaces#name-resolution], do ní nepatří: jsou to jen varování a zmizí, jakmile DressCode dodáte, co mu chybí.
 
 Soubor vznikne vedle konfigurace a ve stejném formátu (`.neon` vedle `dresscode.neon`, `.php` vedle `dresscode.php`) a platí hned: pod tímhle jménem ho DressCode najde sám a hlavička výpisu `check` ho ukáže na řádku `Baseline`. Jiné jméno nebo umístění nastavíte klíčem `baseline`. Takový soubor pak musí existovat, jinak `check` skončí chybou konfigurace, aby překlep nebo smazaný soubor potichu nevypnuly baseline:
 
@@ -195,6 +193,5 @@ Baseline nikdy nebrání opravě. Komentář `dresscode:ignore` říká "tady ro
 
 Když nějaké porušení z baseline zmizí, protože ho opravil někdo ručně nebo `fix`, jakmile to šlo, běh upozorní, že položka už ničemu neodpovídá (<code>''1 entry of the baseline no longer matches a violation; regenerate it with `dresscode baseline`.''</code>). Pusťte `fix` a baseline vygenerujte znovu. Běh přitom upozorní jen na položky souborů, které zpracoval, a při `--only` jen na položky rozhodnutí, která běžela, takže kontrola části projektu nehlásí jako zastaralé to, na co se neptala. Baseline se má zmenšovat, a jakmile je prázdná, smažte řádek z konfigurace a soubor s ním.
 
-Baseline z doby, kdy DressCode hlásil po pravidlech, nová verze nepřečte: otisky se počítají jinak, a proto ji odmítne s radou, ať ji vygenerujete znovu. Stačí pustit `fix` a `dresscode baseline`.
-
 {{maintitle: Potlačení nálezu stylu PHP kódu a baseline}}
+{{description: Jak v DressCode umlčet rozhodnutí na řádku, v bloku, v souboru nebo pro celou cestu a jak baseline odloží nálezy, které dnes opravit neumíte.}}

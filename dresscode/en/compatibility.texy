@@ -8,7 +8,7 @@ A minor version of DressCode may add a new decision to a standard, and `fix` wil
 Standards and Sets
 ==================
 
-This applies to standards and sets alike, and it is intentional: a standard describes a style, not a list of rules frozen on the day you installed it. When DressCode learns to check another part of the style a standard prescribes, you get it with the update.
+A minor version may add a decision to a standard or a set, and it does so on purpose: a standard describes a style, not a list of rules frozen on the day you installed it. When DressCode learns to check another part of the style a standard prescribes, you get it with the update.
 
 If you want to keep these changes under control, there are two ways. Lock the version of DressCode in `composer.lock` and update deliberately, reviewing the diff the update brings. Or set the decision you don't like to `keep` in your configuration; a value from the configuration takes precedence over every preset, even one that gains the decision only in a new version. What you write in your configuration does not change unless you change it.
 
@@ -26,13 +26,27 @@ The `lines` format keeps its grammar, one line per finding in the form `path:lin
 Public API
 ==========
 
-The [Extending DressCode |extending#What Is Public API] page describes what the public API is. For everything listed there:
+A rule, a plugin and a program that embeds DressCode can rely on these classes between minor versions:
+
+- **writing a rule**: `Rule` with its subclasses `NodeRule` and `GapRule`, `RuleInfo`, `RuleContext`, `Claim`, `Space`, `Line`, `Gap`, `LineSplits`, `Style` with `ImportStyle` (the shape of imports), `Violation` and the enums `Stage`, `Severity`, `Tristate`, `Risk` and `DecisionKind`;
+- **decisions**: `Decision`, `Domain` with the domains in `Domains\` (`Words`, `Shapes`, `Count`, `Flag`, `Names`, `Text`, `GrammarEntry`, `Map`), the values `Values` and `Value` with the layer that set the value (`Config\Layer`, `Config\LayerKind`), and the catalogue `Config\Catalogue`;
+- **configuration**: `Config`, `Profile`, `Override`, `Plugin` and `PluginManifest`; presets are NEON files and their names;
+- **rule helpers**: `GlobalCalls` (which global function a call calls), `CodeWriter` (code written in the style the file uses), `QualifiedNames` (the two halves of a fully qualified name) and the grammar of the maps in `Upgrading\` (`MemberMap`, `MemberMapGrammar`, `MemberMapEntry`, `MemberPattern`, `MemberMapMatch`, `ArgumentPattern`, `ArgumentPatternItem`, `ArgumentBindings`, `FunctionPattern`); the built-in rules in `Rules\` only by the name and namespace of their class, so that you can name them in the configuration; their methods are not public;
+- **analyses and testing**: everything in `Analyses\` except `Registry`, `PhpStan`, `Declarations`, `PhpSymbolsData` and `PhpSignaturesData`, plus `Testing\RuleTester` and `Testing\UpgradingTester` together with their exception `Testing\TestFailure`, and the file result `FileResult` that `UpgradingTester::runSample()` returns;
+- **command line**: `Console\Application` for a program that wants to embed a run (see [DressCode Inside Your Own Tool |extending#DressCode Inside Your Own Tool]);
+- **exceptions**: `ConfigurationException`, `RuleException`, `ConvergenceException`;
+- from the library [PhpSyntax |phpsyntax:], everything not marked `@internal`: `Parser`, `Lexer`, `Printer`, `Node`, `Token`, `Trivia`, the nodes, the analyses, `Style`, `Indentation`, the enums and `ParseException`.
+
+Anything marked `@internal` can change at any time: the engine, loading and resolving the configuration, the rest of the command line, the output formats, and the helpers that the built-in rules share only among themselves. So a program that wants to run DressCode calls it through the command line or through `Console\Application`. A test guards both lists, so a class that is in neither of them fails the test suite instead of becoming public API by accident.
+
+Some public classes are created only by the engine: a rule reads `FileResult`, `ImportStyle`, `LineSplits` or `MemberMapMatch` but does not create them, so their constructor is `@internal`.
+
+For everything that is public:
 
 - **Parameter names are a contract.** Methods may be called with named arguments, so a parameter is never renamed in a minor version.
 - **A public enum may gain a case.** `Severity` or `Risk` may get a new value in a minor version. A `match` over them in a rule or a plugin therefore needs a `default` arm.
 - **New node classes.** The PhpSyntax tree may get a new node for new PHP syntax in a minor version, so a `match` over node classes needs a `default` too.
 - **The order of rules is not guaranteed.** Rules run in the order they were registered, but that may change in a minor version; a rule must not rely on another rule running before it or after it. Rules pass information to each other only through a decision, the style of the run or an analysis of the file (see [A Rule in Detail |rule-contract]).
 
-A class or method marked `@internal` is not part of the public API and may change at any time.
-
+{{maintitle: DressCode Backward Compatibility: What Stays Between Versions}}
 {{description: What you can rely on between DressCode versions: what a minor version may change in standards and sets, in the output for tools and in the public API.}}

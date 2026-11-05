@@ -19,7 +19,7 @@ Personally, I don't like exceptions to rules and I don't write them into code; i
 
 Alongside them there is the **baseline**: an exception not to a decision but to time. It records the violations you cannot fix today, so that only new ones are reported.
 
-Whichever level you choose, one thing holds: **a suppressed violation is not fixed.** A rule may change the code only after it has reported the violation and the report has not been suppressed, and it is the engine of the tool that enforces this, not the author of the rule. So a suppression is not just silence in the output; it really turns the decision off. The baseline is a different case and never prevents a fix, as [its section |#baseline] describes.
+Whichever level you choose, one thing holds: **a suppressed violation is not fixed.** A suppression is not just silence in the output; it really turns the decision off. The baseline is a different case and never prevents a fix, as [its section |#baseline] describes.
 
 
 Suppressing on a Line
@@ -53,33 +53,13 @@ foreach ($kinds as $kind) {
 }
 ```
 
-`//`, `#` and `/* */` all work. You copy the path from the output, where it appears next to every finding. Instead of the path, DressCode also accepts the name of a PHP CS Fixer or PHP_CodeSniffer rule that its decision covers, and it understands the comments `phpcs:ignore`, `phpcs:disable`, `phpcs:enable`, `phpcs:ignoreFile` and the annotation `@phpcsSuppress`, so if you are migrating from another tool, you do not have to touch the code at all. [dresscode migrate suppressions |migration#3. Rewrite the Comments] then rewrites them to DressCode paths; it also rewrites a comment with a rule name from an older version of DressCode.
+`//`, `#` and `/* */` all work. You copy the path from the output, where it appears next to every finding. Instead of the path, DressCode also accepts the name of a PHP CS Fixer or PHP_CodeSniffer rule that its decision covers, and it understands the comments `phpcs:ignore`, `phpcs:disable`, `phpcs:enable`, `phpcs:ignoreFile` and the annotation `@phpcsSuppress`, so if you are migrating from another tool, you do not have to touch the code at all. [dresscode migrate suppressions |migration#comments] then rewrites them to DressCode paths.
 
 A name that matches no decision suppresses nothing, and the run warns about it, so that the code does not keep a comment that only looks as if it does something:
 
 /--pre .[terminal]
   Comment `dresscode:ignore noIsNull` names `noIsNull`, which is no decision, section or rule, so it silences nothing.
 \--
-
-Where the project already has its own comment to mark intent, for example `// intentionally ==` next to a comparison that should not be made strict, you do not have to rewrite it. The `suppressionComments` key maps a comment pattern to the decisions that stay silent on its line, just as if `dresscode:ignore` were there:
-
-```neon
-suppressionComments:
-	'~\bintentionally\s+[!=]=~': expressions.comparison.loose
-```
-
-The pattern is a regular expression including its delimiters, and it is matched against the text of a single comment, so `^` means the start of the comment. The value is a path, a section or a list of them. A comment at the end of a line applies to that line, a comment on a line of its own to the statement below it. The `nette` standard includes such a map: `// intentionally ==` silences `expressions.comparison.loose` and `// @` silences `mistakes.errorSuppression`.
-
-An item can also carry an example of a comment the pattern accepts, and then it is written as a map:
-
-```neon
-suppressionComments:
-	'~^//\s*@\s+\S~':
-		decisions: mistakes.errorSuppression
-		example: '// @ <why>'
-```
-
-DressCode verifies the example: it puts a word in place of `<why>`, and the comment must match the pattern. For a violation of that decision, the `agent` format offers it to the agent as a way to keep a justified exception, with the real reason in place of `<why>`; `dresscode config` prints it next to the pattern. A higher layer that writes the same pattern replaces the whole item, including the example.
 
 
 Suppressing in a Block
@@ -124,15 +104,31 @@ overrides:
 
 The rest of the configuration still checks such files as usual. `excludePaths` skips whole paths; both are described on the [Configuration |configuration#Paths] page.
 
-Often, though, the decision should not disappear for that path, just apply with a different value: tests may use different spacing between methods than the source code, but they still have some. An override can do this too, giving its own values to the files that match the path:
+Often, though, the decision should not disappear for that path, just apply with a different value: tests may use different spacing between methods than the source code, but they still have some. An override can do this too, see [Different Values for Part of the Project |configuration#Different Values for Part of the Project].
+
+
+Comments of Your Own
+====================
+
+Where the project already has its own comment to mark intent, for example `// intentionally ==` next to a comparison that should not be made strict, you do not have to rewrite it. The `suppressionComments` key maps a comment pattern to the decisions that stay silent on its line, just as if `dresscode:ignore` were there:
 
 ```neon
-overrides:
-	-
-		paths: [tests/**.phpt]
-		blankLines:
-			aroundMethods: 2
+suppressionComments:
+	'~\bintentionally\s+[!=]=~': expressions.comparison.loose
 ```
+
+The pattern is a regular expression including its delimiters, and it is matched against the text of a single comment, so `^` means the start of the comment. The value is a path, a section or a list of them. A comment at the end of a line applies to that line, a comment on a line of its own to the statement below it. The `nette` standard includes such a map: `// intentionally ==` silences `expressions.comparison.loose` and `// @` silences `mistakes.errorSuppression`.
+
+An item can also carry an example of a comment the pattern accepts, and then it is written as a map:
+
+```neon
+suppressionComments:
+	'~^//\s*@\s+\S~':
+		decisions: mistakes.errorSuppression
+		example: '// @ <why>'
+```
+
+DressCode verifies the example: it puts a word in place of `<why>`, and the comment must match the pattern. For a violation of that decision, the `agent` format offers it to the agent as a way to keep a justified exception, with the real reason in place of `<why>`; `dresscode config` prints it next to the pattern. A higher [layer |configuration#Layers] that writes the same pattern replaces the whole item, including the example.
 
 
 A Baseline for What Cannot Be Fixed Yet .[#baseline]
@@ -165,7 +161,9 @@ Error: The baseline is generated over code a fix leaves alone: a fix would chang
 See https://dresscode.run/suppressing#baseline
 \--
 
-Risky fixes that change the behavior of the code and that the project has not accepted in the [`fixRisky` |configuration#risky-fixes] key belong in the baseline, because the tool does not make them without your permission. Risky fixes that types or `nameResolution` would decide do not belong in it: they are only warnings, and they disappear as soon as you give DressCode what it is missing. The `baseline` command has no `--only` option, because a baseline comes from the whole configuration, not from a few decisions.
+Risky fixes that change the behavior of the code and that the project has not accepted in the [`fixRisky` |configuration#risky-fixes] key belong in the baseline, because the tool does not make them without your permission.
+
+Risky fixes that [types from PHPStan |phpstan-types] or the certainty about [functions in namespaces |php-functions-in-namespaces#name-resolution] would decide do not belong in it: they are only warnings, and they disappear as soon as you give DressCode what it is missing.
 
 The file is created next to the configuration and in the same format (`.neon` next to `dresscode.neon`, `.php` next to `dresscode.php`), and it takes effect at once: DressCode finds it under this name on its own, and the header of the `check` output shows it on the `Baseline` line. You set a different name or location with the `baseline` key. Such a file must then exist; otherwise `check` stops with a configuration error, so that a typo or a deleted file never switches the baseline off silently:
 
@@ -195,6 +193,5 @@ A baseline never prevents a fix. A `dresscode:ignore` comment says "the decision
 
 When a violation listed in the baseline disappears from the code, because someone fixed it or `fix` fixed it as soon as it could, the run points out that the entry no longer matches anything (<code>''1 entry of the baseline no longer matches a violation; regenerate it with `dresscode baseline`.''</code>). Run `fix` and generate the baseline again. The run points out only the entries of the files it processed, and with `--only` only the entries of the decisions that ran, so a check of part of the project does not report entries it did not check as stale. A baseline should shrink, and once it is empty, delete the file and its line in the configuration.
 
-The new version cannot read a baseline from the time when DressCode reported findings per rule: the fingerprints are computed differently, so it rejects the file and advises you to generate it again. Just run `fix` and `dresscode baseline`.
-
 {{maintitle: Ignore a PHP Code Style Finding or Add a Baseline}}
+{{description: How to silence a DressCode decision on a line, in a block, in a file or for a whole path, and how a baseline sets aside findings you cannot fix today.}}

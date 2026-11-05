@@ -10,25 +10,17 @@ Přechody ze Symfony 6 na [Symfony 7 |upgrade-to-symfony-7] a ze Symfony 7.4 na
 Instalace
 =========
 
+Aplikaci, která ještě běží na PHP starším než 8.4, upgradujte s DressCode nainstalovaným globálně, protože sám potřebuje PHP 8.4 (viz [Kde DressCode běží |upgrade#Kde DressCode běží]):
+
 ```shell
-composer require --dev dresscode/upgrade-symfony phpstan/phpstan
-vendor/bin/dresscode upgrade today
+composer global require dresscode/dresscode dresscode/upgrade-symfony phpstan/phpstan
+dresscode upgrade today
 ```
 
-Konfiguraci k tomu nepotřebujete: `upgrade today` si data i pravidla balíčku najde sám a styl kódu nechá, jak je. Postup po jedné hlavní verzi a co dělat s tím, co zbude, popisuje [Upgrade kódu |upgrade].
+Konfiguraci k tomu nepotřebujete: `upgrade today` si data i přepisy balíčku najde sám a styl kódu nechá, jak je. Data každé komponenty se uplatní jen tehdy, když ji projekt má, a jen pro verze, na které projekt [dosáhne |upgrade#Rozhodují dolní meze]. Postup po jedné hlavní verzi a co dělat s tím, co zbude, popisuje [Upgrade kódu |upgrade]. Projekt, který už běží na PHP 8.4 až 8.6, si balíček může přidat i jako vývojovou závislost: `composer require --dev dresscode/upgrade-symfony phpstan/phpstan`, a pak spouští `vendor/bin/dresscode upgrade today`.
 
-Staré API může hlídat i každá kontrola. Potřebuje k tomu v konfiguraci tři věci: typy, sadu `deprecations` a jméno balíčku, které pustí dovnitř jeho pravidla ze sekce `symfony`, jak popisuje [Jak funguje upgrade knihoven |upgrading-libraries#Zapnutí v konfiguraci]:
-
-```neon
-typeAnalysis: phpstan
-
-use:
-	- symfony         # váš standard
-	- deprecations
-	- upgrade-symfony
-```
-
-Data sama zapnou dvě rozhodnutí v sekci `symfony`, `symfony.isGrantedAttribute` od `symfony/security-http` 6.2 a `symfony.valueResolver` od `symfony/http-kernel` 6.2, takže je do konfigurace psát nemusíte a spustí je i `upgrade today`. Kdo některé nechce, vypne ho v sekci `symfony` hodnotou `keep`. Data každé komponenty se uplatní jen tehdy, když ji projekt má, a jen pro verze, na které projekt dosáhne. Projekt, který vyžaduje celé `symfony/symfony`, má všechny komponenty, které ten balíček nahrazuje, ve verzi `symfony/symfony`.
+.[note]
+Projekt, který vyžaduje celé `symfony/symfony`, má všechny komponenty, které ten balíček nahrazuje, ve verzi `symfony/symfony`.
 
 
 Co se opraví
@@ -97,9 +89,7 @@ Co všechno balíček opravuje:
 - **anotace SensioFrameworkExtraBundle** na atributy frameworku: `@Route`, `@Cache`, `@IsGranted` a `@Template`, a `@Security`, jehož výraz jen volá `is_granted()`, na `#[IsGranted]`; anotace routingu a serializeru ze jmenného prostoru `Annotation` na atributy z `Attribute`, anotace constraintů validátoru a `@UniqueEntity` na stejnojmenné atributy, kromě `@ExpressionLanguageSyntax`, ze které je `#[ExpressionSyntax]`, a `@required` na `#[Required]`,
 - **člen třídy na atribut**: `$defaultName` a `$defaultDescription` příkazu, i přepsané `getDefaultName()`, na `#[AsCommand]`, a rozhraní `MessageHandlerInterface` na `#[AsMessageHandler]`,
 - **resolver argumentů controlleru** s rozhraním `ArgumentValueResolverInterface` na `ValueResolverInterface`: jeho `supports()` se stane podmínkou na začátku `resolve()`,
-- **signatury** metod v potomcích tříd frameworku, návratové typy a parametry, které komponenta doplnila (`execute(): int` příkazu); ty píše rozhodnutí `classes.overridingMethod.signature` z deklarací nainstalované verze, bez dat. Dopsání návratového typu je riziková oprava (risky fix), protože tělo metody může vracet něco jiného, a udělá se jen s `--fix-risky`, po souhlasu v `--ask-risky` nebo s rozhodnutím v klíči [`fixRisky` |configuration#risky-fixes].
-
-Anotaci `@Security`, i v podobě atributu `#[Security]` téhož bundlu, a resolver převádějí rozhodnutí `symfony.isGrantedAttribute` a `symfony.valueResolver`, jejichž pravidla přináší balíček. Zbytek dělají pravidla jádra DressCode podle dat, signatury i bez nich.
+- **signatury** metod v potomcích tříd frameworku: návratové typy a parametry, které komponenta doplnila (`execute(): int` příkazu), i bez dat, podle deklarací nainstalované verze. Dopsání návratového typu je [riziková oprava (risky fix) |configuration#risky-fixes], protože tělo metody může vracet něco jiného.
 
 
 Co zůstane na vás
@@ -112,7 +102,25 @@ Method `Symfony\Bundle\FrameworkBundle\Controller\AbstractController::getDoctrin
 Class `Symfony\Component\Messenger\Handler\MessageSubscriberInterface` is forbidden: write the attribute `AsMessageHandler` on each method that handles a message, with what `getHandledMessages()` yields for it as its arguments.
 ```
 
-Co komponenta jen tiše označila jako zastaralé, v datech není; s typy to DressCode ohlásí, a kde anotace náhradu řekne, i přepíše podle `upgrading.declarations.deprecatedMember`. Změny chování, konfigurace v YAMLu a šablon Twig data nezachytí vůbec, ty najdete v průvodcích `UPGRADE-*.md` repozitáře Symfony.
+Co komponenta jen tiše označila jako zastaralé, v datech není; s typy to DressCode ohlásí, a kde anotace náhradu řekne, i přepíše. Změny chování, konfigurace v YAMLu a šablon Twig data nezachytí vůbec, ty najdete v průvodcích `UPGRADE-*.md` repozitáře Symfony.
+
+
+Aby se staré API nevracelo
+==========================
+
+Staré API může hlídat i každá kontrola, třeba v průběžné integraci. Potřebuje k tomu v konfiguraci tři věci: typy, sadu `deprecations` a jméno balíčku, které pustí dovnitř jeho přepisy ze sekce `symfony` (viz [Upgrade kódu |upgrade#Aby se staré API nevracelo]):
+
+```neon
+typeAnalysis: phpstan
+
+use:
+	- symfony         # váš standard
+	- deprecations
+	- upgrade-symfony
+```
+
+.[note]
+Anotaci `@Security`, i v podobě atributu `#[Security]` téhož bundlu, a resolver argumentů převádějí rozhodnutí `symfony.isGrantedAttribute` od `symfony/security-http` 6.2 a `symfony.valueResolver` od `symfony/http-kernel` 6.2. Zapnou je data sama, takže je do konfigurace psát nemusíte a spustí je i `upgrade today`. Kdo některé nechce, vypne ho v sekci `symfony` hodnotou `keep`.
 
 
 Co balíček pokrývá

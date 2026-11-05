@@ -10,6 +10,8 @@ Co budeme psát
 
 Snad každý tým má pár specifických pravidel, která žádný obecný standard nepokrývá, protože patří výhradně jemu. Vezměme si typický příklad: text výjimky je běžná věta a má končit tečkou. Zápis `throw new InvalidArgumentException('The name must not be empty')` tedy chceme automaticky upravit na `'The name must not be empty.'`. Celé roky jsem tohle osobně hlídal při code review, protože napsat na to sniff pro PHP_CodeSniffer dalo víc práce, než kolik času to ve výsledku ušetřilo. V DressCode nám na to bude stačit padesát přímočarých řádků a napíšeme si je společně.
 
+Pravidlo dědí od tříd DressCode a test volá jeho `RuleTester`, takže projekt musí DressCode najít ve vlastním autoloaderu: přidejte si ho jako vývojovou závislost příkazem `composer require --dev dresscode/dresscode` (co to pro projekt znamená, popisuje [instalace |getting-started#Instalace]).
+
 
 Nejdřív fixtura
 ===============
@@ -26,7 +28,7 @@ throw new LogicException('Unreachable ');
 $logger->log('Started');
 ```
 
-Už na těchto několika řádcích přesně definujeme hranice chování našeho pravidla: druhý řádek je v pořádku, třetí obsahuje interpolovaný řetězec v uvozovkách a ten necháme záměrně být (těžko předvídat, co proměnná `$id` obsahuje), čtvrtý má na konci zbytečnou mezeru, kterou tečka přirozeně nahradí, a pátý řádek vůbec nevytváří výjimku. Soubor `basic.expected` bude obsahovat tentýž kód s doplněnými tečkami na řádcích 3 a 6 a soubor `basic.violations` přesně vyjmenuje očekávaná hlášení:
+Už na těchto několika řádcích přesně definujeme hranice chování našeho pravidla: zpráva na řádku 3 tečku potřebuje, na řádku 4 ji už má, řádek 5 obsahuje interpolovaný řetězec v uvozovkách a ten necháme záměrně být (těžko předvídat, co proměnná `$id` obsahuje), řádek 6 má na konci zbytečnou mezeru, kterou tečka přirozeně nahradí, a řádek 7 vůbec nevytváří výjimku. Soubor `basic.expected` bude obsahovat tentýž kód s doplněnými tečkami na řádcích 3 a 6 a soubor `basic.violations` přesně vyjmenuje očekávaná hlášení:
 
 ```
 3: The message of an exception must end with a period.
@@ -37,7 +39,7 @@ Už na těchto několika řádcích přesně definujeme hranice chování našeh
 Kostra pravidla
 ===============
 
-Pravidlo je třída dědící od `DressCode\NodeRule` doplněná o atribut `#[RuleInfo]`, který určuje, ve které fázi pravidlo běží. Fáze (`Stage`) jsou přesně tři: `Structure` pro strukturální změny kódu, `Formatting` pro bílé znaky a zalomení řádků a `Finishing` pro závěrečné začištění. Naše pravidlo upravuje textový obsah, takže logicky patří do fáze `Structure`.
+Pravidlo je třída dědící od `DressCode\NodeRule` doplněná o atribut `#[RuleInfo]`, který mimo jiné určuje, ve které fázi (`Stage`) pravidlo běží. Naše pravidlo mění kód, ne bílé znaky, a proto patří do fáze `Structure`; ostatní fáze popisuje [Pravidlo do detailu |rule-contract#Tvar pravidla].
 
 Samotné pravidlo žádné veřejné jméno nemá. Uživatel v DressCode pravidla nikdy přímo nepíše ani nezapíná: zapisuje **rozhodnutí** (decision), tedy konfigurační klíč vyjadřující, jak má kód vypadat, a pravidlo toto rozhodnutí pouze vymáhá. Naším rozhodnutím je, že text výjimky končí tečkou. Pravidlo jej ohlásí metodou `getDecisions()`:
 
@@ -82,9 +84,7 @@ Objekt `Decision` se skládá ze tří částí. **Cesta** `project.exceptionMes
 
 Takovému rozhodnutí říkáme **požadavek** (requirement): pravidlo se automaticky aktivuje všude tam, kde jej některá vrstva konfigurace nastaví na jinou hodnotu než `keep`. Kde jej nikdo nezmíní, tam pravidlo nevyžaduje nic a vůbec neběží. Pravidla se tedy nikdy nezapínají jménem třídy: projekt pouze deklaruje požadovaný stav kódu a příslušné pravidlo se k němu připojí samo.
 
-`NodeRule` je jednou ze dvou základních podob pravidla: prochází uzly syntaktického stromu a pracuje s nimi. Druhou podobou je `GapRule`, které namísto procházení uzlů [vznáší nároky na bílé znaky |whitespace-rules].
-
-Metoda `getVisitedNodes()` vrací seznam uzlů, které vás zajímají. Jádro pak metodu `enter()` volá výhradně pro ně. Nás zajímá operátor `new`, reprezentovaný třídou `NewNode`. Jaké uzly existují a jaké sloty nabízejí, najdete v [přehledu uzlů |phpsyntax:nodes]: uzel `NewNode` disponuje sloty `newKeyword`, `class` a `arguments`.
+Syntaktický strom se skládá z **uzlů**: každý uzel je jedna konstrukce kódu (volání, podmínka, třída) a její části stojí v jeho pojmenovaných **slotech**. Metoda `getVisitedNodes()` vrací seznam uzlů, které vás zajímají, a jádro pak metodu `enter()` volá výhradně pro ně. Nás zajímá operátor `new`, reprezentovaný třídou `NewNode`, který má sloty `newKeyword` (klíčové slovo `new`), `class` (jméno třídy) a `arguments` (argumenty). Všechny uzly a jejich sloty najdete v [přehledu uzlů |phpsyntax:nodes], pojmy stromu shrnuje [slovníček |how-it-works#Pojmy jádra a pravidel].
 
 
 Podmínky a oprava
@@ -118,7 +118,7 @@ public function enter(Node|Token $node, RuleContext $context): void
 }
 ```
 
-Čtěte podmínky pěkně shora: jde o instanciaci `new` s přímým názvem třídy (nikoliv tedy `new $class` ani anonymní třída) a název třídy končí na `Exception`. První předaný argument je obyčejný neinterpolovaný řetězec: interpolovaný řetězec v uvozovkách tvoří ve stromu zcela jiný uzel než `StringNode`, takže třetí řádek naší fixtury odpadne sám bez jakékoliv zvláštní podmínky. Tento řetězec je zapsaný v jednoduchých uvozovkách, není prázdný a jeho oříznutá hodnota dosud nekončí tečkou.
+Čtěte podmínky pěkně shora: jde o instanciaci `new` s přímým názvem třídy (nikoliv tedy `new $class` ani anonymní třída) a název třídy končí na `Exception`. První předaný argument je obyčejný neinterpolovaný řetězec: interpolovaný řetězec v uvozovkách tvoří ve stromu zcela jiný uzel než `StringNode`, takže řádek 5 naší fixtury odpadne sám bez jakékoliv zvláštní podmínky. Tento řetězec je zapsaný v jednoduchých uvozovkách, není prázdný a jeho oříznutá hodnota dosud nekončí tečkou.
 
 A klíčová poslední podmínka: **nikdo toto rozhodnutí na daném místě nepotlačil.** Volání `$context->report()` vrátí `false`, pokud je dané místo [potlačeno |suppressions-and-baseline] komentářem `dresscode:ignore` (přímo na řádku nebo nad konstrukcí), případně párem `dresscode:disable` a `dresscode:enable`. V takovém případě se kód nesmí nijak změnit. Právě proto stojí volání `report()` až na konci podmínky, a nikoliv samostatně před ní. Cestu rozhodnutí metodě předávat nemusíte: pravidlo s jediným požadavkem hlásí nálezy automaticky pod ním.
 
@@ -137,7 +137,7 @@ project:
 	exceptionMessagePeriod: required
 ```
 
-Třída `RuleTester` převezme třídu pravidla společně s cestou k fixturám a automaticky prověří vše, na co by člověk při ručním psaní testů snadno zapomněl: že opravený výstup do puntíku odpovídá souboru `.expected`, že hlášení sedí na `.violations`, že pravidlo spuštěné nad vlastním výstupem už nic dalšího nemění (idempotence), že nezmizel žádný komentář, že pravidlo respektuje direktivu `dresscode:ignoreFile` a že neupravilo ani bajt bez předchozího ohlášení. V Nette Testeru vypadá takový test následovně:
+Třída `RuleTester` převezme třídu pravidla společně s cestou k fixturám a ověří, že opravený výstup do puntíku odpovídá souboru `.expected` a hlášení souboru `.violations`. Navíc prověří vše, na co by člověk při ručním psaní testů snadno zapomněl, třeba že pravidlo nad vlastním výstupem už nic nemění a že nezmizel žádný komentář; celý výčet najdete na stránce [Testování pravidel |testing-rules#RuleTester]. Test uložte vedle adresáře fixtur, třeba do `tests/ExceptionMessagePeriodRule.phpt`. V Nette Testeru vypadá takto:
 
 ```php
 use App\CodeStyle\ExceptionMessagePeriodRule;
@@ -150,7 +150,7 @@ Tester\Environment::setup();
 Assert::noError(fn() => RuleTester::run(ExceptionMessagePeriodRule::class, __DIR__ . '/fixtures/exceptionMessagePeriod'));
 ```
 
-Nette Tester vyžaduje v každém testu alespoň jednu aserci, proto volání balíme do `Assert::noError()`. V PHPUnit použijete totéž volání uvnitř běžné testovací metody. Jakékoliv selhání vyvolá výjimku `DressCode\Testing\TestFailure` s přehledným diffem, takže přesně uvidíte, kde se výsledek rozešel s očekáváním.
+Volání je zabalené do `Assert::noError()`, protože Nette Tester chce v každém testu aspoň jednu aserci; v PHPUnit použijete totéž volání uvnitř běžné testovací metody. Test spustíte jako každý jiný, v Nette Testeru příkazem `vendor/bin/tester tests`.
 
 Když test nyní spustíte, hladce projde. Pokud by neprošel, diff vám přesně ukáže řádek, kde pravidlo vidí kód jinak než vy. To bývá přesně ten moment, kdy odhalíte skryté hraniční případy: v našem příkladu to bylo volání `rtrim()`, které v první verzi pravidla chybělo a fixtura s mezerou na konci jej okamžitě vynutila.
 

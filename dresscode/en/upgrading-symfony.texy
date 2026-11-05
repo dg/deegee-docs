@@ -10,25 +10,17 @@ The upgrades from Symfony 6 to [Symfony 7 |upgrade-to-symfony-7] and from Symfon
 Installation
 ============
 
+To upgrade an application that still runs on PHP older than 8.4, install DressCode globally, because DressCode itself needs PHP 8.4 (see [Where DressCode Runs |upgrade#Where DressCode Runs]):
+
 ```shell
-composer require --dev dresscode/upgrade-symfony phpstan/phpstan
-vendor/bin/dresscode upgrade today
+composer global require dresscode/dresscode dresscode/upgrade-symfony phpstan/phpstan
+dresscode upgrade today
 ```
 
-You need no configuration for it: `upgrade today` finds the data and the rules of the package on its own and leaves the style of the code as it is. [Upgrading Code |upgrade] describes how to go one major version at a time and what to do with what is left.
+You need no configuration for it: `upgrade today` finds the data and the rewrites of the package on its own and leaves the style of the code as it is. The data of each component applies only when the project uses that component, and only for the versions the project [has reached |upgrade#Lower Bounds Decide]. [Upgrading Code |upgrade] describes how to go one major version at a time and what to do with what is left. A project that already runs on PHP 8.4 to 8.6 can also add the package as a development dependency, `composer require --dev dresscode/upgrade-symfony phpstan/phpstan`, and then run `vendor/bin/dresscode upgrade today`.
 
-Every check can watch for the old API too. For that, the configuration needs three things: the types, the set `deprecations`, and the name of the package, which enables its rules in the section `symfony`, as described in [How Upgrading Libraries Works |upgrading-libraries#Enabling It in the Configuration]:
-
-```neon
-typeAnalysis: phpstan
-
-use:
-	- symfony         # your standard
-	- deprecations
-	- upgrade-symfony
-```
-
-The data itself turns on two decisions in the section `symfony`, `symfony.isGrantedAttribute` from `symfony/security-http` 6.2 and `symfony.valueResolver` from `symfony/http-kernel` 6.2, so you do not have to add them to the configuration, and `upgrade today` runs them too. If you do not want one of them, turn it off in the section `symfony` with the value `keep`. The data of each component applies only when the project uses that component, and only for the versions the project has reached. A project that requires the whole `symfony/symfony` has all the components that package replaces, in the version of `symfony/symfony`.
+.[note]
+A project that requires the whole `symfony/symfony` has all the components that package replaces, in the version of `symfony/symfony`.
 
 
 What Gets Fixed
@@ -97,9 +89,7 @@ What the package fixes:
 - **SensioFrameworkExtraBundle annotations** to attributes of the framework: `@Route`, `@Cache`, `@IsGranted` and `@Template`, and `@Security`, whose expression only calls `is_granted()`, to `#[IsGranted]`; routing and serializer annotations from the namespace `Annotation` to attributes from `Attribute`; validator constraint annotations and `@UniqueEntity` to the attributes of the same name, except `@ExpressionLanguageSyntax`, which becomes `#[ExpressionSyntax]`; and `@required` to `#[Required]`,
 - **a class member to an attribute**: `$defaultName` and `$defaultDescription` of a command, and an overridden `getDefaultName()` too, to `#[AsCommand]`, and the interface `MessageHandlerInterface` to `#[AsMessageHandler]`,
 - **a controller argument resolver** written against `ArgumentValueResolverInterface` to `ValueResolverInterface`: its `supports()` becomes a condition at the start of `resolve()`,
-- **signatures** of methods in child classes of framework classes: the return types and parameters a component added (`execute(): int` of a command); the decision `classes.overridingMethod.signature` writes them from the declarations of the installed version, without data. Adding a return type is a risky fix, because the body of the method may return something else, so DressCode makes it only with `--fix-risky`, after your consent in `--ask-risky`, or with the decision in the key [`fixRisky` |configuration#risky-fixes].
-
-The decisions `symfony.isGrantedAttribute` and `symfony.valueResolver` rewrite the annotation `@Security`, also in the form of the attribute `#[Security]` of the same bundle, and the resolver; their rules come with the package. The rules of the DressCode engine do the rest, following the data; the signatures need no data at all.
+- **signatures** of methods in child classes of framework classes: the return types and parameters a component added (`execute(): int` of a command), even without data, from the declarations of the installed version. Adding a return type is a [risky fix |configuration#risky-fixes], because the body of the method may return something else.
 
 
 What Is Left to You
@@ -112,7 +102,25 @@ Method `Symfony\Bundle\FrameworkBundle\Controller\AbstractController::getDoctrin
 Class `Symfony\Component\Messenger\Handler\MessageSubscriberInterface` is forbidden: write the attribute `AsMessageHandler` on each method that handles a message, with what `getHandledMessages()` yields for it as its arguments.
 ```
 
-What a component only quietly marks as deprecated is not in the data. With the types, DressCode reports it anyway, and where the annotation names the replacement, it rewrites the code through `upgrading.declarations.deprecatedMember`. The data does not capture changes in behavior, in YAML configuration or in Twig templates at all; you will find those in the `UPGRADE-*.md` guides of the Symfony repository.
+What a component only quietly marks as deprecated is not in the data. With the types, DressCode reports it anyway, and where the annotation names the replacement, it rewrites the code. The data does not capture changes in behavior, in YAML configuration or in Twig templates at all; you will find those in the `UPGRADE-*.md` guides of the Symfony repository.
+
+
+Keeping the Old API from Coming Back
+====================================
+
+Every check can watch for the old API too, for example in continuous integration. For that, the configuration needs three things: the types, the set `deprecations`, and the name of the package, which enables its rewrites in the section `symfony` (see [Upgrading Code |upgrade#Keeping the Old API from Coming Back]):
+
+```neon
+typeAnalysis: phpstan
+
+use:
+	- symfony         # your standard
+	- deprecations
+	- upgrade-symfony
+```
+
+.[note]
+The decisions `symfony.isGrantedAttribute` from `symfony/security-http` 6.2 and `symfony.valueResolver` from `symfony/http-kernel` 6.2 rewrite the annotation `@Security`, also in the form of the attribute `#[Security]` of the same bundle, and the argument resolver. The data itself turns them on, so you do not have to add them to the configuration, and `upgrade today` runs them too. If you do not want one of them, turn it off in the section `symfony` with the value `keep`.
 
 
 What the Package Covers

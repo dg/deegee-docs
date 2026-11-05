@@ -58,34 +58,13 @@ In the rule example above, `report()` is called directly inside the condition. T
 
 Because of this, suppressions carry absolute weight. When you add a `// dresscode:ignore` comment or set a decision to `keep` for a specific path, the message doesn't merely disappear from the output: the fix is completely bypassed. This does not rely on the good intentions of rule authors: any rule attempting to fix a suppressed node will fail its own test suite.
 
-**Risky fixes** follow the exact same mechanism. A fix that could alter runtime behavior is flagged as risky. Until the run explicitly allows it, the engine rejects the report, and the rule leaves the code untouched. Risk is always evaluated per occurrence rather than per rule: `mistakes.strictArgument` safely appends `$strict = true` to `in_array()` when static analysis proves an integer is being searched for inside a list of integers; elsewhere, it is treated as risky because the code might depend on loose comparisons. The same rule, in the same pass, applies safe fixes immediately while flagging risky ones with an explanation of what would resolve them: type information from [PHPStan |phpstan-types], name certainty via [`nameResolution` |php-functions-in-namespaces#name-resolution], or manual review where a fix inherently alters behavior. Where a fix depends on information unavailable to DressCode, it is reported as a warning; a fix that changes behavior by design is treated as an error. Where a rule knows a fix would break the code, it stays silent. Permission is granted by listing the decision in your project's `fixRisky` configuration key, and the `--fix-risky` option allows all risky fixes for one run.
+**Risky fixes** follow the exact same mechanism. A fix that could alter runtime behavior is flagged as risky, and until the project explicitly allows it, the engine rejects the report and the rule leaves the code untouched. Risk is a property of each occurrence rather than of the rule: `mistakes.strictArgument` safely appends `$strict = true` to `in_array()` where static analysis proves an integer is searched for in a list of integers, and elsewhere only reports that the code might depend on loose comparison. The same rule, in the same pass, applies the safe fix right away and reports the risky one with an explanation of what would decide it. How to permit risky fixes and how they are reported is described on the [Configuration |configuration#risky-fixes] page.
 
 
-Standards and Sets
-==================
+No Style of Its Own
+===================
 
-DressCode enforces no personal opinions on code style. Instead, it offers a catalogue of decisions and two types of presets to select from. A **preset** is a named configuration file sharing the exact same structure as your project configuration. A **standard** is a preset that defines overall code appearance, with five built-in standards covering everything from indentation to imports:
-
-| standard | what it is |
-|---|---|
-| `psr12` | [PSR-12 |https://www.php-fig.org/psr/psr-12/], section by section |
-| `perCs` | [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/] in full, the modern successor to PSR-12 |
-| `nette` | [Nette Coding Standard |https://doc.nette.org/en/contributing/coding-standard], which is PER Coding Style with tabs and a few deviations |
-| `symfony` | Symfony Coding Standards, following PHP CS Fixer's `@Symfony` set |
-| `laravel` | The default style of [Laravel Pint |https://laravel.com/docs/pint], matching its `laravel` preset |
-
-A **set** is a preset focused on a single intent rather than visual formatting, allowing it to layer seamlessly over any standard:
-
-| set | what it decides |
-|---|---|
-| `cleanup` | Removes dead, redundant, or ineffective code |
-| `modernizations` | Adopts modern PHP syntax supported by your target PHP version |
-| `types` | Adds and standardizes type declarations where PHP evaluates them |
-| `deprecations` | Resolves or reports features deprecated or removed by PHP or libraries |
-| `correctness` | Targets constructs that are most likely mistakes |
-| `compilerOptimizations` | Formats global names for compile-time optimization by the PHP engine |
-
-A project picks one standard, appends the desired sets in the `use` key, and specifies individual differences key by key:
+DressCode enforces no personal opinions on code style. The style comes from **presets**, named configuration files sharing the exact same structure as your project configuration. A **standard** is a preset that defines the overall appearance of the code (`perCs`, `psr12`, `nette`, `symfony`, `laravel`). A **set** is a preset of a single intent that decides nothing about appearance, so it combines with any standard (`cleanup`, `modernizations` and others). A project picks one standard, appends the desired sets in the `use` key, and specifies individual differences key by key:
 
 ```neon
 use:
@@ -97,9 +76,9 @@ blankLines:
 	aroundMethods: 1
 ```
 
-Sets grow alongside DressCode: when a new version introduces another decision, its set provides it automatically without requiring changes to your configuration file. A decision requiring a newer PHP version or static types waits silently until your project meets its requirements. Where a standard deviates from a specification, that choice is exposed as an explicit decision rather than hidden hardcoding, making the same value available to custom presets. The `nette` standard layers tabs, library layouts, code hygiene, and Nette-specific conventions (naming schemes, class member ordering, and docblock content) over PER Coding Style.
+Where a standard deviates from a specification, the deviation is not hidden as an exception in the code of a rule: it is a different value of a decision, which you can use in your own preset as well. The `nette` standard thus adds tabs, the typical layout of Nette libraries, code hygiene, and Nette conventions to PER Coding Style, all of it as values of decisions you can read [in its file |php-coding-standards#nette].
 
-Presets stack as layers in the order specified under `use`: children inherit from parents and change only what they explicitly set. Your project configuration forms a layer above them, and overrides for parts of the project form further layers on top. See [Configuration |configuration#Layers] for a detailed breakdown.
+Presets stack as layers in the order specified under `use`: children inherit from parents and change only what they explicitly set. Your project configuration forms a layer above them, and overrides for parts of the project form further layers on top. What each standard and set does is shown on the [Configuration |configuration#Standards and Sets] page, and its [Layers |configuration#Layers] part explains how layers combine.
 
 
 PER Coding Style and PSR-12 Compared to PHP CS Fixer and PHP_CodeSniffer
@@ -150,7 +129,7 @@ For details on authoring these rules, see [Whitespace Rules |whitespace-rules].
 The PHP Version Belongs to the Project
 ======================================
 
-A decision that emits modern PHP syntax (such as the octal literal `0o755` introduced in PHP 8.1) must never run on a codebase that doesn't yet support it. DressCode determines the target PHP version from the project itself, never from the PHP runtime executing the tool: reading it from `targets` in the configuration (e.g. `targets: {php: '8.2'}`; a part of the project can have a different one in an override), from the minimum version allowed by `require.php` in `composer.json` (taking `config.platform.php` into account), or defaulting to PHP 8.0. Target versions older than PHP 8.0 are bumped to 8.0 with a warning, as rules assume everything PHP 8.0 supports is always available. A file will therefore produce the exact same verdict on any machine. Decisions targeting newer syntax wait silently until your project raises its target version, so neither the preset nor you have to watch for it.
+A decision that emits modern PHP syntax (such as the octal literal `0o755` introduced in PHP 8.1) must never run on a codebase that doesn't yet support it. DressCode determines the target PHP version from the project itself, never from the PHP runtime executing the tool: from the minimum version allowed by `require.php` in `composer.json`, or from the `targets` key in the configuration. A file will therefore produce the exact same verdict on any machine. Decisions targeting newer syntax wait silently until your project raises its target version, so neither the preset nor you have to watch for it. Where exactly the version comes from, including `config.platform.php` and a project without a lower bound, is described on the [Configuration |configuration#PHP and Package Versions] page.
 
 The reverse works just as smoothly: when you raise your target PHP version, the `modernizations` set automatically updates your code to take advantage of the new version's features, from `str_contains()` in PHP 8.0 to `clamp()` in PHP 8.6. See [Upgrading to a Newer PHP |upgrading-php] for details.
 
@@ -184,6 +163,10 @@ Glossary
 
 Terms that appear throughout the documentation, in class names, in the configuration and in the tool's messages. The second column shows where you will encounter each term in practice.
 
+
+Configuration Terms
+-------------------
+
 | term | where you meet it | what it is |
 |---|---|---|
 | decision | `braces.position.class` | A configuration key with a path (`spacing.call`), an allowed range of values, and a description. It names a construct in code, and its value defines how it should be written. Violations are reported under this path, and the same path is used to suppress findings or permit risky fixes. |
@@ -191,7 +174,6 @@ Terms that appear throughout the documentation, in class names, in the configura
 | requirement | `casing.keyword` | A decision that actively enforces a convention whenever its value is not `keep`. |
 | parameter | `controlFlow.trailingIfMinStatements` | A decision that merely refines a requirement without activating any rules on its own. Has a default value and does not accept `keep`. |
 | `keep` | `spacing: keep` | The universal value meaning "nothing is enforced here." Accepted by all requirements; applied to a section, it disables all decisions below it. |
-| rule | `NodeRule`, `GapRule` | A class that implements one or more decisions: detecting violations and typically providing automated fixes. |
 | violation | `check` output | A single finding: file, line, column, message, and associated decision path. |
 | preset | `use:`, `--use` | A named configuration file containing reusable decisions. Referenced in the `use` key. |
 | standard | `use: perCs` | A preset defining the overall visual formatting of a codebase, which a project takes as its base: `perCs`, `psr12`, `nette`, `symfony`, `laravel`. |
@@ -203,6 +185,16 @@ Terms that appear throughout the documentation, in class names, in the configura
 | risky fix | `fixRisky:`, `--fix-risky` | An automated fix that could alter runtime behavior. Executed only when permitted via `fixRisky` or `--fix-risky`; otherwise reported: as a warning where types or `nameResolution` would decide it, and as an error elsewhere. |
 | suppression | `// dresscode:ignore` | Silencing a decision for a single line, block, or file using a comment directive. |
 | baseline | `dresscode baseline` | A file recording existing violations that cannot yet be fixed. Allows turning on strict decisions while reporting only new violations. |
+
+
+Engine and Rule Terms
+---------------------
+
+You meet these terms mainly on the pages about writing your own rules.
+
+| term | where you meet it | what it is |
+|---|---|---|
+| rule | `NodeRule`, `GapRule` | A class that implements one or more decisions: detecting violations and typically providing automated fixes. |
 | engine | - | The core orchestrator that executes rules, settles whitespace claims, and builds outputs. |
 | pass | - | A single traversal of the syntax tree by all rules within a given stage. |
 | stage | `Stage` | Execution stages: `Structure` (code changes), `Formatting` (whitespace and breaks), and `Finishing` (final cleanup). |

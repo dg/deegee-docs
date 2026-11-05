@@ -10,9 +10,9 @@ A preset builds on the presets named in its `use` key and changes only what it s
 Standards
 =========
 
-Five standards decide everything you see: indentation, braces, spaces, blank lines and line breaks. `psr12` and `perCs` are written from the text of the specifications, section by section, and add nothing of their own. `nette`, `symfony` and `laravel` build on PER Coding Style and add what their projects want.
+Five standards decide how the code looks: indentation, braces, spaces and blank lines, and `psr12`, `perCs` and `nette` also how long lines are split. `psr12` and `perCs` are written from the text of the specifications, section by section, and add nothing of their own. `nette`, `symfony` and `laravel` build on PER Coding Style and add what their projects want.
 
-A standard splits a line longer than `file.lineLength` wherever the constructs on it allow. When a line cannot be split, for example because of a long string or a comment, `psr12` and `perCs` only warn, because PSR-12 treats the 120-character limit as soft; `nette` reports an error, and `symfony` and `laravel` do not check the line length at all.
+`psr12`, `perCs` and `nette` split a line longer than `file.lineLength` wherever the constructs on it allow. When a line cannot be split, for example because of a long string or a comment, they only warn, because PSR-12 treats the 120-character limit as soft. `nette` does not report a long import at all, nor a line that is long only because of its strings. `symfony` and `laravel` do not check the line length at all. The details are under the decision [`file.longLines` |decisions/file#file.longLines].
 
 
 psr12
@@ -30,6 +30,7 @@ severity:
 
 file:
 	bom: forbidden
+	invalidUtf8: forbidden                    # PSR-1 asks for UTF-8 only
 	openingTag: required                      # `<?php`, not `<?` or `<?PHP`
 	strictTypes:
 		position: nextLine                    # §3, `<?php` on a line of its own
@@ -104,6 +105,8 @@ multiline:
 		concatenation: [perLine, fill]
 		arithmetic: [perLine, fill]
 		bitwise: [perLine, fill]
+		coalesce: [perLine, fill]
+		pipe: [perLine, fill]
 	edges:
 		argument: apart                       # `foo(` above the arguments, `)` below them
 		parameter: apart
@@ -308,7 +311,9 @@ file:
 		declaration: required                 # risky, `'1'` passed to `int` then throws
 		position: sameLine
 	lineLength: 140                           # a tab counts as 4 columns
-	lineLengthExcept: [imports, strings]      # a line too wide only for its strings is not reported
+	# a line too wide only for its strings is not reported, nor one with `??`, which is not spread for the width,
+	# so that `?? throw new …` stays on the line of the value it guards
+	lineLengthExcept: [imports, strings, coalesce]
 
 indentation:
 	unit: tab
@@ -765,6 +770,8 @@ multiline:
 		concatenation: keep
 		arithmetic: keep
 		bitwise: keep
+		coalesce: keep
+		pipe: keep
 		chain: keep
 		matchCondition: keep
 		ternary: keep
@@ -919,7 +926,7 @@ upgrading:
 Sets
 ====
 
-A set decides nothing about how the code looks, so it never conflicts with a standard. It is added on top of the standard (`use: [nette, modernizations]`), and above all, it grows: a decision that DressCode gains in a new version is added to its set, and a project that uses the set gets it without changing its configuration.
+A set decides nothing about how the code looks, so it never conflicts with a standard. It is added on top of the standard (`use: [nette, modernizations]`), and new versions of DressCode add decisions to it without a change to your configuration. No standard brings the sets `modernizations` and `deprecations`: moving to a newer PHP and to the new API of libraries is a step you decide on yourself.
 
 
 modernizations
@@ -1146,7 +1153,7 @@ mistakes:
 	unreachableCatch: forbidden                 # after `catch (Throwable)`
 	exceptionWhereThrowableBelongs: forbidden   # `catch (Exception)` where `Throwable` is meant, reported
 	errorSuppression: forbidden                 # the `@` operator, reported
-	invisibleCharacter: forbidden               # zero-width, no-break and bidi characters, escaped
+	invisibleCharacter: forbidden               # zero-width, narrow no-break and bidi characters, escaped
 	strictArgument: required                    # `in_array($a, $b, true)`, risky
 	trailingWhitespaceInString: forbidden       # in a multi-line string or inline HTML
 	consecutivePhpdocs: forbidden               # the first of two is lost, reported
@@ -1200,7 +1207,7 @@ upgrading:
 compilerOptimizations
 =====================
 
-Global functions and constants in the form PHP optimizes at compile time, see [Faster Calls When the Name Is Certain |php-functions-in-namespaces#Faster Calls When the Name Is Certain].
+Global functions and constants in the form PHP optimizes at compile time, see [Faster Function Calls in PHP |php-compiler-optimizations].
 
 ```neon .[preset]
 # Compiler optimizations

@@ -41,9 +41,31 @@ Dá se to číst přímo nahlas: složená závorka třídy patří na další �
 
 První pravidlo přidá lomítko před funkce, které kompilátor optimalizuje, a ostatním ho vezme; druhé pak každé lomítko převede na import. Nad týmž souborem dospějí obě konfigurace ke stejnému výsledku, jenže v PHP CS Fixeru k tomu vede úvaha místo jedné přímé věty. PHP_CodeSniffer se Slevomatem sice zvládne přidat lomítko k optimalizovaným funkcím nebo naimportovat úplně všechny globální funkce, ale importovat výhradně ty optimalizované zkrátka neumí.
 
-Nemusíte přitom vypisovat stovky klíčů. Konfigurace stojí na pouhých dvou otázkách: **Jak má kód vypadat?** To vyřeší standard: stačí vybrat jeden jediný podle jména. **A co od kódu chcete navíc kromě vzhledu?** K tomu slouží [sady |configuration#Standardy a sady]: `modernizations`, `deprecations`, `cleanup`, `correctness`, `types` a `compilerOptimizations`. Sada totiž vyjadřuje záměr, nikoli statický výčet klíčů, a roste v čase: jakmile se DressCode naučí novou modernizaci, sada ji automaticky nabídne, aniž byste museli v konfiguraci změnit jediné písmeno. Na specifická přání vám pak stačí konkrétní klíč, a kde nechcete uplatnit ani výchozí chování standardu, jednoduše napíšete `keep`.
+Nemusíte přitom vypisovat stovky klíčů. Konfigurace stojí na pouhých dvou otázkách: **Jak má kód vypadat?** To vyřeší standard, který vyberete podle jména. **A co od kódu chcete navíc kromě vzhledu?** K tomu slouží [sady |configuration#Standardy a sady], třeba `modernizations` nebo `cleanup`. Sada vyjadřuje záměr, ne výčet klíčů: jakmile se DressCode naučí novou modernizaci, sada ji nabídne, aniž byste v konfiguraci změnili jediné písmeno. Klíč po klíči pak dopíšete jen to, v čem se váš kód od standardu liší.
 
-Celou cestu ke klíči (například `braces.position.class`) uvidíte přímo u každého nálezu v terminálu. Hned tedy víte, co přesně nastavit, potlačit, nebo si nechat do detailu osvětlit příkazem `dresscode explain braces.position.class`. A než klíč zanesete do konfigurace natrvalo, můžete si ho nanečisto vyzkoušet: příkaz `dresscode fix --set hygiene.is_null=forbidden` ho dočasně přidá k vaší konfiguraci a provedené změny rovnou zformátuje, připravené pro jeden čistý commit. Přehled všech sekcí a jejich klíčů najdete na stránce [Pravidla |decisions/@home].
+Celou cestu ke klíči (například `braces.position.class`) uvidíte přímo u každého nálezu v terminálu. Hned tedy víte, co přesně nastavit, potlačit, nebo si nechat do detailu osvětlit příkazem `dresscode explain braces.position.class`. Přehled všech sekcí a jejich klíčů najdete na stránce [Pravidla |decisions/@home].
+
+
+Víc než vzhled kódu
+-------------------
+
+Nálezy se neomezují na mezery a závorky. Takhle vypadá kontrola dvou souborů podle rozhodnutí ze sekcí `classes`, `mistakes` a `upgrading` s využitím [typů z PHPStanu |phpstan-types]:
+
+/--pre .[terminal]
+src/Settings.php
+  risky  7:37  The parameter `$name` of `offsetGet()` must be named `$key`, as in `ArrayObject::offsetGet()`.  classes.overridingMethod.parameterName
+               Risky because a call naming the argument `name:` stops working.
+
+src/Users.php
+  error  12:16  The `in_array()` call must pass `$strict = true`.                    mistakes.strictArgument
+  risky  17:16  The `in_array()` call must pass `$strict = true`.                    mistakes.strictArgument
+                Risky because a strict search no longer finds a value of another type.
+  error  22:18  Method `Acme\Mail\Mailer::sendMessage()` is deprecated: use send().  upgrading.declarations.deprecatedMember
+\--
+
+Třída `Settings` přepisuje metodu `offsetGet()` rodičovské třídy `ArrayObject`, ale její parametr pojmenovala `$name`. Samotné PHP to sice povolí, jenže volání `$settings->offsetGet(key: 'theme')`, které u každého `ArrayObject` bez problémů funguje, náhle zhavaruje s chybou `Unknown named parameter $key`. Přejmenování parametru by zase rozbilo volání, která už používají `name:`. Jde tedy o rizikovou opravu (risky fix), která může změnit chování programu, a nález proto přesně říká, co hrozí.
+
+Obě volání `in_array()` dostala stejnou zprávu, ale oprava se k nim zachová odlišně. Na řádku 12 typová analýza potvrdila, že se hledá `int` v poli `list<int>`, takže `fix` doplní `true` sám. Na řádku 17 je hledaná hodnota typu `mixed` a oprava počká, dokud ji [výslovně nepovolíte |configuration#risky-fixes]. Metodu `sendMessage()`, kterou knihovna označila `@deprecated use send()`, přepíše `fix` rovnou na `send()`.
 
 
 Nejen styl, ale i aktualizace kódu
@@ -59,7 +81,19 @@ return trim(strtolower(strip_tags($title)));
 return $title |> strip_tags(...) |> strtolower(...) |> trim(...);
 ```
 
-Stejně hladce probíhá i [aktualizace knihoven |upgrade]: stačí upravit verze závislostí v `composer.json`, spustit `dresscode upgrade today` a kód se sám přepíše na nové API vyžadovaných verzí, a to bez konfigurace a bez zásahu do stylu. Například pro Nette nabízí balíček `dresscode/upgrade-nette` migrace všech knihoven (u většiny z nich od verze 3.0 až po tu nejnovější): zvládá přejmenované třídy, konstanty, metody i parametry. Vlastní balíčky pro upgrade mají také Symfony, Laravel, Dibi nebo Texy. DressCode se navíc ptá PHPStanu na typový kontext, takže zastaralé API přepíše s jistotou podle toho, jakého typu daná proměnná skutečně je. Formátování stylu i přechod na nové verze tak vyřešíte jediným nástrojem, s jednou konfigurací a v jednom přehledném diffu.
+Stejně hladce probíhá i [aktualizace knihoven |upgrade]: stačí upravit verze závislostí v `composer.json`, spustit `dresscode upgrade today` a kód se sám přepíše na nové API vyžadovaných verzí, a to bez konfigurace a bez zásahu do stylu:
+
+```php .[before]
+$image->resize(300, 200, Image::FIT | Image::SHRINK_ONLY);
+file_put_contents($this->file, Json::encode($products, Json::PRETTY));
+```
+
+```php .[after]
+$image->resize(300, 200, Image::OrSmaller | Image::ShrinkOnly);
+file_put_contents($this->file, Json::encode($products, pretty: true));
+```
+
+Pro Nette nabízí balíček `dresscode/upgrade-nette` migrace všech knihoven (u většiny z nich od verze 3.0 až po tu nejnovější): zvládá přejmenované třídy, konstanty, metody i parametry. Vlastní balíčky pro upgrade mají také Symfony, Laravel, Dibi nebo Texy. DressCode se navíc ptá PHPStanu na typový kontext, takže zastaralé API přepíše s jistotou podle toho, jakého typu daná proměnná skutečně je. Formátování stylu i přechod na nové verze tak vyřešíte jediným nástrojem, s jednou konfigurací a v jednom přehledném diffu.
 
 
 Pokrytí PER Coding Style a PSR-12
@@ -82,34 +116,15 @@ Měřeno v říjnu 2026 na PHP 8.5 proti PHP CS Fixeru 3.95, PHP_CodeSnifferu 4.
 
 Kudy dál
 --------
-- [Začínáme s DressCode |getting-started] instalace, první kontrola a první automatická oprava.
-- [Konfigurace |configuration] volba standardu, sad a klíčů, které přesně popisují vzhled kódu.
-- [Přechod na novější PHP |upgrading-php] jak DressCode modernizuje kód od PHP 8.0 až po PHP 8.6.
-- [Upgrade kódu |upgrade] migrace Nette, Symfony, Laravelu a dalších knihoven jediným příkazem.
-- [Přechod na DressCode krok za krokem |migration] praktický návod, pokud dnes používáte PHP CS Fixer, PHP_CodeSniffer nebo Slevomat.
+- [Začínáme s DressCode |getting-started] instalace, první kontrola a náhled opravy bez změny jediného souboru.
+- [Formátování kódu krok za krokem |php-code-style] jak zavést coding standard do existujícího projektu s malým prvním commitem.
+- [Přechod na DressCode krok za krokem |migration] praktický návod, pokud dnes používáte PHP CS Fixer, PHP_CodeSniffer, Nette Coding Standard nebo Laravel Pint.
+- [Upgrade kódu |upgrade] migrace Nette, Symfony, Laravelu a dalších knihoven a [přechod na novější PHP |upgrading-php] od verze 8.0 až po 8.6.
+- [Jak DressCode funguje |how-it-works] syntaktický strom místo tokenů, rozhodnutí místo pravidel a přehledný slovníček pojmů.
+- [Konfigurace |configuration] a [Pravidla |decisions/@home] standardy, sady a všechny klíče s hodnotami a ukázkami.
+- [Integrace |integrations] kontrola stylu v CI, v Git hooku, v editoru i u AI agentů.
+- [Funkce a konstanty ve jmenných prostorech |php-functions-in-namespaces] proč je volání `strlen()` ve jmenném prostoru dvojznačné a jak tuto nejistotu DressCode řeší, a [rychlejší volání funkcí |php-compiler-optimizations], co PHP umí zkrátit a co mu v tom brání.
 - [Jak napsat vlastní pravidlo |custom-rule] snadný postup, pokud vám v katalogu chybí specifická kontrola.
-
-
-Používání
----------
-- [Jak DressCode funguje |how-it-works] syntaktický strom místo tokenů, rozhodnutí místo pravidel, jednotlivé průchody a přehledný slovníček pojmů.
-- [Typy z PHPStanu |phpstan-types] co všechno DressCode dokáže, když se může opřít o typovou analýzu PHPStanu přímo ve vašem kódu.
-- [Funkce a konstanty ve jmenných prostorech |php-functions-in-namespaces] proč je volání `strlen()` ve jmenném prostoru dvojznačné a jak tuto nejistotu DressCode elegantně řeší.
-- [Rychlejší volání, když je jméno jisté |php-functions-in-namespaces#Rychlejší volání, když je jméno jisté] jaké optimalizační zkratky PHP nabízí, co je vypíná a jak kód zapsat, aby běžel co nejrychleji.
-- [Potlačení a baseline |suppressions-and-baseline] výjimky na řádku, v souboru i pro celou cestu a baseline pro nálezy, které zatím nechcete řešit.
-- [Příkazová řádka |cli] kompletní přehled příkazů, přepínačů, formátů výstupu a exit kódů.
-
-
-Reference
----------
-- [Pravidla |decisions/@home] všechny sekce a jejich konfigurační klíče s hodnotami a ukázkami.
-- [Standardy a sady |php-coding-standards] co přesně předepisují standardy PER Coding Style, PSR-12, Nette, Symfony a šestice vestavěných sad.
-
-
-Rozšíření a integrace
----------------------
-- [Rozšiřování DressCode |extending], [vlastní pravidlo |custom-rule], [pravidlo do detailu |rule-contract], [pravidla pro bílé znaky |whitespace-rules], [testování pravidel |testing-rules].
-- [Průběžná integrace |continuous-integration], [AI agenti |ai-agents], [Git hooky |git-hooks].
 - [PhpSyntax |phpsyntax:] bezztrátový syntaktický strom, na kterém DressCode staví, jako samostatná knihovna.
 
 {{maintitle: DressCode: kontrola, oprava a aktualizace PHP kódu}}

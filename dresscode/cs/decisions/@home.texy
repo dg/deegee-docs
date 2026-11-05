@@ -5,34 +5,36 @@ Pravidla
 V jiných nástrojích je pravidlo kus kódu, který zapnete jménem, a pak hledáte, která z jeho voleb řídí to, o co vám jde. V DressCode je každé pravidlo rozhodnutí: jmenuje jednu věc ve vašem kódu a říká, jak se píše, třeba `braces.position.class: nextLine`. Dá se přečíst nahlas, napíšete ho do `dresscode.neon` a totéž jméno uvidíte u každého nálezu.
 
 
-Rozhodnutí místo fixeru a jeho voleb
-====================================
+Sekce rozhodnutí
+================
 
-Složená závorka třídy na dalším řádku a jeden prázdný řádek mezi metodami, nejdřív v PHP CS Fixeru:
+Sekce třídí rozhodnutí tak, aby se dala najít: kde byste hledali mezeru za čárkou, tam je. Jak přísně se porušení hlásí, na sekci nezávisí, určuje to klíč `severity`.
 
-```php
-return (new PhpCsFixer\Config)
-	->setRules([
-		'braces_position' => ['classes_opening_brace' => 'next_line_unless_newline_at_signature_end'],
-		'class_attributes_separation' => ['elements' => ['method' => 'one']],
-	]);
-```
+| sekce | o čem rozhoduje |
+|---|---|
+| [file |file] | soubor jako text: otevírací tag, konce řádků, délka řádku, `declare(strict_types=1)` |
+| [indentation |indentation] | odsazení: jednotka, šířka tabulátoru, odsazení pokračujících řádků |
+| [braces |braces] | složené závorky: kde stojí, kdy jsou povinné, prázdné tělo |
+| [blankLines |blankLines] | prázdné řádky v hlavičce souboru, ve třídě, v bloku a kolem příkazů |
+| [multiline |multiline] | konstrukce rozepsané na řádky a řádky delší než limit: jak stojí položky a okraje parametrů, argumentů, pole, podmínky, řetězu, ternárního operátoru, `for`, operátorů a `implements`, čárka na konci |
+| [spacing |spacing] | mezery na řádku: kolem operátorů, za čárkou, uvnitř závorek, za klíčovým slovem |
+| [naming |naming] | velikost písmen ve jménech tříd, metod, konstant a proměnných |
+| [casing |casing] | velikost písmen v tom, co patří PHP: klíčová slova, `true`, `null`, vestavěné třídy, funkce a typy |
+| [qualification |qualification] | jak plně se píše jméno třídy, funkce a konstanty: holé, importované, nebo s lomítkem |
+| [imports |imports] | příkazy `use` na začátku souboru: tvar, skupiny, pořadí, nepoužité importy |
+| [classes |classes] | třídy a jejich členové: pořadí, viditelnost, modifikátory, prázdné závorky |
+| [functions |functions] | funkce a closure: arrow funkce, `static`, zbytečný `return` |
+| [types |types] | typy v deklaracích: povinné typy, zápis `?int`, pořadí ve sjednocení |
+| [controlFlow |controlFlow] | řídicí struktury: `elseif`, zbytečné `else`, propadání ve `switch` |
+| [expressions |expressions] | operátory a výrazy: přísné porovnání, `!=`, ternární operátor, `$a += 1` |
+| [literals |literals] | zápis řetězců, čísel a polí: uvozovky, `[]`, oddělovače číslic |
+| [comments |comments] | obyčejné komentáře: `//` místo `#`, prázdné komentáře |
+| [phpdoc |phpdoc] | dokumentační komentáře: anotace, typy v nich, co v nich nemá být |
+| [hygiene |hygiene] | kód, který jde napsat jednodušeji se stejným významem: aliasy, `is_null()`, `intval()`, `get_class()`, `call_user_func()` |
+| [mistakes |mistakes] | to, co je nejspíš chyba, ať je styl jakýkoli |
+| [upgrading |upgrading] | přechod na novější PHP a na nové verze knihoven |
 
-a totéž v DressCode:
-
-```neon
-braces:
-	position:
-		class: nextLine
-blankLines:
-	aroundMethods: 1
-```
-
-Na stejném souboru udělají obě konfigurace stejnou změnu (PHP CS Fixer 3.95). Rozdíl je v tom, co jste museli vědět: v PHP CS Fixeru jméno fixeru a jméno jeho volby, v DressCode jen místo v kódu (klíč) a to, jak vypadá (hodnota). Z toho plynou tři věci:
-
-- **Nic se neřadí.** Rozhodnutí říká, jak jedna věc vypadá, ne co se spustí. DressCode spustí, co rozhodnutí vyžadují, a opakuje to, dokud se kód neustálí, takže pořadí pravidel nikdy nenastavujete.
-- **Hodnoty z vašeho kódu.** `dresscode init` změří hodnoty, které váš kód už má, a zapíše je do `dresscode.neon`, viz [Formátování kódu krok za krokem |/php-code-style].
-- **Jedno jméno všude.** `braces.position.class` je klíč v konfiguraci, cesta u nálezu, jméno v `// dresscode:ignore braces.position.class`, hodnota `--only` i argument `dresscode explain`.
+Plugin, který přináší vlastní pravidla, má sekci pojmenovanou po sobě: rozhodnutí balíčku `dresscode/upgrade-nette` stojí pod klíčem `nette`, třeba `nette.linkArguments`. Pravidla, která si projekt napíše sám, rozhodují pod klíčem `project`. Obojí se píše do konfigurace stejně jako sekce jádra; co plugin nebo projekt v sekci má, vypíše `dresscode catalogue`.
 
 Pokud přicházíte z PHP CS Fixeru nebo PHP_CodeSnifferu, stránka každé sekce u každého rozhodnutí vyjmenovává pravidla těchto nástrojů, která dané rozhodnutí pokrývá. Jde to i obráceně: tabulky [pravidel PHP CS Fixeru |/php-cs-fixer-rules], [sniffů PHP_CodeSnifferu |/phpcs-sniffs] a [sniffů Slevomatu |/slevomat-sniffs] vás od jména pravidla dovedou k rozhodnutí.
 
@@ -68,6 +70,36 @@ qualification:
 
 Prvních pět řádků tvoří vyhrazené klíče: z čeho konfigurace vychází a co se kontroluje. Zbytek jsou rozhodnutí a dají se číst nahlas: složená závorka třídy stojí na dalším řádku, tečka se píše bez mezer, mezi metodami je jeden prázdný řádek a před `return` taky, globální funkce zůstávají holé a ty, které PHP optimalizuje, se importují. Celou cestu k rozhodnutí, třeba `blankLines.aroundMethods`, uvidíte u každého nálezu ve výpisu a napíšete ji do komentáře `dresscode:ignore`, do `fixRisky` nebo za přepínač `--only`. Jak se konfigurace skládá z presetů, přepisů a příkazové řádky, popisuje stránka [Konfigurace |/configuration].
 
+Rozhodnutí, která k sobě patří, stojí ve skupině, a cesta se pak čte jako věta: sekce řekne oblast, skupina otázku nebo věc a poslední článek místo. Skupina sdruží buď místa, která odpovídají na tutéž otázku, jako `braces.position` polohu složené závorky u třídy, funkce nebo closure a `multiline.trailingComma` čárku na konci pole, argumentů nebo parametrů, anebo otázky k jedné věci, jako `file.strictTypes` deklaraci i místo, kde stojí. Rozhodnutí, které nemá jiné jméno než věc, o které rozhoduje, skupinu netvoří: stojí naplocho a klíče, které ho upřesňují, stojí vedle něj a nesou jeho jméno. `file.lineLength` je nejdelší povolený řádek, `file.longLines` říká, jestli se hlásí delší řádek, který nešlo rozložit, a `file.lineLengthExcept`, které konstrukce se kvůli šířce řádku nerozkládají a které řádky se nehlásí nikdy. Skupina se píše jako vnořená mapa a cesta k jejím klíčům má o článek víc. Slovo, počet nebo seznam napsaný u skupiny platí pro každý její klíč, který ho bere, takže `multiline.operatorPosition: lineStart` posune na začátek řádku všechny operátory naráz a `qualification.function: imported` importuje funkce globální, optimalizované i z jiných jmenných prostorů. Klíč, který slovo nebere, se přeskočí, a hodnota napsaná přímo u místa vyhrává nad hodnotou skupiny; slovo, které nebere žádný klíč skupiny, je chyba. Slovo přítomnosti napsané u skupiny musí brát každý její klíč, a skupina, která jmenuje jednu věc s několika otázkami, jako `expressions.ternary`, bere ze slov přítomnosti jen `keep`. V sekci `multiline` stojí mezi skupinou a místem ještě druhy míst `lists` a `operators`, jak popisuje [stránka sekce |multiline#Celá skupina naráz].
+
+
+Hodnoty
+=======
+
+Nejdůležitější hodnotou je **`keep`**, které bere každé rozhodnutí, jež něco vyžaduje, a mapa po položkách i celá: "tady se nic nevynucuje, kód zůstane, jak je". Je to jediné slovo pro "nesahej na to" a neznamená žádný tvar. `keep` napsané u sekce nebo u klíče s podklíči platí pro všechno pod ním a pozdější vrstva pak oživí jen ty klíče, které sama jmenuje:
+
+```neon
+blankLines: keep        # o prázdných řádcích nerozhoduje nic
+```
+
+Co dalšího klíč bere, říká jeho popis na stránce sekce a vypíše to i `dresscode explain <cesta>`. Druhů hodnot je pár a opakují se:
+
+- **Přítomnost** říká, jestli věc v kódu být musí, nebo nesmí: `required`, nebo `forbidden`, třeba `hygiene.is_null: forbidden` nebo `functions.arrowFunction.oneExpression: required`. Klíč jmenuje věc a slovo říká, co s ní: `forbidden` ji odstraní nebo přepíše, `required` ji doplní. V sekci `upgrading` píše `required` konstrukci, kterou přineslo novější PHP, a `forbidden` nahrazuje to, co PHP zavrhlo. Kde smí věc být i nebýt, jako čárka na konci víceřádkového seznamu, bere klíč i `optional`.
+- **Slovo** pojmenuje tvar, který nemá jeden pevný zápis: `braces.position.class: nextLine`, `imports.order.names: alphabetical`, `literals.quotes: single`.
+- **Ukázka** je tvar napsaný příkladem kódu v jednoduchých uvozovkách: `spacing.call: 'foo($a, $b)'`, `types.nullable: '?int'`. Uvozovky jsou nutné, protože NEON by `foo($a, $b)` četl jako entitu. DressCode ji nečte jako kód, jen ji porovná s ukázkami, které klíč zná; neznámá ukázka je chyba a hláška vypíše ty známé.
+- **Počet** prázdných řádků, číslic nebo délka: `blankLines.aroundMethods: 2`. Kde to klíč dovolí, i rozsah `0-1` a rozsah s otevřeným koncem `1+`. Některé počty berou i slovo, třeba `file.lineLength: none`. Seznam počtem nikdy není, `[0, 1]` DressCode odmítne.
+- **Seznam** jmen, vzorů nebo pořadí: `classes.members.order: [traitUse, constant, property]`, `phpdoc.forbiddenAnnotations: ['@author', '@package']`. Seznam napsaný ve vyšší vrstvě nahradí ten pod ním celý, i výchozí; kdo chce přidávat, napíše do seznamu `...`, které zastoupí seznam vrstvy pod ním: `['...', '@package']`.
+- **Tolerance** je seznam slov nebo ukázek tam, kde klíč snese víc tvarů najednou: `multiline.edges.condition: [apart, closingApart]` nechá projít oba tvary a podmínku, která neodpovídá žádnému, napíše podle prvního.
+- **Mapa** jmen nebo druhů na hodnotu: `blankLines.beforeStatement: {return: 1, throw: 1}`, nebo mapy náhrad v `upgrading.api`. Mapa se s vrstvou pod sebou slévá po položkách. Položka s hodnotou `keep` stáhne to jméno ze všech vrstev pod sebou, `keep` místo celé mapy ji stáhne celou a vykřičník za klíčem (`replacedClasses!:`) nahradí mapy nižších vrstev tím, co napíšete.
+- **Text** je jediný případ, kde je hodnotou prostá věta: text komentáře u propadnutí `case` (`controlFlow.switch.fallThroughComment: no break`). Seznam textů nechá projít každý a píše první.
+- **Ano, nebo ne** (`yes`, `no`) mají jen parametry (klíče, které upřesňují jiný klíč, viz níže), na jejichž otázku jinak odpovědět nejde, třeba `imports.order.caseSensitive: yes`, a `upgrading.packages`, které pod mapy projektu přivede data balíčků.
+
+
+Výchozí hodnota, požadavek a parametr
+=====================================
+
+Rozhodnutí, které nikdo nenapíše, má výchozí hodnotu a stránka sekce ji u něj uvádí. U většiny je to `keep`, takže nevyžaduje nic; takové rozhodnutí, které začne něco vynucovat, jakmile dostane jinou hodnotu, se nazývá požadavek. Parametr, tedy klíč, který jen upřesňuje jiný klíč, má skutečnou výchozí hodnotu, `keep` nebere a sám nic nezapne: `controlFlow.trailingIfMinStatements` říká, od kolika příkazů se z `if` na konci funkce stane časný návrat, ale hlídat se to začne až s `controlFlow.trailingIf: forbidden`.
+
 
 Vyhrazené klíče
 ===============
@@ -88,74 +120,10 @@ Vyhrazený klíč není rozhodnutí o vzhledu kódu, ale fakt o projektu, rozsah
 | `analyses` | vlastní [analýzy |/rule-contract#Analýzy] pro pravidla |
 | `fixRisky` | rozhodnutí, jejichž [rizikové opravy |/configuration#risky-fixes] projekt přijímá |
 | `severity` | jak přísně se hlásí porušení: mapa rozhodnutí, skupin, sekcí nebo presetů na `warning`, nebo `error` |
-| `suppressionComments` | [komentáře projektu |/suppressions-and-baseline#Potlačení na řádku], které umlčí rozhodnutí na svém řádku |
+| `suppressionComments` | [komentáře projektu |/suppressions-and-baseline#Vlastní komentáře projektu], které umlčí rozhodnutí na svém řádku |
 | `overrides` | jiné hodnoty pro [část projektu |/configuration#Jiné hodnoty pro část projektu] |
 
 Ne každý klíč smí stát všude. Preset nese jen rozhodnutí, `use` s presety, `suppressionComments` a `severity`, protože zná standard, ale ne váš projekt. Přepis pro část projektu smí mít navíc `targets` s verzí PHP, `namespaces`, `nameResolution` a `fixRisky`. Zbytek patří jen konfiguraci celého projektu.
-
-
-Sekce rozhodnutí
-================
-
-Sekce třídí rozhodnutí tak, aby se dala najít: kde byste hledali mezeru za čárkou, tam je. Nic dalšího z ní neplyne. Jak přísně se porušení hlásí, určuje klíč `severity`, a jestli smí DressCode opravu udělat sám nebo kdy se rozhodnutí uplatní, určuje hodnota a vlastnosti rozhodnutí, ne jméno sekce.
-
-| sekce | o čem rozhoduje |
-|---|---|
-| [file |file] | soubor jako text: otevírací tag, konce řádků, délka řádku, `declare(strict_types=1)` |
-| [indentation |indentation] | odsazení: jednotka, šířka tabulátoru, odsazení pokračujících řádků |
-| [braces |braces] | složené závorky: kde stojí, kdy jsou povinné, prázdné tělo |
-| [blankLines |blankLines] | prázdné řádky v hlavičce souboru, ve třídě, v bloku a kolem příkazů |
-| [multiline |multiline] | konstrukce rozepsané na řádky a řádky delší než limit: jak stojí položky a okraje parametrů, argumentů, pole, podmínky, řetězu, ternárního operátoru, `for`, operátorů a `implements`, čárka na konci |
-| [spacing |spacing] | mezery na řádku: kolem operátorů, za čárkou, uvnitř závorek, za klíčovým slovem |
-| [naming |naming] | velikost písmen ve jménech tříd, metod, konstant a proměnných |
-| [casing |casing] | velikost písmen v tom, co patří PHP: klíčová slova, `true`, `null`, vestavěné třídy, funkce a typy |
-| [qualification |qualification] | jak plně se píše jméno třídy, funkce a konstanty: holé, importované, nebo s lomítkem |
-| [imports |imports] | příkazy `use` na začátku souboru: tvar, skupiny, pořadí, nepoužité importy |
-| [classes |classes] | třídy a jejich členové: pořadí, viditelnost, modifikátory, prázdné závorky |
-| [functions |functions] | funkce a closure: arrow funkce, `static`, zbytečný `return` |
-| [types |types] | typy v deklaracích: povinné typy, zápis `?int`, pořadí ve sjednocení |
-| [controlFlow |controlFlow] | řídicí struktury: `elseif`, zbytečné `else`, propadání ve `switch` |
-| [expressions |expressions] | operátory a výrazy: přísné porovnání, `!=`, ternární operátor, `$a += 1` |
-| [literals |literals] | zápis řetězců, čísel a polí: uvozovky, `[]`, oddělovače číslic |
-| [comments |comments] | obyčejné komentáře: `//` místo `#`, prázdné komentáře |
-| [phpdoc |phpdoc] | dokumentační komentáře: anotace, typy v nich, co v nich nemá být |
-| [hygiene |hygiene] | kód, který jde napsat jednodušeji se stejným významem: aliasy, `is_null()`, `intval()`, `get_class()`, `call_user_func()` |
-| [mistakes |mistakes] | to, co je nejspíš chyba, ať je styl jakýkoli |
-| [upgrading |upgrading] | přechod na novější PHP a na nové verze knihoven |
-
-Plugin, který přináší vlastní pravidla, má sekci pojmenovanou po sobě: rozhodnutí balíčku `dresscode/upgrade-nette` stojí pod klíčem `nette`, třeba `nette.linkArguments`. Pravidla, která si projekt napíše sám, rozhodují pod klíčem `project`. Obojí se píše do konfigurace stejně jako sekce jádra; co plugin nebo projekt v sekci má, vypíše `dresscode catalogue`.
-
-
-Hodnoty
-=======
-
-Co klíč bere, říká jeho popis na stránce sekce a vypíše to i `dresscode explain <cesta>`. Druhů hodnot je pár a opakují se:
-
-- **Přítomnost** říká, jestli věc v kódu být musí, nebo nesmí: `required`, nebo `forbidden`, třeba `hygiene.is_null: forbidden` nebo `functions.arrowFunction.oneExpression: required`. Klíč jmenuje věc a slovo říká, co s ní: `forbidden` ji odstraní nebo přepíše, `required` ji doplní. V sekci `upgrading` píše `required` konstrukci, kterou přineslo novější PHP, a `forbidden` nahrazuje to, co PHP zavrhlo. Kde smí věc být i nebýt, jako čárka na konci víceřádkového seznamu, bere klíč i `optional`.
-- **Slovo** pojmenuje tvar, který nemá jeden pevný zápis: `braces.position.class: nextLine`, `imports.order.names: alphabetical`, `literals.quotes: single`.
-- **Ukázka** je tvar napsaný příkladem kódu v jednoduchých uvozovkách: `spacing.call: 'foo($a, $b)'`, `types.nullable: '?int'`. Uvozovky jsou nutné, protože NEON by `foo($a, $b)` četl jako entitu. DressCode ji nečte jako kód, jen ji porovná s ukázkami, které klíč zná; neznámá ukázka je chyba a hláška vypíše ty známé.
-- **Počet** prázdných řádků, číslic nebo délka: `blankLines.aroundMethods: 2`. Kde to klíč dovolí, i rozsah `0-1` a rozsah s otevřeným koncem `1+`. Některé počty berou i slovo, třeba `file.lineLength: none`. Seznam počtem nikdy není, `[0, 1]` DressCode odmítne.
-- **Seznam** jmen, vzorů nebo pořadí: `classes.members.order: [traitUse, constant, property]`, `phpdoc.forbiddenAnnotations: ['@author', '@package']`. Seznam napsaný ve vyšší vrstvě nahradí ten pod ním celý, i výchozí; kdo chce přidávat, napíše do seznamu `...`, které zastoupí seznam vrstvy pod ním: `['...', '@package']`.
-- **Tolerance** je seznam slov nebo ukázek tam, kde klíč snese víc tvarů najednou: `multiline.edges.condition: [apart, closingApart]` nechá projít oba tvary a podmínku, která neodpovídá žádnému, napíše podle prvního.
-- **Mapa** jmen nebo druhů na hodnotu: `blankLines.beforeStatement: {return: 1, throw: 1}`, nebo mapy náhrad v `upgrading.api`. Mapa se s vrstvou pod sebou slévá po položkách. Položka s hodnotou `keep` stáhne to jméno ze všech vrstev pod sebou, `keep` místo celé mapy ji stáhne celou a vykřičník za klíčem (`replacedClasses!:`) nahradí mapy nižších vrstev tím, co napíšete.
-- **Text** je jediný případ, kde je hodnotou prostá věta: text komentáře u propadnutí `case` (`controlFlow.switch.fallThroughComment: no break`). Seznam textů nechá projít každý a píše první.
-- **Ano, nebo ne** (`yes`, `no`) mají jen parametry, na jejichž otázku jinak odpovědět nejde, třeba `imports.order.caseSensitive: yes`, a `upgrading.packages`, které pod mapy projektu přivede data balíčků.
-
-Rozhodnutí, která k sobě patří, stojí ve skupině, a cesta se pak čte jako věta: sekce řekne oblast, skupina otázku nebo věc a poslední článek místo. Skupina sdruží buď místa, která odpovídají na tutéž otázku, jako `braces.position` polohu složené závorky u třídy, funkce nebo closure a `multiline.trailingComma` čárku na konci pole, argumentů nebo parametrů, anebo otázky k jedné věci, jako `file.strictTypes` deklaraci i místo, kde stojí. Rozhodnutí, které nemá jiné jméno než věc, o které rozhoduje, skupinu netvoří: stojí naplocho a klíče, které ho upřesňují, stojí vedle něj a nesou jeho jméno. `file.lineLength` je nejdelší povolený řádek, `file.longLines` říká, jestli se hlásí delší řádek, který nešlo rozložit, a `file.lineLengthExcept`, které konstrukce se kvůli šířce řádku nerozkládají a které řádky se nehlásí nikdy. Skupina se píše jako vnořená mapa a cesta k jejím klíčům má o článek víc. Slovo, počet nebo seznam napsaný u skupiny platí pro každý její klíč, který ho bere, takže `multiline.operatorPosition: lineStart` posune na začátek řádku všechny operátory naráz a `qualification.function: imported` importuje funkce globální, optimalizované i z jiných jmenných prostorů. Klíč, který slovo nebere, se přeskočí, a hodnota napsaná přímo u místa vyhrává nad hodnotou skupiny; slovo, které nebere žádný klíč skupiny, je chyba. Slovo přítomnosti napsané u skupiny musí brát každý její klíč, a skupina, která jmenuje jednu věc s několika otázkami, jako `expressions.ternary`, bere ze slov přítomnosti jen `keep`. V sekci `multiline` stojí mezi skupinou a místem ještě druhy míst `lists` a `operators`, jak popisuje [stránka sekce |multiline#Celá skupina naráz].
-
-A pak je tu **`keep`**, které bere každé rozhodnutí, jež něco vyžaduje, a mapa po položkách i celá: "tady se nic nevynucuje, kód zůstane, jak je". Je to jediné slovo pro "nesahej na to" a neznamená žádný tvar. `keep` napsané u sekce nebo u klíče s podklíči platí pro všechno pod ním a pozdější vrstva pak oživí jen ty klíče, které sama jmenuje:
-
-```neon
-blankLines: keep        # o prázdných řádcích nerozhoduje nic
-```
-
-
-Výchozí hodnota a fakt
-======================
-
-Rozhodnutí, které nikdo nenapíše, má výchozí hodnotu a stránka sekce ji u něj uvádí. U většiny je to `keep`, takže nevyžaduje nic. Parametr, tedy klíč, který jen upřesňuje jiný klíč, má skutečnou výchozí hodnotu, `keep` nebere a sám nic nezapne: `controlFlow.trailingIfMinStatements` říká, od kolika příkazů se z `if` na konci funkce stane časný návrat, ale hlídat se to začne až s `controlFlow.trailingIf: forbidden`. Proto ani seznam, který projekt napíše do `types.traversableClasses`, nikdy sám nezapne povinné typy.
-
-**Fakt projektu** není rozhodnutí o vzhledu, ale o tom, co projekt obsahuje: `namespaces.functions` a `namespaces.constants` vyjmenují funkce a konstanty ve jmenných prostorech. Píšou se do vyhrazeného klíče `namespaces` a hlídač, který ohlásí deklaraci chybějící v seznamu, se zapne klíčem `nameResolution: certain`; podrobnosti jsou na stránce [Funkce a konstanty ve jmenných prostorech |/php-functions-in-namespaces].
 
 
 Kde zjistit víc

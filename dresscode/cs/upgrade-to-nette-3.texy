@@ -4,7 +4,7 @@ Přechod na Nette 3
 .[perex]
 Přechod z Nette 2.4 na poslední verzi Nette 3 je dlouhá cesta. Verze 3.0 odstranila `Nette\Object` a změnila routery, vydání 3.x pak přejmenovala `Nette\Database\Context` na `Explorer`, `Cache::EXPIRE` na `Cache::Expire`, `FileUpload::getName()` na `getUntrustedName()` a `IMailer` na `Mailer`. Většinu té cesty ujde DressCode za vás: s daty balíčku `dresscode/upgrade-nette` přepíše zastaralé API sám, a kde musíte rozhodnout vy, se zastaví a poradí.
 
-Pro Nette 3 nesou data balíčku zhruba 500 změn, z toho asi 190 jen z verze 3.0. Přes 350 z nich DressCode přepíše sám a asi 140 ohlásí. Data sahají od verze 3.0 po poslední verze Nette 3, které běží na `nette/utils` 3; `nette/application` 3.2, `nette/forms` 3.2 a `nette/database` 3.2 už vyžadují `nette/utils` 4 (viz [Packagist |https://packagist.org/packages/nette/application]), a tak patří na stránku [Nette 4 |upgrade-to-nette-4]. Pro verze před 3.0 data nejsou, takže s krokem z Nette 2.3 nebo starší verze na 2.4 DressCode nepomůže.
+Pro Nette 3 nesou data balíčku zhruba 500 změn, z toho asi 190 jen z verze 3.0. Přes 350 z nich DressCode přepíše sám a asi 140 ohlásí. Tahle stránka končí u posledních verzí Nette 3, které ještě běží na `nette/utils` 3; novější vydání, třeba `nette/application` 3.2, už vyžadují `nette/utils` 4, a tak patří na stránku [Nette 4 |upgrade-to-nette-4]. Pro verze před 3.0 data nejsou, takže s krokem z Nette 2.3 nebo starší verze na 2.4 DressCode nepomůže.
 
 
 Jak to vypadá
@@ -18,7 +18,7 @@ app/ProductPresenter.php:40:25: error: Constant `Nette\Caching\Cache::EXPIRE` is
 app/ProductPresenter.php:67:44: error: Method `Nette\Http\FileUpload::getName()` is deprecated: replaced by `getUntrustedName`, since nette/http 3.0.5. [upgrading.api.forbiddenMembers]
 \--
 
-Jakmile dolní meze dosáhnou posledních vydání Nette 3, třeba `^3.1.15` u `nette/application` a `nette/forms`, přepíše `upgrade today` i ohlášená místa. Pět řádků presenteru před prvním krokem a na konci:
+Jakmile dolní meze dosáhnou posledních vydání Nette 3, třeba `^3.1.15` u `nette/application` a `nette/forms`, přepíše `upgrade today` i ohlášená místa. Takhle vypadá pět řádků presenteru před prvním krokem a po posledním:
 
 ```php .[before]
 $sort = $this->getHttpRequest()->getQuery('sort', 'name');
@@ -36,7 +36,26 @@ $form->addText('email')->addCondition(Form::Filled);
 $mail->setSubject('New photo ' . $photo->getUntrustedName());
 ```
 
-Tentýž běh přepsal i importy, typy parametrů a anotace `@var`: z `Context`, `IMailer` a `IStorage` jsou teď `Explorer`, `Mailer` a `Storage`. Že je `$photo` objekt `FileUpload`, ví DressCode z typů PHPStanu, a tak `getName()` u komponenty nebo formulářového prvku nechá být. Jak kroky udělat, popisuje oddíl [Krok za krokem |#Krok za krokem].
+Tentýž běh přepsal i importy, typy parametrů a anotace `@var`: z `Context`, `IMailer` a `IStorage` jsou teď `Explorer`, `Mailer` a `Storage`. Že je `$photo` objekt `FileUpload`, ví DressCode z typů PHPStanu, a tak `getName()` u komponenty nebo formulářového prvku nechá být.
+
+
+Krok za krokem
+==============
+
+DressCode běží na PHP 8.4 a potřebuje `nette/utils` 4.1, a tak se do aplikace na Nette 2.4 nebo 3 jako vývojová závislost nevejde. Nainstalujte ho globálně, s PHPStanem a s daty pro Nette:
+
+```shell
+composer global require dresscode/dresscode dresscode/upgrade-nette phpstan/phpstan
+```
+
+Knihovny Nette se navzájem vyžadují, třeba `nette/application` 3.0 vyžaduje `nette/utils` 3, takže se posouvají společně a jejich verze zvedáte sami. Dokumentace Nette doporučuje jít po jedné verzi ([Průvodce upgradem |https://doc.nette.org/cs/migrations]), a tak tyhle kroky zopakujte pro 3.0, pak pro 3.1 a tak dál:
+
+1. V `composer.json` zvedněte dolní mez každé knihovny Nette na další verzi, třeba `"nette/application": "^3.0"`. V rámci Nette 3 pište nejnovější vydání té verze, třeba `^3.1.15`, protože se kód přepisuje pro nejnižší verzi, kterou omezení dovolí, viz [Rozhodují dolní meze |upgrade#Rozhodují dolní meze].
+2. Pusťte `composer update --prefer-lowest`, ať jsou ve vendoru právě tyhle verze.
+3. Pusťte `dresscode upgrade today`, a když vám to poradí, ještě jednou.
+4. Projděte, co ohlásil, pusťte testy a PHPStan, přečtěte si diff a commitněte.
+
+Běží-li projekt ještě na PHP 7, začne každý běh varováním, že DressCode je odzkoušený na kódu pro PHP 8.0 a novější, a přepisy, které by zapsaly konstrukce PHP 8, proto vynechá; API Nette přepíše stejně. U knihovny, kterou aplikace v `composer.json` sama nevyžaduje, třeba `nette/routing` nebo `nette/component-model`, se změny jen ohlásí; přidejte ji do `require` s dolní mezí a přepíšou se. Celý postup podrobně popisuje [Upgrade kódu |upgrade#Po jedné hlavní verzi, ručně].
 
 
 Co se přepíše
@@ -128,28 +147,9 @@ app/Model/Visits.php:29:33: error: Method `Nette\Http\Request::getReferer()` is 
 | `$presenter->getContext()` | nechte si předat služby, které presenter potřebuje | `nette/application` 3.1 |
 | `IAuthenticator` | `Nette\Security\Authenticator`, jehož `authenticate()` bere jméno a heslo místo pole | `nette/security` 3.1 |
 
-Sem patří většina `nette/di`: z jeho 84 položek pro Nette 3 se 46 jen ohlásí, hlavně metody kompilátoru a builderu kontejneru, které volají rozšíření. Když místo vyřešíte, nález zmizí; místo, které necháváte schválně, označte komentářem `// dresscode:ignore <rozhodnutí> -- <důvod>`, viz [Ruční úkoly po cestě |upgrade#Ruční úkoly po cestě].
+Sem patří většina `nette/di`, hlavně metody kompilátoru a builderu kontejneru, které volají rozšíření. Když místo vyřešíte, nález zmizí; místo, které necháváte schválně, označte komentářem `// dresscode:ignore <rozhodnutí> -- <důvod>`, viz [Ruční úkoly po cestě |upgrade-plan#Ruční úkoly po cestě].
 
 Některé změny Nette 3 v datech nejsou vůbec. Od verze 3.0 musí metoda, která ve vašem presenteru nebo komponentě přepisuje metodu Nette, deklarovat stejné typy parametrů a návratové hodnoty, a Nette kontroluje, že signál přišel ze stejného původu ([průvodce upgradem nette/application |https://doc.nette.org/cs/application/upgrading]). Typy DressCode nedoplní a data nezachytí změny chování, konfigurace v NEONu ani šablon Latte; popisují je [průvodci upgradem jednotlivých knihoven |https://doc.nette.org/cs/migrations].
-
-
-Krok za krokem
-==============
-
-DressCode běží na PHP 8.4 a potřebuje `nette/utils` 4.1, a tak se do aplikace na Nette 2.4 nebo 3 jako vývojová závislost nevejde. Nainstalujte ho globálně, s PHPStanem a s daty pro Nette:
-
-```shell
-composer global require dresscode/dresscode dresscode/upgrade-nette phpstan/phpstan
-```
-
-Knihovny Nette se navzájem vyžadují, třeba `nette/application` 3.0 vyžaduje `nette/utils` 3, takže se posouvají společně a jejich verze zvedáte sami. Dokumentace Nette doporučuje jít po jedné verzi ([Průvodce upgradem |https://doc.nette.org/cs/migrations]), a tak tyhle kroky zopakujte pro 3.0, pak pro 3.1 a tak dál:
-
-1. V `composer.json` zvedněte dolní mez každé knihovny Nette na další verzi, třeba `"nette/application": "^3.0"`. V rámci Nette 3 pište nejnovější vydání té verze, třeba `^3.1.15`, protože se kód přepisuje pro nejnižší verzi, kterou omezení dovolí, viz [Rozhodují dolní meze |upgrade#Rozhodují dolní meze].
-2. Pusťte `composer update --prefer-lowest`, ať jsou ve vendoru právě tyhle verze.
-3. Pusťte `dresscode upgrade today`, a když vám to poradí, ještě jednou.
-4. Projděte, co ohlásil, pusťte testy a PHPStan, přečtěte si diff a commitněte.
-
-Na PHP 7 začne každý běh varováním, že je DressCode odzkoušený na kódu pro PHP 8.0 a novější, a tak nechá opravy konstrukcí PHP 8 vypnuté; API Nette přepíše stejně. U knihovny, kterou aplikace v `composer.json` sama nevyžaduje, třeba `nette/routing` nebo `nette/component-model`, se změny jen ohlásí; přidejte ji do `require` s dolní mezí a přepíšou se. Celý postup podrobně popisuje [Upgrade kódu krok za krokem |upgrade#Po jedné hlavní verzi, ručně].
 
 
 Kam dál
@@ -158,7 +158,7 @@ Kam dál
 - [Nette 4 |upgrade-to-nette-4], další krok po Nette 3: `nette/utils` 4 a knihovny, které ho vyžadují.
 - [Knihovny Nette |upgrading-nette], co balíček `dresscode/upgrade-nette` pokrývá ve všech verzích.
 - [Přechod na novější PHP |upgrading-php], protože Nette 3.1 potřebuje aspoň PHP 7.2, kdežto Nette 2.4 běží i na PHP 5.6.
-- [Upgrade kódu krok za krokem |upgrade], `upgrade today`, odhad a plán podrobně.
+- [Upgrade kódu |upgrade], `upgrade today` podrobně, a [plán upgradu |upgrade-plan] s odhadem, testy a commity.
 
 {{maintitle: Přechod na Nette 3: automatický přepis kódu}}
 {{description: Upgrade z Nette 2.4 na 3: DressCode přepíše zastaralé API, třeba Context na Explorer a Cache::EXPIRE na Cache::Expire, a zbytek ohlásí.}}

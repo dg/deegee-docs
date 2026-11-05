@@ -10,9 +10,9 @@ Každý preset vychází z předchůdců uvedených v jeho klíči `use` a uprav
 Standardy
 =========
 
-Pětice vestavěných standardů komplexně určuje vše, co v kódu vidíte: odsazení, umístění závorek, mezery, prázdné řádky i pravidla zalamování. Standardy `psr12` a `perCs` jsou napsány striktně podle oficiálních specifikací PHP-FIG, oddíl po oddílu, a nepřidávají nic vlastního. Standardy `nette`, `symfony` a `laravel` staví na základech PER Coding Style a doplňují zvyklosti a požadavky svých ekosystémů.
+Pětice vestavěných standardů určuje, jak kód vypadá: odsazení, umístění závorek, mezery a prázdné řádky; `psr12`, `perCs` a `nette` i zalamování dlouhých řádků. Standardy `psr12` a `perCs` jsou napsány striktně podle oficiálních specifikací PHP-FIG, oddíl po oddílu, a nepřidávají nic vlastního. Standardy `nette`, `symfony` a `laravel` staví na základech PER Coding Style a doplňují zvyklosti a požadavky svých ekosystémů.
 
-Řádek přesahující limit `file.lineLength` standard automaticky zalomí všude tam, kde to syntaxe dovoluje. Kde zalomení provést nelze (například u dlouhých textových řetězců nebo komentářů), tam `psr12` a `perCs` hlásí pouze varování, protože PSR-12 považuje limit 120 znaků za doporučený (soft limit). Standard `nette` jej naproti tomu hlásí jako striktní chybu, zatímco `symfony` a `laravel` délku řádků nehlídají vůbec.
+Standardy `psr12`, `perCs` a `nette` zalomí řádek přesahující limit `file.lineLength` všude tam, kde to syntaxe dovoluje. Kde zalomení provést nelze (například u dlouhých textových řetězců nebo komentářů), hlásí pouze varování, protože PSR-12 považuje limit 120 znaků za doporučený (soft limit). Standard `nette` navíc vůbec nehlásí dlouhý import ani řádek, který je dlouhý jen kvůli řetězcům. Standardy `symfony` a `laravel` délku řádků nehlídají vůbec. Podrobnosti najdete u rozhodnutí [`file.longLines` |decisions/file#file.longLines].
 
 
 psr12
@@ -30,6 +30,7 @@ severity:
 
 file:
 	bom: forbidden
+	invalidUtf8: forbidden                    # PSR-1 asks for UTF-8 only
 	openingTag: required                      # `<?php`, not `<?` or `<?PHP`
 	strictTypes:
 		position: nextLine                    # §3, `<?php` on a line of its own
@@ -104,6 +105,8 @@ multiline:
 		concatenation: [perLine, fill]
 		arithmetic: [perLine, fill]
 		bitwise: [perLine, fill]
+		coalesce: [perLine, fill]
+		pipe: [perLine, fill]
 	edges:
 		argument: apart                       # `foo(` above the arguments, `)` below them
 		parameter: apart
@@ -308,7 +311,9 @@ file:
 		declaration: required                 # risky, `'1'` passed to `int` then throws
 		position: sameLine
 	lineLength: 140                           # a tab counts as 4 columns
-	lineLengthExcept: [imports, strings]      # a line too wide only for its strings is not reported
+	# a line too wide only for its strings is not reported, nor one with `??`, which is not spread for the width,
+	# so that `?? throw new …` stays on the line of the value it guards
+	lineLengthExcept: [imports, strings, coalesce]
 
 indentation:
 	unit: tab
@@ -765,6 +770,8 @@ multiline:
 		concatenation: keep
 		arithmetic: keep
 		bitwise: keep
+		coalesce: keep
+		pipe: keep
 		chain: keep
 		matchCondition: keep
 		ternary: keep
@@ -919,7 +926,7 @@ upgrading:
 Sady
 ====
 
-Sada o vizuálním vzhledu kódu nerozhoduje, a proto se se zvoleným standardem nikdy nedostane do křížku. Připojuje se v konfiguraci vedle něj (`use: [nette, modernizations]`) a v čase se plynule rozvíjí: jakmile DressCode v nové verzi získá další rozhodnutí daného záměru, automaticky přibudou do příslušné sady a váš projekt je získá bez nutnosti měnit konfigurační soubor.
+Sada o vizuálním vzhledu kódu nerozhoduje, a proto se se zvoleným standardem nikdy nedostane do křížku. Připojuje se v konfiguraci vedle něj (`use: [nette, modernizations]`) a s novými verzemi DressCode přibývají její rozhodnutí bez změny vaší konfigurace. Sady `modernizations` a `deprecations` nenese žádný standard: přechod na novější PHP a nové API knihoven je krok, pro který se rozhodujete sami.
 
 
 modernizations
@@ -1146,7 +1153,7 @@ mistakes:
 	unreachableCatch: forbidden                 # after `catch (Throwable)`
 	exceptionWhereThrowableBelongs: forbidden   # `catch (Exception)` where `Throwable` is meant, reported
 	errorSuppression: forbidden                 # the `@` operator, reported
-	invisibleCharacter: forbidden               # zero-width, no-break and bidi characters, escaped
+	invisibleCharacter: forbidden               # zero-width, narrow no-break and bidi characters, escaped
 	strictArgument: required                    # `in_array($a, $b, true)`, risky
 	trailingWhitespaceInString: forbidden       # in a multi-line string or inline HTML
 	consecutivePhpdocs: forbidden               # the first of two is lost, reported
@@ -1200,7 +1207,7 @@ upgrading:
 compilerOptimizations
 =====================
 
-Globální funkce a konstanty zapsané do tvaru, který kompilátor PHP optimalizuje přímo při překladu (podrobnosti přináší stránka [Rychlejší volání, když je jméno jisté |php-functions-in-namespaces#Rychlejší volání, když je jméno jisté]).
+Globální funkce a konstanty zapsané do tvaru, který kompilátor PHP optimalizuje přímo při překladu (podrobnosti přináší stránka [Rychlejší volání funkcí v PHP |php-compiler-optimizations]).
 
 ```neon .[preset]
 # Compiler optimizations

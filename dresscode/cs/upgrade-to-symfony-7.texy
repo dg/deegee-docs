@@ -4,7 +4,7 @@ Přechod na Symfony 7
 .[perex]
 Symfony 7.0 jen uklidilo: odstranilo všechno, co Symfony 6 zavrhlo, třeba anotaci `@Route`, anotace SensioFrameworkExtraBundle, `MessageHandlerInterface`, `renderForm()` nebo vlastnost `$defaultName` příkazu. Náhrady za ně má už Symfony 6.4, a tak většinu upgradu ze Symfony 6 na 7 uděláte ještě na něm: DressCode s balíčkem `dresscode/upgrade-symfony` váš kód přepíše a co přepsat neumí, ohlásí.
 
-Podle [UPGRADE-7.0.md |https://github.com/symfony/symfony/blob/7.0/UPGRADE-7.0.md] má verze 7.0 stejné funkce jako 6.4, jen bez těch zavržených; obě vyšly společně na konci listopadu 2023. Verze 7.0 ale potřebuje PHP 8.2, kdežto 6.4 běží i na PHP 8.1 ([Symfony 7.0 |https://symfony.com/releases/7.0]).
+Podle [UPGRADE-7.0.md |https://github.com/symfony/symfony/blob/7.0/UPGRADE-7.0.md] má verze 7.0 stejné funkce jako 6.4, jen bez těch zavržených. Verze 7.0 ale potřebuje PHP 8.2, kdežto 6.4 běží i na PHP 8.1 ([Symfony 7.0 |https://symfony.com/releases/7.0]).
 
 
 Jak to vypadá
@@ -51,6 +51,28 @@ class OrderController extends AbstractController
 ```
 
 Z anotace se stal stejnojmenný atribut, importovaný ze jmenného prostoru `Attribute` místo `Annotation`. Z `renderForm()` je `render()`, které bere formulář tak, jak je, a z `getContentType()` je `getContentTypeFormat()`. Kód dál běží na 6.4. Po zvednutí verzí v `composer.json` na `7.0.*` už druhý běh v tomhle controlleru nenašel nic k přepsání.
+
+
+Krok za krokem
+==============
+
+Balíčky Symfony se zvedají všechny najednou, a tak je v `composer.json` zvednete sami a kód přepíše `dresscode upgrade today`. DressCode potřebuje PHP 8.4. Pokud vaše aplikace běží na starším PHP, nainstalujte DressCode globálně, s PHPStanem a s daty pro Symfony:
+
+```shell
+composer global require dresscode/dresscode dresscode/upgrade-symfony phpstan/phpstan
+```
+
+Na PHP 8.4 a novějším může být vývojovou závislostí projektu, jak ukazuje [Instalace |upgrading-symfony#Instalace].
+
+1. Začněte na Symfony 6.4 s čistým pracovním stromem. Pusťte `dresscode upgrade today`, a pokud to poradí, ještě jednou. Přepíše, co Symfony 6.1 až 6.4 zavrhlo, protože náhrady už v 6.4 existují.
+2. Projděte, co ohlásí, pusťte testy a PHPStan a commitněte.
+3. Zvedněte balíčky Symfony v `composer.json` na `7.0.*` nebo na pozdější 7.x a `require.php` aspoň na 8.2. Se Symfony Flex zvedněte i `extra.symfony.require`. Pak pusťte `composer update "symfony/*" -W --prefer-lowest`.
+4. Pusťte znovu `dresscode upgrade today`. Najde, co po zvednutí zbylo, a na pozdější 7.x i to, co zavrhla ta verze. Pak pusťte testy a commitněte.
+
+.[warning]
+Verzi každého balíčku DressCode čte z jeho omezení v `composer.json`. Když má balíček Symfony v `composer.json` jen `*` a verzi nechává na `extra.symfony.require`, DressCode dolní mez nevidí a změny toho balíčku jen ohlásí. Napište verzi do omezení, třeba `6.4.*`.
+
+Proč `--prefer-lowest` a proč po jedné hlavní verzi, vysvětluje [Upgrade kódu |upgrade#Po jedné hlavní verzi, ručně].
 
 
 Anotace SensioFrameworkExtraBundle
@@ -142,38 +164,16 @@ Class `Symfony\Component\DependencyInjection\ContainerAwareInterface` is depreca
 | `StopWorkerOnSignalsListener` | nic, `messenger:consume` zastaví workera při `SIGTERM` a `SIGINT` sám; listener odeberte | `symfony/messenger` 6.4 |
 | `Kernel::stripComments()` | náhrada není; zkopírujte metodu do projektu | `symfony/http-kernel` 6.4 |
 
-Takové místo potvrdíte komentářem `// dresscode:ignore <rozhodnutí> -- <důvod>`, nebo ho přepíšete; podrobnosti najdete v kapitole [Ruční úkoly po cestě |upgrade#Ruční úkoly po cestě].
+Takové místo potvrdíte komentářem `// dresscode:ignore <rozhodnutí> -- <důvod>`, nebo ho přepíšete; podrobnosti najdete v kapitole [Ruční úkoly po cestě |upgrade-plan#Ruční úkoly po cestě].
 
 Změny konfigurace v YAMLu, šablon Twig a chování data nezachytí. Symfony 7.0 také dalo mnoha metodám nativní návratové typy ([Symfony 7.0 type declarations |https://symfony.com/blog/symfony-7-0-type-declarations]) a vaše metoda, která některou z nich přepisuje, potřebuje stejný typ; jak takové signatury DressCode píše, říká stránka [Symfony |upgrading-symfony].
-
-
-Krok za krokem
-==============
-
-DressCode potřebuje PHP 8.4. Pokud vaše aplikace běží na starším PHP, nainstalujte DressCode globálně, s PHPStanem a s daty pro Symfony:
-
-```shell
-composer global require dresscode/dresscode dresscode/upgrade-symfony phpstan/phpstan
-```
-
-Na PHP 8.4 a novějším může být vývojovou závislostí projektu, jak ukazuje [Instalace |upgrading-symfony#Instalace].
-
-1. Začněte na Symfony 6.4 s čistým pracovním stromem. Pusťte `dresscode upgrade today`, a pokud to poradí, ještě jednou. Přepíše, co Symfony 6.1 až 6.4 zavrhlo, protože náhrady už v 6.4 existují.
-2. Projděte, co ohlásí, pusťte testy a PHPStan a commitněte.
-3. Zvedněte balíčky Symfony v `composer.json` na `7.0.*` nebo na pozdější 7.x a `require.php` aspoň na 8.2. Se Symfony Flex zvedněte i `extra.symfony.require`. Pak pusťte `composer update "symfony/*" -W --prefer-lowest`.
-4. Pusťte znovu `dresscode upgrade today`. Najde, co po zvednutí zbylo, a na pozdější 7.x i to, co zavrhla ta verze. Pak pusťte testy a commitněte.
-
-.[warning]
-Verzi každého balíčku DressCode čte z jeho omezení v `composer.json`. Když má balíček Symfony v `composer.json` jen `*` a verzi nechává na `extra.symfony.require`, DressCode dolní mez nevidí a změny toho balíčku jen ohlásí. Napište verzi do omezení, třeba `6.4.*`.
-
-Proč `--prefer-lowest` a proč po jedné hlavní verzi, vysvětluje [Upgrade kódu krok za krokem |upgrade#Po jedné hlavní verzi, ručně].
 
 
 Kam dál
 =======
 
 - [Symfony |upgrading-symfony], všechny komponenty, které balíček pokrývá, i přechod ze Symfony 5 na 6.
-- [Upgrade kódu krok za krokem |upgrade], celý postup s testy a commity.
+- [Upgrade kódu |upgrade], `upgrade today` podrobně, a [plán upgradu |upgrade-plan] s testy a commity.
 - [Přechod na novější PHP |upgrading-php], protože Symfony 7 potřebuje PHP 8.2.
 
 {{maintitle: Přechod ze Symfony 6 na 7: automatický přepis kódu}}

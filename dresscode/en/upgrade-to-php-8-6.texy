@@ -2,7 +2,7 @@ Upgrade to PHP 8.6
 ******************
 
 .[perex]
-PHP 8.6 is due on November 19, 2026, but you can upgrade your code to it today, in a branch, with DressCode running on PHP 8.4 or 8.5. DressCode turns `max(0, min(5, $votes))` into `clamp($votes, 0, 5)`, and `fn($x) => str_pad($x, 10, '-')` into the partial function application `str_pad(?, 10, '-')`. It also fixes or reports what PHP 8.6 deprecated.
+DressCode upgrades your code to PHP 8.6 even when it runs on PHP 8.4 or 8.5 itself. It turns `max(0, min(5, $votes))` into `clamp($votes, 0, 5)`, and `fn($x) => str_pad($x, 10, '-')` into the partial function application `str_pad(?, 10, '-')`. It also fixes or reports what PHP 8.6 deprecated.
 
 
 What It Looks Like
@@ -111,7 +111,7 @@ Every decision knows the PHP version that brought its feature. While `composer.j
 What PHP 8.6 Deprecated
 =======================
 
-The set `deprecations` fixes what has a direct replacement and reports the rest, with the version that deprecated it. A deprecation is reported regardless of the target version, so you can clean it up before the move.
+The set `deprecations` fixes what has a direct replacement and reports the rest, with the version that deprecated it. Like the rewrites to new features, it follows the lower bound in `composer.json`: the deprecations of PHP 8.6 are reported once the project requires at least PHP 8.6.
 
 | deprecated | DressCode |
 |---|---|
@@ -147,22 +147,24 @@ fixRisky:
 In a namespace, an unqualified `min()` may be a function of that namespace. Until the configuration says `nameResolution: certain`, the rewrites of such calls wait as risky, see [Functions and Constants in Namespaces |php-functions-in-namespaces].
 
 
-Ready Before the Release
-========================
+PHP 8.6 Syntax on an Older PHP
+==============================
 
-DressCode reads the syntax of PHP 8.6 even when it runs on PHP 8.4 or 8.5. Its parser [PhpSyntax |phpsyntax:] adds the tokens the running interpreter does not know yet, so a file with `str_pad(?, 10, '-')` is a file like any other, and the rules of your standard format it. You can raise the version and rewrite the code on the day PHP 8.6 is released, or earlier, in a branch.
+DressCode reads the syntax of PHP 8.6 even when it runs on PHP 8.4 or 8.5. Its parser [PhpSyntax |phpsyntax:] adds the tokens the running interpreter does not know yet, so a file with `str_pad(?, 10, '-')` is a file like any other, and the rules of your standard format it. So you can upgrade the code in a branch before your server moves to PHP 8.6.
 
 
 Step by Step
 ============
 
+The [upgrade plan |upgrade-plan] needs a configuration, `dresscode.neon`; if the project does not have one yet, `dresscode init` measures it from the code.
+
 1. Start with a clean working tree, so that the diff shows only what DressCode did.
-2. Measure how much work the move takes: `dresscode upgrade estimate php 8.6`. If the project sets `config.platform.php`, raise it to 8.6 first.
+2. Measure how much work the move takes: `dresscode upgrade estimate php 8.6`.
 3. Save the plan and carry it out: `dresscode upgrade plan php 8.6 --save`, then `dresscode upgrade run`. At the Composer step, DressCode asks whether it may raise `require.php` to `^8.6`; you can also raise it yourself and then run `upgrade run`.
 4. Read what is left for you, and run `upgrade run` again until the run ends with `UPGRADED`. Whether the waiting risky fixes are made is decided by the types, by `nameResolution`, or by you.
 5. Commit the result on its own, without other changes.
 
-If the project has the sets `modernizations` and `deprecations` in its configuration, a plain `dresscode fix` after raising `require.php` is enough. [Upgrade Your Code Step by Step |upgrade] describes the whole procedure with tests and commits.
+When you raise `require.php` yourself, you do not need the plan: if the configuration has the sets `modernizations` and `deprecations`, a plain `dresscode fix` is enough, otherwise [`dresscode upgrade today --modernize` |upgrade#When You Have Already Raised the Versions]. [The Upgrade Plan Step by Step |upgrade-plan] describes the whole procedure of the plan with tests and commits.
 
 
 Where to Go Next
@@ -173,4 +175,4 @@ Where to Go Next
 - [The section upgrading |decisions/upgrading] with every decision about a newer PHP.
 
 {{maintitle: Upgrade Your Code to PHP 8.6 Automatically}}
-{{description: Upgrade to PHP 8.6 before it is released: DressCode rewrites your code to clamp() and partial function application, and fixes or reports what PHP 8.6 deprecated.}}
+{{description: Upgrade to PHP 8.6 automatically: DressCode rewrites your code to clamp() and partial function application, and fixes or reports what PHP 8.6 deprecated.}}

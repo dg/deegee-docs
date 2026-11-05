@@ -8,23 +8,16 @@ Kód psaný pro Laravel 5.8 volá `str_slug()` a `array_get()`, které jsou dnes
 Instalace
 =========
 
+Aplikaci, která ještě běží na PHP starším než 8.4, upgradujte s DressCode nainstalovaným globálně, protože sám potřebuje PHP 8.4 (viz [Kde DressCode běží |upgrade#Kde DressCode běží]):
+
 ```shell
-composer require --dev dresscode/upgrade-laravel phpstan/phpstan
-vendor/bin/dresscode upgrade today
+composer global require dresscode/dresscode dresscode/upgrade-laravel phpstan/phpstan
+dresscode upgrade today
 ```
 
-`upgrade today` vezme data balíčku sám, bez konfigurace, a styl kódu nechá, jak je. Uplatní je jen tehdy, když projekt má `laravel/framework`, a jen pro verze, na které projekt dosáhne. Postup po jedné hlavní verzi a co dělat s tím, co zbude, popisuje [Upgrade kódu |upgrade].
+`upgrade today` vezme data i přepisy balíčku sám, bez konfigurace, a styl kódu nechá, jak je. Uplatní je jen tehdy, když projekt má `laravel/framework`, a jen pro verze, na které projekt [dosáhne |upgrade#Rozhodují dolní meze]. Postup po jedné hlavní verzi a co dělat s tím, co zbude, popisuje [Upgrade kódu |upgrade]. Projekt, který už běží na PHP 8.4 až 8.6, si balíček může přidat i jako vývojovou závislost: `composer require --dev dresscode/upgrade-laravel phpstan/phpstan`, a pak spouští `vendor/bin/dresscode upgrade today`.
 
-Aby se staré API do kódu nevrátilo, patří do konfigurace typy a sada `deprecations`, jak popisuje [Jak funguje upgrade knihoven |upgrading-libraries#Zapnutí v konfiguraci]:
-
-```neon
-typeAnalysis: phpstan
-
-use:
-	- perCs           # váš standard
-	- deprecations
-```
-
+.[note]
 Larastan v projektu nevadí, naopak: ať ho máte v `phpstan.neon`, nebo ho zaregistroval `phpstan/extension-installer`, DressCode spustí aplikaci stejně jako PHPStan a volání fasády `Request::get()` čte jako metodu třídy, která za ní stojí. Selže-li při tom `bootstrap/app.php`, vypíše Larastan sám hlášku "Application bootstrap failed" i s výjimkou, na které start aplikace selhal, a celý běh ukončí. Pozor v CI: běh skončí nenulovým exit kódem, a když běží v jednom procesu, je to 1, stejně jako když DressCode v kódu něco najde. Alias z `config/app.php` psaný bez jmenného prostoru, `\Request::get()`, nezná žádná statická analýza, takže takové volání zůstane nepovšimnuté.
 
 
@@ -102,16 +95,17 @@ Příklady toho, co balíček opravuje, podle druhu změny:
 
 - **helpery Laravelu 5.8**: `str_slug()`, `str_limit()`, `array_get()`, `studly_case()` a dalších 35 na metody `Str` a `Arr` se stejnými argumenty, i s importem,
 - **přejmenované třídy**: `VerifyCsrfToken` a `ValidateCsrfToken` na `PreventRequestForgery`, trait `HasVersion7Uuids` na `HasUuids`, fasáda `Input` na `Request`, `Resource` na `JsonResource`, testovací `TestResponse` a `Assert` do jmenného prostoru `Illuminate\Testing`; přepíše se import, `extends`, `::class` i `withoutMiddleware()`,
-- **přejmenované členy**: `Request::get()` na `input()` i přes fasádu, `Lang::trans()` a `transChoice()` na `get()` a `choice()`, `dispatchNow()` jobu a funkce `dispatch_now()` na `dispatchSync()` a `dispatch_sync()`, `getRouteMiddleware()` kernelu na `getMiddlewareAliases()`, `validateCsrfTokens()` na `preventRequestForgery()`, `forceRootUrl()` na `useOrigin()`, metody kolekcí `containsOneItem()`, `containsManyItems()`, `reduceWithKeys()`, `reduceMany()` a `until()` na `hasSole()`, `hasMany()`, `reduce()`, `reduceSpread()` a `takeUntil()`, `Relation::getBaseQuery()` na `toBase()`, `PendingMail::sendNow()` na `send()`, vlastnost `QueueBusy::$connection` na `$connectionName`,
-- **volání jiného tvaru**: `$limit->decayMinutes` na sekundy, `$event->exceptionOccurred` na `$event->exception !== null`, `redirectTo()` výjimky `AuthenticationException` s aktuálním požadavkem, `Redirect::home()` na `route('home')`, `assertDeleted()` testů na `assertModelMissing()` nebo `assertDatabaseMissing()`, `assertTimesSent($count, $notification)` na `assertSentTimes($notification, $count)`, `addHidden()` a `addVisible()` modelu na `makeHidden()` a `makeVisible()`, sloupce `double('x', 8, 2)`, `unsignedDecimal()` a `unsignedDouble()` migrací, jak je píše Laravel 11.
+- **přejmenované členy**: `Request::get()` na `input()` i přes fasádu, `dispatchNow()` jobu na `dispatchSync()`, `forceRootUrl()` na `useOrigin()`, metody kolekcí jako `containsOneItem()` na `hasSole()`, vlastnost `QueueBusy::$connection` na `$connectionName` a další,
+- **volání jiného tvaru**: `$limit->decayMinutes` na sekundy, `$event->exceptionOccurred` na `$event->exception !== null`, `assertDeleted()` testů na `assertModelMissing()`, sloupce migrací `double('x', 8, 2)` a `unsignedDecimal()`, jak je píše Laravel 11, a další.
 
 Úplný výčet je v datech balíčku, v souboru `upgrading/framework.neon`.
 
 Helper volaný bez zpětného lomítka uvnitř jmenného prostoru, jak je to v aplikaci obvyklé, DressCode přepíše jen s `--fix-risky`: stejnojmennou funkci by mohl deklarovat ten prostor. `str_contains()`, `array_first()` a `array_last()` data nechávají být, protože dnes jsou to funkce PHP.
 
+.[note]
 `Request::get()` a `input()` nejsou úplně totéž: `get()` čte napřed atributy routy, pak query a nakonec tělo požadavku, `input()` atributy nečte, tělo má před query a klíč s tečkou bere jako cestu do pole. Laravel sám u zastaralého `get()` radí `input()` a DressCode ho píše také; hodnotu, kterou nastavuje middleware jako atribut routy, čtěte přes `$request->attributes->get()`.
 
-Změny v signaturách data nepotřebují: metodu, kterou přidal kontrakt, i návratový typ, který musí deklarovat potomek, ohlásí a zapíšou rozhodnutí `mistakes.unimplementedAbstractMethod` a `classes.overridingMethod.signature` z téže sady, podle deklarací nainstalované verze. Dopsání návratového typu je riziková oprava (risky fix): tělo metody může vracet něco jiného, a proto se udělá jen s `--fix-risky` nebo s rozhodnutím v klíči [`fixRisky` |configuration#risky-fixes].
+Změny v signaturách data nepotřebují: metodu, kterou přidal kontrakt, i návratový typ, který musí deklarovat potomek, DressCode ohlásí a zapíše podle deklarací nainstalované verze. Dopsání návratového typu je [riziková oprava (risky fix) |configuration#risky-fixes], protože tělo metody může vracet něco jiného.
 
 
 Co zůstane na vás
@@ -134,19 +128,35 @@ Stejně se ohlásí i další místa, například tato:
 
 Úplný výčet i s tím, co napsat místo toho, je opět v datech balíčku.
 
-Co framework jen označil jako zastaralé a náhradu k tomu napsal, v datech často není; s typy to DressCode ohlásí, a kde anotace náhradu řekne, i přepíše podle `upgrading.declarations.deprecatedMember`. Změny chování a konfigurace data nezachytí vůbec, ty najdete v průvodci upgradem Laravelu.
+Co framework jen označil jako zastaralé a náhradu k tomu napsal, v datech často není; s typy to DressCode ohlásí, a kde anotace náhradu řekne, i přepíše. Změny chování a konfigurace data nezachytí vůbec, ty najdete v průvodci upgradem Laravelu.
 
 
-Atributy Laravelu 13
-====================
+Aby se staré API nevracelo
+==========================
 
-Laravel 13 čte z atributů třídy to, co dřív četl z vlastností: `#[Table('posts')]` místo `protected $table = 'posts'`, `#[Tries(3)]` místo `public $tries = 3`. Vlastnosti fungují dál, a proto je tahle část nabídka, ne oprava. Data k ní se uplatní s ostatními daty balíčku, jakmile konfigurace používá sadu `deprecations` nebo `modernizations`. Data sama zapnou rozhodnutí sekce `laravel`, `laravel.castsMethod` od `laravel/framework` 11 a `laravel.scopeAttribute` od 12.4, a jménem balíčku v `use` pustíte dovnitř jeho plugin, který je hlídá:
+Aby se staré API do kódu nevrátilo, třeba v průběžné integraci, patří do konfigurace typy, sada `deprecations` a jméno balíčku, které pustí dovnitř jeho přepisy ze sekce `laravel` (viz [Upgrade kódu |upgrade#Aby se staré API nevracelo]):
 
 ```neon
+typeAnalysis: phpstan
+
 use:
 	- perCs           # váš standard
 	- deprecations
-	- modernizations
+	- upgrade-laravel
+```
+
+
+Nový zápis modelů
+=================
+
+Laravel 11 čte přetypování hodnot modelu z metody `casts()`, Laravel 12.4 pozná lokální scope podle atributu `#[Scope]` místo předpony `scope` a Laravel 13 čte z atributů třídy to, co dřív četl z vlastností, třeba `#[Table('posts')]` místo `protected $table = 'posts'`. Starý zápis funguje dál, a proto je tohle nabídka, ne oprava. Dostanete ji spolu s ostatními daty balíčku, s konfigurací z předchozí sekce:
+
+```neon
+typeAnalysis: phpstan
+
+use:
+	- perCs           # váš standard
+	- deprecations
 	- upgrade-laravel
 ```
 
@@ -191,7 +201,10 @@ class Post extends Model
 }
 ```
 
-Data mapy `upgrading.api.attributeForMember` přinášejí atributy pro modely, příkazy, form requesty, API resources a joby, listenery, mailables a notifikace ve frontě; vlastnosti téže třídy atributu, `$table`, `$primaryKey` a `$keyType`, se spojí do jednoho `#[Table]`. Třídu, která vlastnost sama čte, abstraktní třídu a metodu `getRouteKeyName()` s logikou pravidlo ohlásí a nechá být. Metodu `casts()` píše rozhodnutí `laravel.castsMethod` a scope s atributem `laravel.scopeAttribute`, obě ze sekce balíčku; kdo některé nechce, vypne ho v sekci `laravel` hodnotou `keep`. Ta druhá oprava je riziková: volání `scopePublished()` starým jménem v jiném souboru DressCode nevidí, a proto se udělá jen s `--fix-risky`. Pravidlo píše metodu jako chráněnou, protože statické volání `Post::published()` k ní jinak nedojde.
+Vlastnosti téže třídy atributu, `$table`, `$primaryKey` a `$keyType`, se spojí do jednoho `#[Table]`; které atributy data znají pro modely, příkazy, joby a další třídy, vyjmenovává stránka [Přechod na Laravel 13 |upgrade-to-laravel-13#Atributy Laravelu 13]. Přepis scope je riziková oprava, a proto potřebuje `--fix-risky`: volání `scopePublished()` starým jménem v jiném souboru DressCode nevidí. Metodu `published()` píše jako chráněnou, protože statické volání `Post::published()` k ní jinak nedojde.
+
+.[note]
+Metodu `casts()` píše rozhodnutí `laravel.castsMethod` od `laravel/framework` 11 a scope s atributem `laravel.scopeAttribute` od 12.4. Zapnou je data sama a hlídá je plugin, který pustí dovnitř jméno balíčku v `use`; kdo některé nechce, vypne ho v sekci `laravel` hodnotou `keep`.
 
 
 Co balíček pokrývá
@@ -205,7 +218,7 @@ Co balíček pokrývá
 | `casts()` místo `$casts` | 11 |
 | `#[Scope]` místo předpony `scope` | 12.4 |
 
-Balíček začíná Laravelem 6, takže převede kód psaný pro Laravel 5.8. Aplikaci na starší verzi převedete po jedné hlavní verzi, jak popisuje [Upgrade kódu |upgrade#Po jedné hlavní verzi, ručně], ale pro verze do 5.8 data balíček nemá.
+Balíček začíná Laravelem 6, takže převede kód psaný pro Laravel 5.8; dál postupujte po jedné hlavní verzi, jak popisuje [Upgrade kódu |upgrade#Po jedné hlavní verzi, ručně]. Pro verze starší než 5.8 data nemá a přechod na 5.8 musíte udělat ručně.
 
 {{maintitle: Automatický upgrade kódu pro Laravel}}
 {{description: Balíček dresscode/upgrade-laravel nese změny frameworku Laravel od verze 6 po současnou a nabídku atributů Laravelu 13, které DressCode přepíše nebo ohlásí.}}
