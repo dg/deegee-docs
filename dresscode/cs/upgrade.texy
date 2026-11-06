@@ -243,7 +243,7 @@ Veškeré zálohy běhu se ukládají přímo do repozitáře projektu v `.git/d
 Knihovna rozšiřuje, nezvedá
 ---------------------------
 
-U knihoven (tedy projektů s `"type": "library"` bez vlastního `composer.lock`) se minimální verze nezvedají: kód knihovny musí fungovat i se staršími verzemi, které projekt dosud podporuje. Plán knihovny proto tvoří pouze fáze mostu a rozšíření závislostí o novou verzi (například z `^3.2` na `^3.2 || ^4.0`), zapsané s přepínačem `--no-update`. Úpravy, které by vyžadovaly čistě novou verzi, se v této fázi pouze ohlásí (viz [níže |#Rozhodují dolní meze]). U projektu, který má v `composer.json` typ `library`, ale přesto drží vlastní lock file, se DressCode v terminálu zeptá na preferovaný postup a mimo něj se řídí podle `type`; přepínače `--library` a `--no-library` toto chování určí přímo bez ptaní.
+U knihoven (tedy projektů s `"type": "library"` bez vlastního `composer.lock`) se minimální verze nezvedají: kód knihovny musí fungovat i se staršími verzemi, které projekt dosud podporuje. Plán knihovny proto tvoří pouze fáze mostu a rozšíření závislostí o novou verzi (například z `^3.2` na `^3.2 || ^4.0`), zapsané s přepínačem `--no-update`. Úpravy, které by vyžadovaly čistě novou verzi, se v této fázi ani nepřepisují, ani nehlásí, protože kód knihovny musí dál fungovat i se starší verzí (viz [níže |#Rozhodují dolní meze]). U projektu, který má v `composer.json` typ `library`, ale přesto drží vlastní lock file, se DressCode v terminálu zeptá na preferovaný postup a mimo něj se řídí podle `type`; přepínače `--library` a `--no-library` toto chování určí přímo bez ptaní.
 
 
 Co zůstane na vás
@@ -270,21 +270,23 @@ Na jakou verzi se váš kód přepíše, to neurčuje verze knihovny náhodně s
 
 Upgradovat kód tedy v praxi neznamená pouhé stažení novější verze do `vendor/`, ale především **posun dolní meze**. Právě proto plán nejprve navýší závislosti v `composer.json` a teprve poté kód adaptuje na nové API.
 
-Novinky z vyšších verzí, které stávající podmínka rovněž umožňuje nainstalovat, se nepřepisují automaticky, ale pouze se hlásí, kód na nich totiž může v budoucnu běžet. U zápisu `"^3.2 || ^4.0"` se kód přepíše na API verze 3.2 a změny z verze 4.0 se pouze nahlásí i s označením verze:
+Novinky z vyšších verzí, které stávající podmínka rovněž umožňuje nainstalovat, DressCode nepřepisuje, a dokonce je ani nehlásí. Oprava na novější API by totiž rozbila kód právě na té nejnižší verzi, se kterou musí fungovat, a test s nejnižšími závislostmi (`composer update --prefer-lowest`) by to hned odhalil. U zápisu `"^3.2 || ^4.0"` se proto kód přepíše na API verze 3.2 a na změny z verze 4.0 dojde, až dolní mez zvednete. Co by na vyšší povolené verzi spadlo, prozradí testy s nejvyššími závislostmi.
+
+Co knihovna zavrhla a co DressCode nedokáže přepsat sám, nahlásí i s verzí, která to zavrhla:
 
 ```
-Class `Acme\Old` is deprecated: replaced by `Acme\New`, since acme/lib 4.0.
+Function `acme_format()` is deprecated: use `Acme\Formatter`, since acme/lib 3.2.
 ```
 
-Slovo `deprecated` značí, že nainstalovaný balíček daný prvek ještě obsahuje, zatímco `removed` varuje, že už byl zcela odstraněn. Knihovna, kterou projekt požaduje bez spodní meze (`*`), nebo kterou nemá v přímých závislostech a přišla jen jako tranzitivní závislost jiné knihovny, se může v projektu vyskytovat v libovolné verzi. Podle jejích dat pro upgrade se proto automaticky nepřepisuje nic, všechny nálezy se pouze hlásí. Tyto knihovny přehledně vyjmenuje hlavička příkazu `upgrade today` na řádku `Reported` a knihovny nainstalované ve vyšší verzi, než jakou nejníže povoluje podmínka, na řádku `Lowest`.
+Slovo `deprecated` značí, že nainstalovaný balíček daný prvek ještě obsahuje, zatímco `removed` varuje, že už byl zcela odstraněn. Knihovna, kterou projekt požaduje bez spodní meze (`*`), nebo kterou nemá v přímých závislostech a přišla jen jako tranzitivní závislost jiné knihovny, se může v projektu vyskytovat v libovolné verzi. Její data pro upgrade ani anotace v jejím kódu proto neříkají nic, nikdo totiž neví, se kterou verzí musí kód fungovat. Tyto knihovny přehledně vyjmenuje hlavička příkazu `upgrade today` na řádku `Unbounded` a knihovny nainstalované ve vyšší verzi, než jakou nejníže povoluje podmínka, na řádku `Lowest`.
 
-Kde přesně data pro upgrade začínají a kam by vedlo navýšení spodní meze, vám kdykoliv ukáže `dresscode config`. Verze označené `(reported)` stávající podmínka už povoluje, a proto se jejich změny pouze reportují:
+Kde přesně data pro upgrade začínají a kam by vedlo navýšení spodní meze, vám kdykoliv ukáže `dresscode config`:
 
 /--pre .[terminal]
 Packages   3 with upgrading data
-      nette/application 3.2           upgrading/application.neon of dresscode/upgrade-nette, upgrading further to 3.2.1 (reported), 3.2.3 (reported), 3.2.9 (reported), 3.2.10 (reported), 3.3 (reported)
+      nette/application 3.2           upgrading/application.neon of dresscode/upgrade-nette, upgrading further to 3.2.1, 3.2.3, 3.2.9, 3.2.10, 3.3
       nette/component-model 3.2       upgrading/component-model.neon of dresscode/upgrade-nette, upgrading further to 4.0
-      nette/utils 4.1                 upgrading/utils.neon of dresscode/upgrade-nette, upgrading further to 4.1.5 (reported)
+      nette/utils 4.1                 upgrading/utils.neon of dresscode/upgrade-nette, upgrading further to 4.1.5
 \--
 
 
