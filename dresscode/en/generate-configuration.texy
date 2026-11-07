@@ -16,13 +16,13 @@ Excluded   fixtures        test data
            src/Generated   generated
            not measured: 1 file git does not track, which the first fix takes too
 PHP        8.2 and newer, from `composer.json`
-Standard   perCs (PER Coding Style), the nearest to your code by the files a fix changes, 13 under psr12; `--use` names another
-Measured   your code departs from it in 3 decisions over 13 files; perCs as it is, with no decision below `use`, would rewrite 13 of them
-As written indentation.unit: tab   your code, 92% of 13 files
-           blankLines.beforeDeclaration: 2   your code, all 13 places
-           braces.emptyBody.function: expanded   your code, all 26 places
+Standard   `perCs` (PER Coding Style), the nearest to your code by the files a fix changes, 13 under `psr12`; `--use` names another
+Measured   your code departs from it in 3 decisions over 13 files; `perCs` as it is, with no decision below `use`, would rewrite 13 of them
+As written `indentation.unit: tab`                 your code, 92% of 13 files
+           `blankLines.beforeDeclaration: 2`       your code, all 13 places
+           `braces.emptyBody.function: expanded`   your code, all 26 places
 Checked    all 13 files: a fix changes 1 file, 1 of them for the indentation, the line endings or the long lines the rest of the code has
-Your call  `dresscode init --use nette` measures against nette instead, where there is no `dresscode.neon` yet
+Your call  `dresscode init --use nette` measures against `nette` instead, where there is no `dresscode.neon` yet
 
 Written    `dresscode.neon`
 Next       `dresscode fix`        rewrites 1 file in place (`dresscode check --diff` shows the changes first); until then `check` reports them
@@ -85,14 +85,16 @@ The `psr12` standard gives way to `perCs`, its successor, unless the formatter n
 How It Measures the Decisions
 =============================
 
-Then it measures the decisions in which the code departs from the standard, each one separately and with each of its values. It measures the indentation, the line length and the line endings first, because everything else depends on them. A project of up to a thousand files and 8 MB is measured in full. A larger one is measured on a sample split evenly among its directories, so that one large directory does not outweigh the others; the `Sample` line says how many files each directory contributed.
+Then it measures the decisions in which the code departs from the standard, each one separately and with each of its values, while every other decision stays as the standard sets it. It measures the indentation, the line length and the line endings first, because everything else depends on them. A project of up to a thousand files and 8 MB is measured in full. A larger one is measured on a sample split evenly among its directories, so that one large directory does not outweigh the others; the `Sample` line says how many files each directory contributed.
 
 A value that at least 70% of the places agree on is written together with what it rests on (`your code, 92% of 13 files`). Where the code writes the same thing in several ways and none of them prevails, `init` writes `keep`, which means "do not check", with a `not checked:` comment and what it found in the code; the `Unchecked` line says how many such decisions there are.
+
+Only the places that tell the values apart count toward the 70%. For example, a line too long in any shape would be rewritten under every value, so it says nothing about the shape the code prefers. Where fewer than ten places tell the values apart, `init` writes no value from the code, because one or two places should not decide for the whole project: it keeps the standard when the fix under it changes at most a tenth of the files, and otherwise writes `keep` with the cost of that fix in the comment. The indentation, the line length and the line endings are the exception, as they are measured by files: a value all files agree on is written even in a small project.
 
 A directory whose files write the indentation or one of the `file.*` decisions differently from the rest of the project (in at least five files and in nine tenths of them) gets a `Differs` line with the [override |configuration#Different Values for Part of the Project] that would let it keep its own style. Only you can write it, though: `init` proposes one style for the whole project, and an override is your decision.
 
 /--pre .[terminal]
-Differs    tests: indentation.unit 4 spaces in all 6 files; an override for `tests` would keep it, none is written
+Differs    tests: `indentation.unit: 4 spaces` in all 6 files; an override for `tests` would keep it, none is written
 \--
 
 Before it writes the file, `init` loads it as a configuration and checks that it yields the same values it measured. When a rule fails in a file, it leaves that file out of the measuring, names it in the header of the written file and ends with exit code 2, because the configuration then rests only on the rest of the code.
@@ -101,27 +103,33 @@ Before it writes the file, `init` loads it as a configuration and checks that it
 The Budget of the First Fix and the Questions
 =============================================
 
-Finally, it runs the whole configuration over all files. The first `fix` after `init` should not rewrite half of the project, so there is a budget: the fix may change 1% of the files, but never fewer than 2 or more than 20; the `--budget` option sets a different number. When the fixes together would change more files, `init` leaves some decisions unchecked until the rest fits the budget, and asks you about them, showing a place in the code that each one concerns.
+Finally, it runs the whole configuration over all files. The first `fix` after `init` should not rewrite half of the project, so there is a budget: the fix may change 1% of the files, but never fewer than 2 or more than 20; the `--budget` option sets a different number. When the fixes together would change more files, `init` leaves some decisions unchecked until the rest fits the budget, and asks you about them, showing for each one a place in the code and how the fix would rewrite it.
 
 The indentation, the line length and the line endings are never left unchecked, because the other decisions depend on them; `fix` corrects the files that write them differently from the rest of the project regardless of the budget, and the `Checked` line counts them separately. Your answers do not count against the budget either. The findings that no rule fixes belong in the [baseline |suppressions-and-baseline#baseline]; the same line says how many there are. Here is the end of the report and a question when the code is measured against the `nette` standard, given by `dresscode init --use nette`:
 
 /--pre .[terminal]
-Standard   nette (the Nette Coding Standard), as given
-Measured   your code departs from it in 4 decisions over 13 files; nette as it is, with no decision below `use`, would rewrite 13 of them
-As written file.strictTypes.position: nextLine   your code, all 13 files
+Standard   `nette` (the Nette Coding Standard), as given
+Measured   your code departs from it in 4 decisions over 13 files; `nette` as it is, with no decision below `use`, would rewrite 13 of them
+As written `file.strictTypes.position: nextLine`   your code, all 13 files
 Checked    all 13 files: a fix changes 1 file, 1 of them for the indentation, the line endings or the long lines the rest of the code has
            1 more decision is left as your code has it, as the fixes together would change more than 2 files, the indentation, the line endings, the long lines and your answers aside (`--budget` raises the limit)
 
-Check `literals.quotes: single`? A fix rewrites 3 files, more than the budget allows.
+Check `literals.quotes: single`? Without asking, init lets the first fix rewrite at most 2 files (`--budget`).
            e.g. src/Cart.php:18  A plain string must be written with single quotes.
+                  $count = max(1, $count);
+                - $label = "item";
+                + $label = 'item';
+                  $this->items[$item] = [$label, $count];
   [1] don't check it (recommended)
-  [2] single everywhere, a fix rewrites 3 files
+  [2] `single` everywhere, a fix rewrites 3 files
 Your choice [1/2]
 \--
 
+Under the question you see a place the decision concerns, with the message of the rule, and below it what the fix does there: the line before the fix (`-`) and after it (`+`), with one line of the surrounding code above and below them. Where the fix would change only blank lines, the indentation or the spaces at the end of a line, the difference would not show, so only the place and the message are there.
+
 You answer with the number in the square brackets. The recommended answer always comes first, as number 1, and pressing Enter accepts it; it leaves your code as it is, so if you are not sure, you cannot break anything. The answers that change the code show how many files the fix would rewrite. When your answers change the configuration, `init` checks it again, so that the `Checked` line also holds for what you chose. If the budget then leaves another decision unchecked, it asks about that one as well and says that your answers caused it. The questions of one round are numbered, `(2/3)`, so you know how many are left.
 
-What does `init` ask about? About the decisions the budget left unchecked, and about the standard when two are close, as described above. It also asks about a value the configuration of the project's formatter contradicts, and about names that do not use the case the standard requires and share a prefix or a suffix, such as classes ending with an underscore; a pattern in [`naming.except` |decisions/naming#naming.except] can let them pass. It asks about at most five decisions, the costliest first.
+What does `init` ask about? About the decisions the budget left unchecked, and about the standard when two are close, as described above. It also asks about a value the configuration of the project's formatter contradicts, and about names that do not use the case the standard requires and share a prefix or a suffix, such as classes ending with an underscore; a pattern in [`naming.except` |decisions/naming#naming.except] can let them pass. It asks about at most five decisions one by one, the costliest first; when more are left, one more question lists them with the cost of their fixes, and a single answer decides them all.
 
 `init` does not ask whether to take the standard as it is; the `Measured` line only shows what that would cost: here `nette` would rewrite all 13 files, mostly because of a single decision, as your code always puts `declare(strict_types=1)` in a different place than `nette` does. A difference like that is often a trace of a standard that has changed since. If you want to follow it, delete the decision `file.strictTypes.position` from `dresscode.neon` and run `fix`; otherwise the value `init` measured from your code stays.
 
@@ -135,7 +143,7 @@ Without a terminal, with the `--yes` option or with `--format json`, `init` asks
 Your call  `literals.quotes: single` in `dresscode.neon` checks it too; its fix changes 3 files
 \--
 
-You can also give an answer in advance: `dresscode init --set literals.quotes=single` writes the value regardless of what the code says, and the budget never leaves it unchecked. The path and the value are checked against the catalogue before measuring starts, so you learn about a typo before the measuring, not after it.
+You can also give an answer in advance: `dresscode init --set literals.quotes=single` writes the value regardless of what the code says, and the budget never leaves it unchecked. When it is the value the standard already sets, as `single` is for `nette`, no line is added to the file, as it would only repeat the standard (the same goes for an answer in the wizard); the decision is checked all the same. The path and the value are checked against the catalogue before measuring starts, so you learn about a typo before the measuring, not after it.
 
 With the `--dry-run` option, `init` prints the configuration below the report and writes nothing. `--jobs` limits how many processors the measuring uses, and `--jobs 1` measures in a single process.
 

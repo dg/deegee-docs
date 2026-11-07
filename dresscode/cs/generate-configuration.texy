@@ -16,13 +16,13 @@ Excluded   fixtures        test data
            src/Generated   generated
            not measured: 1 file git does not track, which the first fix takes too
 PHP        8.2 and newer, from `composer.json`
-Standard   perCs (PER Coding Style), the nearest to your code by the files a fix changes, 13 under psr12; `--use` names another
-Measured   your code departs from it in 3 decisions over 13 files; perCs as it is, with no decision below `use`, would rewrite 13 of them
-As written indentation.unit: tab   your code, 92% of 13 files
-           blankLines.beforeDeclaration: 2   your code, all 13 places
-           braces.emptyBody.function: expanded   your code, all 26 places
+Standard   `perCs` (PER Coding Style), the nearest to your code by the files a fix changes, 13 under `psr12`; `--use` names another
+Measured   your code departs from it in 3 decisions over 13 files; `perCs` as it is, with no decision below `use`, would rewrite 13 of them
+As written `indentation.unit: tab`                 your code, 92% of 13 files
+           `blankLines.beforeDeclaration: 2`       your code, all 13 places
+           `braces.emptyBody.function: expanded`   your code, all 26 places
 Checked    all 13 files: a fix changes 1 file, 1 of them for the indentation, the line endings or the long lines the rest of the code has
-Your call  `dresscode init --use nette` measures against nette instead, where there is no `dresscode.neon` yet
+Your call  `dresscode init --use nette` measures against `nette` instead, where there is no `dresscode.neon` yet
 
 Written    `dresscode.neon`
 Next       `dresscode fix`        rewrites 1 file in place (`dresscode check --diff` shows the changes first); until then `check` reports them
@@ -85,14 +85,16 @@ Starší standard `psr12` ustoupí svému nástupci `perCs`, pokud jej formátov
 Jak měří rozhodnutí
 ===================
 
-V dalším kroku `init` detailně proměří rozhodnutí, ve kterých se kód od vybraného standardu odchyluje, každé samostatně a se všemi jeho povolenými hodnotami. Odsazení, maximální délku řádku a zakončení řádků měří přednostně, protože na nich stojí všechno ostatní. Menší projekty do tisíce souborů a 8 MB proměří kompletně celé, u větších projektů sáhne po reprezentativním vzorku rozděleném rovným dílem mezi jednotlivé adresáře, aby velká složka nepřehlušila zbytek kódu (kolik souborů který adresář poskytl, vyčíslí řádek `Sample`).
+V dalším kroku `init` detailně proměří rozhodnutí, ve kterých se kód od vybraného standardu odchyluje, každé samostatně a se všemi jeho povolenými hodnotami; všechna ostatní rozhodnutí přitom drží tak, jak je dává standard. Odsazení, maximální délku řádku a zakončení řádků měří přednostně, protože na nich stojí všechno ostatní. Menší projekty do tisíce souborů a 8 MB proměří kompletně celé, u větších projektů sáhne po reprezentativním vzorku rozděleném rovným dílem mezi jednotlivé adresáře, aby velká složka nepřehlušila zbytek kódu (kolik souborů který adresář poskytl, vyčíslí řádek `Sample`).
 
 Hodnotu, na které panuje shoda na alespoň 70 % míst, zapíše do konfigurace i s přesným podkladem (`your code, 92% of 13 files`). Kde kód stejnou věc zapisuje několika různými způsoby a žádný z nich jasně nepřevládá, zapíše hodnotu `keep` ("nekontrolovat") s komentářem `not checked:` a s výčtem nalezených variant; kolik takových rozhodnutí v projektu zůstalo, shrnuje řádek `Unchecked`.
+
+Do oněch 70 % se počítají jen místa, která hodnoty od sebe rozliší. Například řádek, který je příliš dlouhý v jakémkoli tvaru, by oprava přepsala při každé hodnotě, takže o tom, který tvar kód volí, nic neříká. Kde je rozlišujících míst méně než deset, `init` hodnotu z kódu nezapíše, protože jedno nebo dvě místa nemají rozhodovat za celý projekt: ponechá standard, pokud jeho oprava změní nanejvýš desetinu souborů, jinak zapíše `keep` s cenou opravy v komentáři. Výjimkou jsou odsazení, šířka řádku a konce řádků, které se měří po souborech: hodnotu, na které se shodnou všechny soubory, zapíše i v malém projektu.
 
 Pokud některý adresář vykazuje odlišné odsazení nebo některé z rozhodnutí `file.*` oproti zbytku projektu (alespoň v pěti souborech a v devíti desetinách z nich), upozorní na to `init` na řádku `Differs` a navrhne přesný [přepis konfigurace |configuration#Jiné hodnoty pro část projektu], díky kterému by si složka svůj styl ponechala. Do souboru jej však automaticky nezapíše: `init` navrhuje jednotný styl pro celý projekt a vytvoření lokální výjimky nechává plně na vašem rozhodnutí:
 
 /--pre .[terminal]
-Differs    tests: indentation.unit 4 spaces in all 6 files; an override for `tests` would keep it, none is written
+Differs    tests: `indentation.unit: 4 spaces` in all 6 files; an override for `tests` would keep it, none is written
 \--
 
 Před samotným uložením souboru si `init` konfiguraci znovu načte a ověří, že z ní vzejdou přesně tytéž hodnoty, jaké naměřil. Pokud v některém souboru selže pravidlo, daný soubor z měření vynechá, jmenuje jej v hlavičce a skončí s exit kódem 2, protože konfigurace pak stojí na neúplných datech.
@@ -101,27 +103,33 @@ Před samotným uložením souboru si `init` konfiguraci znovu načte a ověří
 Rozpočet první opravy a otázky
 ==============================
 
-Na závěr `init` prověří celou navrženou konfiguraci nad všemi soubory projektu. První automatická oprava po spuštění `init` rozhodně nemá přepsat půlku repozitáře, a proto nástroj striktně hlídá rozpočet změn: oprava smí ve výchozím stavu změnit nanejvýš 1 % souborů (minimálně 2 a maximálně 20; jiný limit určí přepínač `--budget`). Kdyby měly navržené opravy tento rozpočet překročit, nechá `init` některá rozhodnutí zatím neaktivní, dokud se zbytek do limitu nevejde, a v interaktivním průvodci se vás na ně přímo zeptá i s ukázkou konkrétního místa v kódu.
+Na závěr `init` prověří celou navrženou konfiguraci nad všemi soubory projektu. První automatická oprava po spuštění `init` rozhodně nemá přepsat půlku repozitáře, a proto nástroj striktně hlídá rozpočet změn: oprava smí ve výchozím stavu změnit nanejvýš 1 % souborů (minimálně 2 a maximálně 20; jiný limit určí přepínač `--budget`). Kdyby měly navržené opravy tento rozpočet překročit, nechá `init` některá rozhodnutí zatím neaktivní, dokud se zbytek do limitu nevejde, a v interaktivním průvodci se vás na ně zeptá: u každého ukáže jedno místo v kódu a to, jak by ho oprava přepsala.
 
 Odsazení, šířku řádku a konce řádků neodloží nikdy, protože na nich závisejí všechna ostatní rozhodnutí; soubory, které je mají jinak než zbytek projektu, opraví `fix` bez ohledu na rozpočet a řádek `Checked` je vyčísluje odděleně. Do limitu se nezapočítávají ani vaše přímé odpovědi v průvodci. Nálezy, které žádné pravidlo neumí opravit automaticky, patří do [baseline |suppressions-and-baseline#baseline], jejich počet uvádí tentýž řádek. Takhle vypadá konec výpisu a otázka, když se kód měří proti standardu `nette`, který zadal příkaz `dresscode init --use nette`:
 
 /--pre .[terminal]
-Standard   nette (the Nette Coding Standard), as given
-Measured   your code departs from it in 4 decisions over 13 files; nette as it is, with no decision below `use`, would rewrite 13 of them
-As written file.strictTypes.position: nextLine   your code, all 13 files
+Standard   `nette` (the Nette Coding Standard), as given
+Measured   your code departs from it in 4 decisions over 13 files; `nette` as it is, with no decision below `use`, would rewrite 13 of them
+As written `file.strictTypes.position: nextLine`   your code, all 13 files
 Checked    all 13 files: a fix changes 1 file, 1 of them for the indentation, the line endings or the long lines the rest of the code has
            1 more decision is left as your code has it, as the fixes together would change more than 2 files, the indentation, the line endings, the long lines and your answers aside (`--budget` raises the limit)
 
-Check `literals.quotes: single`? A fix rewrites 3 files, more than the budget allows.
+Check `literals.quotes: single`? Without asking, init lets the first fix rewrite at most 2 files (`--budget`).
            e.g. src/Cart.php:18  A plain string must be written with single quotes.
+                  $count = max(1, $count);
+                - $label = "item";
+                + $label = 'item';
+                  $this->items[$item] = [$label, $count];
   [1] don't check it (recommended)
-  [2] single everywhere, a fix rewrites 3 files
+  [2] `single` everywhere, a fix rewrites 3 files
 Your choice [1/2]
 \--
 
+Pod otázkou je místo, kterého se rozhodnutí týká, s hláškou pravidla a pod ním ukázka opravy: řádek před ní (`-`) a po ní (`+`), nad nimi a pod nimi po jednom řádku okolního kódu. Kde by oprava měnila jen prázdné řádky, odsazení nebo mezery na konci řádku, ukázka by rozdíl neukázala, a tak zůstane jen místo s hláškou.
+
 Odpovídáte jednoduše zadáním čísla volby. Doporučená odpověď je vždy na prvním místě (s číslem 1) a stačí ji potvrdit klávesou Enter; ponechává kód v původním stavu, takže ani při nejistotě nic nepokazíte. U variant, které kód upravují, rovnou vidíte přesný počet souborů, které by oprava přepsala. Pokud vaše odpovědi konfiguraci pozmění, `init` ji okamžitě znovu otestuje, aby řádek `Checked` odpovídal vašim volbám. Pokud by kvůli tomu rozpočet musel odložit jiné rozhodnutí, zeptá se na něj v dalším kole a upozorní, že jde o důsledek vašich předchozích odpovědí. Otázky jsou přehledně číslované (např. `(2/3)`), abyste měli přehled, kolik voleb zbývá.
 
-Na co přesně se `init` ptá? Především na rozhodnutí odložená rozpočtem a na volbu mezi těsnými standardy. Dále na hodnoty, které přímo odporují existující konfiguraci původního formátovače, a na identifikátory se společnou předponou či příponou, které neodpovídají standardu (např. třídy končící podtržítkem); ty lze totiž hromadně povolit vzorem v [`naming.except` |decisions/naming#naming.except]. Průvodce položí nanejvýš pět otázek na rozhodnutí, přičemž ty s největším dopadem řeší jako první.
+Na co přesně se `init` ptá? Především na rozhodnutí odložená rozpočtem a na volbu mezi těsnými standardy. Dále na hodnoty, které přímo odporují existující konfiguraci původního formátovače, a na identifikátory se společnou předponou či příponou, které neodpovídají standardu (např. třídy končící podtržítkem); ty lze totiž hromadně povolit vzorem v [`naming.except` |decisions/naming#naming.except]. Jednotlivě se zeptá nanejvýš na pět rozhodnutí, počínaje tím s největším dopadem; zbude-li jich víc, položí ještě jednu souhrnnou otázku, která je vyjmenuje i s cenou jejich oprav, a jedinou odpovědí rozhodnete o všech najednou.
 
 Zda převzít standard v jeho čisté podobě bez úprav, na to se `init` neptá: na řádku `Measured` vám pouze ukáže, kolik souborů by to stálo: v naší ukázce by čisté `nette` přepsalo všech 13 souborů, a to především kvůli jedinému rozhodnutí, protože váš kód umisťuje `declare(strict_types=1)` jinam než `nette`. Takový rozdíl bývá stopou standardu, který se mezitím posunul. Chcete-li jít s ním, stačí z `dresscode.neon` smazat řádek `file.strictTypes.position` a spustit `fix`; jinak zůstane v platnosti hodnota vašeho kódu, kterou `init` zapsal.
 
@@ -135,7 +143,7 @@ Mimo interaktivní terminál, s přepínačem `--yes` nebo s přepínačem `--fo
 Your call  `literals.quotes: single` in `dresscode.neon` checks it too; its fix changes 3 files
 \--
 
-Odpověď můžete zadat i předem: příkaz `dresscode init --set literals.quotes=single` zapíše danou hodnotu bez ohledu na to, co převažuje v kódu, a rozpočet ji nikdy neodloží. Nástroj platnost cesty i hodnoty ověří v katalogu ještě před zahájením měření, takže se o případném překlepu dozvíte okamžitě.
+Odpověď můžete zadat i předem: příkaz `dresscode init --set literals.quotes=single` zapíše danou hodnotu bez ohledu na to, co převažuje v kódu, a rozpočet ji nikdy neodloží. Je-li to hodnota, kterou už říká standard, jako `single` u `nette`, řádek do souboru nepřidá (stejně jako u odpovědi v průvodci), protože by standard jen opakoval; rozhodnutí se přesto kontroluje. Nástroj platnost cesty i hodnoty ověří v katalogu ještě před zahájením měření, takže se o případném překlepu dozvíte okamžitě.
 
 S přepínačem `--dry-run` vypíše `init` navrženou konfiguraci do konzole a na disk nic nezapíše. Přepínač `--jobs` omezí počet procesů pro paralelní měření (`--jobs 1` měří v jediném procesu).
 
