@@ -34,7 +34,25 @@ file_put_contents($this->file, Json::encode($products, pretty: true));
 return \str_starts_with($code, 'sale-');
 ```
 
-It rewrites a method call only where the types from PHPStan say the method belongs to that class, and in the style of the project's code. [Step by Step |#Step by Step] shows how to get there.
+It rewrites a method call only where the types from PHPStan say the method belongs to that class, and in the style of the project's code.
+
+
+Step by Step
+============
+
+DressCode needs `nette/utils` 4.1, so it cannot be a development dependency of a Nette 3 application. Install it globally, with PHPStan and the data for Nette:
+
+```shell
+composer global require dresscode/dresscode dresscode/upgrade-nette phpstan/phpstan
+```
+
+1. If the project has no `dresscode.neon`, write it with `dresscode init`: the plan rewrites the code in the style the configuration keeps, and `upgrade run` does not start without it.
+2. Measure how much work the upgrade takes: `dresscode upgrade estimate nette/utils 4.0`. The line `Composer` says whether something in `composer.lock` refuses the target version.
+3. Save the plan with the test command, so that the team can review it: `dresscode upgrade plan nette/utils 4.0 --save --test-command "vendor/bin/tester tests -o junit:{junit}"`.
+4. Carry it out: `dresscode upgrade run`. The tests run after each step, and if a test newly fails after a step, that step is undone. At the Composer step, DressCode asks whether it may raise `nette/utils` to `^4.0`.
+5. Go through what is left for you, and run `upgrade run` again until the run ends with `UPGRADED`.
+
+The other libraries are upgraded the same way, only with a different target, such as `dresscode upgrade estimate nette/php-generator 4.2`. Without a target, DressCode proposes every library for which it has data about a newer version than the project allows today. If you have raised `nette/utils` to `^4.0` yourself, a plain `dresscode upgrade today` is enough. [The Upgrade Plan Step by Step |upgrade-plan] describes the whole procedure with tests, commits and manual tasks.
 
 
 What Gets Rewritten
@@ -100,30 +118,13 @@ app/Samples.php:32:9: error: Static property `Nette\Utils\Html::$xhtml` is remov
 | `Nette\Iterators\Mapper` | `Iterables::map()`, which returns a generator you can iterate only once | `nette/utils` 4.0.5 |
 | `ClassType::addExtend()` | `setExtends()`, a class extends at most one class | `nette/php-generator` 4.0.1 |
 
-Confirm such a place with the comment `// dresscode:ignore <decision> -- <reason>`, or rewrite it; [Manual Tasks Along the Way |upgrade#Manual Tasks Along the Way] has the details.
-
-
-Step by Step
-============
-
-DressCode needs `nette/utils` 4.1, so it cannot be a development dependency of a Nette 3 application. Install it globally, with PHPStan and the data for Nette:
-
-```shell
-composer global require dresscode/dresscode dresscode/upgrade-nette phpstan/phpstan
-```
-
-1. Measure how much work the upgrade takes: `dresscode upgrade estimate nette/utils 4.0`. The line `Composer` says whether something in `composer.lock` refuses the target version.
-2. Save the plan with the test command, so that the team can review it: `dresscode upgrade plan nette/utils 4.0 --save --test-command "vendor/bin/tester tests -o junit:{junit}"`.
-3. Carry it out: `dresscode upgrade run`. The tests run after each step, and if a test newly fails after a step, that step is undone. At the Composer step, DressCode asks whether it may raise `nette/utils` to `^4.0`.
-4. Go through what is left for you, and run `upgrade run` again until the run ends with `UPGRADED`.
-
-The other libraries are upgraded the same way, only with a different target, such as `dresscode upgrade estimate nette/php-generator 4.2`. Without a target, DressCode proposes every library for which it has data about a newer version than the project allows today. [Upgrade Your Code Step by Step |upgrade] describes the whole procedure with tests, commits and manual tasks.
+Confirm such a place with the comment `// dresscode:ignore <decision> -- <reason>`, or rewrite it; [Manual Tasks Along the Way |upgrade-plan#Manual Tasks Along the Way] has the details.
 
 
 Where to Go Next
 ================
 
-- [Upgrade Your Code Step by Step |upgrade], the estimate, the plan and the run in detail.
+- [The upgrade plan step by step |upgrade-plan], the estimate, the plan and the run in detail.
 - [Nette libraries |upgrading-nette], what the package `dresscode/upgrade-nette` covers for the other libraries and versions.
 - [How upgrading libraries works |upgrading-libraries], how DressCode knows what has changed.
 

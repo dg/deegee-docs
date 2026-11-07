@@ -8,7 +8,7 @@ A six-line pre-commit hook checks the PHP code style of exactly what goes into t
 A Pre-commit Hook
 =================
 
-A commit does not take the file on disk; it takes the file's content in the index, and after `git add -p` the two differ. So the hook reads the content from the index and passes it in with the `--stdin` option; the `lines` format then prints one line per finding, and nothing when the code is clean:
+A commit does not take the file on disk; it takes the file's content in the index, that is, what you added to the commit with `git add`. After `git add -p`, which adds only some of the changes of a file, the two differ. So the hook reads the content from the index and passes it in with the `--stdin` option; the `lines` format then prints one line per finding, and nothing when the code is clean:
 
 ```shell
 #!/bin/sh
@@ -19,18 +19,20 @@ done
 exit $status
 ```
 
-Save it as `.git/hooks/pre-commit` and make it executable. When everything is fine, the hook prints nothing and the commit goes through; otherwise it prints each violation on one line with the path, the line, the message and the decision path, and stops the commit:
+Save it as `.git/hooks/pre-commit` and make it executable: `chmod +x .git/hooks/pre-commit`. If you installed DressCode in the project, write `vendor/bin/dresscode` instead of `dresscode` in the script.
+
+When everything is fine, the hook prints nothing and the commit goes through; otherwise it prints each violation on one line with the path, the line, the message and the decision path, and stops the commit:
 
 /--pre .[terminal]
 src/Cart.php:5:5: error: The import of `Gateway` is unused. [imports.unused]
 src/Cart.php:15:21: error: A plain string must be written with single quotes. [literals.quotes]
 \--
 
-Thanks to `--skip-excluded`, the hook skips a file that the configuration excludes in `excludePaths` or that is outside its `paths`; without it, `--stdin` would check that file too.
+Thanks to `--skip-excluded`, the hook skips a file that the configuration excludes in `excludePaths` or that is outside its `paths`. Without it, that file would be checked too: DressCode checks code from standard input and a file given by name even when the configuration excludes it.
 
 If you want a hook that fixes the code right away, run `fix` over the working tree and add the fixed files to the index. It is convenient, but it means the commit contains changes the developer has not seen. I prefer the first variant: the hook only reports, and I run the fix on purpose.
 
-With the `pre-commit` tool, it is one entry in the configuration. The tool passes file names to DressCode, so the entry needs `--skip-excluded`; otherwise it would also check a file that the configuration excludes in `excludePaths`:
+With the `pre-commit` tool, it is one entry in the configuration. The tool passes file names to DressCode, so here too the command takes `--skip-excluded`:
 
 ```yaml
 repos:

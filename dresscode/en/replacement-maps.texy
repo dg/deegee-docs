@@ -55,7 +55,7 @@ In map keys targeting class members (`replacedMembers`, `replacedCalls`, `nette.
 
 In NEON, keys containing parentheses or dollar signs must be wrapped in single quotes. A bare `App\Form::size(...)` is an error because modern PHP treats that as a first-class callable; match invocations with arbitrary arguments using `size(...$args)`.
 
-Pay close attention to empty parentheses `()`: they do not mean the same thing everywhere. In `replacedMembers`, they simply clarify that the symbol is a method, matching calls with any arguments. In `replacedCalls`, `forbiddenMembers`, and package maps inspecting argument shapes, `size()` matches calls with **no arguments** exclusively. If copied into those maps, a key from `replacedMembers` will silently ignore calls that pass arguments: calls with zero arguments are often precisely the pattern that older library versions allowed and newer releases forbid, so such a key makes sense. To match any invocation regardless of arguments, always use `size(...$args)`.
+Pay close attention to empty parentheses `()`: they do not mean the same thing everywhere. In `replacedMembers`, they simply clarify that the symbol is a method, matching calls with any arguments. In `replacedCalls`, `forbiddenMembers`, and the maps of plugins that read the shape of the arguments, `size()` matches calls with **no arguments** only, and such a key leaves calls with arguments alone. That is useful when the old version allowed a call without arguments and the new one forbids it. To match every call, write `size(...$args)`.
 
 A key matches access through any subtype of the specified class, including interfaces, traits, and calls via `self::`, `static::`, or `parent::`. Resolution is driven by the type of the receiver expression, allowing DressCode to recognize members that newer releases have completely removed. Where a receiver could also be something else (such as `Form|stdClass`), the key safely steps aside. Constructor keys match direct instantiations of the class, child classes without their own constructor, and calls to `parent::__construct()`; a child class declaring its own constructor is treated as a distinct class. Similarly, properties declared directly on a child class (when absent on the parent) are treated as distinct properties.
 
@@ -71,8 +71,6 @@ The argument shape pattern describes what the arguments of the call look like:
 
 Positional placeholders also match arguments passed by parameter name, provided the method declaration can be inspected.
 
-When multiple `replacedCalls` keys match a single invocation, the one containing more literals wins (each key in an array literal counts as a literal). In the event of a tie, the key with more typed parameters wins (with `list` weighted double), followed by keys without trailing variadic `...` placeholders, then keys with more total arguments, then the class closest to the receiver in the inheritance hierarchy (child before parent), and finally the order in the map. In `replacedMembers` and `forbiddenMembers`, argument shapes do not participate in tie-breaking: the class closest to the receiver wins, followed by declaration order in the map. The `nette.flagsAsNamedArguments` map selects the first matching key in declaration order.
-
 
 replacedClasses and replacedFunctions
 =====================================
@@ -86,7 +84,11 @@ replacedFunctions:
 	formatPrice: App\Utils\formatPrice
 ```
 
-A class is rewritten across `use` import statements, type declarations, `new` instantiations, static member accesses, `instanceof` checks, and attributes. The replacement is emitted in the shortest form the file context allows, importing it where the unqualified name is free. When the import statement itself is rewritten, fully qualified references to the new class in the file are shortened automatically. Classes are updated in docblock comments as well: in type annotations, class constant references like `Kind::*`, `@see` targets, and inline `{@link}` tags. Because only the identifier itself changes, comment indentation and alignment are preserved, and plain prose mentions remain untouched. `noDeprecatedClasses` performs equivalent updates in docblocks, but only for classes whose `@deprecated` annotation explicitly names a replacement. When [types from PHPStan |phpstan-types] are available, target classes that don't exist in the project are reported without being rewritten. Functions are emitted fully qualified; when both functions belong to PHP core, the rewrite occurs only if the replacement safely accepts all passed arguments. Keys can also target namespaced functions (e.g. `Symfony\Component\DependencyInjection\Loader\Configurator\ref`): matching calls via imports, qualified names, or unqualified calls within that namespace, and writing the replacement using the same convention.
+A class is rewritten across `use` import statements, type declarations, `new` instantiations, static member accesses, `instanceof` checks, and attributes. The replacement is emitted in the shortest form the file context allows, importing it where the unqualified name is free. When the import statement itself is rewritten, fully qualified references to the new class in the file are shortened automatically. When [types from PHPStan |phpstan-types] are available, target classes that don't exist in the project are reported without being rewritten.
+
+Classes are updated in docblock comments as well: in type annotations, class constant references like `Kind::*`, `@see` targets, and inline `{@link}` tags. Because only the identifier itself changes, comment indentation and alignment are preserved, and plain prose mentions remain untouched. The decision `upgrading.declarations.deprecatedClass` does the same for classes whose `@deprecated` annotation explicitly names a replacement.
+
+Functions are emitted fully qualified; when both functions belong to PHP core, the rewrite occurs only if the replacement safely accepts all passed arguments. Keys can also target namespaced functions (e.g. `Symfony\Component\DependencyInjection\Loader\Configurator\ref`): matching calls via imports, qualified names, or unqualified calls within that namespace, and writing the replacement using the same convention.
 
 A function can also be mapped to a static method, such as `str_slug: Illuminate\Support\Str::slug`: the invocation is rewritten to `Str::slug()` with matching arguments, and the class is imported according to project conventions. Updating unqualified calls to global functions inside namespaces remains a risky fix here as well, because the namespace could theoretically declare a function of the same name.
 
@@ -181,23 +183,14 @@ replacedCalls:
 - **The `removed` keyword** designates an invocation that is completely inert in newer versions. It is deleted along with its entire statement, provided neither the receiver nor the arguments produce side effects. Invocations whose return value is consumed, calls forming the body of a control structure without braces, or calls containing inline comments are reported rather than deleted, with the message: <code>''Function `curl_close()` does nothing.''</code>
 - **The `{write: …, because: …}` syntax** defines a rewrite that can alter program behavior. The fix is classified as risky, and the message cites the explanation provided in `because`: <code>''Risky because a build without mbstring answers the call with an error.''</code>
 
+.[note]
+When multiple `replacedCalls` keys match a single invocation, the one containing more literals wins (each key in an array literal counts as a literal). In the event of a tie, the key with more typed parameters wins (with `list` weighted double), followed by keys without trailing variadic `...` placeholders, then keys with more total arguments, then the class closest to the receiver in the inheritance hierarchy (child before parent), and finally the order in the map. In `replacedMembers` and `forbiddenMembers`, argument shapes do not participate in tie-breaking: the class closest to the receiver wins, followed by declaration order in the map.
 
-nette.flagsAsNamedArguments
-===========================
 
-Handles methods that previously accepted bitwise integer flags and now take modern named arguments. This map is not part of the DressCode engine; it is provided alongside its dedicated rule by the `dresscode/upgrade-nette` package, because so far only Nette has examples of such a change. In project configurations, it resides in the `nette` section under `flagsAsNamedArguments`. The key is an invocation with a flag placeholder at the end (or just before `...`); the value maps individual flag constants to specific named arguments:
+A Value as Code in NEON
+=======================
 
-```neon
-nette.flagsAsNamedArguments:
-	'Nette\Utils\Json::encode($value, $flags)':
-		Nette\Utils\Json::PRETTY: {pretty: true}
-		Nette\Utils\Json::ESCAPE_UNICODE: {asciiSafe: true}
-	'Nette\Utils\Strings::split($subject, $pattern, $flags, ...)':
-		PREG_SPLIT_NO_EMPTY: {skipEmpty: true}
-		PREG_SPLIT_DELIM_CAPTURE: {}
-```
-
-An invocation like `Json::encode($data, Json::PRETTY | Json::ESCAPE_UNICODE)` becomes `Json::encode($data, pretty: true, asciiSafe: true)`. A constant is recognized by the class that declares it, so `self::PRETTY` or `$json::PRETTY` match correctly. An empty value `{}` marks a flag that the method now applies unconditionally. Positional arguments after the flags are converted to use their parameter names. Unrecognized flags or dynamic variables passed as flags are reported; literals in that position (such as `true` or `0`) indicate the call already targets the new API and are left alone.
+Always write `replacedCalls` values as single-quoted strings containing valid PHP code; escape single quotes inside by doubling them: `'isMethod(''POST'')'`. While NEON can parse unquoted calls like `isMethod(POST)` as entities, entity arguments interpret bare words as strings, `Class::NAME` as class constants, `$name` as placeholders, `...` and `...$args` as the remaining arguments, numbers, `true`, `false` and `null` as PHP literals, and nested entities as nested calls. An entity cannot hold global constants, operators, or arbitrary expressions, and DressCode explicitly rejects chained entities (calling a method on the result of another call). Such expressions belong in single quotes as complete strings. Similarly, identifiers that NEON could interpret as literals (`False`, `Null`) must always be wrapped in single quotes.
 
 
 attributeForAnnotation
@@ -272,12 +265,6 @@ forbiddenConstants:
 ```
 
 
-A Value as Code in NEON
-=======================
-
-Always write `replacedCalls` values as single-quoted strings containing valid PHP code; escape single quotes inside by doubling them: `'isMethod(''POST'')'`. While NEON can parse unquoted calls like `isMethod(POST)` as entities, entity arguments interpret bare words as strings, `Class::NAME` as class constants, `$name` as placeholders, `...` and `...$args` as the remaining arguments, numbers, `true`, `false` and `null` as PHP literals, and nested entities as nested calls. An entity cannot hold global constants, operators, or arbitrary expressions, and DressCode explicitly rejects chained entities (calling a method on the result of another call). Such expressions belong in single quotes as complete strings. Similarly, identifiers that NEON could interpret as literals (`False`, `Null`) must always be wrapped in single quotes.
-
-
 Data Files
 ==========
 
@@ -315,7 +302,7 @@ since 3.2.1:
 
 - **Files do not define intent.** What one version introduces as a modern syntax alternative usually becomes a formal deprecation in a subsequent release, and the `since <version>` section explicitly records that timeline. Data files take effect when a project enables `upgrading.packages: yes`, which the `deprecations` and `modernizations` [sets |configuration#Standards and Sets] do automatically. PHP deprecation data is activated separately via `upgrading.php.deprecatedApi: forbidden`, which is included in both the `deprecations` set and the `nette` standard.
 - **Write sections in descending order from the newest version down**, matching how official upgrade guides are written. Sections are merged by version regardless of their order in the file, and newer releases always take precedence.
-- **Which section applies** is decided by the lowest version permitted by your project's constraints in `composer.json`. Code is rewritten according to sections that this lower bound reaches. Sections for higher versions that constraints also permit stay silent, because their fix would break the code on the lowest version; they come into play once the lower bound reaches them. For packages required without a lower bound or present purely as unconstrained transitive dependencies, no section applies (see [Upgrading Code |upgrade#Lower Bounds Decide]).
+- **Which section applies** is decided by the lowest version your project's constraints in `composer.json` allow: the sections this version reaches apply, see [Lower Bounds Decide |upgrade#Lower Bounds Decide].
 - **Fixes valid in earlier versions** than the section's release use the `from` key, e.g. `{write: …, from: '8.0'}`. For example, `curl_close()` has been inert since PHP 8.0, but was only officially deprecated in PHP 8.5. In the `since 8.5` section, it is recorded as `'curl_close($handle)': {write: removed, from: '8.0'}`, safely removing calls in any project targeting PHP 8.0 or newer.
 - **Versions** are written without trailing zeros (`since 3.1`), and the key `since 3.10` is parsed as a string, preventing it from converting to the number 3.1.
 - **Constructs reverted by later releases** receive `keep` in that version's section (possibly also an explicit prohibition, like `IMAGE_MIME_TYPES` above).
@@ -385,6 +372,24 @@ Upgrade data for an entire ecosystem belongs in a dedicated package. Official pa
 The list of data files is not declared in the plugin class because data is loaded without executing package code; the plugin itself is instantiated only when a project explicitly allows it in `use`. Upgrade data populates plugin maps identically to engine maps, and requirements activate starting with the version where the rewrite becomes valid (e.g. `nette.linkArguments` from `nette/application` 3.3); both happen when a project enables `upgrading.packages: yes`. Projects do not need to enable them manually: they are provided to `dresscode upgrade today` and both sets automatically.
 
 The reference implementation is [dresscode/upgrade-nette |https://github.com/dg/dresscode-upgrade-nette].
+
+
+nette.flagsAsNamedArguments
+===========================
+
+Handles methods that previously accepted bitwise integer flags and now take modern named arguments. This map is not part of the DressCode engine; it is provided alongside its dedicated rule by the `dresscode/upgrade-nette` package, because so far only Nette has examples of such a change. In project configurations, it resides in the `nette` section under `flagsAsNamedArguments`. The key is an invocation with a flag placeholder at the end (or just before `...`); the value maps individual flag constants to specific named arguments:
+
+```neon
+nette.flagsAsNamedArguments:
+	'Nette\Utils\Json::encode($value, $flags)':
+		Nette\Utils\Json::PRETTY: {pretty: true}
+		Nette\Utils\Json::ESCAPE_UNICODE: {asciiSafe: true}
+	'Nette\Utils\Strings::split($subject, $pattern, $flags, ...)':
+		PREG_SPLIT_NO_EMPTY: {skipEmpty: true}
+		PREG_SPLIT_DELIM_CAPTURE: {}
+```
+
+An invocation like `Json::encode($data, Json::PRETTY | Json::ESCAPE_UNICODE)` becomes `Json::encode($data, pretty: true, asciiSafe: true)`. A constant is recognized by the class that declares it, so `self::PRETTY` or `$json::PRETTY` match correctly. An empty value `{}` marks a flag that the method now applies unconditionally. Positional arguments after the flags are converted to use their parameter names. Unrecognized flags or dynamic variables passed as flags are reported; literals in that position (such as `true` or `0`) indicate the call already targets the new API and are left alone. When several keys match a call, the first one in the map applies.
 
 {{maintitle: Replacement Maps: Describe an API Change for PHP Upgrades}}
 {{description: Reference for the maps DressCode uses to rewrite PHP code to a new API: members and argument shapes, PHP expressions as replacements, data files and upgrade packages.}}

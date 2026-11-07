@@ -28,49 +28,9 @@ Written    `dresscode.neon`
 Next       `dresscode fix`        rewrites 1 file in place (`dresscode check --diff` shows the changes first); until then `check` reports them
 \--
 
-Nejprve `init` vyhledá soubory projektu: projde vše, co sleduje Git, a v projektu bez Gitu vyjde z autoload cest v `composer.json` společně se složkami `src`, `tests`, `test`, `app`, `lib`, `bin`, `cron` a `www*`, které v kořeni reálně existují. Zcela stranou ponechá testovací data (adresáře `fixtures`, `Fixtures` a `expected`), soubory označené v hlavičce či v `.gitattributes` jako strojově generované (`linguist-generated`), testy ve formátu PHPT, soubory ignorované Gitem a soubory se syntaktickou chybou, které nelze naparsovat. Nic z toho totiž nikdo nepíše ručně. Každou vynechanou cestu zapíše do konfiguračního klíče `excludePaths` i s přesným odůvodněním, aby ji automaticky ignorovala i každá další kontrola (řádek `Excluded` je přehledně vypíše). Soubory, které Git zatím nesleduje, ale ani neignoruje, `init` neměří; řádek `not measured` je však spočítá, protože první automatický `fix` je zpracuje také.
 
-Následně nástroj vybere nejvhodnější standard: cvičně zkontroluje kód podle každého z nich a zvolí ten, se kterým by automatická oprava změnila nejmenší počet souborů (jak potvrzuje řádek `Standard`). Počítají se vždy celé soubory, nikoliv rozhodnutí, protože odchylka napříč celým projektem má větší váhu než odchylka na jediném místě. Pokud jsou dva standardy v těsném souboji (s rozdílem do deseti procent), rozhodne standard uvedený v konfiguraci stávajícího formátovače projektu. Samotný framework, na kterém aplikace staví, nerozhoduje: aplikace v Nette či Symfony jejich oficiální styl dodržovat nemusí. Pokud formátovač žádný standard nejmenuje, vybere nástroj z blízkých kandidátů standard `perCs` (pokud je mezi nimi) a v interaktivním terminálu se vás zeptá, zda nechcete raději jiný; pokud zvolíte alternativu, proměří kód podle ní. Mimo interaktivní terminál nahradí otázku řádek `Your call` s hotovým příkazem pro měření podle druhého standardu. Starší standard `psr12` ustoupí svému nástupci `perCs`, pokud jej formátovač výslovně nejmenuje a oprava podle `perCs` nezmění o více než polovinu souborů navíc: PSR-12 totiž o modernějších prvcích PHP vůbec nemluví, a kód psaný podle [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/] se proto od PSR-12 formálně liší v menším počtu rozhodnutí. Projekt formátovaný nástrojem Laravel Pint automaticky získá standard svého presetu a standard zadaný přepínačem `--use` se použije přesně tak, jak jej zadáte. Sady přidané dalšími přepínači `--use` zapíše nástroj přímo za standard, takže příkaz `dresscode init --use nette --use modernizations` promítne do klíče `use` obě jména.
-
-V dalším kroku `init` detailně proměří rozhodnutí, ve kterých se kód od vybraného standardu odchyluje, každé samostatně a se všemi jeho povolenými hodnotami. Odsazení, maximální délku řádku a zakončení řádků měří přednostně, protože na nich stojí všechno ostatní. Menší projekty do tisíce souborů a 8 MB proměří kompletně celé, u větších projektů sáhne po reprezentativním vzorku rozděleném rovným dílem mezi jednotlivé adresáře, aby velká složka nepřehlušila zbytek kódu (kolik souborů který adresář poskytl, vyčíslí řádek `Sample`). Hodnotu, na které panuje shoda na alespoň 70 % míst, zapíše do konfigurace i s přesným podkladem (`your code, 92% of 13 files`). Kde kód stejnou věc zapisuje několika různými způsoby a žádný z nich jasně nepřevládá, zapíše hodnotu `keep` ("nekontrolovat") s komentářem `not checked:` a s výčtem nalezených variant; kolik takových rozhodnutí v projektu zůstalo, shrnuje řádek `Unchecked`.
-
-Pokud některý adresář vykazuje odlišné odsazení nebo některé z rozhodnutí `file.*` oproti zbytku projektu (alespoň v pěti souborech a v devíti desetinách z nich), upozorní na to `init` na řádku `Differs` a navrhne přesný [přepis konfigurace |configuration#Jiné hodnoty pro část projektu], díky kterému by si složka svůj styl ponechala. Do souboru jej však automaticky nezapíše: `init` navrhuje jednotný styl pro celý projekt a vytvoření lokální výjimky nechává plně na vašem rozhodnutí:
-
-/--pre .[terminal]
-Differs    tests: indentation.unit 4 spaces in all 6 files; an override for `tests` would keep it, none is written
-\--
-
-Na závěr `init` prověří celou navrženou konfiguraci nad všemi soubory projektu. První automatická oprava po spuštění `init` rozhodně nemá přepsat půlku repozitáře, a proto nástroj striktně hlídá rozpočet změn: oprava smí ve výchozím stavu změnit nanejvýš 1 % souborů (minimálně 2 a maximálně 20; jiný limit určí přepínač `--budget`). Kdyby měly navržené opravy tento rozpočet překročit, nechá `init` některá rozhodnutí zatím neaktivní, dokud se zbytek do limitu nevejde, a v interaktivním průvodci se vás na ně přímo zeptá i s ukázkou konkrétního místa v kódu. Odsazení, šířku řádku a konce řádků neodloží nikdy, protože na nich závisejí všechna ostatní rozhodnutí; soubory, které je mají jinak než zbytek projektu, opraví `fix` bez ohledu na rozpočet a řádek `Checked` je vyčísluje odděleně. Do limitu se nezapočítávají ani vaše přímé odpovědi v průvodci. Nálezy, které žádné pravidlo neumí opravit automaticky, patří do [baseline |suppressions-and-baseline#baseline], jejich počet uvádí tentýž řádek:
-
-/--pre .[terminal]
-Standard   nette (the Nette Coding Standard), as given
-Measured   your code departs from it in 4 decisions over 13 files; nette as it is, with no decision below `use`, would rewrite 13 of them
-As written file.strictTypes.position: nextLine   your code, all 13 files
-Checked    all 13 files: a fix changes 1 file, 1 of them for the indentation, the line endings or the long lines the rest of the code has
-           1 more decision is left as your code has it, as the fixes together would change more than 2 files, the indentation, the line endings, the long lines and your answers aside (`--budget` raises the limit)
-
-Check `literals.quotes: single`? A fix rewrites 3 files, more than the budget allows.
-           e.g. src/Cart.php:18  A plain string must be written with single quotes.
-  [1] don't check it (recommended)
-  [2] single everywhere, a fix rewrites 3 files
-Your choice [1/2]
-\--
-
-Odpovídáte jednoduše zadáním čísla volby. Doporučená odpověď je vždy na prvním místě (s číslem 1) a stačí ji potvrdit klávesou Enter; ponechává kód v původním stavu, takže ani při nejistotě nic nepokazíte. U variant, které kód upravují, rovnou vidíte přesný počet souborů, které by oprava přepsala. Pokud vaše odpovědi konfiguraci pozmění, `init` ji okamžitě znovu otestuje, aby řádek `Checked` odpovídal vašim volbám. Pokud by kvůli tomu rozpočet musel odložit jiné rozhodnutí, zeptá se na něj v dalším kole a upozorní, že jde o důsledek vašich předchozích odpovědí. Otázky jsou přehledně číslované (např. `(2/3)`), abyste měli přehled, kolik voleb zbývá.
-
-Na co přesně se `init` ptá? Především na rozhodnutí odložená rozpočtem a na volbu mezi těsnými standardy. Dále na hodnoty, které přímo odporují existující konfiguraci původního formátovače, a na identifikátory se společnou předponou či příponou, které neodpovídají standardu (např. třídy končící podtržítkem); ty lze totiž hromadně povolit vzorem v [`naming.except` |decisions/naming#naming.except]. Průvodce položí nanejvýš pět otázek na rozhodnutí, přičemž ty s největším dopadem řeší jako první.
-
-Zda převzít standard v jeho čisté podobě bez úprav, na to se `init` neptá: na řádku `Measured` vám pouze ukáže, kolik souborů by to stálo: v naší ukázce by čisté `nette` přepsalo všech 13 souborů, a to především kvůli jedinému rozhodnutí, protože váš kód umisťuje `declare(strict_types=1)` jinam než `nette`. Takový rozdíl bývá stopou standardu, který se mezitím posunul. Chcete-li jít s ním, stačí z `dresscode.neon` smazat řádek `file.strictTypes.position` a spustit `fix`; jinak zůstane v platnosti hodnota vašeho kódu, kterou `init` zapsal.
-
-Mimo interaktivní terminál, s přepínačem `--yes` nebo s přepínačem `--format json` se `init` na nic nedotazuje a automaticky potvrdí doporučené odpovědi (výsledkem je tedy naprosto stejný soubor, jako byste na vše odpověděli Enterem). Každou nezodpovězenou otázku pak vypíše na řádku `Your call` s hotovým zápisem pro `dresscode.neon` nebo s příkazem, kterým můžete volbu změnit:
-
-/--pre .[terminal]
-Your call  `literals.quotes: single` in `dresscode.neon` checks it too; its fix changes 3 files
-\--
-
-Odpověď můžete zadat i předem: příkaz `dresscode init --set literals.quotes=single` zapíše danou hodnotu bez ohledu na to, co převažuje v kódu, a rozpočet ji nikdy neodloží. Nástroj platnost cesty i hodnoty ověří v katalogu ještě před zahájením měření, takže se o případném překlepu dozvíte okamžitě.
-
-S přepínačem `--dry-run` vypíše `init` navrženou konfiguraci do konzole a na disk nic nezapíše. Přepínač `--jobs` omezí počet procesů pro paralelní měření (`--jobs 1` měří v jediném procesu). S přepínačem `--format json` vygeneruje namísto textu strukturovaný dokument pro externí nástroje či AI agenty: verzi formátu `version`, kořen projektu `root`, rozsah `scope`, vzorek `sample`, zvolený standard `standard` i s počty souborů, které by oprava změnila s každým standardem, naměřené hodnoty `values` s komentáři a původem, odchylující se složky `regions`, ověření všech souborů `verification`, instrukce z řádků `Your call` jako `instructions`, soubory s chybujícími pravidly `failed`, navrženou konfiguraci `configuration` a cestu k zapsanému souboru `written`; u existující konfigurace navíc v poli `shifts` popíše, co se od minula posunulo.
+Co init zapíše
+==============
 
 Výsledný soubor má u každé hodnoty přehledně zdokumentováno, o co se opírá:
 
@@ -98,13 +58,110 @@ blankLines:
 	beforeDeclaration: 2     # your code, all 13 places
 ```
 
-Kromě rozhodnutí `init` zmapuje i deklarace ve jmenných prostorech. Zde nerozhoduje většina, ale absolutní úplnost. Projde proto všechny soubory, detekuje funkce a konstanty deklarované ve jmenných prostorech, zapíše jejich seznamy do klíče `namespaces` a doplní klíč `nameResolution: certain` (význam těchto klíčů podrobně rozebírá stránka [Funkce a konstanty ve jmenných prostorech |php-functions-in-namespaces]). Pokud v projektu objeví balíček `phpstan/phpstan`, zapíše i klíč [`typeAnalysis: phpstan` |phpstan-types#enable] s vysvětlujícím komentářem. Klíč `fixRisky` nástroj nezapíše nikdy: souhlas s rizikovými opravami, které mohou změnit chování programu, totiž z kódu naměřit nelze.
-
-Pokud projekt obsahuje konfiguraci PHP_CodeSnifferu, PHP CS Fixeru nebo Laravel Pintu, `init` si ji načte, ale bez vašeho svolení ji nikdy nespustí. Konfiguraci vybere stejným postupem jako [`migrate config` |migration#migrate-config] (tedy tu, kterou projekt reálně spouští), a pokud to nelze jednoznačně určit, v terminálu se zeptá. Převezme z ní sledované cesty, vynechané soubory a pravidla vypnutá pouze v části projektu, pro která připraví [přepis |configuration#Jiné hodnoty pro část projektu]. Pravidla původního formátovače porovná s reálným stavem kódu, a pokud si vzájemně odporují, zeptá se, kterému nastavení dát přednost. Konfigurace PHP CS Fixeru je však spustitelný PHP kód: cesty pro Finder sice `init` z kódu staticky vyčte (a pod řádkem `Formatter` uvede ty, které přečíst nešlo), ale konkrétní pravidla zjistí pouze spuštěním skriptu, a proto se v terminálu nejprve výslovně zeptá na svolení. Jinou konfiguraci můžete předat přepínačem `--formatter`, čímž zároveň udělujete souhlas s jejím načtením. Na závěr nástroj shrne, kde všude může `dresscode check` původní formátovač nahradit, zda jeho pravidla s kódem porovnal, nebo je vůbec nečetl, a připomene, že namísto měření kódu je umí přímo přeložit příkaz `dresscode migrate config`; do zapsaného souboru se pravidla formátovače nepřenesou ani v jednom případě. Uvede také přesný počet potlačovacích komentářů, které dokáže převést `dresscode migrate suppressions`.
-
 Po dokončení zbývají nanejvýš dva přímočaré kroky, které `init` sám vypíše: příkaz `dresscode fix` srovná soubory odchylující se od zapsané konfigurace a `dresscode baseline` uloží místa, která automaticky vyřešit nelze, aby `check` prošel.
 
-Před samotným uložením souboru si `init` konfiguraci znovu načte a ověří, že z ní vzejdou přesně tytéž hodnoty, jaké naměřil. Pokud v některém souboru selže pravidlo, daný soubor z měření vynechá, jmenuje jej v hlavičce a skončí s exit kódem 2, protože konfigurace pak stojí na neúplných datech. Již existující konfigurační soubor `init` nikdy nepřepíše (při jeho existenci se na nic neptá a přepínač `--set` odmítne); nečitelnou konfiguraci ohlásí s chybou ještě před zahájením prací. Namísto přepisu proměří projekt znovu podle standardu uvedeného v existujícím souboru na souborech, které konfigurace kontroluje (soubory, kterým přepis dává vlastní rozhodnutí, vynechá a řekne to). Vypíše každé rozhodnutí, které by dnes nastavil jinak (včetně počtu souborů, jež by oprava změnila), a upozorní na rozhodnutí, která máte v souboru nastavena odlišně od standardu, přestože se kód standardu drží. To oceníte po aktualizaci DressCode nebo po delším čase aktivního vývoje:
+
+Které soubory měří
+==================
+
+Nejprve `init` vyhledá soubory projektu: projde vše, co sleduje Git, a v projektu bez Gitu vyjde z autoload cest v `composer.json` společně se složkami `src`, `tests`, `test`, `app`, `lib`, `bin`, `cron` a `www*`, které v kořeni reálně existují.
+
+Zcela stranou ponechá testovací data (adresáře `fixtures`, `Fixtures` a `expected`), soubory označené v hlavičce či v `.gitattributes` jako strojově generované (`linguist-generated`), testy ve formátu PHPT, soubory ignorované Gitem a soubory se syntaktickou chybou, které nelze naparsovat. Nic z toho totiž nikdo nepíše ručně. Každou vynechanou cestu zapíše do konfiguračního klíče `excludePaths` i s přesným odůvodněním, aby ji automaticky ignorovala i každá další kontrola (řádek `Excluded` je přehledně vypíše). Soubory, které Git zatím nesleduje, ale ani neignoruje, `init` neměří; řádek `not measured` je však spočítá, protože první automatický `fix` je zpracuje také.
+
+
+Jak vybere standard
+===================
+
+Následně nástroj vybere nejvhodnější standard: cvičně zkontroluje kód podle každého z nich a zvolí ten, se kterým by automatická oprava změnila nejmenší počet souborů (jak potvrzuje řádek `Standard`). Počítají se vždy celé soubory, nikoliv rozhodnutí, protože odchylka napříč celým projektem má větší váhu než odchylka na jediném místě. Samotný framework, na kterém aplikace staví, nerozhoduje: aplikace v Nette či Symfony jejich oficiální styl dodržovat nemusí.
+
+Pokud jsou dva standardy v těsném souboji (s rozdílem do deseti procent), rozhodne standard uvedený v konfiguraci stávajícího formátovače projektu. Pokud formátovač žádný standard nejmenuje, vybere nástroj z blízkých kandidátů standard `perCs` (pokud je mezi nimi) a v interaktivním terminálu se vás zeptá, zda nechcete raději jiný; pokud zvolíte alternativu, proměří kód podle ní. Mimo interaktivní terminál nahradí otázku řádek `Your call` s hotovým příkazem pro měření podle druhého standardu.
+
+Projekt formátovaný nástrojem Laravel Pint automaticky získá standard svého presetu a standard zadaný přepínačem `--use` se použije přesně tak, jak jej zadáte. Sady přidané dalšími přepínači `--use` zapíše nástroj přímo za standard, takže příkaz `dresscode init --use nette --use modernizations` promítne do klíče `use` obě jména.
+
+.[note]
+Starší standard `psr12` ustoupí svému nástupci `perCs`, pokud jej formátovač výslovně nejmenuje a oprava podle `perCs` nezmění o více než polovinu souborů navíc: PSR-12 totiž o modernějších prvcích PHP vůbec nemluví, a kód psaný podle [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/] se proto od PSR-12 formálně liší v menším počtu rozhodnutí.
+
+
+Jak měří rozhodnutí
+===================
+
+V dalším kroku `init` detailně proměří rozhodnutí, ve kterých se kód od vybraného standardu odchyluje, každé samostatně a se všemi jeho povolenými hodnotami. Odsazení, maximální délku řádku a zakončení řádků měří přednostně, protože na nich stojí všechno ostatní. Menší projekty do tisíce souborů a 8 MB proměří kompletně celé, u větších projektů sáhne po reprezentativním vzorku rozděleném rovným dílem mezi jednotlivé adresáře, aby velká složka nepřehlušila zbytek kódu (kolik souborů který adresář poskytl, vyčíslí řádek `Sample`).
+
+Hodnotu, na které panuje shoda na alespoň 70 % míst, zapíše do konfigurace i s přesným podkladem (`your code, 92% of 13 files`). Kde kód stejnou věc zapisuje několika různými způsoby a žádný z nich jasně nepřevládá, zapíše hodnotu `keep` ("nekontrolovat") s komentářem `not checked:` a s výčtem nalezených variant; kolik takových rozhodnutí v projektu zůstalo, shrnuje řádek `Unchecked`.
+
+Pokud některý adresář vykazuje odlišné odsazení nebo některé z rozhodnutí `file.*` oproti zbytku projektu (alespoň v pěti souborech a v devíti desetinách z nich), upozorní na to `init` na řádku `Differs` a navrhne přesný [přepis konfigurace |configuration#Jiné hodnoty pro část projektu], díky kterému by si složka svůj styl ponechala. Do souboru jej však automaticky nezapíše: `init` navrhuje jednotný styl pro celý projekt a vytvoření lokální výjimky nechává plně na vašem rozhodnutí:
+
+/--pre .[terminal]
+Differs    tests: indentation.unit 4 spaces in all 6 files; an override for `tests` would keep it, none is written
+\--
+
+Před samotným uložením souboru si `init` konfiguraci znovu načte a ověří, že z ní vzejdou přesně tytéž hodnoty, jaké naměřil. Pokud v některém souboru selže pravidlo, daný soubor z měření vynechá, jmenuje jej v hlavičce a skončí s exit kódem 2, protože konfigurace pak stojí na neúplných datech.
+
+
+Rozpočet první opravy a otázky
+==============================
+
+Na závěr `init` prověří celou navrženou konfiguraci nad všemi soubory projektu. První automatická oprava po spuštění `init` rozhodně nemá přepsat půlku repozitáře, a proto nástroj striktně hlídá rozpočet změn: oprava smí ve výchozím stavu změnit nanejvýš 1 % souborů (minimálně 2 a maximálně 20; jiný limit určí přepínač `--budget`). Kdyby měly navržené opravy tento rozpočet překročit, nechá `init` některá rozhodnutí zatím neaktivní, dokud se zbytek do limitu nevejde, a v interaktivním průvodci se vás na ně přímo zeptá i s ukázkou konkrétního místa v kódu.
+
+Odsazení, šířku řádku a konce řádků neodloží nikdy, protože na nich závisejí všechna ostatní rozhodnutí; soubory, které je mají jinak než zbytek projektu, opraví `fix` bez ohledu na rozpočet a řádek `Checked` je vyčísluje odděleně. Do limitu se nezapočítávají ani vaše přímé odpovědi v průvodci. Nálezy, které žádné pravidlo neumí opravit automaticky, patří do [baseline |suppressions-and-baseline#baseline], jejich počet uvádí tentýž řádek. Takhle vypadá konec výpisu a otázka, když se kód měří proti standardu `nette`, který zadal příkaz `dresscode init --use nette`:
+
+/--pre .[terminal]
+Standard   nette (the Nette Coding Standard), as given
+Measured   your code departs from it in 4 decisions over 13 files; nette as it is, with no decision below `use`, would rewrite 13 of them
+As written file.strictTypes.position: nextLine   your code, all 13 files
+Checked    all 13 files: a fix changes 1 file, 1 of them for the indentation, the line endings or the long lines the rest of the code has
+           1 more decision is left as your code has it, as the fixes together would change more than 2 files, the indentation, the line endings, the long lines and your answers aside (`--budget` raises the limit)
+
+Check `literals.quotes: single`? A fix rewrites 3 files, more than the budget allows.
+           e.g. src/Cart.php:18  A plain string must be written with single quotes.
+  [1] don't check it (recommended)
+  [2] single everywhere, a fix rewrites 3 files
+Your choice [1/2]
+\--
+
+Odpovídáte jednoduše zadáním čísla volby. Doporučená odpověď je vždy na prvním místě (s číslem 1) a stačí ji potvrdit klávesou Enter; ponechává kód v původním stavu, takže ani při nejistotě nic nepokazíte. U variant, které kód upravují, rovnou vidíte přesný počet souborů, které by oprava přepsala. Pokud vaše odpovědi konfiguraci pozmění, `init` ji okamžitě znovu otestuje, aby řádek `Checked` odpovídal vašim volbám. Pokud by kvůli tomu rozpočet musel odložit jiné rozhodnutí, zeptá se na něj v dalším kole a upozorní, že jde o důsledek vašich předchozích odpovědí. Otázky jsou přehledně číslované (např. `(2/3)`), abyste měli přehled, kolik voleb zbývá.
+
+Na co přesně se `init` ptá? Především na rozhodnutí odložená rozpočtem a na volbu mezi těsnými standardy. Dále na hodnoty, které přímo odporují existující konfiguraci původního formátovače, a na identifikátory se společnou předponou či příponou, které neodpovídají standardu (např. třídy končící podtržítkem); ty lze totiž hromadně povolit vzorem v [`naming.except` |decisions/naming#naming.except]. Průvodce položí nanejvýš pět otázek na rozhodnutí, přičemž ty s největším dopadem řeší jako první.
+
+Zda převzít standard v jeho čisté podobě bez úprav, na to se `init` neptá: na řádku `Measured` vám pouze ukáže, kolik souborů by to stálo: v naší ukázce by čisté `nette` přepsalo všech 13 souborů, a to především kvůli jedinému rozhodnutí, protože váš kód umisťuje `declare(strict_types=1)` jinam než `nette`. Takový rozdíl bývá stopou standardu, který se mezitím posunul. Chcete-li jít s ním, stačí z `dresscode.neon` smazat řádek `file.strictTypes.position` a spustit `fix`; jinak zůstane v platnosti hodnota vašeho kódu, kterou `init` zapsal.
+
+
+Bez otázek
+==========
+
+Mimo interaktivní terminál, s přepínačem `--yes` nebo s přepínačem `--format json` se `init` na nic nedotazuje a automaticky potvrdí doporučené odpovědi (výsledkem je tedy naprosto stejný soubor, jako byste na vše odpověděli Enterem). Každou nezodpovězenou otázku pak vypíše na řádku `Your call` s hotovým zápisem pro `dresscode.neon` nebo s příkazem, kterým můžete volbu změnit:
+
+/--pre .[terminal]
+Your call  `literals.quotes: single` in `dresscode.neon` checks it too; its fix changes 3 files
+\--
+
+Odpověď můžete zadat i předem: příkaz `dresscode init --set literals.quotes=single` zapíše danou hodnotu bez ohledu na to, co převažuje v kódu, a rozpočet ji nikdy neodloží. Nástroj platnost cesty i hodnoty ověří v katalogu ještě před zahájením měření, takže se o případném překlepu dozvíte okamžitě.
+
+S přepínačem `--dry-run` vypíše `init` navrženou konfiguraci do konzole a na disk nic nezapíše. Přepínač `--jobs` omezí počet procesů pro paralelní měření (`--jobs 1` měří v jediném procesu).
+
+S přepínačem `--format json` vygeneruje namísto textu strukturovaný dokument pro externí nástroje či AI agenty: verzi formátu `version`, kořen projektu `root`, rozsah `scope`, vzorek `sample`, zvolený standard `standard` i s počty souborů, které by oprava změnila s každým standardem, naměřené hodnoty `values` s komentáři a původem, odchylující se složky `regions`, ověření všech souborů `verification`, instrukce z řádků `Your call` jako `instructions`, soubory s chybujícími pravidly `failed`, navrženou konfiguraci `configuration` a cestu k zapsanému souboru `written`; u existující konfigurace navíc v poli `shifts` popíše, co se od minula posunulo.
+
+
+Jmenné prostory a typy
+======================
+
+Kromě rozhodnutí `init` zmapuje i deklarace ve jmenných prostorech. Zde nerozhoduje většina, ale absolutní úplnost. Projde proto všechny soubory, detekuje funkce a konstanty deklarované ve jmenných prostorech, zapíše jejich seznamy do klíče `namespaces` a doplní klíč `nameResolution: certain` (význam těchto klíčů podrobně rozebírá stránka [Funkce a konstanty ve jmenných prostorech |php-functions-in-namespaces]). Pokud v projektu objeví balíček `phpstan/phpstan`, zapíše i klíč [`typeAnalysis: phpstan` |phpstan-types#enable] s vysvětlujícím komentářem. Klíč `fixRisky` nástroj nezapíše nikdy: souhlas s rizikovými opravami, které mohou změnit chování programu, totiž z kódu naměřit nelze.
+
+
+Konfigurace jiného formátovače
+==============================
+
+Pokud projekt obsahuje konfiguraci PHP_CodeSnifferu, PHP CS Fixeru nebo Laravel Pintu, `init` si ji načte, ale bez vašeho svolení ji nikdy nespustí. Konfiguraci vybere stejným postupem jako [`migrate config` |migration#migrate-config] (tedy tu, kterou projekt reálně spouští), a pokud to nelze jednoznačně určit, v terminálu se zeptá. Převezme z ní sledované cesty, vynechané soubory a pravidla vypnutá pouze v části projektu, pro která připraví [přepis |configuration#Jiné hodnoty pro část projektu]. Pravidla původního formátovače porovná s reálným stavem kódu, a pokud si vzájemně odporují, zeptá se, kterému nastavení dát přednost.
+
+Konfigurace PHP CS Fixeru je však spustitelný PHP kód: cesty pro Finder sice `init` z kódu staticky vyčte (a pod řádkem `Formatter` uvede ty, které přečíst nešlo), ale konkrétní pravidla zjistí pouze spuštěním skriptu, a proto se v terminálu nejprve výslovně zeptá na svolení. Jinou konfiguraci můžete předat přepínačem `--formatter`, čímž zároveň udělujete souhlas s jejím načtením.
+
+Na závěr nástroj shrne, kde všude může `dresscode check` původní formátovač nahradit, zda jeho pravidla s kódem porovnal, nebo je vůbec nečetl, a připomene, že namísto měření kódu je umí přímo přeložit příkaz `dresscode migrate config`; do zapsaného souboru se pravidla formátovače nepřenesou ani v jednom případě. Uvede také přesný počet potlačovacích komentářů, které dokáže převést `dresscode migrate suppressions`.
+
+
+Když konfigurace už existuje
+============================
+
+Když už `dresscode.neon` existuje, `init` ho nikdy nepřepíše. Místo toho proměří projekt znovu podle standardu uvedeného v existujícím souboru na souborech, které konfigurace kontroluje (soubory, kterým přepis dává vlastní rozhodnutí, vynechá a řekne to). Vypíše každé rozhodnutí, které by dnes nastavil jinak (včetně počtu souborů, jež by oprava změnila), a upozorní na rozhodnutí, která máte v souboru nastavena odlišně od standardu, přestože se kód standardu drží. To oceníte po aktualizaci DressCode nebo po delším čase aktivního vývoje:
 
 /--pre .[terminal]
 Compared   the code with the standard and the decisions of `dresscode.neon`, over the files it checks
@@ -112,6 +169,8 @@ Moved      nothing: `dresscode.neon` says what init measures
 
 `dresscode.neon` exists, so nothing is written; `dresscode check --set path=value` shows what a value would change.
 \--
+
+Při existujícím souboru se `init` na nic neptá a přepínač `--set` odmítne; nečitelnou konfiguraci ohlásí s chybou ještě před zahájením prací.
 
 {{maintitle: Konfigurace stylu PHP kódu naměřená z vašeho kódu}}
 {{description: dresscode init změří váš PHP kód a ušije na míru dresscode.neon: nejbližší coding standard, hodnoty, kterých se kód drží, a první opravu jen na pár souborech.}}

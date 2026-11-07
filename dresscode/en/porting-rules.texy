@@ -10,7 +10,7 @@ Who This Is For
 
 You have your own sniff (a PHP_CodeSniffer rule) or fixer (a PHP CS Fixer rule). For years it has checked something no standard covers, and you want to have it here too. This procedure is written so that you can work through it step by step, and an AI agent can follow it just as well when you give it the original rule. In fact, agents ported most of the built-in rules of DressCode this way.
 
-But first check whether you need to port it at all: for every decision, `dresscode catalogue` prints the names of the PHP CS Fixer, PHP_CodeSniffer and Slevomat rules it covers. Port only what is not in that list.
+But first check whether you need to port it at all: the tables of [PHP CS Fixer rules |php-cs-fixer-rules], [PHP_CodeSniffer sniffs |phpcs-sniffs] and [Slevomat sniffs |slevomat-sniffs] lead you from the name of a rule to the decision that covers it, and `dresscode catalogue` prints the same for every decision. Port only what is not in them.
 
 
 1. Take the Specification from the Tests, Not from the Source
@@ -51,13 +51,13 @@ The result is usually several times shorter. A rule that has more than a hundred
 4. Handle Safety Differently from the Original
 ==============================================
 
-The original often guarded against side effects with a list: `T_INC`, `T_DEC`, maybe calls. Here you use `isRepeatableRead()` instead, which is both stricter and more precise. A fix that was risky in PHP CS Fixer may stop being risky after porting, if the rule asks the tree. Where the code does not show whether a case is safe, report the fix as risky at every such occurrence, with `report(..., risk: Risk::TypeUnknown)` and what would decide it (see [the rule contract |rule-contract#Report First, Fix Second]); the fix is then made only with the permission of the project. A rule that by its nature changes the meaning of the program reports every occurrence with `Risk::BehaviorChanges`, so its fixes stay subject to the user's permission.
+The original often guarded against side effects with a list: `T_INC`, `T_DEC`, maybe calls. Here you use `isRepeatableRead()` instead, which is both stricter and more precise. A fix that was risky in PHP CS Fixer may stop being risky after porting, if the rule asks the tree. Where the code does not show whether a case is safe, report the fix as risky at every such occurrence, with `report(..., risk: Risk::TypeUnknown)` and what would decide it (see [Risky Fixes |rule-contract#Risky Fixes]); the fix is then made only with the permission of the project. A rule that by its nature changes the meaning of the program reports every occurrence with `Risk::BehaviorChanges`, so its fixes stay subject to the user's permission.
 
 
 5. Decisions Instead of Options
 ===============================
 
-The options of the other tool's rule are not carried over one to one. First ask yourself what thing in the code the rule checks, and name it with a decision path according to the [convention |extending#Naming Decisions]: in the `project` section or in your plugin's section, and as a state, not a step. What was a choice between two shapes in the original becomes the value of that decision (`sameLine`, `nextLine`); what turned something on and off becomes `forbidden` or `required` versus `keep`; and a list of exceptions becomes a parameter. Drop an option that only worked around a weakness of tokens, such as "ignore nested parentheses", together with the defensive code. [A Rule in Detail |rule-contract#The Decisions a Rule Enforces] describes how to declare a decision.
+The options of the other tool's rule are not carried over one to one. First ask yourself what thing in the code the rule checks, and name it with a decision path: in the `project` section or in your plugin's section, and as a state, not a step. What was a choice between two shapes in the original becomes the value of that decision (`sameLine`, `nextLine`); what turned something on and off becomes `forbidden` or `required` versus `keep`; and a list of exceptions becomes a parameter. Drop an option that only worked around a weakness of tokens, such as "ignore nested parentheses", together with the defensive code. [A Rule in Detail |rule-contract#The Decisions a Rule Enforces] describes how to name and declare a decision.
 
 Your users, however, will still have the name of the original sniff or fixer in their `phpcs:ignore` comments. DressCode translates the names of other tools only into decisions of the engine, so for your own rule, replace them in the code with the path of the new decision: `migrate suppressions` prints the names it does not know, and that is exactly the list you need.
 

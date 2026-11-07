@@ -10,6 +10,8 @@ What We Are Going to Write
 
 Every team has a few bespoke coding conventions that no standard covers because they belong to that team alone. Take this common example: an exception message is a complete sentence and must end with a period. A statement like `throw new InvalidArgumentException('The name must not be empty')` should therefore automatically become `'The name must not be empty.'`. For years, I watched for this manually in code reviews because writing a custom sniff for PHP_CodeSniffer was more trouble than it was worth. In DressCode, we can implement this cleanly in about fifty lines, and we'll write them together.
 
+The rule extends classes of DressCode and the test calls its `RuleTester`, so the project's own autoloader must find DressCode: add it as a development dependency with `composer require --dev dresscode/dresscode` ([installation |getting-started#Installation] says what that means for the project).
+
 
 The Fixture First
 =================
@@ -26,7 +28,7 @@ throw new LogicException('Unreachable ');
 $logger->log('Started');
 ```
 
-Right here, we define the exact boundaries of what our rule should and shouldn't do: the second line is already valid; the third contains an interpolated string that we intentionally leave untouched (we can't predict what `$id` will evaluate to); the fourth has trailing whitespace that the period should absorb; and the fifth isn't an exception at all. The `basic.expected` file contains the exact same code with periods added on lines 3 and 6, while `basic.violations` specifies the expected reports:
+Right here, we define the exact boundaries of what our rule should and shouldn't do: the message on line 3 needs the period; the one on line 4 already has it; line 5 contains an interpolated string that we intentionally leave untouched (we can't predict what `$id` will evaluate to); line 6 has trailing whitespace that the period should absorb; and line 7 isn't an exception at all. The `basic.expected` file contains the exact same code with periods added on lines 3 and 6, while `basic.violations` specifies the expected reports:
 
 ```
 3: The message of an exception must end with a period.
@@ -37,7 +39,7 @@ Right here, we define the exact boundaries of what our rule should and shouldn't
 The Skeleton of the Rule
 ========================
 
-A rule is a class extending `DressCode\NodeRule`, decorated with the `#[RuleInfo]` attribute specifying which execution stage it belongs to. There are three stages (`Stage`): `Structure` for structural code changes, `Formatting` for whitespace and line breaks, and `Finishing` for final cleanup. Because our rule modifies text content, it belongs in `Structure`.
+A rule is a class extending `DressCode\NodeRule`, decorated with the `#[RuleInfo]` attribute, which among other things says in which stage (`Stage`) the rule runs. Our rule changes the code, not the whitespace, so it belongs in the `Structure` stage; [A Rule in Detail |rule-contract#The Shape of a Rule] describes the other stages.
 
 A rule has no public name. In DressCode, users never configure or enable rules directly: they configure **decisions** (configuration keys that define how code should look), and rules merely enforce them. Our decision is that exception messages must end with a period. The rule declares this via `getDecisions()`:
 
@@ -82,9 +84,7 @@ A `Decision` consists of three parts. The **path** `project.exceptionMessagePeri
 
 A decision like this is called a **requirement**: the rule runs wherever any configuration layer sets it to a value other than `keep`. Where no configuration mentions it, it requires nothing and does not run. Rules are therefore never enabled by class name: a project simply declares its desired code style, and the corresponding rule joins the run automatically.
 
-`NodeRule` is one of two rule types: it traverses syntax tree nodes and inspects them directly. The other type is `GapRule`, which doesn't visit nodes, but [submits declarative claims about whitespace |whitespace-rules] instead.
-
-The `getVisitedNodes()` method declares which node types you want to inspect. The engine will call `enter()` exclusively for those nodes. We care about instantiation via `new`, represented by `NewNode`. The [node reference |phpsyntax:nodes] lists all available nodes and their slots: `NewNode` provides `newKeyword`, `class`, and `arguments`.
+The syntax tree consists of **nodes**: each node is one construct of the code (a call, a condition, a class), and its parts sit in its named **slots**. The `getVisitedNodes()` method declares which node types you want to inspect, and the engine calls `enter()` exclusively for those nodes. We care about instantiation via `new`, represented by `NewNode`, which has the slots `newKeyword` (the keyword `new`), `class` (the class name) and `arguments`. The [node reference |phpsyntax:nodes] lists all nodes and their slots, and the [glossary |how-it-works#Engine and Rule Terms] sums up the terms of the tree.
 
 
 Conditions and the Fix
@@ -118,7 +118,7 @@ public function enter(Node|Token $node, RuleContext $context): void
 }
 ```
 
-Read the checks from the top down: this is a `new` instantiation with an explicit class name (not `new $class` or an anonymous class), and the class name ends with `Exception`. The first argument is a plain string without interpolation: an interpolated string in double quotes produces a completely different node, so the third line of our fixture is filtered out automatically without any special conditions. That string uses single quotes, is non-empty, and its trimmed value doesn't already end with a period.
+Read the checks from the top down: this is a `new` instantiation with an explicit class name (not `new $class` or an anonymous class), and the class name ends with `Exception`. The first argument is a plain string without interpolation: an interpolated string in double quotes produces a completely different node, so line 5 of our fixture is filtered out automatically without any special conditions. That string uses single quotes, is non-empty, and its trimmed value doesn't already end with a period.
 
 And the crucial final check: **nobody suppressed the decision at this location.** The `$context->report()` method returns `false` if the construct is [suppressed |suppressions-and-baseline] by a `dresscode:ignore` comment on the same line or above it, or by a `dresscode:disable`/`dresscode:enable` block. In that scenario, the code must not change. That is why `report()` sits at the end of the `if` condition rather than before it. You don't need to pass the decision path manually: a rule with a single requirement reports under it automatically.
 
@@ -137,7 +137,7 @@ project:
 	exceptionMessagePeriod: required
 ```
 
-The `RuleTester` utility takes the rule class and the fixtures directory, automatically verifying everything you might otherwise forget to test: that the output matches `.expected`, that reported findings match `.violations`, that running the rule on its own output mutates nothing further (idempotence), that comments are fully preserved, that `dresscode:ignoreFile` is respected, and that nothing was modified without being reported. In Nette Tester, a test looks like this:
+The `RuleTester` utility takes the rule class and the fixtures directory and verifies that the output matches `.expected` and the reported findings match `.violations`. It also checks everything you might otherwise forget to test, for example that the rule changes nothing more on its own output and that no comment got lost; [Testing Rules |testing-rules#RuleTester] has the full list. Save the test next to the fixtures directory, for example as `tests/ExceptionMessagePeriodRule.phpt`. In Nette Tester, it looks like this:
 
 ```php
 use App\CodeStyle\ExceptionMessagePeriodRule;
@@ -150,7 +150,7 @@ Tester\Environment::setup();
 Assert::noError(fn() => RuleTester::run(ExceptionMessagePeriodRule::class, __DIR__ . '/fixtures/exceptionMessagePeriod'));
 ```
 
-Nette Tester expects at least one assertion per test, which is why the call is wrapped in `Assert::noError()`. In PHPUnit, you would place the exact same call inside a test method. Any assertion failure throws a `DressCode\Testing\TestFailure` exception with a unified diff, highlighting exactly where the output diverged from expectations.
+The call is wrapped in `Assert::noError()` because Nette Tester expects at least one assertion per test; in PHPUnit, you would place the same call inside a test method. You run the test like any other, in Nette Tester with `vendor/bin/tester tests`.
 
 Run the test now, and it will pass. If it fails, the diff reveals the exact line where the rule sees code differently than you do. That is often when you discover subtle edge cases: in our case, `rtrim()` was missing in the first draft, and the fixture with trailing whitespace immediately prompted its addition.
 

@@ -31,15 +31,15 @@ Written    `dresscode.neon`
 
 In this example, the closest matching standard is `perCs`, representing [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/]. Notice the `Measured` line: applied out of the box, the standard would rewrite all 13 files. Once three decisions are tuned to match your actual conventions, the `Checked` line shows that an automated fix touches just a single file. That is the core idea: the standard provides the base, your codebase defines the exceptions, and every value clearly states its statistical foundation (`your code, 92% of 13 files`).
 
-Even so, a project can deviate from its closest standard in dozens of places, and the initial fix should never turn your repository upside down. That's why `init` enforces a strict change budget: an automated fix is allowed to modify at most 1% of files by default (with a minimum of 2 and a maximum of 20; configurable via `--budget`). The only exceptions are indentation, line length, and line endings: these are normalized regardless of the budget because all other rules build upon them (files affected by these rules are counted separately on the `Checked` line). If remaining fixes would exceed your budget, `init` defers contentious decisions and prompts you interactively, showing representative code snippets. It also asks about other things that are yours to decide, such as when two standards are in a close tie. The recommended choice always comes first (option 1) and can be confirmed simply by pressing Enter. This default leaves your existing code untouched, so you risk nothing if you're unsure.
+Even so, a project can deviate from its closest standard in dozens of places, and the initial fix should never turn your repository upside down. That's why `init` enforces a strict change budget: an automated fix is allowed to modify at most 1% of files by default. Only indentation, line length, and line endings are normalized regardless of the budget, because everything else builds upon them. If remaining fixes would exceed your budget, `init` defers contentious decisions and prompts you interactively, showing representative code snippets. The recommended choice always comes first (option 1) and can be confirmed simply by pressing Enter. This default leaves your existing code untouched, so you risk nothing if you're unsure.
 
-Outside an interactive terminal (or when passed `--yes`), `init` skips prompts and automatically chooses the recommended defaults. It prints each deferred question on a `Your call` line, formatted as a ready-to-use `dresscode.neon` snippet or as a CLI command to choose the alternative. To measure against a specific standard directly, specify it up front: `dresscode init --use nette`. If your project already uses PHP_CodeSniffer, PHP CS Fixer, or Laravel Pint, `init` inspects their existing configurations as well (see [Migrating to DressCode |migration] to translate existing rules instead). Full details can be found on the [`init` command |generate-configuration] page.
+To measure against a specific standard directly, specify it up front: `dresscode init --use nette`. If your project already uses PHP_CodeSniffer, PHP CS Fixer, or Laravel Pint, `init` inspects their existing configurations as well (see [Migrating to DressCode |migration] to translate existing rules instead). How `init` measures, what it asks, and how it runs outside a terminal is described on the [Configuration Measured from Your Code |generate-configuration] page.
 
 
 2. Read and Adjust the Configuration
 ====================================
 
-The `init` command generated a `dresscode.neon` file in your project root. Setting aside excluded paths and namespace declarations, it looks like this:
+The `init` command generated a `dresscode.neon` file in your project root. It is written in [NEON |https://ne-on.org], which reads much like YAML: indentation expresses nesting and `#` starts a comment. Shortened, it looks like this:
 
 ```neon
 # made to measure by `dresscode init`; run it again to see what has moved since, it writes nothing over this file
@@ -62,7 +62,7 @@ The file answers two straightforward questions. The `use` key defines your visua
 
 Each key represents a precise decision path, the exact same path shown next to findings in the output. If a setting is unfamiliar, ask about it: `dresscode explain braces.emptyBody.function` displays its purpose, supported values, its current setting in your project, and how major standards treat it. Running `dresscode config` shows the complete resolved configuration with every active decision and its source layer.
 
-You can modify any value at any time, or delete a line to let the standard govern it. Before saving a change permanently, test it in a dry run: `dresscode check --set literals.quotes=single --only literals.quotes --diff` previews what enforcing single quotes would change without modifying files. The value `keep` means "do not check" and turns off a decision completely, even if required by the standard. Everything the configuration file can express is covered on the [Configuration |configuration] page.
+You can modify any value at any time, or delete a line to let the standard govern it. The value `keep` means "do not check" and turns off a decision completely, even if required by the standard. [Step 6 |#6. Tighten It Over Time] shows how to try a change in a dry run first; everything the configuration file can express is covered on the [Configuration |configuration] page.
 
 
 3. The First Fix as a Commit of Its Own
@@ -85,7 +85,7 @@ Commit the result alongside `dresscode.neon`, which documents the rationale, and
 
 Following an automated fix, `check` may still highlight a few findings requiring human intervention: a method named `get_total` that should use camelCase, a [risky fix |configuration#risky-fixes] your project hasn't yet permitted, or a line exceeding `file.lineLength` that cannot be safely broken automatically. There are three clean ways forward:
 
-If there are only a handful of occurrences, resolve them manually. If a decision simply shouldn't apply to a specific line, suppress it in-place with `// dresscode:ignore naming.method` and append your reason after two dashes. And if the decision is correct but you don't have time to refactor legacy code right now, record the remaining violations in a baseline:
+If there are only a handful of occurrences, resolve them manually. If a decision simply shouldn't apply to a specific line, suppress it in place with a comment giving the reason after two dashes, such as `// dresscode:ignore naming.method -- called by an external API`. And if the decision is correct but you don't have time to refactor legacy code right now, record the remaining violations in a baseline:
 
 ```shell
 dresscode baseline

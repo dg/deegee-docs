@@ -10,25 +10,14 @@ Vlastní stránku mají dva přechody: z Nette 2.4 na [Nette 3 |upgrade-to-nette
 Instalace
 =========
 
+Aplikaci, která ještě běží na Nette 3 nebo na PHP starším než 8.4, upgradujte s DressCode nainstalovaným globálně, protože sám potřebuje PHP 8.4 a `nette/utils` 4.1 (viz [Kde DressCode běží |upgrade#Kde DressCode běží]):
+
 ```shell
-composer require --dev dresscode/upgrade-nette phpstan/phpstan
-vendor/bin/dresscode upgrade today
+composer global require dresscode/dresscode dresscode/upgrade-nette phpstan/phpstan
+dresscode upgrade today
 ```
 
-Tyhle dva řádky stačí: `upgrade today` vezme data i pravidla balíčku sám, bez konfigurace, a styl kódu nechá, jak je. Postup po jedné hlavní verzi a co dělat s tím, co zbude, popisuje [Upgrade kódu |upgrade]. Data každé knihovny se uplatní jen tehdy, když ji projekt má, a jen pro verze, na které projekt dosáhne. Když DressCode instalujete takhle do projektu, musí projekt běžet na PHP 8.4 až 8.6, viz [Instalace |getting-started#Instalace].
-
-Aby staré API hlídala i každá kontrola, patří do konfigurace typy, sada `deprecations` a jméno balíčku, které pustí dovnitř jeho pravidla ze sekce `nette`, jak popisuje [Jak funguje upgrade knihoven |upgrading-libraries#Zapnutí v konfiguraci]:
-
-```neon
-typeAnalysis: phpstan
-
-use:
-	- nette           # váš standard
-	- deprecations
-	- upgrade-nette
-```
-
-Převod příznaků na pojmenované argumenty, mapu `nette.flagsAsNamedArguments`, zapne sada `deprecations` spolu s daty. Data zapnou i dvě rozhodnutí, jedno pro destinace odkazů a druhé pro hooky komponent: `nette.linkArguments` od `nette/application` 3.3 a `nette.monitorCallbacks` od `nette/component-model` 3.0, takže je do konfigurace psát nemusíte a spustí je i `upgrade today`. Kdo některé nechce, vypne ho v sekci `nette` hodnotou `keep`.
+Tyhle dva řádky stačí: `upgrade today` vezme data i přepisy balíčku sám, bez konfigurace, a styl kódu nechá, jak je. Data každé knihovny se uplatní jen tehdy, když ji projekt má, a jen pro verze, na které projekt [dosáhne |upgrade#Rozhodují dolní meze]. Postup po jedné hlavní verzi a co dělat s tím, co zbude, popisuje [Upgrade kódu |upgrade]. Projekt, který už běží na PHP 8.4 až 8.6 a na současných verzích, si balíček může přidat i jako vývojovou závislost: `composer require --dev dresscode/upgrade-nette phpstan/phpstan`, a pak spouští `vendor/bin/dresscode upgrade today`.
 
 
 Co se opraví
@@ -71,12 +60,10 @@ Co všechno balíček opravuje:
 - **přejmenované parametry** u volání s pojmenovanými argumenty: `setExpiration(time: ...)` na `setExpiration(expire: ...)`, `Arrays::map(callback: ...)` na `Arrays::map(transformer: ...)`, i v `parent::__construct()` potomka,
 - **výchozí hodnota za `??`**: `getParameter('page', 1)` na `getParameter('page') ?? 1`, stejně u `getQuery()`, `getPost()`, `getCookie()`, `getHeader()` a `getOption()`,
 - **magické vlastnosti** na gettery a settery: `$form->action`, `$control->caption`, `$section->user`, `$section['user']`,
-- **příznaky** na pojmenované argumenty: `Json::encode($value, Json::PRETTY)` a `Json::decode()`, `Strings::match()`, `matchAll()`, `split()` a `Arrays::grep()` s konstantami `PREG_*`, `Neon::encode()` s `Neon::BLOCK`, `add()`, `prepend()` a `addRoute()` routeru s `Router::ONE_WAY`, `User::setExpiration()` s `IUserStorage::CLEAR_IDENTITY` a `Job::run()` Testeru s `RUN_ASYNC`,
+- **příznaky** na pojmenované argumenty: `Json::encode($value, Json::PRETTY)`, `Strings::match()` a další funkce s konstantami `PREG_*`, `Neon::encode()` s `Neon::BLOCK`, router s `Router::ONE_WAY`,
 - **volání jiného tvaru**: `addUpload($name, $label, true)` na `addMultiUpload()`, `getValues(true)` na `getValues('array')`, `Callback::closure()` na `Closure::fromCallable()`,
 - **anotace** na atributy: `@persistent` a `@crossOrigin` v presenterech, `@filter` a `@function` ve třídách parametrů šablon Latte, a atribut `#[CrossOrigin]` na `#[Requires(sameOrigin: false)]`,
 - **hooky** `attached()` a `detached()` komponent na callbacky metody `monitor()` v konstruktoru, a **query string a fragment v destinaci odkazu**, `link('Product:show?id=1#reviews')`, na argumenty.
-
-Příznaky převádí mapa `nette.flagsAsNamedArguments` podle dat, hooky a destinace odkazů rozhodnutí `nette.monitorCallbacks` a `nette.linkArguments`; pravidla k nim přináší balíček. Zbytek dělají pravidla jádra DressCode podle dat.
 
 
 Co zůstane na vás
@@ -89,7 +76,25 @@ Method `Nette\Http\UrlScript::setPath()` is forbidden: the class is immutable; t
 Constant `Nette\Application\IRouter::SECURED` is forbidden: write the protocol, `https://`, into the mask of the route.
 ```
 
-Co knihovna jen tiše označila jako zastaralé, v datech není; s typy to DressCode ohlásí, a kde anotace náhradu řekne, i přepíše podle `upgrading.declarations.deprecatedMember`. Změny chování, konfigurace v NEONu a syntaxe šablon Latte data nezachytí vůbec, ty najdete v průvodcích upgradem jednotlivých knihoven.
+Co knihovna jen tiše označila jako zastaralé, v datech není; s typy to DressCode ohlásí, a kde anotace náhradu řekne, i přepíše. Změny chování, konfigurace v NEONu a syntaxe šablon Latte data nezachytí vůbec, ty najdete v průvodcích upgradem jednotlivých knihoven.
+
+
+Aby se staré API nevracelo
+==========================
+
+Aby staré API hlídala i každá kontrola, třeba v průběžné integraci, patří do konfigurace typy, sada `deprecations` a jméno balíčku, které pustí dovnitř jeho přepisy ze sekce `nette` (viz [Upgrade kódu |upgrade#Aby se staré API nevracelo]):
+
+```neon
+typeAnalysis: phpstan
+
+use:
+	- nette           # váš standard
+	- deprecations
+	- upgrade-nette
+```
+
+.[note]
+Převod příznaků na pojmenované argumenty, mapu `nette.flagsAsNamedArguments`, zapne sada `deprecations` spolu s daty. Data zapnou i rozhodnutí pro destinace odkazů a pro hooky komponent, `nette.linkArguments` od `nette/application` 3.3 a `nette.monitorCallbacks` od `nette/component-model` 3.0, takže je do konfigurace psát nemusíte a spustí je i `upgrade today`. Kdo některé nechce, vypne ho v sekci `nette` hodnotou `keep`.
 
 
 Co balíček pokrývá

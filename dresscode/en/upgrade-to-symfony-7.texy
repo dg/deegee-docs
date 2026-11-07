@@ -4,7 +4,7 @@ Upgrade to Symfony 7
 .[perex]
 Symfony 7.0 was a cleanup: it removed everything Symfony 6 had deprecated, such as the `@Route` annotation, the annotations of SensioFrameworkExtraBundle, `MessageHandlerInterface`, `renderForm()` and the property `$defaultName` of a command. Symfony 6.4 already has all their replacements, so you do most of the upgrade from Symfony 6 to 7 while still on 6.4: DressCode with the package `dresscode/upgrade-symfony` rewrites your code and reports what it cannot rewrite.
 
-According to [UPGRADE-7.0.md |https://github.com/symfony/symfony/blob/7.0/UPGRADE-7.0.md], version 7.0 has the same features as 6.4, only without the deprecated ones; both were released together at the end of November 2023. But 7.0 needs PHP 8.2, while 6.4 also runs on PHP 8.1 ([Symfony 7.0 |https://symfony.com/releases/7.0]).
+According to [UPGRADE-7.0.md |https://github.com/symfony/symfony/blob/7.0/UPGRADE-7.0.md], version 7.0 has the same features as 6.4, only without the deprecated ones. But 7.0 needs PHP 8.2, while 6.4 also runs on PHP 8.1 ([Symfony 7.0 |https://symfony.com/releases/7.0]).
 
 
 What It Looks Like
@@ -51,6 +51,28 @@ class OrderController extends AbstractController
 ```
 
 The annotation became an attribute of the same name, imported from the namespace `Attribute` instead of `Annotation`. `renderForm()` became `render()`, which takes the form as it is, and `getContentType()` became `getContentTypeFormat()`. The code still runs on 6.4. After the versions in `composer.json` were raised to `7.0.*`, a second run found nothing more to rewrite in this controller.
+
+
+Step by Step
+============
+
+The Symfony packages are raised all at once, so you raise them in `composer.json` yourself and `dresscode upgrade today` rewrites the code. DressCode needs PHP 8.4. If your application runs on an older PHP, install DressCode globally, with PHPStan and the data for Symfony:
+
+```shell
+composer global require dresscode/dresscode dresscode/upgrade-symfony phpstan/phpstan
+```
+
+On PHP 8.4 or newer, it can be a development dependency of the project, as [Installation |upgrading-symfony#Installation] shows.
+
+1. Start from Symfony 6.4 with a clean working tree. Run `dresscode upgrade today`, and once more if it advises you to. It rewrites what Symfony 6.1 to 6.4 deprecated, because the replacements already exist in 6.4.
+2. Go through what it reports, run your tests and PHPStan, and commit.
+3. Raise the Symfony packages in `composer.json` to `7.0.*`, or to a later 7.x, and `require.php` to at least 8.2. With Symfony Flex, raise `extra.symfony.require` too. Then run `composer update "symfony/*" -W --prefer-lowest`.
+4. Run `dresscode upgrade today` again. It finds what is left after raising the versions, and on a later 7.x also what that version deprecated. Then run the tests, and commit.
+
+.[warning]
+DressCode reads the version of each package from its constraint in `composer.json`. If a Symfony package has only `*` there and leaves the version to `extra.symfony.require`, DressCode does not see the lower bound and only reports the changes of that package. Write the version into the constraint, such as `6.4.*`.
+
+[Upgrading Code |upgrade#One Major Version at a Time, by Hand] explains why `--prefer-lowest` and why one major version at a time.
 
 
 SensioFrameworkExtraBundle Annotations
@@ -142,38 +164,16 @@ Class `Symfony\Component\DependencyInjection\ContainerAwareInterface` is depreca
 | `StopWorkerOnSignalsListener` | nothing, `messenger:consume` stops the worker on `SIGTERM` and `SIGINT` by itself; remove the listener | `symfony/messenger` 6.4 |
 | `Kernel::stripComments()` | no replacement; copy the method into the project | `symfony/http-kernel` 6.4 |
 
-Confirm such a place with the comment `// dresscode:ignore <decision> -- <reason>`, or rewrite it; [Manual Tasks Along the Way |upgrade#Manual Tasks Along the Way] has the details.
+Confirm such a place with the comment `// dresscode:ignore <decision> -- <reason>`, or rewrite it; [Manual Tasks Along the Way |upgrade-plan#Manual Tasks Along the Way] has the details.
 
 The data do not capture changes in YAML configuration, in Twig templates or in behavior. Symfony 7.0 also added native return types to many methods ([Symfony 7.0 type declarations |https://symfony.com/blog/symfony-7-0-type-declarations]), and a method of yours that overrides one of them needs the same type; the page [Symfony |upgrading-symfony] says how DressCode writes such signatures.
-
-
-Step by Step
-============
-
-DressCode needs PHP 8.4. If your application runs on an older PHP, install DressCode globally, with PHPStan and the data for Symfony:
-
-```shell
-composer global require dresscode/dresscode dresscode/upgrade-symfony phpstan/phpstan
-```
-
-On PHP 8.4 or newer, it can be a development dependency of the project, as [Installation |upgrading-symfony#Installation] shows.
-
-1. Start from Symfony 6.4 with a clean working tree. Run `dresscode upgrade today`, and once more if it advises you to. It rewrites what Symfony 6.1 to 6.4 deprecated, because the replacements already exist in 6.4.
-2. Go through what it reports, run your tests and PHPStan, and commit.
-3. Raise the Symfony packages in `composer.json` to `7.0.*`, or to a later 7.x, and `require.php` to at least 8.2. With Symfony Flex, raise `extra.symfony.require` too. Then run `composer update "symfony/*" -W --prefer-lowest`.
-4. Run `dresscode upgrade today` again. It finds what is left after raising the versions, and on a later 7.x also what that version deprecated. Then run the tests, and commit.
-
-.[warning]
-DressCode reads the version of each package from its constraint in `composer.json`. If a Symfony package has only `*` there and leaves the version to `extra.symfony.require`, DressCode does not see the lower bound and only reports the changes of that package. Write the version into the constraint, such as `6.4.*`.
-
-[Upgrade Your Code Step by Step |upgrade#One Major Version at a Time, by Hand] explains why `--prefer-lowest` and why one major version at a time.
 
 
 Where to Go Next
 ================
 
 - [Symfony |upgrading-symfony], all components the package covers, and the move from Symfony 5 to 6.
-- [Upgrade Your Code Step by Step |upgrade], the whole procedure with tests and commits.
+- [Upgrading code |upgrade], `upgrade today` in detail, and the [upgrade plan |upgrade-plan] with tests and commits.
 - [Upgrading to a newer PHP |upgrading-php], because Symfony 7 needs PHP 8.2.
 
 {{maintitle: Upgrade Symfony 6 to 7 Automatically}}

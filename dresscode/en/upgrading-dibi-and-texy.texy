@@ -8,22 +8,14 @@ Since version 4.1 of the Dibi database layer and version 3.0 of Texy, both libra
 Installation
 ============
 
+To upgrade an application that still runs on PHP older than 8.4, install DressCode globally, because DressCode itself needs PHP 8.4 (see [Where DressCode Runs |upgrade#Where DressCode Runs]):
+
 ```shell
-composer require --dev dresscode/upgrade-deegee phpstan/phpstan
-vendor/bin/dresscode upgrade today
+composer global require dresscode/dresscode dresscode/upgrade-deegee phpstan/phpstan
+dresscode upgrade today
 ```
 
-The second line already rewrites the code: `upgrade today` finds the data of the package on its own, needs no configuration, and leaves the style of the code as it is. [Upgrading Code |upgrade] describes the procedure and what to do with what is left.
-
-The everyday check watches for the old API too, once the configuration adds the types and the set `deprecations`; see [How Upgrading Libraries Works |upgrading-libraries#Enabling It in the Configuration]:
-
-```neon
-typeAnalysis: phpstan
-
-use:
-	- perCs           # your standard
-	- deprecations
-```
+The second line already rewrites the code: `upgrade today` finds the data of the package on its own, needs no configuration, and leaves the style of the code as it is. [Upgrading Code |upgrade] describes the procedure and what to do with what is left. A project that already runs on PHP 8.4 to 8.6 can also add the package as a development dependency, `composer require --dev dresscode/upgrade-deegee phpstan/phpstan`, and then run `vendor/bin/dresscode upgrade today`.
 
 
 What Gets Fixed
@@ -75,7 +67,7 @@ public function getColumnType(): string
 }
 ```
 
-From Dibi, DressCode fixes the constants of `Dibi\Type`, `Fluent` and the drivers that used to be in uppercase, the constants of the static facade `dibi` (`dibi::AFFECTED_ROWS` to `Dibi\Fluent::AffectedRows`), `affectedRows()` and `insertId()` to `getAffectedRows()` and `getInsertId()`, also on the facade, `Dibi\DateTime::modifyClone($modify)` to `modify($modify)`, `DibiExtension22` to `DibiExtension3`, and the constructors of `FileLogger` and `Panel` with the filter `null`. From Texy: classes with the prefix `Texy` to the namespace `Texy\`, helper methods of `Texy` and `Utf` moved to `Texy\Helpers`, `escapeHtml()` to `htmlspecialchars()`, `unescapeHtml()` to `Texy\Helpers::unescapeHtml()` (and, in a project on Texy 3.0 to 3.1.0, to `html_entity_decode()`), the property `$cleaner` to `$htmlOutputModule`, the constants of `HtmlElement`, and the renamed parameters of `Modifier`.
+From Dibi, DressCode fixes the constants that used to be in uppercase, in `Dibi\Type`, `Fluent`, the drivers and the static facade `dibi` (`dibi::AFFECTED_ROWS` to `Dibi\Fluent::AffectedRows`), renamed methods such as `insertId()` to `getInsertId()`, `DibiExtension22` to `DibiExtension3`, and more. From Texy: classes with the prefix `Texy` to the namespace `Texy\`, helper methods of `Texy` and `Utf` moved to `Texy\Helpers`, `escapeHtml()` to `htmlspecialchars()`, and renamed properties, constants and parameters.
 
 
 What Is Left to You
@@ -88,9 +80,23 @@ Method `Dibi\Connection::translateArgs()` is forbidden: there is no replacement;
 Method `Texy\Texy::setOutputMode()` is forbidden: there is no replacement; the output is always HTML5.
 ```
 
-From Dibi, DressCode also reports the extension methods `extensionMethod()`, the trait `Dibi\Strict`, `modifyClone()` without an argument, and `__sleep()` and `__wakeup()` of a child of `Connection`, which should be replaced by `__serialize()` and `__unserialize()`. From Texy: the HTML4 and XHTML output modes, including `setOutputMode()`, `getOutputMode()` and `$xhtml`, encodings other than UTF-8 (`$encoding`, `Utf::toUtf()`, `utfTo()` and `utf2html()`), methods of modules that became private in version 3.2, `TexyMacro` for Latte 2, `$removeOptional`, `Modifier::$cite` and the trait `Texy\Strict`.
+From Dibi, DressCode also reports, for example, the extension methods `extensionMethod()` and the trait `Dibi\Strict`; from Texy, the HTML4 and XHTML output modes, encodings other than UTF-8, and methods of modules that became private in version 3.2.
 
-What a library only quietly marks as deprecated is not in the data. With the types, DressCode reports it anyway, and where the annotation names the replacement, it rewrites the code through `upgrading.declarations.deprecatedMember`. The data does not capture changes in behavior at all.
+What a library only quietly marks as deprecated is not in the data. With the types, DressCode reports it anyway, and where the annotation names the replacement, it rewrites the code. The data does not capture changes in behavior at all.
+
+
+Keeping the Old API from Coming Back
+====================================
+
+The everyday check watches for the old API too, for example in continuous integration, once the configuration adds the types and the set `deprecations` (see [Upgrading Code |upgrade#Keeping the Old API from Coming Back]). The package carries only data, no plugin, so you do not have to name it in `use`:
+
+```neon
+typeAnalysis: phpstan
+
+use:
+	- perCs           # your standard
+	- deprecations
+```
 
 
 What the Package Covers

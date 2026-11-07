@@ -31,15 +31,15 @@ Written    `dresscode.neon`
 
 V této ukázce je nejbližším standardem `perCs`, tedy [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/]. Všimněte si řádku `Measured`: v čisté podobě by standard přepsal všech 13 souborů. Jakmile se však přidají tři rozhodnutí odvozená z vašeho kódu, změní oprava podle řádku `Checked` jediný soubor. V tom spočívá celá pointa: základní kostru dodá standard, odchylky si určí váš kód a každá hodnota transparentně uvádí, o co se opírá (`your code, 92% of 13 files`).
 
-I tak se může projekt od nejbližšího standardu lišit na spoustě míst a první oprava rozhodně nemá převrátit půlku repozitáře vzhůru nohama. Proto `init` hlídá rozpočet změn: automatická oprava smí ve výchozím nastavení změnit nejvýše 1 % souborů (minimálně 2 a maximálně 20; jiný limit určí přepínač `--budget`). Výjimkou jsou pouze odsazení, délka řádků a konce řádků: ty se srovnají bez ohledu na rozpočet, protože na nich stojí všechno ostatní (soubory, kterých se to týká, počítá řádek `Checked` zvlášť). Kdyby měly opravy rozpočet překročit, nechá `init` sporná rozhodnutí zatím neaktivní a v interaktivním průvodci se vás na ně zeptá i s ukázkou konkrétního místa v kódu. Ptá se i na další věci, o kterých máte rozhodnout vy, třeba když jsou dva standardy v těsném souboji. Doporučená odpověď je vždy na prvním místě a stačí ji potvrdit klávesou Enter. Tato volba ponechá kód v původním stavu, takže ani při nejistotě nic nerozbijete.
+I tak se může projekt od nejbližšího standardu lišit na spoustě míst a první oprava rozhodně nemá převrátit půlku repozitáře vzhůru nohama. Proto `init` hlídá rozpočet změn: automatická oprava smí ve výchozím nastavení změnit nejvýše 1 % souborů. Jen odsazení, délku řádků a konce řádků srovná bez ohledu na rozpočet, protože na nich stojí všechno ostatní. Kdyby měly opravy rozpočet překročit, nechá `init` sporná rozhodnutí zatím neaktivní a v interaktivním průvodci se vás na ně zeptá i s ukázkou konkrétního místa v kódu. Doporučená odpověď je vždy na prvním místě a stačí ji potvrdit klávesou Enter. Tato volba ponechá kód v původním stavu, takže ani při nejistotě nic nerozbijete.
 
-Mimo interaktivní terminál (nebo s přepínačem `--yes`) se `init` na nic neptá a rovnou zvolí doporučené odpovědi. Každou otázku pak vypíše na řádku `Your call` s hotovým zápisem pro `dresscode.neon` nebo s příkazem, kterým můžete volbu změnit. Chcete-li kód měřit podle konkrétního standardu, stačí jej zadat: `dresscode init --use nette`. Pokud projekt už využívá PHP_CodeSniffer, PHP CS Fixer nebo Laravel Pint, `init` přečte i jejich konfiguraci (postup přímého překladu pravidel popisuje stránka [Přechod na DressCode |migration]). Všechny podrobnosti najdete v popisu [příkazu `init` |generate-configuration].
+Chcete-li kód měřit podle konkrétního standardu, stačí jej zadat: `dresscode init --use nette`. Pokud projekt už využívá PHP_CodeSniffer, PHP CS Fixer nebo Laravel Pint, `init` přečte i jejich konfiguraci (postup přímého překladu pravidel popisuje stránka [Přechod na DressCode |migration]). Jak `init` měří, na co se ptá a jak běží mimo terminál, popisuje stránka [Konfigurace naměřená z kódu |generate-configuration].
 
 
 2. Projděte a upravte konfiguraci
 =================================
 
-Příkaz `init` vytvořil v kořeni projektu soubor `dresscode.neon`. Pokud pomineme vyloučené cesty a zjištěné deklarace ve jmenných prostorech, vypadá jeho struktura takto:
+Příkaz `init` vytvořil v kořeni projektu soubor `dresscode.neon`. Je zapsaný ve formátu [NEON |https://ne-on.org], který se čte podobně jako YAML: odsazení vyjadřuje vnoření a `#` uvozuje komentář. Ve zkrácené podobě vypadá takto:
 
 ```neon
 # made to measure by `dresscode init`; run it again to see what has moved since, it writes nothing over this file
@@ -62,7 +62,7 @@ Soubor dává jasnou odpověď na dvě otázky. Klíč `use` určuje základní 
 
 Každý klíč představuje přesnou cestu rozhodnutí, tutéž, kterou vidíte u každého nálezu ve výpisu. Pokud vám některá cesta není jasná, nechte si ji osvětlit: příkaz `dresscode explain braces.emptyBody.function` vypíše, k čemu rozhodnutí slouží, jaké hodnoty přijímá, jak je nastavené ve vašem projektu a co k němu říkají zavedené standardy. Příkaz `dresscode config` vám zase ukáže výslednou konfiguraci se všemi rozhodnutími, která nakonec platí, i s vrstvou, která je nastavila.
 
-Kteroukoliv hodnotu můžete kdykoliv upravit, nebo řádek smazat a nechat rozhodnutí na standardu. Než konfiguraci upravíte natrvalo, vyzkoušejte si změnu nanečisto na jeden běh: `dresscode check --set literals.quotes=single --only literals.quotes --diff` vám v diffu ukáže, co by přineslo vynucení jednoduchých uvozovek, aniž by cokoliv zapsal na disk. Hodnota `keep` znamená "nekontrolovat" a dané rozhodnutí zcela vypne, i kdyby ho standard přímo vyžadoval. Všechny možnosti zápisu podrobně rozebírá stránka [Konfigurace |configuration].
+Kteroukoliv hodnotu můžete kdykoliv upravit, nebo řádek smazat a nechat rozhodnutí na standardu. Hodnota `keep` znamená "nekontrolovat" a dané rozhodnutí zcela vypne, i kdyby ho standard přímo vyžadoval. Jak změnu nejdřív vyzkoušet nanečisto, ukazuje [krok 6 |#6. Časem zpřísněte]; všechny možnosti zápisu podrobně rozebírá stránka [Konfigurace |configuration].
 
 
 3. První oprava jako samostatný commit
@@ -85,7 +85,7 @@ Výsledek commitněte společně s vygenerovaným `dresscode.neon`, který změn
 
 I po automatické opravě může `check` hlásit několik míst, která vyžadují zásah vývojáře: metodu `get_total`, jež má být správně v camelCase, [rizikovou opravu (risky fix) |configuration#risky-fixes], kterou projekt zatím nepovolil, nebo řádek přesahující limit `file.lineLength`, který DressCode neumí bezpečně sám zalomit. Z takové situace vedou tři přímočaré cesty:
 
-Pokud jde o pár ojedinělých míst, upravte je ručně. Pokud rozhodnutí na daném místě zkrátka nemá pravdu, potlačte jej přímo v kódu komentářem `// dresscode:ignore naming.method` a za dvě pomlčky připište důvod. A pokud má rozhodnutí pravdu, ale dnes nemáte čas stovky starých míst přepisovat, uložte zbytek porušení do baseline:
+Pokud jde o pár ojedinělých míst, upravte je ručně. Pokud rozhodnutí na daném místě zkrátka nemá pravdu, potlačte jej přímo v kódu komentářem s důvodem za dvěma pomlčkami, třeba `// dresscode:ignore naming.method -- volá ho externí API`. A pokud má rozhodnutí pravdu, ale dnes nemáte čas stovky starých míst přepisovat, uložte zbytek porušení do baseline:
 
 ```shell
 dresscode baseline

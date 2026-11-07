@@ -151,7 +151,7 @@ src/Db.php:19:5: error: Function `mysqli_execute()` is deprecated: since PHP 8.5
 Risky Fixes
 ===========
 
-A rewrite that may change what the code does is only reported, and is made only once you list its decision in `fixRisky`. The attribute `#[\Deprecated]` is such a case by its very nature, because the deprecated code starts reporting at runtime:
+A rewrite that may change what the code does is only reported, and is made only once you list its decision in `fixRisky`. The rewrite to `clone()` with properties is such a case wherever it could matter that the argument is evaluated only once, at the moment of cloning. The attribute `#[\Deprecated]` is such a case by its very nature, because the deprecated code starts reporting at runtime:
 
 ```neon
 fixRisky:
@@ -165,13 +165,15 @@ In a namespace, an unqualified `strip_tags()` may be a function of that namespac
 Step by Step
 ============
 
+The [upgrade plan |upgrade-plan] needs a configuration, `dresscode.neon`; if the project does not have one yet, `dresscode init` measures it from the code.
+
 1. Start with a clean working tree, so that the diff shows only what DressCode did.
-2. Measure how much work the move takes: `dresscode upgrade estimate php 8.5`. If the project sets `config.platform.php`, raise it to 8.5 first.
+2. Measure how much work the move takes: `dresscode upgrade estimate php 8.5`.
 3. Save the plan and carry it out: `dresscode upgrade plan php 8.5 --save`, then `dresscode upgrade run`. At the Composer step, DressCode asks whether it may raise `require.php` to `^8.5`; you can also raise it yourself and then run `upgrade run`.
 4. Read what is left for you, and run `upgrade run` again until the run ends with `UPGRADED`. Whether the waiting risky fixes are made is decided by the types, by `nameResolution`, or by you.
 5. Commit the result on its own, without other changes.
 
-If the project has the sets `modernizations` and `deprecations` in its configuration, a plain `dresscode fix` after raising `require.php` is enough. [Upgrade Your Code Step by Step |upgrade] describes the whole procedure with tests and commits.
+When you raise `require.php` yourself, you do not need the plan: if the configuration has the sets `modernizations` and `deprecations`, a plain `dresscode fix` is enough, otherwise [`dresscode upgrade today --modernize` |upgrade#When You Have Already Raised the Versions]. [The Upgrade Plan Step by Step |upgrade-plan] describes the whole procedure of the plan with tests and commits.
 
 
 Where to Go Next

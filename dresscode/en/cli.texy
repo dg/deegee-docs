@@ -12,11 +12,11 @@ Commands
 dresscode check [paths...]
 dresscode fix [paths...]
 dresscode baseline [paths...]
+dresscode init
 dresscode upgrade estimate|plan|run|tasks|status|abort|today [target [version]]
 dresscode config
 dresscode explain [decision]
 dresscode catalogue
-dresscode init
 dresscode migrate config [file]
 dresscode migrate suppressions [paths...]
 ```
@@ -36,13 +36,11 @@ These options apply to every command:
 | option | meaning |
 |---|---|
 | `-c`, `--config <file>` | a configuration file instead of the nearest `dresscode.neon` or `dresscode.php` (or their templates with the `.dist` extension) |
-| `--use <name>` | adds a preset or a plugin on top of the configuration; works even without a configuration file; for `init`, the standard and the sets to write; may be given several times, see [below |#A Preset for One Run: --use] |
+| `--use <name>` | adds a preset or a plugin on top of the configuration; works even without a configuration file; for `init`, the standard and the sets to write; it does not set a decision, `--set` does that; may be given several times, see [Configuration |configuration#Checking Someone Else's Project Without a Configuration] |
 | `--set <path=value>` | gives a decision a value for one run; the value is written in NEON; may be given several times, see [Configuration |configuration#One Decision for One Run: --set and --only] |
 | `--severity <name=severity>` | says how the violations of a decision, section, preset or rule are counted, `name=warning` or `name=error`, on top of the [`severity` |configuration#risky-fixes] key; may be given several times |
 | `--no-color` | output without colors; the environment variable `NO_COLOR` does the same, and `FORCE_COLOR` forces colors instead |
 | `--version`, `--help` | version, help |
-
-With `--use`, `--only` and `--fix-risky`, a built-in preset is written without the vendor: `--use nette` is the same as `--use dresscode/nette`. So is a package of the vendor `dresscode`, `--only upgrade-nette`; a preset from a plugin of another vendor is written in full (see [Standards and Sets |configuration#Standards and Sets]). Decisions and sections are written by their path, `--only blankLines` or `--only blankLines.aroundMethods`, and on a typo, the message offers the closest known name (<code>''Unknown preset `modernizaton`. Did you mean `modernizations`?''</code>).
 
 
 dresscode check .[#check]
@@ -50,7 +48,7 @@ dresscode check .[#check]
 
 `check` reports violations and writes nothing. [Getting Started |getting-started#Check Your PHP Code Without Changing It] shows how to read its output, and its exit code tells CI the result (see [Exit Codes |#Exit Codes]).
 
-These options belong to `check` and `fix`, and where the table says so, also to `baseline`:
+These options belong to `check` and `fix`; those the table marks "also for `baseline`" belong to `baseline` too:
 
 | option | meaning |
 |---|---|
@@ -66,11 +64,13 @@ These options belong to `check` and `fix`, and where the table says so, also to 
 | `--jobs <n>` | the number of worker processes; `1` means running in a single process; also for `baseline` |
 | `--strict-rules` | a rule that breaks its contract is an error, not a warning; for developing your own rules; also for `baseline` |
 
+With `--use`, `--only` and `--fix-risky`, a built-in preset is written without the vendor: `--use nette` is the same as `--use dresscode/nette`. So is a package of the vendor `dresscode`, `--only upgrade-nette`; a preset from a plugin of another vendor is written in full (see [Standards and Sets |configuration#Standards and Sets]). Decisions and sections are written by their path, `--only blankLines` or `--only blankLines.aroundMethods`, and on a typo, the message offers the closest known name (<code>''Unknown preset `modernizaton`. Did you mean `modernizations`?''</code>).
+
 
 dresscode fix .[#fix]
 =====================
 
-`fix` fixes what it can and reports the rest. A file is written only when it has changed and the fixed text parses back to the same syntax tree; a file with a syntax error or one in which a rule failed stays untouched, and so does a file that an editor or another tool saved in the meantime. It takes the options of `check` above; with `--diff`, it shows what it changed, and `--ask-risky` asks about each risky fix that remains.
+`fix` fixes what it can and reports the rest. A file is written only when it has changed and the fixed text parses back to exactly the tree the fix made; a file with a syntax error or one in which a rule failed stays untouched, and so does a file that an editor or another tool saved in the meantime. It takes the options of `check` above; with `--diff`, it shows what it changed, and `--ask-risky` asks about each risky fix that remains.
 
 
 dresscode baseline .[#baseline]
@@ -99,7 +99,7 @@ dresscode init .[#init]
 dresscode upgrade .[#upgrade]
 =============================
 
-`upgrade today` rewrites the code to the API of the newer library and PHP versions that the project now requires in `composer.json`. It works even without a configuration, writes in the style the project follows, and offers to install missing upgrade data. It also accepts `--modernize`, `--ask-risky` and `--yes` (see the tables below). `upgrade estimate` estimates, without changing anything, what upgrading to the target versions involves; `upgrade plan` orders it into steps, `upgrade run` carries them out, `upgrade tasks` lists the manual tasks the plan leaves for you, `upgrade status` says where the saved plan stands, and `upgrade abort` restores what an unfinished run changed. See [Upgrade Your Code Step by Step |upgrade].
+`upgrade` rewrites the code to the new API of libraries and PHP. `upgrade today` does it for the versions the project already requires in `composer.json`: it works even without a configuration, writes in the style the project follows, and offers to install missing upgrade data. The other subcommands estimate, plan and carry out an upgrade step by step. The guides are [Code Upgrade |upgrade] and [The Upgrade Plan Step by Step |upgrade-plan].
 
 A bare `dresscode upgrade` lists its commands. These commands measure, plan and carry out the plan, report where it stands, or restore what an unfinished run changed:
 
@@ -165,28 +165,19 @@ dresscode migrate .[#migrate]
 =============================
 
 - `migrate config` translates a PHP CS Fixer, PHP_CodeSniffer or Laravel Pint configuration into decisions; without an argument, it takes the one the project has. See [Migrating to DressCode |migration#migrate-config].
-- `migrate suppressions` rewrites `phpcs:*` comments to `dresscode:*`; see [the same page |migration#3. Rewrite the Comments].
-
-
-A Preset for One Run: --use
-===========================
-
-`--use` adds a preset or a plugin for one run, the same thing the `use` key otherwise holds. It takes precedence over all layers, including the configuration and the overrides:
-
-```shell
-dresscode check --use modernizations        # the configuration plus the modernizations set
-dresscode check src --use psr12            # someone else's project without a configuration
-```
-
-Without a configuration file, `--use` is all the run has. This way you can try DressCode on someone else's project without writing anything into it (see [Configuration |configuration#Checking Someone Else's Project Without a Configuration]). `--use` does not take decisions; that is what `--set` is for, and the message says so: <code>''Option `--use`: expects a preset or a plugin, `controlFlow.elseAfterReturn=forbidden` given; a decision is set by `--set path=value`.''</code>
+- `migrate suppressions` rewrites `phpcs:*` comments to `dresscode:*`; see [the same page |migration#comments].
 
 
 Output Formats
 ==============
 
-The `--format` option chooses the whole shape of the output, not a detail of it; formats cannot be combined.
+The `--format` option chooses the whole shape of the output, not a detail of it; formats cannot be combined. Warnings about the configuration go to standard error in all formats.
 
-`console` is the default for the terminal: a header with the configuration, the target PHP version and the scope of the check, then the individual files with their violations (severity, line and column, message, decision path), and finally a summary. The header also names the [baseline |suppressions-and-baseline#baseline] the run uses. A file lists at most 20 violations and summarizes the rest on one line, grouped by decision (`… and 3456 more: 3100 indentation.unit, 340 spacing.call, 16 others`), so that a file written in another style does not flood the terminal; the formats for tools list everything. A violation of a decision that the [`severity` |configuration#risky-fixes] key softened is labeled `warning` instead of `error`. A risky fix the run was not allowed to make is labeled `risky`; when types or `nameResolution` would decide it, the summary counts it as a warning, like the softened violations. For `check`, the summary also says how many violations would be left after `fix`:
+`console` is the default for the terminal: a header with the configuration, the target PHP version and the scope of the check, then the individual files with their violations (severity, line and column, message, decision path), and finally a summary. The header also names the [baseline |suppressions-and-baseline#baseline] the run uses.
+
+A file lists at most 20 violations and summarizes the rest on one line, grouped by decision (`… and 3456 more: 3100 indentation.unit, 340 spacing.call, 16 others`), so that a file written in another style does not flood the terminal; the formats for tools list everything.
+
+A violation of a decision that the [`severity` |configuration#risky-fixes] key softened is labeled `warning` instead of `error`. A risky fix the run was not allowed to make is labeled `risky`; when types or `nameResolution` would decide it, the summary counts it as a warning, like the softened violations. For `check`, the summary also says how many violations would be left after `fix`:
 
 /--pre .[terminal]
 src/Cart.php
@@ -239,7 +230,7 @@ Colors turn off automatically when the output does not go to a terminal. In a te
 
 `github` is chosen automatically when the run is a step in GitHub Actions, except with `--stdin`, where only an explicit `--format` applies. Each violation is an annotation that appears directly in the diff of the pull request; for `fix`, these are the violations the fix left.
 
-`lines` is for Git hooks and editors: one line per finding in the form compilers use, `path:line:column: severity: message [decision]`; for a risky fix the run did not make, the risk follows the decision. The column is missing where the finding has none, a line break in the message becomes a space, and the path is relative to the working directory, or absolute for a file outside it, and always uses forward slashes. For `fix`, these are the findings the fix left; a clean file and a rewritten file with nothing left print nothing. Warnings about the configuration go to standard error in all formats. The [Editors and IDEs |editors#Findings in the Editor: the lines Format] page shows how an editor reads the output.
+`lines` is for Git hooks and editors: one line per finding in the form compilers use, `path:line:column: severity: message [decision]`; for a risky fix the run did not make, the risk follows the decision. The column is missing where the finding has none, a line break in the message becomes a space, and the path is relative to the working directory, or absolute for a file outside it, and always uses forward slashes. For `fix`, these are the findings the fix left; a clean file and a rewritten file with nothing left print nothing. The [Editors and IDEs |editors#Findings in the Editor: the lines Format] page shows how an editor reads the output.
 
 /--pre .[terminal]
 src/Cart.php:13:10: warning: The `in_array()` call must pass `$strict = true`. [mistakes.strictArgument; risk=typeUnknown]
@@ -344,12 +335,22 @@ Exit Codes
 | code | meaning |
 |---|---|
 | `0` | done, and nothing is left; for `fix` also when the fixed text no longer violates anything; warnings do not change the exit code unless `--max-warnings` sets a threshold |
-| `1` | done, but work is left for a person: violations, a file that cannot be parsed, more warnings than `--max-warnings` allows, a `baseline` refused over code that `fix` would still change, manual tasks of an upgrade, or what a migration did not carry over; for a run of the [upgrade plan |upgrade#Carrying Out the Plan] also a step reverted because of the tests, more findings of the check at the end of the plan, or a previous run interrupted in the middle of a step; for `upgrade abort`, a file it left unchanged, or a failed `composer install` |
-| `2` | incomplete, because something could not be processed: a rule threw an exception in a file, the rules got into a loop, or the file changed during the fix; an estimate, a plan, a run or the tasks of an upgrade missed a file, an estimate or a plan missed upgrade data or an answer from Composer; `init` measured without the files a rule failed in; the tests fail to run even before the first step of `upgrade run`; Git refused a commit of `upgrade run --commit`; `migrate suppressions` found a name nothing covers, or skipped a file |
+| `1` | done, but work is left for a person |
+| `2` | incomplete, because something could not be processed |
 | `3` | an error on the command line or in the configuration: an unknown option, key or value, a missing configuration |
-| `4` | a run of the upgrade plan waits for a step outside DressCode: for the versions in `composer.json` to be raised, also when Composer did not finish raising them, or at a manual step until the lock file allows the target version; for DressCode running inside another program, also after the versions are raised, after which `upgrade run` has to be run again |
+| `4` | a run of the upgrade plan waits for a step outside DressCode |
 
-These codes apply to every command. The queries that change no code, `upgrade estimate` and `upgrade plan`, end with `0` even when they find a lot of work, because that work is their answer, and with `2` when they could not examine everything; `upgrade status` always ends with `0`.
+These codes apply to every command. What each of them means for the individual commands:
+
+- `check` and `fix`: `1` for violations left, a file that cannot be parsed, or more warnings than `--max-warnings` allows; `2` when a rule threw an exception in a file, the rules got into a loop, or the file changed during the fix.
+- `baseline`: `1` when it is run over code that `fix` would still change.
+- `init`: `2` when it measured without the files a rule failed in.
+- `migrate`: `1` for what the migration did not carry over; `migrate suppressions` ends with `2` when it finds a name nothing covers, or skips a file.
+- `upgrade estimate` and `upgrade plan`: `0` even when they find a lot of work, because that work is their answer; `2` when they could not examine everything: they missed a file, upgrade data or an answer from Composer.
+- `upgrade run`: `1` for manual tasks left, a step reverted because of the tests, more findings of the check at the end of the plan, or a previous run interrupted in the middle of a step; `2` for a file it missed, tests that fail to run even before the first step, or a commit Git refused with `--commit`; `4` while it waits for the versions in `composer.json` to be raised, also when Composer did not finish raising them, or at a manual step until the lock file allows the target version, and inside another program also after the versions are raised, after which `upgrade run` has to be run again (see [The Upgrade Plan Step by Step |upgrade-plan#Carrying Out the Plan]).
+- `upgrade tasks`: `1` for a manual task left or a `dresscode:ignore` comment without a reason, `2` for a file it missed.
+- `upgrade status`: always `0`.
+- `upgrade abort`: `1` for a file it left unchanged, or a failed `composer install`.
 
 The failure of one file does not stop the run: the file is reported as failed, nothing is written into it, and the run continues with the other files. A risky fix that waits for permission and changes the behavior of the code by its nature is a violation like any other, and it keeps the exit code at `1` until someone applies it or adds it to the baseline; one that types or `nameResolution` would decide is a warning.
 
@@ -357,7 +358,7 @@ The failure of one file does not stop the run: the file is reported as failed, n
 Cache and Parallel Runs
 =======================
 
-DressCode remembers every file it found clean: its path and a fingerprint of its content, and with them a fingerprint of the configuration that applies to it (including the overrides for its path), of the target PHP version, of the baseline and of the versions of the installed packages. The path is part of the key because the same content in two files may get different verdicts, for example because of an override. Next time, a file with the same path, content and configuration is skipped; as soon as any of these things changes, it is processed again. The counts in the summary and the warnings about stale baseline entries are the same with or without the cache. DressCode remembers content written by `fix` only in a project without a baseline. The cache lives in the system temporary directory, or wherever `cacheDir` in the configuration points; `--no-cache` bypasses it for one run.
+DressCode remembers every file it found clean: its path and a fingerprint of its content, and with them a fingerprint of the configuration that applies to it (including the overrides for its path), of the target PHP version, of the baseline and of the versions of the installed packages. The path is part of the key because the same content in two files may get different verdicts, for example because of an override. Next time, a file with the same path, content and configuration is skipped; as soon as any of these things changes, it is processed again. The counts in the summary and the warnings about stale baseline entries are the same with or without the cache. The cache lives in the system temporary directory, or wherever `cacheDir` in the configuration points; `--no-cache` bypasses it for one run.
 
 Files the cache does not cover are split among worker processes. By default, there are as many as there are CPUs, but at most one process per four files, because starting a process has a cost. `--jobs 1` runs without worker processes, which helps when debugging your own rule, and `--jobs 4` keeps a run on a shared machine from taking every core. `baseline` uses worker processes too, so generating it takes no longer than a check.
 
@@ -374,20 +375,5 @@ cat src/Cart.php | dresscode fix --stdin src/Cart.php > fixed.php
 
 You cannot combine `--stdin` with paths to other files. The cache is not used for standard input. The `excludePaths` key is not evaluated: the code is checked even when the path lies in an excluded part of the project; with `--skip-excluded`, `fix --stdin` returns the code unchanged for such a path, and `check --stdin` reports nothing.
 
-
-DressCode Inside Your Own Tool
-==============================
-
-If you bundle DressCode into your own tool with its own binary, run the whole command-line application, the `DressCode\Console\Application` class, inside your process, and give it the configuration that applies when the project has none of its own:
-
-```php
-use DressCode\Config;
-use DressCode\Console\Application;
-
-$application = new Application(script: __FILE__, defaultConfig: new Config(use: ['nette'], paths: ['src', 'tests']));
-exit($application->run($argv));
-```
-
-`script` is your binary: DressCode uses it to start the parallel worker processes and an upgrade run that continues in a new process, so that they get the same default configuration. Everything else (the commands, options, formats and parallel runs) stays the same as with `dresscode`, and `run()` returns the same exit codes. `run()` itself prints the errors that belong to the run to standard error: an invalid call and a bad configuration with exit code `3`, a rule failure, rules in a loop, and environment errors of the `RuntimeException` type, for example a file that cannot be written or a crashed worker process, with exit code `2`. Other exceptions, for example `LogicException` or `Error`, indicate a bug in the program, and `run()` lets them propagate.
-
-{{description: The DressCode command line reference: check, fix, baseline, init, upgrade, config, explain, catalogue and migrate with all their options, output formats for CI and editors, exit codes, cache and parallel runs.}}
+{{maintitle: DressCode Command Line: Commands, Options and Exit Codes}}
+{{description: DressCode commands and options from check and fix to upgrade and explain, output formats for CI and editors, exit codes, cache and parallel runs.}}

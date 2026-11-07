@@ -10,7 +10,7 @@ Co v CI spouštět
 
 `check`, ne `fix`. CI má říct, jestli je kód v pořádku, a při porušení job s exit kódem `1` selže; opravu dělá vývojář lokálně, kde ji vidí. Kdo chce, aby CI opravu i nabídlo, pustí `fix` a za ním `git diff --exit-code`. Diff ve výpisu jobu je pak přesně to, co má vývojář commitnout.
 
-Exit kódy jsou pevně dané: `0` znamená čisto; `1` porušení, soubor, který nejde parsovat, nebo víc varování, než dovoluje `--max-warnings`; `2` soubor, který selhal (výjimka v pravidle, zacyklená pravidla); `3` chybu na příkazové řádce nebo v konfiguraci. Na `2` a `3` má job selhat hlasitěji než na `1`: `3` znamená, že se nezkontrolovalo nic, a `2`, že některý soubor zkontrolovaný není.
+Exit kódy jsou pevně dané: `0` znamená čisto; `1` porušení, soubor, který nejde parsovat, nebo víc varování, než dovoluje `--max-warnings`; `2` soubor, který selhal (výjimka v pravidle, zacyklená pravidla); `3` chybu na příkazové řádce nebo v konfiguraci. Na `2` a `3` má job selhat hlasitěji než na `1`: `3` znamená, že se nezkontrolovalo nic, a `2`, že některý soubor zkontrolovaný není. Celou stupnici popisuje [Příkazová řádka |cli#Exit kódy].
 
 
 GitHub Actions
@@ -35,7 +35,7 @@ jobs:
 
 Nic dalšího potřeba není: DressCode pozná, že běží jako krok GitHub Actions, a přepne výstup na formát `github`, ve kterém je každé porušení anotací. V pull requestu se pak ukáže přímo u řádku, kterého se týká, se zprávou i cestou rozhodnutí. Ve výpisu jobu stojí u každého porušení soubor, řádek a rozhodnutí, na konci shrnutí.
 
-Barvy se vypnou samy, protože výstup nejde do terminálu, takže `--no-color` psát nemusíte. A pozor na verzi PHP v běžci: samotný DressCode potřebuje PHP 8.4 až 8.6, i když kontroluje projekt psaný pro starší verzi.
+Verzi DressCode si přibijte, ať už číslem u `create-project` (`dresscode/dresscode:1.3.0`), nebo v `composer.lock`: nové rozhodnutí sady nebo standardu v minoritní verzi může začít hlásit něco, co dosud procházelo, a to se má stát při vědomé aktualizaci, ne v cizím pull requestu. A pozor na verzi PHP v běžci: samotný DressCode potřebuje PHP 8.4 až 8.6, i když kontroluje projekt psaný pro starší verzi.
 
 
 GitLab, Jenkins a ostatní
@@ -53,7 +53,20 @@ dresscode:
     paths: [dresscode.xml]
 ```
 
-Tvar obou formátů se v minoritních verzích nemění; dokument `json` navíc nese verzi svého formátu v klíči `version` a exit kód běhu v `summary.exitCode`. Formáty `console` a `github` jsou naopak pro lidi a měnit se mohou.
+Tvar obou formátů se v minoritních verzích nemění, viz [Zpětná kompatibilita |compatibility#Výstup pro nástroje]. Formáty `console` a `github` jsou naopak pro lidi a měnit se mohou.
+
+
+Projekt s typy
+==============
+
+V projektu s klíčem `typeAnalysis: phpstan` patří DressCode i PHPStan do vývojových závislostí, aby se DressCode ptal té verze PHPStanu a té konfigurace, se kterými projekt pracuje ([Typy z PHPStanu |phpstan-types#enable]). Job pak nainstaluje závislosti projektu a DressCode pustí z `vendor/bin`:
+
+```yaml
+      - run: composer install --no-progress
+      - run: vendor/bin/dresscode check --no-cache
+```
+
+Kontrolu s typy pouštějte bez cache, jako v ukázce. Cache si soubor pamatuje podle jeho obsahu, a tak nepozná, že metoda v jiném souboru dostala anotaci `@deprecated` nebo že se změnil `phpstan.neon`. Následující oddíl proto platí pro projekt bez typů.
 
 
 Cache mezi běhy
@@ -73,12 +86,12 @@ cacheDir: temp/dresscode-cache
           restore-keys: dresscode-
 ```
 
-Cache s klíčem, který už existuje, `actions/cache` na konci jobu znovu neuloží, takže s pevným klíčem by zůstala ve stavu z prvního běhu. Proto má klíč v sobě commit: každý běh uloží novou cache a `restore-keys` na začátku dalšího obnoví tu nejnovější. DressCode má navíc vlastní klíč cache, jehož součástí je otisk konfigurace, verzí nainstalovaných balíčků a času změny souborů s vlastními pravidly a presety projektu, takže po změně konfigurace, po aktualizaci nástroje nebo po úpravě vlastního pravidla se soubory zkontrolují znovu samy od sebe.
+Cache s klíčem, který už existuje, `actions/cache` na konci jobu znovu neuloží, takže s pevným klíčem by zůstala ve stavu z prvního běhu. Proto má klíč v sobě commit: každý běh uloží novou cache a `restore-keys` na začátku dalšího obnoví tu nejnovější. Po změně konfigurace, aktualizaci nástroje nebo úpravě vlastního pravidla se soubory zkontrolují znovu samy, viz [Cache a paralelní běh |cli#Cache a paralelní běh].
 
 
-Paralelní běh a verze
-=====================
+Paralelní běh
+=============
 
-Počet pracovních procesů se řídí počtem procesorů běžce, takže na dvoujádrovém běžci není co ladit; kde běžec sdílí stroj s jinými úlohami, `--jobs 4` nedovolí běhu zabrat všechna jádra. Verzi DressCode si přibijte, ať už v `composer.lock`, nebo číslem u `create-project`: nové rozhodnutí sady nebo standardu v minoritní verzi může začít hlásit něco, co dosud procházelo, a to se má stát při vědomé aktualizaci, ne v cizím pull requestu.
+Počet pracovních procesů se řídí počtem procesorů běžce, takže na dvoujádrovém běžci není co ladit. Kde běžec sdílí stroj s jinými úlohami, `--jobs 4` nedovolí běhu zabrat všechna jádra.
 
 {{maintitle: Styl PHP kódu v CI: GitHub Actions a GitLab}}

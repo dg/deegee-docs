@@ -4,7 +4,7 @@ Upgrade to Symfony 8
 .[perex]
 In Symfony 8, `$application->add()` became `addCommand()`, a constraint no longer takes an array of options, and `#[AutowireIterator]` replaced `#[TaggedIterator]`. Symfony 8.0 removed what 7.x had deprecated, and it requires PHP 8.4. DressCode with the package `dresscode/upgrade-symfony` prepares your code for the upgrade from Symfony 7.4 to 8 while you are still on 7.4: it rewrites the code to the new API, and after the move it continues with what Symfony 8.1 deprecated.
 
-The data of the package hold 217 changes that Symfony deprecated in versions 7.1 to 7.4 and removed in 8.0: DressCode rewrites 152 of them by itself and reports the other 65. Symfony 7.4, released together with 8.0 at the end of November 2025, has the same features according to [UPGRADE-8.0.md |https://github.com/symfony/symfony/blob/8.0/UPGRADE-8.0.md], so every replacement already exists in 7.4.
+The data of the package hold 217 changes that Symfony deprecated in versions 7.1 to 7.4 and removed in 8.0: DressCode rewrites 152 of them by itself and reports the other 65. Symfony 7.4 has the same features according to [UPGRADE-8.0.md |https://github.com/symfony/symfony/blob/8.0/UPGRADE-8.0.md], so every replacement already exists in 7.4.
 
 
 What It Looks Like
@@ -82,6 +82,28 @@ function nameConstraints(): array
 Four changes from three versions of Symfony 7: `#[TaggedIterator]` became `#[AutowireIterator]` (7.1); the method `getDefaultName()` moved into the attribute `#[AsCommand]` and the options of the constraints became named arguments (7.3); `add()` became `addCommand()` (7.4). DressCode rewrote the imports of both attributes as well, and the code still runs on 7.4.
 
 
+Step by Step
+============
+
+The Symfony packages are raised all at once, so you raise them in `composer.json` yourself and `dresscode upgrade today` rewrites the code. DressCode needs PHP 8.4. If your application on Symfony 7.4 runs on an older PHP, install DressCode globally, with PHPStan and the data for Symfony:
+
+```shell
+composer global require dresscode/dresscode dresscode/upgrade-symfony phpstan/phpstan
+```
+
+On PHP 8.4 or newer, it can be a development dependency of the project, as [Installation |upgrading-symfony#Installation] shows.
+
+1. Start from Symfony 7.4 with a clean working tree. Run `dresscode upgrade today`, and once more if it advises you to. Go through what it reports, run your tests and PHPStan, and commit.
+2. Raise `require.php` to at least 8.4. The next run of `upgrade today` then also fixes or reports what PHP deprecated up to 8.4, see [Upgrading to a newer PHP |upgrading-php].
+3. Raise the Symfony packages in `composer.json` to `8.0.*`; with Symfony Flex, raise `extra.symfony.require` too. Run `composer update "symfony/*" -W --prefer-lowest` and `dresscode upgrade today` again, then run the tests and commit.
+4. Move on to `8.1.*` the same way. Only now does DressCode rewrite what 8.1 deprecated, such as the base class `Extension` of a bundle extension.
+
+.[warning]
+DressCode reads the version of each package from its constraint in `composer.json`. If a Symfony package has only `*` there and leaves the version to `extra.symfony.require`, DressCode does not see the lower bound and only reports the changes of that package. Write the version into the constraint, such as `7.4.*`.
+
+[Upgrading Code |upgrade#One Major Version at a Time, by Hand] explains why `--prefer-lowest` and why one version at a time.
+
+
 What Gets Rewritten
 ===================
 
@@ -118,7 +140,7 @@ Symfony 8.1 deprecated 37 more things, and DressCode rewrites 22 of them. It app
 | `new ValidatorExtension($validator, false)` | `new ValidatorExtension($validator)` | `symfony/form` 8.1 |
 | `mirror($source, $target, options: ['copy_on_windows' => $follow])` | `mirror($source, $target, options: ['follow_symlinks' => $follow])` | `symfony/filesystem` 8.1 |
 
-Symfony 8.2 is planned for November 2026 ([Symfony 8.2 |https://symfony.com/releases/8.2]). The data already hold six changes from its [UPGRADE-8.2.md |https://github.com/symfony/symfony/blob/8.2/UPGRADE-8.2.md], and DressCode applies them once a project requires 8.2.
+The data already hold six changes that Symfony 8.2 announced in [UPGRADE-8.2.md |https://github.com/symfony/symfony/blob/8.2/UPGRADE-8.2.md], and DressCode applies them once a project requires 8.2.
 
 
 What Gets Reported
@@ -141,44 +163,22 @@ Method `Symfony\Component\Security\Core\User\UserInterface::eraseCredentials()` 
 | `Bundle::registerCommands()` | each command as a service with `#[AsCommand]` or the tag `console.command` | `symfony/http-kernel` 8.1 |
 | `ConstraintValidatorInterface::validate()` | `validateInContext()`, which takes the execution context too | `symfony/validator` 8.1 |
 
-Confirm such a place with the comment `// dresscode:ignore <decision> -- <reason>`, or rewrite it; [Manual Tasks Along the Way |upgrade#Manual Tasks Along the Way] has the details. The data do not capture changes in YAML configuration, in Twig templates or in behavior; [UPGRADE-8.0.md |https://github.com/symfony/symfony/blob/8.0/UPGRADE-8.0.md] lists them.
+Confirm such a place with the comment `// dresscode:ignore <decision> -- <reason>`, or rewrite it; [Manual Tasks Along the Way |upgrade-plan#Manual Tasks Along the Way] has the details. The data do not capture changes in YAML configuration, in Twig templates or in behavior; [UPGRADE-8.0.md |https://github.com/symfony/symfony/blob/8.0/UPGRADE-8.0.md] lists them.
 
 
 Symfony 7.4 LTS or 8.x
 ======================
 
-Symfony 7.4 is a long-term support (LTS) release. It gets bug fixes until November 2028 and security fixes until November 2029, and it runs on PHP 8.2 ([Symfony 7.4 |https://symfony.com/releases/7.4]). The 8.x versions need PHP 8.4 and are maintained for a shorter time: support for 8.0 ended in July 2026, and 8.1 is supported until January 2027 ([Symfony 8.1 |https://symfony.com/releases/8.1]).
+Symfony 7.4 is a long-term support (LTS) release and runs on PHP 8.2, while the 8.x versions need PHP 8.4 and are maintained for a shorter time; [Symfony 7.4 |https://symfony.com/releases/7.4] says for how long.
 
 Either way, the first step is the same. On 7.4, `dresscode upgrade today` rewrites everything 7.1 to 7.4 deprecated, so an application that stays on the LTS has code written for the API of Symfony 8, as far as the data go, and moving to 8.x later is a smaller step.
-
-
-Step by Step
-============
-
-DressCode needs PHP 8.4. If your application on Symfony 7.4 runs on an older PHP, install DressCode globally, with PHPStan and the data for Symfony:
-
-```shell
-composer global require dresscode/dresscode dresscode/upgrade-symfony phpstan/phpstan
-```
-
-On PHP 8.4 or newer, it can be a development dependency of the project, as [Installation |upgrading-symfony#Installation] shows.
-
-1. Start from Symfony 7.4 with a clean working tree. Run `dresscode upgrade today`, and once more if it advises you to. Go through what it reports, run your tests and PHPStan, and commit.
-2. Raise `require.php` to at least 8.4. The next run of `upgrade today` then also fixes or reports what PHP deprecated up to 8.4, see [Upgrading to a newer PHP |upgrading-php].
-3. Raise the Symfony packages in `composer.json` to `8.0.*`; with Symfony Flex, raise `extra.symfony.require` too. Run `composer update "symfony/*" -W --prefer-lowest` and `dresscode upgrade today` again, then run the tests and commit.
-4. Move on to `8.1.*` the same way. Only now does DressCode rewrite what 8.1 deprecated, such as the base class `Extension` of a bundle extension.
-
-.[warning]
-DressCode reads the version of each package from its constraint in `composer.json`. If a Symfony package has only `*` there and leaves the version to `extra.symfony.require`, DressCode does not see the lower bound and only reports the changes of that package. Write the version into the constraint, such as `7.4.*`.
-
-[Upgrade Your Code Step by Step |upgrade#One Major Version at a Time, by Hand] explains why `--prefer-lowest` and why one version at a time.
 
 
 Where to Go Next
 ================
 
 - [Symfony |upgrading-symfony], all components the package covers, and the older versions.
-- [Upgrade Your Code Step by Step |upgrade], the whole procedure with tests and commits.
+- [Upgrading code |upgrade], `upgrade today` in detail, and the [upgrade plan |upgrade-plan] with tests and commits.
 - [Upgrading to a newer PHP |upgrading-php], because Symfony 8 needs PHP 8.4.
 
 {{maintitle: Upgrade Symfony 7.4 to 8 Automatically}}

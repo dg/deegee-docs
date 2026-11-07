@@ -10,24 +10,77 @@ Co integrace umí
 
 Kontrola, která běží jen v průběžné integraci, ohlásí porušení až po pushi, kdy už myslíte na jiný úkol. Nejužitečnější je proto **formátování při uložení**: soubor se po uložení opraví tak, jak by ho opravil `dresscode fix`. Editory to umějí dvojím způsobem. Některé pošlou obsah bufferu formátovači na standardní vstup a vezmou si zpátky výsledek, na to je `fix --stdin`. Jiné po uložení spustí příkaz nad souborem na disku a jeho výstup umějí číst jako seznam nálezů, na to je formát `lines`, jeden řádek na nález ve tvaru, jaký píšou překladače.
 
+Formátování při uložení provede i opravy, které projekt povolil v `fixRisky`, takže mění víc než vzhled.
+
 Podtržení porušení přímo v kódu, oprava jednoho porušení z nabídky rychlých oprav a potlačení jedním klikem jsou v plánu, viz [níže |#V plánu: jazykový server].
 
 
-Formátovač přes standardní vstup
-================================
+PhpStorm
+========
 
-`dresscode fix --stdin <cesta>` je formátovač: přečte kód ze standardního vstupu, provede všechny opravy, které konfigurace dovolí, a celý výsledný text vypíše na standardní výstup. Cesta říká, co pro kód platí, tedy přepisy pro cesty a vyloučení; na disk se nic nezapíše. Formátovač skončí s kódem 0, i když v kódu zůstalo něco, co oprava vyřešit neumí, protože editor považuje jiný exit kód za selhání a výsledek by zahodil. Nálezy dává `check --stdin`, a proto `fix --stdin` přepínače výpisu (`--format`, `--diff`, `--max-warnings`, `--ask-risky`) odmítne.
+PhpStorm obecný formátovač přes standardní vstup nemá, a proto se použije **File Watcher** (Settings › Tools › File Watchers) s tímto nastavením:
 
-| Stav | Standardní výstup | Chybový výstup | Exit |
-|---|---|---|---|
-| kód bez změny | přesně původní bajty | nic | 0 |
-| opravený kód, ať v něm zůstalo cokoli | celý výsledný text | nic | 0 |
-| cesta, kterou vylučuje `excludePaths`, s `--skip-excluded` | přesně původní bajty | nic | 0 |
-| syntaktická chyba | původní text | jeden řádek chyby | 1 |
-| selhání pravidla | původní text | jeden řádek selhání | 2 |
-| chyba konfigurace nebo příkazové řádky | nic | chyba | 3 |
+1. typ souboru PHP,
+2. program `$ProjectFileDir$/vendor/bin/dresscode`,
+3. argumenty `fix $FilePath$ -f lines --skip-excluded`,
+4. pracovní adresář `$ProjectFileDir$`,
+5. do pole Output filters `$FILE_PATH$:$LINE$:$COLUMN$: $MESSAGE$`.
 
-Částečně opravený mezivýsledek formátovač nevydá nikdy. Opravy, které projekt v `fixRisky` povolil, provede také, takže formátování při uložení mění víc než vzhled.
+Nálezy, které oprava nechala, se pak ve výpisu watcheru dají rozkliknout, a u čistého souboru watcher mlčí. Přepínač `--skip-excluded` zařídí, že watcher nesáhne na soubor, který konfigurace vylučuje v `excludePaths`.
+
+Zároveň vypněte vestavěné formátování PHP (Settings › Tools › Actions on Save › Reformat code), jinak se oba formátovače přetahují a soubor se při každém uložení změní dvakrát.
+
+
+Visual Studio Code
+==================
+
+Pro formátování při uložení použijte rozšíření **Run on Save** (`emeraldwalk.RunOnSave`) s příkazem pro soubory PHP:
+
+```json
+{
+	"emeraldwalk.runonsave": {
+		"commands": [
+			{
+				"match": "\\.php$",
+				"cmd": "${workspaceFolder}/vendor/bin/dresscode fix ${file} -f lines --skip-excluded"
+			}
+		]
+	}
+}
+```
+
+Nálezy celého projektu dostanete do panelu Problems úlohou s problem matcherem v `.vscode/tasks.json`:
+
+```json
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "DressCode",
+			"type": "shell",
+			"command": "${workspaceFolder}/vendor/bin/dresscode check -f lines",
+			"problemMatcher": {
+				"owner": "dresscode",
+				"fileLocation": ["autoDetect", "${workspaceFolder}"],
+				"pattern": {
+					"regexp": "^(.+?):(\\d+)(?::(\\d+))?: (error|warning): (.*?)(?: \\[([^\\]]+)\\])?$",
+					"file": 1, "line": 2, "column": 3, "severity": 4, "message": 5, "code": 6
+				}
+			}
+		}
+	]
+}
+```
+
+Jiný formátovač PHP (třeba Intelephense) přitom pro formátování při uložení vypněte, nebo mu nechte jen to, co DressCode neřeší.
+
+Místo Run on Save můžete zapojit i [formátovač přes standardní vstup |#Formátovač přes standardní vstup], a to obecným rozšířením pro vlastní formátovač.
+
+
+Zed, Helix, Neovim a Emacs
+==========================
+
+Tyto editory pošlou obsah bufferu formátovači na standardní vstup a vezmou si zpátky výsledek. Formátovačem je `dresscode fix --stdin <cesta>`: opravený text vypíše na standardní výstup a na disk nic nezapíše; cesta říká, které přepisy a vyloučení pro kód platí. Jak se přesně chová, popisuje [poslední oddíl |#Formátovač přes standardní vstup].
 
 **Zed** (`settings.json`):
 
@@ -79,8 +132,6 @@ require('conform').setup({
   (push '(php-mode . dresscode) apheleia-mode-alist))
 ```
 
-Ve **VS Code** se formátovač přes standardní vstup zapojí obecným rozšířením pro vlastní formátovač, nebo se po uložení spustí příkaz nad souborem, viz [níže |#Visual Studio Code].
-
 
 Nálezy v editoru: formát lines
 ==============================
@@ -96,64 +147,12 @@ src/Order.php:20:11: error: The `@` operator must not be used. [mistakes.errorSu
 Cesta je relativní k pracovnímu adresáři, mimo něj absolutní, vždy s lomítky. Sloupec chybí, kde ho nález nemá; zalomení řádku ve zprávě se nahradí mezerou. U `fix` jsou to nálezy, které oprava nechala, s řádky opraveného souboru. U čistého souboru se nevypíše nic, a stejně tak u přepsaného souboru, ve kterém nic nezůstalo.
 
 
-PhpStorm
-========
-
-PhpStorm obecný formátovač přes standardní vstup nemá, a proto se použije **File Watcher** (Settings › Tools › File Watchers): typ souboru PHP, program `$ProjectFileDir$/vendor/bin/dresscode`, argumenty `fix $FilePath$ -f lines --skip-excluded`, pracovní adresář `$ProjectFileDir$`. Do pole Output filters zapište `$FILE_PATH$:$LINE$:$COLUMN$: $MESSAGE$` a nálezy, které oprava nechala, se pak ve výpisu watcheru dají rozkliknout. U čistého souboru watcher mlčí. Přepínač `--skip-excluded` zařídí, že watcher nesáhne na soubor, který konfigurace vylučuje v `excludePaths`.
-
-Zároveň vypněte vestavěné formátování PHP (Settings › Tools › Actions on Save › Reformat code), jinak se oba formátovače přetahují a soubor se při každém uložení změní dvakrát.
-
-
-Visual Studio Code
-==================
-
-Pro formátování při uložení použijte rozšíření **Run on Save** (`emeraldwalk.RunOnSave`) s příkazem pro soubory PHP:
-
-```json
-{
-	"emeraldwalk.runonsave": {
-		"commands": [
-			{
-				"match": "\\.php$",
-				"cmd": "${workspaceFolder}/vendor/bin/dresscode fix ${file} -f lines --skip-excluded"
-			}
-		]
-	}
-}
-```
-
-Nálezy celého projektu dostanete do panelu Problems úlohou s problem matcherem v `.vscode/tasks.json`:
-
-```json
-{
-	"version": "2.0.0",
-	"tasks": [
-		{
-			"label": "DressCode",
-			"type": "shell",
-			"command": "${workspaceFolder}/vendor/bin/dresscode check -f lines",
-			"problemMatcher": {
-				"owner": "dresscode",
-				"fileLocation": ["autoDetect", "${workspaceFolder}"],
-				"pattern": {
-					"regexp": "^(.+?):(\\d+)(?::(\\d+))?: (error|warning): (.*?)(?: \\[([^\\]]+)\\])?$",
-					"file": 1, "line": 2, "column": 3, "severity": 4, "message": 5, "code": 6
-				}
-			}
-		}
-	]
-}
-```
-
-Jiný formátovač PHP (třeba Intelephense) přitom pro formátování při uložení vypněte, nebo mu nechte jen to, co DressCode neřeší.
-
-
 Soubor, který nejde naparsovat
 ==============================
 
 Soubor, který nejde parsovat, `fix` nechá být a ohlásí jen syntaktickou chybu: radši neopravený soubor než zmrzačený.
 
-Totéž platí o každé opravě. DressCode zapíše jen výsledek, který se znovu naparsuje a vytiskne zpět na týž text. Je to týž round trip, na kterém stojí celý nástroj: vytištěný strom dá původní soubor bajt po bajtu. V editoru je z něj pojistka, že formátování při uložení nemůže soubor rozbít.
+Totéž platí o každé opravě. DressCode zapíše jen výsledek, který se znovu naparsuje a vytiskne zpět na týž text. Je to týž [round trip |how-it-works#Syntaktický strom místo pole tokenů], na kterém stojí celý nástroj: vytištěný strom dá původní soubor bajt po bajtu. V editoru je z něj pojistka, že formátování při uložení nemůže soubor rozbít.
 
 
 V plánu: jazykový server
@@ -167,5 +166,22 @@ Plánujeme jazykový server `dresscode lsp`, který bude součástí balíčku, 
 - **běžící proces**, takže se při každém uložení neplatí start PHP, a s `typeAnalysis: phpstan` ani start PHPStanu.
 
 Server bude používat Language Server Protocol, takže totéž dostane i Neovim, Zed, Helix nebo Sublime Text. Do té doby slouží formátovač přes standardní vstup a formát `lines` popsané výše.
+
+
+Formátovač přes standardní vstup
+================================
+
+Kdo píše integraci pro další editor, potřebuje přesné chování formátovače. `dresscode fix --stdin <cesta>` přečte kód ze standardního vstupu, provede všechny opravy, které konfigurace dovolí, a celý výsledný text vypíše na standardní výstup. Cesta říká, co pro kód platí, tedy přepisy pro cesty a vyloučení; na disk se nic nezapíše. Formátovač skončí s kódem 0, i když v kódu zůstalo něco, co oprava vyřešit neumí, protože editor považuje jiný exit kód za selhání a výsledek by zahodil. Nálezy dává `check --stdin`, a proto `fix --stdin` přepínače výpisu (`--format`, `--diff`, `--max-warnings`, `--ask-risky`) odmítne.
+
+| Stav | Standardní výstup | Chybový výstup | Exit |
+|---|---|---|---|
+| kód bez změny | přesně původní bajty | nic | 0 |
+| opravený kód, ať v něm zůstalo cokoli | celý výsledný text | nic | 0 |
+| cesta, kterou vylučuje `excludePaths`, s `--skip-excluded` | přesně původní bajty | nic | 0 |
+| syntaktická chyba | původní text | jeden řádek chyby | 1 |
+| selhání pravidla | původní text | jeden řádek selhání | 2 |
+| chyba konfigurace nebo příkazové řádky | nic | chyba | 3 |
+
+Částečně opravený mezivýsledek formátovač nevydá nikdy.
 
 {{maintitle: Formátování PHP při uložení v PhpStormu a VS Code}}

@@ -4,7 +4,7 @@ Přechod na DressCode krok za krokem
 .[perex]
 Komentáře potlačující nálezy fungují v kódu dál i s původními názvy pravidel a konfiguraci převedete jediným příkazem, který vás přehledně upozorní na vše, co nebylo možné přenést automaticky. Zde najdete společný postup migrace z PHP CS Fixeru, PHP_CodeSnifferu i Laravel Pintu, včetně otevřeného přehledu toho, co bude fungovat jinak.
 
-Instalaci popisuje stránka [Začínáme s DressCode |getting-started#Instalace] a kompletní výčet přepínačů pro příkazy [`migrate` |cli#migrate], [`init` |cli#init] a [`fix` |cli#fix] najdete v referenci příkazové řádky.
+Instalaci popisuje stránka [Začínáme s DressCode |getting-started#Instalace]. Co je navíc specifické pro váš dosavadní nástroj, doplňují stránky [PHP CS Fixer |from-php-cs-fixer], [PHP_CodeSniffer a Slevomat |from-phpcs], [Nette Coding Standard |from-nette-coding-standard] a [Laravel Pint |from-laravel-pint].
 
 
 Proč to nebolí
@@ -12,9 +12,9 @@ Proč to nebolí
 
 Vím, jak to v praxi chodí: v projektu máte konfiguraci laděnou dlouhé roky, ve zdrojácích stovky komentářů `phpcs:ignore`, možná pár vlastních sniffů a k tomu zaběhnuté CI, které to celé hlídá. Nikdo nemění nástroj jen proto, že ten nový vypadá moderněji. Změna dává smysl teprve ve chvíli, kdy přechod nebolí, a přesně na to byl DressCode od začátku navržen.
 
-Zásadní výhoda spočívá v tom, že **DressCode u každého svého rozhodnutí přesně ví, která pravidla PHP CS Fixeru, PHP_CodeSnifferu a Slevomatu pokrývá.** Když spustíte `dresscode catalogue`, uvidíte původní pravidla vypsaná u každého rozhodnutí v závorce `covers`. Z toho plyne vše podstatné: stávající komentáře v kódu fungují beze změny a starou konfiguraci zvládne nástroj přeložit strojově. Do nové konfigurace a na příkazovou řádku už ale zapisujete čisté cesty rozhodnutí DressCode, například `imports.unused`.
+V konfiguraci DressCode nevyjmenováváte pravidla a jejich volby, ale píšete **rozhodnutí** (decision): klíč, který jmenuje věc v kódu, a hodnotu, která říká, jak se píše, třeba `imports.unused: forbidden`. A **DressCode u každého rozhodnutí přesně ví, která pravidla PHP CS Fixeru, PHP_CodeSnifferu a Slevomatu pokrývá.** Když spustíte `dresscode catalogue`, uvidíte původní pravidla vypsaná u každého rozhodnutí v závorce `covers`. Z toho plyne vše podstatné: stávající komentáře v kódu fungují beze změny a starou konfiguraci zvládne nástroj přeložit strojově.
 
-Celý proces probíhá ve třech bezpečných krocích a každý z nich můžete kdykoliv vrátit zpět. Druhý a třetí krok navíc obstarají dva podpříkazy z rodiny `dresscode migrate`.
+Přechod má pět kroků a každý z nich můžete kdykoliv vrátit zpět: první kontrola bez zásahu do kódu, převod konfigurace, první oprava, volitelný přepis komentářů a nakonec výměna starého nástroje v CI a hookách. Převod konfigurace i přepis komentářů obstarají podpříkazy z rodiny `dresscode migrate`.
 
 
 1. Kód nechte, jak je
@@ -28,22 +28,25 @@ dresscode check src tests --use perCs
 
 Je tu však jeden důležitý rozdíl v chování, o kterém musíte vědět: `phpcs:ignore` na samostatném řádku potlačoval v PHP_CodeSnifferu pouze bezprostředně následující řádek. DressCode jej naproti tomu interpretuje stejně jako vlastní direktivu `dresscode:ignore`, tedy tak, že na samostatném řádku platí pro celý následující příkaz, i když je roztažený přes více řádků. Potlačení tak může v některých případech pokrýt větší kus kódu než dříve.
 
-Konfigurační soubor v této fázi ještě nemáte, a protože DressCode bez něj nic nekontroluje, určuje standard přepínač `--use`. Hodnota `perCs` znamená [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/]. Pokud jste dosud používali `@PER-CS` nebo `PSR12`, uvidíte zhruba to, na co jste zvyklí. Pokud jste měli pravidla detailně přizpůsobená nad rámec standardu, narazíte na odchylky, které vyřeší hned následující krok.
+Konfigurační soubor v této fázi ještě nemáte, a protože DressCode bez něj nic nekontroluje, určuje standard přepínač `--use`. Zvolte ten, který odpovídá vašemu dosavadnímu: `perCs` je [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/] (v PHP CS Fixeru sada `@PER-CS`), `psr12` je PSR-12, `symfony` sada `@Symfony`, `laravel` výchozí styl Pintu a `nette` Nette Coding Standard. Pokud jste měli pravidla detailně přizpůsobená nad rámec standardu, narazíte na odchylky, které vyřeší hned následující krok.
 
 
 2. Přeložte konfiguraci .[#migrate-config]
 ==========================================
 
-Příkaz `migrate config` automaticky vyhledá konfiguraci vašeho projektu (ať už patří PHP_CodeSnifferu, PHP CS Fixeru, nebo Laravel Pintu) a její ekvivalent pro DressCode zapíše včetně kontrolovaných cest přímo do `dresscode.neon` (pokud přecházíte z prostředí bez konfigurace, nebo žádnou nemáte, nechte si ji raději změřit přímo z existujícího kódu pomocí příkazu [`dresscode init` |generate-configuration]):
+Příkaz `migrate config` automaticky vyhledá konfiguraci vašeho projektu, ať už patří PHP_CodeSnifferu, PHP CS Fixeru, nebo Laravel Pintu, a její ekvivalent pro DressCode zapíše včetně kontrolovaných cest do `dresscode.neon`:
 
 ```shell
 dresscode migrate config
 dresscode migrate config conf/phpcs.xml --output dresscode.php
 ```
 
-Nástroj hledá konfigurační soubory na obvyklých místech a vybere ten, který projekt reálně používá. Postupuje systematicky: nejprve prověří skripty v `composer.json`, zda některý z nich nespouští formátovač s konkrétním souborem (např. `phpcs --standard=conf/phpcs.xml`, a to i vnořeně přes aliasy typu `@lint`). Následně zkontroluje konfiguraci nástroje, jehož balíček projekt vyžaduje v závislostech, a nakonec hledá soubory ležící přímo v kořeni projektu (lokální `.php-cs-fixer.php` před `.php-cs-fixer.dist.php`). Pokud zbude více kandidátů, v interaktivním terminálu se vás zeptá, který z nich platí; mimo terminál zvolí první a ostatní vypíše. Cestu k jinému souboru můžete samozřejmě předat přímo jako argument. Kam se má výsledek uložit, určí přepínač `--output`; formát výstupu se řídí příponou `.neon` nebo `.php` a již existující soubor `migrate config` nikdy nepřepíše. Před samotným zápisem si vygenerovaný soubor cvičně načte a ověří, že z něj vzejdou přeložená rozhodnutí; s přepínačem `--dry-run` výsledek pouze vypíše do konzole. Soubor patří do kořene projektu, protože uvedené cesty jsou relativní právě k tomuto kořeni.
+Vybere konfiguraci, kterou projekt opravdu používá, a když najde víc kandidátů, zeptá se; cestu k jinému souboru předáte argumentem. Existující soubor nikdy nepřepíše a s přepínačem `--dry-run` výsledek jen vypíše. Pokud jste žádnou konfiguraci neměli, nebo jste používali standard bez vlastních úprav, nechte si ji raději změřit z kódu příkazem [`dresscode init` |generate-configuration].
 
-Zatímco `phpcs.xml` je běžné XML a `pint.json` standardní JSON (oba formáty DressCode přečte bez jakýchkoliv závislostí), se souborem `.php-cs-fixer.dist.php` je to jiné: jde o spustitelný PHP skript, který vrací objekt cizí knihovny. Pokud na něj `migrate config` narazí sám, nejprve se v terminálu zeptá na svolení ke spuštění; bez interaktivního terminálu jej z bezpečnostních důvodů nespustí vůbec a pouze vypíše doporučený příkaz. Skript spouští v izolovaném procesu s autoloaderem projektu, takže vyžaduje, aby byl PHP CS Fixer v projektu stále nainstalovaný (samotný DressCode přitom může běžet odkudkoliv, viz podrobnosti na stránce [PHP CS Fixer |from-php-cs-fixer#Než začnete]). Z toho důvodu překládejte konfiguraci dříve, než starý nástroj z projektu odinstalujete. Preset Pintu se stane standardem a pravidla v klíči `rules`, což jsou pravidla PHP CS Fixeru, se přeloží stejně jako u Fixeru. Preset, který Pint nemá, je chyba, a klíč souboru `pint.json`, který se nepřenese, třeba `notPath`, se objeví ve varováních.
+.[note]
+Kandidáty hledá v tomto pořadí: skripty v `composer.json`, které spouštějí formátovač s konkrétním souborem (např. `phpcs --standard=conf/phpcs.xml`, i vnořeně přes aliasy typu `@lint`), konfigurace nástroje, jehož balíček projekt vyžaduje v závislostech, a soubory v kořeni projektu (lokální `.php-cs-fixer.php` před `.php-cs-fixer.dist.php`). Mimo terminál zvolí první a ostatní vypíše. Formát výstupu se řídí příponou `.neon` nebo `.php` souboru v `--output`. Před zápisem si vygenerovaný soubor cvičně načte a ověří, že z něj vzejdou přeložená rozhodnutí. Soubor patří do kořene projektu, protože cesty v něm jsou relativní právě k tomuto kořeni.
+
+Konfiguraci PHP CS Fixeru převeďte dřív, než starý nástroj z projektu odinstalujete: je to PHP skript a `migrate config` ho spustí s autoloaderem projektu, a to jen s vaším svolením v terminálu, viz [PHP CS Fixer |from-php-cs-fixer#Než začnete]. Soubory `phpcs.xml` a `pint.json` přečte i tehdy, když už jejich nástroj nainstalovaný není.
 
 Z konfigurace `phpcs.xml`, která kontroluje složky `src` a `tests`, vychází z `PSR12`, omezuje délku řádku na 100 znaků, hlídá nepoužité importy a vyžaduje dokumentaci funkcí, vznikne tento čistý `dresscode.neon`:
 
@@ -74,15 +77,28 @@ Read 4 rules; set 4 decisions and 1 preset, the rules translated; `dresscode ini
 5 phpcs suppression comments: `dresscode migrate suppressions` rewrites them.
 \--
 
-Tyto řádky mají stejnou cenu jako vygenerovaná konfigurace: přesně pojmenovávají místa, kde se musíte rozhodnout sami. Zde vás například informují, že DressCode zachová import využívaný pouze v phpDoc komentáři, zatímco původní sniff bez volby `searchAnnotations` by jej smazal. Varování k pravidlu, které se podařilo přeložit jen částečně, se navíc uloží přímo jako komentář k danému rozhodnutí v souboru, aby nezmizelo se zavřením okna terminálu. Pokud příkaz vypíše jakékoliv varování, skončí s exit kódem 1, i když soubor v pořádku zapsal. Pravidlo bez přímého protějšku buď vůbec nepotřebujete, nebo si na něj snadno [napíšete vlastní kontrolu |porting-rules]. Obecné sady jako `@PSR12` nebo `PSR12` se překládají na standardy; u sad bez jednoznačného protějšku (např. `@PhpCsFixer`) na to příkaz upozorní a doporučí začít od standardu `perCs` či `psr12`. Výpis zároveň připomene druhou cestu: `dresscode init` pravidla nepřekládá, ale změří reálný styl vašeho kódu. S přepínačem `--format json` získáte strukturovaný dokument obsahující verzi v klíči `version`, kořen projektu v klíči `root`, konfiguraci, soubor, kam ji zapsal, počty, přehled varování a nepřeložená pravidla. V tomto režimu se nástroj na nic neptá, stejně jako mimo terminál.
+Tyto řádky mají stejnou cenu jako vygenerovaná konfigurace: přesně pojmenovávají místa, kde se musíte rozhodnout sami. Zde vás například informují, že DressCode zachová import využívaný pouze v phpDoc komentáři, zatímco původní sniff bez volby `searchAnnotations` by jej smazal. Varování k pravidlu, které se podařilo přeložit jen částečně, se navíc uloží přímo jako komentář k danému rozhodnutí v souboru, aby nezmizelo se zavřením okna terminálu. Pravidlo bez přímého protějšku buď vůbec nepotřebujete, nebo si na něj snadno [napíšete vlastní kontrolu |porting-rules].
 
 Jedno původní pravidlo se v DressCode často rozpadne do několika přesných rozhodnutí: například `Generic.Files.LineLength` s volbou `absoluteLineLimit` vygeneruje rozhodnutí `file.longLines`, `file.lineLength` a `file.lineLengthExcept`. Ne každá specifická volba má v DressCode svůj protějšek, což výpis opět transparentně přizná. Pravidlo, které bylo v původním nástroji výslovně vypnuté, získá hodnotu `keep`. Pokud však stejné rozhodnutí pokrývá i jiné pravidlo daného nástroje, nechá jej příkaz netknuté a vypíše varování, protože nemůže vědět, jestli z nich některé pořád platí. Výsledný soubor si projděte, bývá příjemně krátký.
 
+.[note]
+Pokud příkaz vypíše jakékoliv varování, skončí s exit kódem 1, i když soubor v pořádku zapsal. S přepínačem `--format json` vydá strukturovaný dokument s verzí v klíči `version`, kořenem projektu v klíči `root`, konfigurací, souborem, kam ji zapsal, počty, varováními a nepřeloženými pravidly; v tomto režimu se na nic neptá, stejně jako mimo terminál.
 
-3. Přepište komentáře
-=====================
 
-Komentáře v kódu sice fungují i se starými názvy, ale nativní cesty rozhodnutí jsou kratší, jednotné a mnohem čitelnější. Kolik takových komentářů v projektu máte, vyčíslil už předchozí příkaz `migrate config`. Samotný přepis obstará jediný příkaz:
+3. První oprava
+===============
+
+Jakmile máte konfiguraci vyladěnou, spusťte `dresscode fix` a výsledek uložte do samostatného commitu bez jakýchkoliv jiných úprav. I u pravidel, která dělají "totéž", se může formátování v detailech lišit o mezeru oproti starému nástroji. Nemá smysl procházet tisíce řádků ručně, zásadní je mít jistotu, že daný commit neobsahuje nic jiného.
+
+U rozsáhlejších projektů, kde by byl jeden obří commit nepřehledný, postupujte po jednotlivých sadách či sekcích: spusťte `dresscode fix --only cleanup` nebo `dresscode fix --only blankLines` a každý krok commitněte zvlášť. Závěrečný plný `fix` pak doladí zbytek (více v kapitole [Uklidit starý kód po krocích |configuration#Uklidit starý kód po krocích]).
+
+Nálezy, které `fix` neumí vyřešit sám, zůstanou ve výpisu. Pokud je jich více, než kolik stíháte vyřešit hned, příkaz `dresscode baseline` je uloží do [baseline |suppressions-and-baseline#baseline] a od té chvíle se budou hlásit už jen nově vzniklá porušení.
+
+
+4. Přepište komentáře .[#comments]
+==================================
+
+Tenhle krok je dobrovolný: komentáře v kódu fungují i se starými názvy. Nativní cesty rozhodnutí jsou ale kratší, jednotné a mnohem čitelnější. Kolik takových komentářů v projektu máte, vyčíslil už příkaz `migrate config`. Samotný přepis obstará jediný příkaz:
 
 ```shell
 dresscode migrate suppressions src tests
@@ -98,13 +114,18 @@ Widened    src/Legacy.php:10: a `dresscode:ignore` on a line of its own covers t
 
 Získáte tak jasný přehled neplatných komentářů, které reálně nic nepotlačují, protože DressCode pravidlo s takovým jménem nezná. Jelikož tyto komentáře nebylo možné přenést, skončí příkaz s exit kódem 2. Pokud se objeví pouze rozšířená potlačení z řádku `Widened`, vrátí příkaz exit kód 1, protože tato místa pouze čekají na vaši zběžnou revizi.
 
-Přepisují se výhradně skutečné direktivy, tedy takové, za kterými bezprostředně končí komentář nebo řádek. Pouze takto totiž DressCode potlačení čte; věta v komentáři, která `phpcs:ignore` pouze zmiňuje v textu, zůstane nedotčena. Soubor, který nelze naparsovat nebo který se během práce změnil, příkaz přeskočí, uvede jej na řádku `Skipped` a skončí s kódem 2. S přepínačem `--dry-run` ukáže všechny plánované změny v podobě diffu a nezapíše nic. S přepínačem `--format json` vypíše jako data počty, diffy běhu s `--dry-run` a to, co nechal, rozšířil a přeskočil.
+S přepínačem `--dry-run` ukáže příkaz všechny plánované změny v podobě diffu a nezapíše nic.
+
+.[note]
+Přepisují se výhradně skutečné direktivy, tedy takové, za kterými bezprostředně končí komentář nebo řádek. Pouze takto totiž DressCode potlačení čte; věta v komentáři, která `phpcs:ignore` pouze zmiňuje v textu, zůstane nedotčena. Soubor, který nelze naparsovat nebo který se během práce změnil, příkaz přeskočí, uvede jej na řádku `Skipped` a skončí s kódem 2. S přepínačem `--format json` vypíše jako data počty, diffy běhu s `--dry-run` a to, co nechal, rozšířil a přeskočil.
 
 
-První oprava
-============
+5. Vyměňte starý nástroj v CI a hookách
+=======================================
 
-Jakmile máte konfiguraci vyladěnou, spusťte `dresscode fix` a výsledek uložte do samostatného commitu bez jakýchkoliv jiných úprav. I u pravidel, která dělají "totéž", se může formátování v detailech lišit o mezeru oproti starému nástroji. Nemá smysl procházet tisíce řádků ručně, zásadní je mít jistotu, že daný commit neobsahuje nic jiného. U rozsáhlejších projektů, kde by byl jeden obří commit nepřehledný, postupujte po jednotlivých sadách či sekcích: spusťte `dresscode fix --only cleanup` nebo `dresscode fix --only blankLines` a každý krok commitněte zvlášť. Závěrečný plný `fix` pak doladí zbytek (více v kapitole [Uklidit starý kód po krocích |configuration#Uklidit starý kód po krocích]). Nálezy, které `fix` neumí vyřešit sám, zůstanou ve výpisu. Pokud je jich více, než kolik stíháte vyřešit hned, příkaz `dresscode baseline` je uloží do [baseline |suppressions-and-baseline#baseline] a od té chvíle se budou hlásit už jen nově vzniklá porušení.
+Nakonec nahraďte starý příkaz všude, kde se spouštěl: ve skriptech `composer.json`, v CI, v Git hooku i ve formátování při uložení v editoru. Kde běželo `phpcs` nebo `php-cs-fixer fix --dry-run`, spouštějte `dresscode check`, a kde `phpcbf`, `php-cs-fixer fix` nebo `pint`, tam `dresscode fix`. Kdo kombinoval PHP_CodeSniffer a PHP CS Fixer, má teď místo dvou kroků v CI jeden. Jak DressCode zapojit na každém z těchto míst, popisuje [Integrace |integrations].
+
+Pozor na skripty, které vyhodnocují exit kód: DressCode vrací `0` pro čisto, `1` pro nálezy k řešení, `2` pro selhání na některém souboru a `3` pro chybu v příkazové řádce nebo v konfiguraci (viz [Příkazová řádka |cli#Exit kódy]). PHP_CodeSniffer i PHP CS Fixer používají vlastní škály, takže takový skript potřebuje drobnou úpravu. Pak můžete starý nástroj z projektu odinstalovat.
 
 
 Co bude jinak
@@ -115,14 +136,10 @@ Návod, který slibuje stoprocentně bezbolestný přechod bez jakýchkoliv odli
 - **Rozhodnutí namísto stovek pravidel.** V konfiguraci nevyjmenováváte konkrétní pravidla ani jejich interní volby, ale přímo popisujete požadovaný stav: `blankLines.aroundMethods: 1` nebo `imports.unused: forbidden`. Která konkrétní pravidla se o to postarají, necháváte na DressCode (viz [Rozhodnutí místo pravidel |how-it-works#Rozhodnutí místo pravidel]). Kompletní přehled všech možností nabízí stránka [Pravidla |decisions/@home].
 - **Priority neexistují.** Pokud jste byli zvyklí spoléhat na ručně laděné pořadí fixerů, můžete u některých specifických souborů získat jiný výsledný kód. Pravidla v DressCode běží opakovaně, dokud se kód zcela neustálí; důvody vysvětluje kapitola [Bez priorit: pravidla běží do ustálení |how-it-works#Bez priorit: pravidla běží do ustálení].
 - **Některá pravidla nemají protějšek.** Příkazy `migrate config` i `migrate suppressions` vás na ně přímo upozorní. Není jich málo, jde především o detailní sniffy kontrolující obsah dokumentačních komentářů a o pravidla, kterými se nástroje navzájem překrývají.
-- **Riziková pravidla zde nemusí být riziková.** To, co PHP CS Fixer zapínal pouze na výslovné vyžádání (protože nad pouhými tokeny nedokázal odlišit bezpečný případ od nebezpečného), řeší DressCode na úrovni syntaktického stromu a bezpečné výskyty opraví automaticky. Zásah, který by mohl změnit chování, se nahlásí jako [riziková oprava (risky fix) |configuration#risky-fixes] a provede se teprve po schválení v klíči `fixRisky` nebo s přepínačem `--fix-risky`. A rozhodnutí, které mění chování z podstaty věci (`expressions.comparison.loose: forbidden` nahrazující `==` za `===`), zůstává plně ve vaší režii.
-- **Exit kódy jsou jiné**: `0` znamená čisto, `1` nálezy k řešení, `2` selhání na některém souboru a `3` chybu v příkazové řádce nebo v konfiguraci. Jednotnou škálu popisuje [Příkazová řádka |cli#Exit kódy]. PHP_CodeSniffer i PHP CS Fixer používají vlastní škály, takže případné vyhodnocovací skripty v CI budou vyžadovat drobnou úpravu.
-- **Jeden nástroj místo kombinace dvou.** Kdo kombinoval CodeSniffer a Fixer, měl dvě konfigurace a dva kroky v CI. DressCode obojí sjednocuje pod jednu střechu.
-- **Rozhodnutí si vyzkoušíte bez zásahu do konfigurace.** Příkaz `dresscode check --set controlFlow.elseAfterReturn=forbidden --only controlFlow.elseAfterReturn --diff` ukáže dopad konkrétního rozhodnutí v diffu, a `dresscode fix --set …` jej dočasně přidá ke zbytku konfigurace, takže změny vyjdou rovnou zformátované podle vašeho standardu (viz [Jedno rozhodnutí na jeden běh |configuration#Jedno rozhodnutí na jeden běh: --set a --only]).
-- **Popisujete záměr, ne výčet pravidel.** Konfigurace stojí na dvou pilířích: standard určí vzhled a [sady |configuration#Standardy a sady] definují, co dalšího od kódu očekáváte. Sad je přesně šest a tvoří uzavřený výčet, takže z položky `cleanup` v klíči `use` se nikdy nestane dvacet nepřehledných řádků, i když katalog časem přinese desítky nových kontrol.
-- **Modernizaci kódu obstará stejný nástroj.** DressCode umí kód nejen formátovat, ale i automaticky přepsat na novější PHP či nová API vašich knihoven, a to v tomtéž běhu a podle stejného standardu. Na upgrade kódu tak nepotřebujete další externí nástroj s vlastní konfigurací (viz [Přechod na novější PHP |upgrading-php] a [Upgrade kódu |upgrade]).
+- **`phpcs:ignore` na samostatném řádku kryje celý příkaz**, ne jen následující řádek, jak popisuje [první krok |#1. Kód nechte, jak je].
+- **Rizikové opravy se povolují po rozhodnutích.** Co PHP CS Fixer zapínal jen na výslovné vyžádání, protože nad pouhými tokeny nedokázal odlišit bezpečný případ od nebezpečného, opraví DressCode tam, kde je to bezpečné, sám. Zásah, který by mohl změnit chování, se nahlásí jako [riziková oprava (risky fix) |configuration#risky-fixes] a provede se teprve po schválení v klíči `fixRisky` nebo s přepínačem `--fix-risky`.
 
-Podrobné návody pro jednotlivé nástroje: [PHP CS Fixer |from-php-cs-fixer], [PHP_CodeSniffer a Slevomat |from-phpcs], [Nette Coding Standard |from-nette-coding-standard], [Laravel Pint |from-laravel-pint].
+A jedna věc navíc: DressCode kód nejen formátuje, ale v tomtéž běhu ho umí přepsat i na novější PHP a na nová API vašich knihoven, takže na upgrade kódu nepotřebujete další nástroj s vlastní konfigurací (viz [Přechod na novější PHP |upgrading-php] a [Upgrade kódu |upgrade]).
 
 {{maintitle: Přechod na DressCode z PHP CS Fixeru, PHP_CodeSnifferu nebo Pintu}}
 {{description: Přechod na DressCode z PHP CS Fixeru, PHP_CodeSnifferu nebo Laravel Pintu: potlačovací komentáře fungují dál a konfiguraci převede jeden příkaz.}}

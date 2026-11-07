@@ -34,7 +34,25 @@ file_put_contents($this->file, Json::encode($products, pretty: true));
 return \str_starts_with($code, 'sale-');
 ```
 
-Volání metody DressCode přepíše jen tam, kde typy z PHPStanu říkají, že patří té třídě, a ve stylu, který kód projektu má. Jak se k tomu dostat, popisuje oddíl [Krok za krokem |#Krok za krokem].
+Volání metody DressCode přepíše jen tam, kde typy z PHPStanu říkají, že patří té třídě, a ve stylu, který kód projektu má.
+
+
+Krok za krokem
+==============
+
+DressCode potřebuje `nette/utils` 4.1, a tak se do aplikace na Nette 3 jako vývojová závislost nevejde. Nainstalujte ho globálně, s PHPStanem a s daty pro Nette:
+
+```shell
+composer global require dresscode/dresscode dresscode/upgrade-nette phpstan/phpstan
+```
+
+1. Nemá-li projekt `dresscode.neon`, napište ho příkazem `dresscode init`: plán přepisuje kód ve stylu, který konfigurace drží, a `upgrade run` bez ní nezačne.
+2. Změřte, kolik práce upgrade dá: `dresscode upgrade estimate nette/utils 4.0`. Řádek `Composer` řekne, jestli cílovou verzi něco v `composer.lock` nepouští.
+3. Uložte plán i s příkazem testů, ať ho tým může projít: `dresscode upgrade plan nette/utils 4.0 --save --test-command "vendor/bin/tester tests -o junit:{junit}"`.
+4. Proveďte ho: `dresscode upgrade run`. Po každém kroku se pustí testy a krok, po kterém nově spadne test, se vrátí. U kroku Composeru se DressCode zeptá, jestli smí zvednout `nette/utils` na `^4.0`.
+5. Projděte, co zůstalo na vás, a pusťte `upgrade run` znovu, dokud běh neskončí řádkem `UPGRADED`.
+
+Ostatní knihovny se převádějí stejně, jen s jiným cílem, třeba `dresscode upgrade estimate nette/php-generator 4.2`. Bez cíle DressCode navrhne všechny knihovny, u kterých má data o novějších verzích, než projekt dnes dovoluje. Pokud jste `nette/utils` na `^4.0` zvedli sami, stačí obyčejné `dresscode upgrade today`. Celý postup s testy, commity a ručními úkoly popisuje [Plán upgradu krok za krokem |upgrade-plan].
 
 
 Co se přepíše
@@ -100,30 +118,13 @@ app/Samples.php:32:9: error: Static property `Nette\Utils\Html::$xhtml` is remov
 | `Nette\Iterators\Mapper` | `Iterables::map()`, které vrací generátor, a ten se dá projít jen jednou | `nette/utils` 4.0.5 |
 | `ClassType::addExtend()` | `setExtends()`, třída dědí nejvýš z jedné | `nette/php-generator` 4.0.1 |
 
-Takové místo potvrdíte komentářem `// dresscode:ignore <rozhodnutí> -- <důvod>`, nebo ho přepíšete; podrobnosti najdete v kapitole [Ruční úkoly po cestě |upgrade#Ruční úkoly po cestě].
-
-
-Krok za krokem
-==============
-
-DressCode potřebuje `nette/utils` 4.1, a tak se do aplikace na Nette 3 jako vývojová závislost nevejde. Nainstalujte ho globálně, s PHPStanem a s daty pro Nette:
-
-```shell
-composer global require dresscode/dresscode dresscode/upgrade-nette phpstan/phpstan
-```
-
-1. Změřte, kolik práce upgrade dá: `dresscode upgrade estimate nette/utils 4.0`. Řádek `Composer` řekne, jestli cílovou verzi něco v `composer.lock` nepouští.
-2. Uložte plán i s příkazem testů, ať ho tým může projít: `dresscode upgrade plan nette/utils 4.0 --save --test-command "vendor/bin/tester tests -o junit:{junit}"`.
-3. Proveďte ho: `dresscode upgrade run`. Po každém kroku se pustí testy a krok, po kterém nově spadne test, se vrátí. U kroku Composeru se DressCode zeptá, jestli smí zvednout `nette/utils` na `^4.0`.
-4. Projděte, co zůstalo na vás, a pusťte `upgrade run` znovu, dokud běh neskončí řádkem `UPGRADED`.
-
-Ostatní knihovny se převádějí stejně, jen s jiným cílem, třeba `dresscode upgrade estimate nette/php-generator 4.2`. Bez cíle DressCode navrhne všechny knihovny, u kterých má data o novějších verzích, než projekt dnes dovoluje. Celý postup s testy, commity a ručními úkoly popisuje [Upgrade kódu krok za krokem |upgrade].
+Takové místo potvrdíte komentářem `// dresscode:ignore <rozhodnutí> -- <důvod>`, nebo ho přepíšete; podrobnosti najdete v kapitole [Ruční úkoly po cestě |upgrade-plan#Ruční úkoly po cestě].
 
 
 Kam dál
 =======
 
-- [Upgrade kódu krok za krokem |upgrade], odhad, plán a běh podrobně.
+- [Plán upgradu krok za krokem |upgrade-plan], odhad, plán a běh podrobně.
 - [Knihovny Nette |upgrading-nette], co balíček `dresscode/upgrade-nette` pokrývá u dalších knihoven a verzí.
 - [Jak funguje upgrade knihoven |upgrading-libraries], odkud DressCode ví, co se změnilo.
 

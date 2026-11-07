@@ -58,34 +58,13 @@ V ukázce pravidla výše voláme `report()` přímo uvnitř podmínky. Není to
 
 Potlačení kontroly (suppression) díky tomu získává absolutní váhu. Když do kódu napíšete `// dresscode:ignore` nebo rozhodnutí pro danou cestu nastavíte na `keep`, nezmizí jen hláška z výpisu, ale oprava se skutečně vůbec neprovede. Nemusíte se přitom spoléhat na dobrou vůli autora pravidla: pravidlo, které by ignorovalo potlačení a kód přesto upravilo, neprojde ani svými vlastními testy.
 
-Na stejném principu fungují i **rizikové opravy** (risky fixes). Úprava, která by mohla změnit chování programu, se ohlásí s příznakem rizika. Dokud ji výslovně nepovolíte, hlášení neprojde a pravidlo nechá kód netknutý. Rizikovost je přitom vždy vlastností konkrétního výskytu v kódu: `mistakes.strictArgument` bezpečně doplní parametr `$strict = true` do `in_array()` tam, kde typová analýza potvrdí hledání celého čísla v poli celých čísel. Kdekoliv jinde jde o rizikovou opravu, protože kód mohl spoléhat na volné porovnání. Totéž pravidlo tak v témže průchodu bezpečný výskyt rovnou opraví a rizikový pouze vypíše s vysvětlením, co by o bezpečnosti rozhodlo: typ hodnoty z [typové analýzy |phpstan-types], jistota o globální funkci z [`nameResolution` |php-functions-in-namespaces#name-resolution], nebo váš vlastní úsudek tam, kde oprava mění chování ze své podstaty. Místo, o němž by rozhodla informace, kterou DressCode nemá k dispozici, se nahlásí jako varování; oprava, která chování mění z principu, je chyba. Kde pravidlo bezpečně ví, že by úprava kód rozbila, tam raději mlčí. Souhlas s rizikovou opravou neuděluje rozhodnutí samo, ale projekt tím, že jej uvede v klíči `fixRisky`; přepínač `--fix-risky` pak povolí všechny rizikové opravy jednorázově.
+Na stejném principu fungují i **rizikové opravy** (risky fixes). Úprava, která by mohla změnit chování programu, se ohlásí s příznakem rizika, a dokud ji projekt výslovně nepovolí, hlášení neprojde a pravidlo nechá kód netknutý. Rizikovost je přitom vlastností konkrétního výskytu, ne pravidla: `mistakes.strictArgument` bezpečně doplní `$strict = true` do `in_array()` tam, kde typová analýza potvrdí hledání celého čísla v poli celých čísel, a jinde jen nahlásí, že kód mohl spoléhat na volné porovnání. Totéž pravidlo tak v témže průchodu bezpečný výskyt rovnou opraví a rizikový vypíše s vysvětlením, co by o bezpečnosti rozhodlo. Jak rizikové opravy povolit a jak se hlásí, popisuje stránka [Konfigurace |configuration#risky-fixes].
 
 
-Standardy a sady
-================
+Žádný vlastní styl
+==================
 
-DressCode vám nevnucuje žádný svůj vlastní styl. Místo toho nabízí katalog rozhodnutí a dva druhy předpřipravených presetů, kterými z něj vybíráte. **Preset** je pojmenovaný konfigurační soubor se stejnou strukturou, jakou má vaše vlastní konfigurace. **Standard** je preset určující celkový vzhled kódu. Pětice vestavěných standardů pokrývá vše od odsazení až po importy:
-
-| standard | co je to |
-|---|---|
-| `psr12` | [PSR-12 |https://www.php-fig.org/psr/psr-12/], oddíl po oddílu |
-| `perCs` | [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/] v plném rozsahu, přímý nástupce PSR-12 |
-| `nette` | [Nette Coding Standard |https://doc.nette.org/cs/contributing/coding-standard], tedy PER Coding Style s tabulátory a několika odchylkami |
-| `symfony` | Symfony Coding Standards podle sady `@Symfony` z PHP CS Fixeru |
-| `laravel` | výchozí styl nástroje [Laravel Pint |https://laravel.com/docs/pint], jeho preset `laravel` |
-
-**Sada** je preset reprezentující jeden konkrétní záměr. O vizuálním vzhledu kódu nerozhoduje, a proto ji můžete libovolně zkombinovat s jakýmkoliv standardem:
-
-| sada | co rozhoduje |
-|---|---|
-| `cleanup` | odstraňuje kód, který nic nedělá |
-| `modernizations` | nahrazuje starší zápisy moderní syntaxí, kterou cílové PHP již podporuje |
-| `types` | doplňuje a sjednocuje typy tam, kde jim PHP rozumí |
-| `deprecations` | řeší prvky, které PHP nebo knihovny označily za zastaralé či odstranily |
-| `correctness` | hlídá konstrukce, které jsou nejspíš omylem |
-| `compilerOptimizations` | zapisuje globální jména do tvaru, který kompilátor PHP optimalizuje už při překladu |
-
-Projekt si jednoduše vybere jeden standard, za něj do klíče `use` přidá požadované sady a případné individuální odchylky dopíše klíč po klíči:
+DressCode vám nevnucuje žádný svůj vlastní styl. Styl přinášejí **presety**, pojmenované konfigurační soubory se stejnou strukturou, jakou má vaše vlastní konfigurace. **Standard** je preset, který určuje celkový vzhled kódu (`perCs`, `psr12`, `nette`, `symfony`, `laravel`). **Sada** je preset jednoho záměru, o vzhledu nerozhoduje, a proto ji můžete zkombinovat s jakýmkoliv standardem (`cleanup`, `modernizations` a další). Projekt si vybere jeden standard, za něj do klíče `use` přidá požadované sady a případné individuální odchylky dopíše klíč po klíči:
 
 ```neon
 use:
@@ -97,9 +76,9 @@ blankLines:
 	aroundMethods: 1
 ```
 
-Sada se vyvíjí společně s DressCode: jakmile nová verze přinese další rozhodnutí, automaticky přibude do příslušné sady a váš projekt ho získá bez nutnosti měnit konfiguraci. Rozhodnutí, které vyžaduje novější PHP nebo typovou analýzu, přitom tiše čeká, až pro něj projekt splní podmínky. Kde se standard rozchází se specifikací, dostane rozhodnutí jinou hodnotu namísto skryté výjimky v kódu, takže tutéž hodnotu můžete snadno použít i ve vlastním presetu. Standard `nette` tak k PER Coding Style přidává tabulátory, typické rozvržení knihoven Nette, hygienu kódu i zvyklosti Nette: tvorbu identifikátorů, pořadí prvků třídy či obsah dokumentačních komentářů.
+Kde se standard odchyluje od specifikace, nemá to schované jako výjimku v kódu pravidla: odchylka je jiná hodnota rozhodnutí, kterou můžete použít i ve vlastním presetu. Standard `nette` tak k PER Coding Style přidává tabulátory, typické rozvržení knihoven Nette, hygienu kódu i zvyklosti Nette, a to všechno jako hodnoty rozhodnutí, které si přečtete [v jeho souboru |php-coding-standards#nette].
 
-Presety se skládají jako vrstvy přesně v tom pořadí, v jakém je klíč `use` uvádí: potomek dědí od rodiče a upravuje jen to, co sám výslovně zmíní. Vaše konfigurace tvoří vrstvu nad nimi a lokální přepis pro určitou část projektu představuje další vrstvu nad konfigurací. Podrobně tento systém rozebírá stránka [Konfigurace |configuration#Vrstvy].
+Presety se skládají jako vrstvy přesně v tom pořadí, v jakém je klíč `use` uvádí: potomek dědí od rodiče a upravuje jen to, co sám výslovně zmíní. Vaše konfigurace tvoří vrstvu nad nimi a lokální přepis pro určitou část projektu představuje další vrstvu nad konfigurací. Co který standard a sada dělá, ukazuje stránka [Konfigurace |configuration#Standardy a sady], skládání vrstev rozebírá její část [Vrstvy |configuration#Vrstvy].
 
 
 PER Coding Style a PSR-12 proti PHP CS Fixeru a PHP_CodeSnifferu
@@ -150,7 +129,7 @@ Podrobnosti o tom, jak psát vlastní pravidla tohoto typu, najdete na stránce 
 Verze PHP je vlastnost projektu
 ===============================
 
-Rozhodnutí, které zapisuje novější syntaxi PHP (například osmičkový zápis `0o755` z PHP 8.1), se nesmí aplikovat v projektu, který na této verzi ještě neběží. DressCode proto cílovou verzi neodvozuje z interpretu, na kterém sám zrovna běží, ale z projektu. Zjišťuje ji z klíče `targets` v konfiguraci (např. `targets: {php: '8.2'}`, přičemž část projektu může mít v přepisu jinou verzi), případně z nejnižší verze povolené v `require.php` v `composer.json` (zohlední i `config.platform.php`), a pokud tyto údaje chybí, předpokládá PHP 8.0 jako základní výchozí verzi. Starší verzi z konfigurace nebo z Composeru automaticky zvedne na PHP 8.0 a vypíše varování, protože pravidla počítají s tím, že prvky PHP 8.0 jsou vždy dostupné. Stejný soubor tak dostane naprosto shodný verdikt na jakémkoliv stroji. Rozhodnutí vyžadující novější syntaxi pod svou verzí tiše čeká, takže to nemusíte vy ani preset nijak hlídat.
+Rozhodnutí, které zapisuje novější syntaxi PHP (například osmičkový zápis `0o755` z PHP 8.1), se nesmí aplikovat v projektu, který na této verzi ještě neběží. DressCode proto cílovou verzi neodvozuje z interpretu, na kterém sám zrovna běží, ale z projektu: z nejnižší verze, kterou povoluje `require.php` v `composer.json`, případně z klíče `targets` v konfiguraci. Stejný soubor tak dostane naprosto shodný verdikt na jakémkoliv stroji. Rozhodnutí vyžadující novější syntaxi pod svou verzí tiše čeká, takže to nemusíte vy ani preset nijak hlídat. Odkud přesně se verze bere, včetně `config.platform.php` a projektu bez spodní meze, popisuje stránka [Konfigurace |configuration#Verze PHP a balíčků].
 
 Funguje to i v opačném směru: jakmile cílovou verzi zvednete, sada `modernizations` automaticky přepíše kód na novinky dané verze, od `str_contains()` z PHP 8.0 až po funkci `clamp()` z PHP 8.6. Celý postup rozebírá stránka [Přechod na novější PHP |upgrading-php].
 
@@ -184,6 +163,10 @@ Slovníček
 
 Přehled pojmů, které se v dokumentaci pravidelně opakují. Anglické názvy uvádíme proto, že se s nimi setkáte v názvech tříd, v konfiguraci i v hláškách nástroje.
 
+
+Pojmy konfigurace
+-----------------
+
 | pojem | anglicky | co to je |
 |---|---|---|
 | rozhodnutí | decision | klíč konfigurace s cestou (`spacing.call`), oborem hodnot a popisem; pojmenovává věc v kódu a hodnota určuje její zápis; pod touto cestou se nálezy hlásí a potlačují a povoluje se pod ní riziková oprava |
@@ -191,7 +174,6 @@ Přehled pojmů, které se v dokumentaci pravidelně opakují. Anglické názvy 
 | požadavek | requirement | rozhodnutí, které v kódu něco aktivně vynucuje, pokud nemá hodnotu `keep` |
 | parametr | parameter | rozhodnutí, které pouze upřesňuje chování požadavku a samo o sobě nic nezapíná; má výchozí hodnotu a nepřijímá `keep` |
 | `keep` | keep | univerzální hodnota "zde se nic nevynucuje"; přijímá ji každý požadavek a zapsaná u celé sekce vypne vše pod ní |
-| pravidlo | rule | třída obsluhující jedno či více rozhodnutí: vyhledává jejich porušení a zpravidla nabízí i automatickou opravu |
 | porušení | violation | jeden konkrétní nález: soubor, řádek, sloupec, zpráva a cesta k rozhodnutí |
 | preset | preset | pojmenovaný soubor se stejnou strukturou jako konfigurace; projekt na něj odkazuje v klíči `use` |
 | standard | standard | preset určující celkový vizuální styl kódu, z něhož projekt vychází: `perCs`, `psr12`, `nette`, `symfony`, `laravel` |
@@ -203,6 +185,16 @@ Přehled pojmů, které se v dokumentaci pravidelně opakují. Anglické názvy 
 | riziková oprava | risky fix | oprava, která může změnit chování programu; provede se jen u rozhodnutí povolených v `fixRisky` nebo při spuštění s `--fix-risky`, jinak se pouze ohlásí: jako varování tam, kde by ji rozhodly typy nebo `nameResolution`, jinde jako chyba |
 | potlačení | suppression | vypnutí kontroly rozhodnutí na konkrétním řádku, v bloku nebo v celém souboru pomocí komentáře `dresscode:ignore` |
 | baseline | baseline | soubor evidující stávající porušení, které zatím nelze opravit; díky němu můžete zapnout přísnější rozhodnutí a řešit jen nová porušení |
+
+
+Pojmy jádra a pravidel
+----------------------
+
+Tyto pojmy potkáte hlavně na stránkách o psaní vlastních pravidel.
+
+| pojem | anglicky | co to je |
+|---|---|---|
+| pravidlo | rule | třída obsluhující jedno či více rozhodnutí: vyhledává jejich porušení a zpravidla nabízí i automatickou opravu |
 | jádro | engine | vnitřní část nástroje, která spouští pravidla, řeší vzájemné nároky na bílé znaky a sestavuje výstup |
 | průchod | pass | jedno kompletní projití syntaktického stromu všemi pravidly dané fáze |
 | fáze | stage | pořadí průchodů: `Structure` (změny kódu), `Formatting` (mezery a zalomení) a `Finishing` (začištění) |

@@ -23,7 +23,7 @@ composer create-project dresscode/dresscode temp/dresscode
 temp/dresscode/bin/dresscode check
 ```
 
-A do třetice: DressCode můžete přidat přímo do projektu jako vývojovou závislost (`composer require --dev dresscode/dresscode`) a spouštět z `vendor/bin/dresscode`. Tuto variantu zvolte ve chvíli, kdy v projektu používáte také PHPStan. DressCode se ho pak přímo ptá na typy ve vašem kódu a dokáže díky tomu spolehlivě přepsat zastaralé API knihoven podle reálného typu proměnné (více na stránce [Typy z PHPStanu |phpstan-types]). Počítejte jen s tím, že samotný DressCode vyžaduje PHP 8.4 až 8.6, takže na některé z těchto verzí musí běžet i prostředí vašeho projektu, i kdyby kód samotný cílil na starší PHP.
+A do třetice: DressCode můžete přidat přímo do projektu jako vývojovou závislost (`composer require --dev dresscode/dresscode`) a spouštět z `vendor/bin/dresscode`. Tuto variantu zvolte ve chvíli, kdy v projektu používáte také PHPStan. DressCode se ho pak přímo ptá na typy ve vašem kódu a dokáže díky tomu spolehlivě přepsat zastaralé API knihoven podle reálného typu proměnné (více na stránce [Typy z PHPStanu |phpstan-types]). Počítejte jen s tím, že samotný DressCode vyžaduje PHP 8.4 až 8.6, takže na některé z těchto verzí musí běžet i prostředí vašeho projektu, i kdyby kód samotný cílil na starší PHP. Závislosti DressCode (mimo jiné `nette/utils` 4.1) se navíc musí snést se závislostmi projektu; starší aplikaci, která to nesplní, nainstalujte DressCode i PHPStan globálně, jak popisuje [Upgrade kódu |upgrade#Kde DressCode běží].
 
 Tohle bývá nejčastější zdroj nedorozumění: **verze PHP, na které běží samotný DressCode, a cílová verze PHP vašeho kódu jsou dvě zcela nezávislé věci.** Když máte DressCode nainstalovaný globálně nebo mimo projekt, může bez problémů běžet na PHP 8.5 a přitom kontrolovat kód psaný pro PHP 8.1. Cílovou verzi si sám vyčte ze sekce `require.php` v `composer.json` vašeho projektu a striktně se jí drží, takže vám do kódu nikdy nevloží syntaxi, které by cílové PHP nerozumělo. Podporovány jsou všechny verze od PHP 8.0 výše; starší verze PHP DressCode nepodporuje a při pokusu o jejich použití vás na to upozorní.
 
@@ -37,7 +37,7 @@ DressCode zastane hned několik různých úkolů a pro každý z nich nabízí 
 
 - **Coding standard pro existující projekt:** [Formátování kódu krok za krokem |php-code-style] vás provede od prvního spuštění `dresscode init` až po standard, který za vás automaticky hlídá CI.
 - **Novější verze PHP:** [Přechod na novější PHP |upgrading-php] ukáže, jak kód psaný pro PHP 8.0 a novější elegantně přepsat tak, aby využíval novinky každé další verze až po PHP 8.6.
-- **Nové verze knihoven:** [Upgrade kódu krok za krokem |upgrade] vás provede odhadem pracnosti, sestavením plánu i samotným upgradem. Pro [Nette |upgrading-nette], [Symfony |upgrading-symfony], [Laravel |upgrading-laravel] i [Dibi a Texy |upgrading-dibi-and-texy] má DressCode detailní data o změnách mezi verzemi.
+- **Nové verze knihoven:** [Upgrade kódu |upgrade] ukáže, jak kód přepsat na nové API knihoven: jediným příkazem, když už jste verze zvedli, nebo [plánem krok za krokem |upgrade-plan] i s Composerem a testy. Pro [Nette |upgrading-nette], [Symfony |upgrading-symfony], [Laravel |upgrading-laravel] i [Dibi a Texy |upgrading-dibi-and-texy] má DressCode detailní data o změnách mezi verzemi.
 - **Přechod z jiného nástroje:** [Přechod na DressCode krok za krokem |migration] předvede, jak snadno převést konfiguraci z PHP CS Fixeru, PHP_CodeSnifferu nebo Laravel Pintu.
 
 Pokud si ale chcete nástroj nejdřív oťukat v praxi, nikam neodcházejte. V následujících krocích spustíte na svém kódu tři příkazy a žádný z nich nezmění ani bajt.
@@ -74,27 +74,9 @@ Každý nález přesně říká, kde k porušení došlo (řádek a sloupec), co
 
 Hlavička výpisu odpovídá na dvě klíčové otázky, které jinak bývají zdrojem zbytečných nedorozumění: podle čeho se kontroluje (použitá konfigurace a presety) a pro jakou cílovou verzi PHP. Shrnutí na konci navíc prozradí, kolik nálezů by po spuštění `fix` v kódu ještě zůstalo.
 
-Každé hlášení je srozumitelná celá věta vztažená ke konkrétnímu místu. Kdekoliv DressCode něco měří, přesně vyčíslí očekávanou i nalezenou hodnotu (`Expected the statement indented by 12 spaces, 10 spaces found.`). Pokud by oprava jednoho porušení vyvolala porušení jiné, vypíše ho DressCode hned pod původním nálezem s označením `Then also`.
+Každé hlášení je srozumitelná celá věta vztažená ke konkrétnímu místu. Kdekoliv DressCode něco měří, přesně vyčíslí očekávanou i nalezenou hodnotu (`Expected the statement indented by 12 spaces, 10 spaces found.`).
 
-Skutečná síla těchto zpráv se projeví tam, kde jde o víc než jen o kosmetiku. Podívejte se na ukázku kontroly dvou souborů podle rozhodnutí ze sekcí `classes`, `mistakes` a `upgrading` s využitím [typů z PHPStanu |phpstan-types]:
-
-/--pre .[terminal]
-src/Settings.php
-  risky  7:37  The parameter `$name` of `offsetGet()` must be named `$key`, as in `ArrayObject::offsetGet()`.  classes.overridingMethod.parameterName
-               Risky because a call naming the argument `name:` stops working.
-
-src/Users.php
-  error  12:16  The `in_array()` call must pass `$strict = true`.                    mistakes.strictArgument
-  risky  17:16  The `in_array()` call must pass `$strict = true`.                    mistakes.strictArgument
-                Risky because a strict search no longer finds a value of another type.
-  error  22:18  Method `Acme\Mail\Mailer::sendMessage()` is deprecated: use send().  upgrading.declarations.deprecatedMember
-\--
-
-Třída `Settings` přepisuje metodu `offsetGet()` rodičovské třídy `ArrayObject`, ale její parametr pojmenovala `$name`. Samotné PHP to sice povolí, jenže volání `$settings->offsetGet(key: 'theme')`, které u každého `ArrayObject` bez problémů funguje, náhle zhavaruje s chybou `Unknown named parameter $key`. Automatické přejmenování parametru by ale zase rozbilo volání, která už začala používat pojmenovaný argument `name:`. Jde tedy o rizikovou opravu (risky fix), která může změnit chování programu. Nález proto přesně vysvětluje, co konkrétního hrozí.
-
-Ačkoliv obě volání `in_array()` dostala stejnou zprávu, oprava se k nim zachová zcela odlišně. Na řádku 12 typová analýza potvrdila, že se hledá `int` v poli typu `list<int>`; striktní porovnání zde vrátí stejný výsledek, takže `fix` doplní parametr `true` zcela bezpečně a automaticky. Na řádku 17 je však hledaná hodnota obecného typu `mixed`: taková oprava počká, dokud ji [výslovně nepovolíte |configuration#risky-fixes], a do té doby vás pouze informuje, co by změnila.
-
-Metodu `sendMessage()` označila knihovna anotací `@deprecated use send()`. Nález toto doporučení cituje a automatický `fix` kód rovnou přepíše na `send()`.
+Nálezy se přitom neomezují na vzhled. DressCode ohlásí i místa, která jsou nejspíš chybou, a opravu, která by mohla změnit chování programu, takzvanou [rizikovou opravu (risky fix) |configuration#risky-fixes], provede až s vaším svolením. Jak takové nálezy vypadají, ukazuje [úvodní stránka |@home#Víc než vzhled kódu].
 
 Exit kód je `0`, pokud je kód zcela čistý, a `1`, jakmile se objeví jakýkoliv nález. Stejný příkaz tak můžete okamžitě nasadit do [průběžné integrace |continuous-integration]. Přehled všech pěti exit kódů najdete v [referenci příkazové řádky |cli#Exit kódy].
 
@@ -161,7 +143,7 @@ Error: No `dresscode.neon` or `dresscode.php` found in `/var/www/shop` or above 
 
 Mohli byste sice přepínač `--use perCs` zopakovat a nechat DressCode zapsat vše, co ukázal diff. Jenže v projektu s vlastním zavedeným stylem by to znamenalo obří nepřehledný diff, který v týmu nikdo neschválí. Daleko lepším prvním krokem je příkaz `dresscode init`: ten detailně zanalyzuje váš stávající kód, vybere k němu nejbližší standard, do `dresscode.neon` uloží jen reálné odchylky vašeho projektu a první automatickou opravu udrží v bezpečném rozsahu několika málo souborů. Celý proces vás provede stránka [Formátování kódu krok za krokem |php-code-style], od úvodního měření až po standard hlídaný v CI.
 
-Jediným příkazem, který do souborů zapisuje i bez konfiguračního souboru, je `dresscode upgrade today`. Ten po aktualizaci knihoven v Composeru přepíše kód na jejich nové API a může si to dovolit proto, že formátování a styl nechává zcela netknuté (více na stránce [Upgrade kódu krok za krokem |upgrade]).
+Jediným příkazem, který do souborů zapisuje i bez konfiguračního souboru, je `dresscode upgrade today`. Ten po aktualizaci knihoven v Composeru přepíše kód na jejich nové API a může si to dovolit proto, že formátování a styl nechává zcela netknuté (více na stránce [Upgrade kódu |upgrade]).
 
 
 Kam dál
@@ -169,8 +151,7 @@ Kam dál
 
 - [Formátování kódu krok za krokem |php-code-style], pokud chcete zavést coding standard do existujícího projektu a první commit udržet co nejmenší.
 - [Jak DressCode funguje |how-it-works], pokud vás zajímá vnitřní architektura a důvody, proč se nástroj chová právě takto.
-- [Upgrade kódu krok za krokem |upgrade], [Přechod na novější PHP |upgrading-php] a [Typy z PHPStanu |phpstan-types], pokud chcete kód nejen formátovat, ale i průběžně modernizovat.
-- [Přechod na DressCode krok za krokem |migration], pokud dnes používáte PHP CS Fixer, PHP_CodeSniffer nebo Slevomat.
+- [Typy z PHPStanu |phpstan-types], co všechno DressCode zvládne, když zná typy vašeho kódu.
 - [Konfigurace |configuration], kompletní přehled možností konfiguračního souboru včetně [vyzkoušení jednoho rozhodnutí na jeden běh |configuration#Jedno rozhodnutí na jeden běh: --set a --only].
 - [Integrace |integrations], jak zapojit kontrolu stylu do CI, Git hooků, editoru nebo k AI agentům.
 

@@ -10,7 +10,7 @@ What to Run in CI
 
 `check`, not `fix`. CI should say whether the code is fine, and the exit code `1` on a violation fails the job; the developer makes the fix locally, where they can see it. If you want CI to offer the fix as well, run `fix` followed by `git diff --exit-code`. The diff in the output of the job is then exactly what the developer should commit.
 
-The exit codes are fixed. `0` means the code is clean. `1` means a violation, a file that cannot be parsed, or more warnings than `--max-warnings` allows. `2` means that a file failed (an exception in a rule, rules stuck in a loop). `3` means an error on the command line or in the configuration. On `2` and `3`, the job should fail more loudly than on `1`: `3` means that nothing was checked, and `2` means that some file was not checked.
+The exit codes are fixed. `0` means the code is clean. `1` means a violation, a file that cannot be parsed, or more warnings than `--max-warnings` allows. `2` means that a file failed (an exception in a rule, rules stuck in a loop). `3` means an error on the command line or in the configuration. On `2` and `3`, the job should fail more loudly than on `1`: `3` means that nothing was checked, and `2` means that some file was not checked. The whole scale is described in [Command Line |cli#Exit Codes].
 
 
 GitHub Actions
@@ -35,7 +35,7 @@ jobs:
 
 Nothing else is needed: DressCode recognizes that it is running as a step of GitHub Actions and switches the output to the `github` format, in which every violation is an annotation. In the pull request, each annotation then appears right at its line, with the message and the decision path. In the output of the job, each violation comes with the file, the line and the decision, and the output ends with a summary.
 
-Colors are off automatically because the output does not go to a terminal; you do not have to write `--no-color`. And watch the PHP version on the runner: DressCode itself needs PHP 8.4 to 8.6, even when it checks a project written for an older version.
+Pin the version of DressCode, either with a version number in `create-project` (`dresscode/dresscode:1.3.0`) or through `composer.lock`: a new decision of a set or a standard in a minor version can start reporting something that used to pass, and that should happen during an update you make on purpose, not in someone else's pull request. And watch the PHP version on the runner: DressCode itself needs PHP 8.4 to 8.6, even when it checks a project written for an older version.
 
 
 GitLab, Jenkins and Others
@@ -53,7 +53,20 @@ dresscode:
     paths: [dresscode.xml]
 ```
 
-Neither of these formats changes its structure in a minor version; the `json` document also carries the version of its format in the key `version` and the exit code of the run in `summary.exitCode`. The `console` and `github` formats, on the other hand, are for people and may change.
+Neither of these formats changes its structure in a minor version, see [Backward Compatibility |compatibility#Output for Tools]. The `console` and `github` formats, on the other hand, are for people and may change.
+
+
+Projects with Types
+===================
+
+In a project with `typeAnalysis: phpstan`, both DressCode and PHPStan belong among the development dependencies, so that DressCode asks the version of PHPStan and the configuration the project works with ([Types from PHPStan |phpstan-types#enable]). The job then installs the dependencies of the project and runs DressCode from `vendor/bin`:
+
+```yaml
+      - run: composer install --no-progress
+      - run: vendor/bin/dresscode check --no-cache
+```
+
+Run the check with types without the cache, as in the example. The cache remembers a file by its content, so it does not notice that a method in another file gained a `@deprecated` annotation or that `phpstan.neon` changed. The next section therefore applies to a project without types.
 
 
 Cache Between Runs
@@ -73,12 +86,12 @@ cacheDir: temp/dresscode-cache
           restore-keys: dresscode-
 ```
 
-`actions/cache` does not save a cache again at the end of the job when its key already exists, so with a fixed key the cache would stay stuck at the state of the first run. That is why the key contains the commit: every run saves a new cache, and `restore-keys` restores the newest one at the start of the next run. DressCode also has its own cache key. It includes a fingerprint of the configuration, of the versions of the installed packages, and of the modification times of the files with the project's own rules and presets. So after you change the configuration, update the tool or edit your own rule, the files are checked again automatically.
+`actions/cache` does not save a cache again at the end of the job when its key already exists, so with a fixed key the cache would stay stuck at the state of the first run. That is why the key contains the commit: every run saves a new cache, and `restore-keys` restores the newest one at the start of the next run. After you change the configuration, update the tool or edit your own rule, the files are checked again automatically, see [Cache and Parallel Runs |cli#Cache and Parallel Runs].
 
 
-Parallel Runs and Versions
-==========================
+Parallel Runs
+=============
 
-The number of worker processes follows the number of CPUs of the runner, so on a two-core runner there is nothing to tune; where a runner shares its machine with other jobs, `--jobs 4` keeps the run from taking every core. Pin the version of DressCode, either through `composer.lock` or with a version number in `create-project`: a new decision of a set or a standard in a minor version can start reporting something that used to pass, and that should happen during an update you make on purpose, not in someone else's pull request.
+The number of worker processes follows the number of CPUs of the runner, so on a two-core runner there is nothing to tune. Where a runner shares its machine with other jobs, `--jobs 4` keeps the run from taking every core.
 
 {{maintitle: PHP Code Style in CI: GitHub Actions and GitLab}}

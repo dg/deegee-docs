@@ -41,9 +41,31 @@ You can read it right out loud: class opening braces go on the next line, concat
 
 The first rule adds a leading backslash to functions optimized by the compiler and strips it from the rest; the second rule then converts every backslash into an import statement. Over the exact same file, both tools arrive at the same code, except with PHP CS Fixer you have to derive the result yourself instead of reading a straightforward sentence. PHP_CodeSniffer with Slevomat can add a backslash to optimized functions or import all global functions across the board, but it cannot import only the optimized ones.
 
-Yet you never have to write hundreds of configuration keys. The entire setup hinges on just two simple questions: **What should your code look like?** That is determined by the standard: you simply pick exactly one by name. **And what else do you want from your code besides its appearance?** That's where [sets |configuration#Standards and Sets] come in: `modernizations`, `deprecations`, `cleanup`, `correctness`, `types`, and `compilerOptimizations`. A set represents an intent rather than a static list of keys, and it grows over time: whenever DressCode learns a new modernization, the set delivers it automatically without touching a single line of your configuration. For individual tweaks, a specific key is all you need, and wherever you want to bypass even the standard's default behavior, just write `keep`.
+Yet you never have to write hundreds of configuration keys. The entire setup hinges on just two simple questions: **What should your code look like?** That is determined by the standard, which you pick by name. **And what else do you want from your code besides its appearance?** That's where [sets |configuration#Standards and Sets] come in, such as `modernizations` or `cleanup`. A set represents an intent rather than a list of keys: whenever DressCode learns a new modernization, the set delivers it without touching a single line of your configuration. Key by key, you then write only where your code differs from the standard.
 
-You'll see the full decision path (such as `braces.position.class`) directly next to every finding in the terminal. You instantly know what to configure, what to suppress, or what to inspect in detail using `dresscode explain braces.position.class`. And before writing a key into your configuration permanently, you can test it on a single run: `dresscode fix --set hygiene.is_null=forbidden` adds it temporarily on top of your configuration and its changes come out already formatted, ready for a single, focused commit. An overview of all sections and their keys is available on the [Rules |decisions/@home] page.
+You'll see the full decision path (such as `braces.position.class`) directly next to every finding in the terminal. You instantly know what to configure, what to suppress, or what to inspect in detail using `dresscode explain braces.position.class`. An overview of all sections and their keys is available on the [Rules |decisions/@home] page.
+
+
+More Than How the Code Looks
+----------------------------
+
+Findings go well beyond whitespace and braces. Here are two files checked against decisions from the `classes`, `mistakes`, and `upgrading` sections, backed by [types from PHPStan |phpstan-types]:
+
+/--pre .[terminal]
+src/Settings.php
+  risky  7:37  The parameter `$name` of `offsetGet()` must be named `$key`, as in `ArrayObject::offsetGet()`.  classes.overridingMethod.parameterName
+               Risky because a call naming the argument `name:` stops working.
+
+src/Users.php
+  error  12:16  The `in_array()` call must pass `$strict = true`.                    mistakes.strictArgument
+  risky  17:16  The `in_array()` call must pass `$strict = true`.                    mistakes.strictArgument
+                Risky because a strict search no longer finds a value of another type.
+  error  22:18  Method `Acme\Mail\Mailer::sendMessage()` is deprecated: use send().  upgrading.declarations.deprecatedMember
+\--
+
+The `Settings` class overrides `ArrayObject::offsetGet()` and names its parameter `$name`. While PHP allows this, a call like `$settings->offsetGet(key: 'theme')`, which works on every `ArrayObject`, will suddenly fail with `Unknown named parameter $key`. Renaming the parameter would break calls that already use `name:`. That makes it a risky fix (a fix that can alter runtime behavior), so the finding tells you exactly what is at risk.
+
+Both `in_array()` calls produce the same message, but the fix treats them differently. On line 12, type analysis confirms that an `int` is searched for in a `list<int>`, so `fix` adds `true` on its own. On line 17, the value searched for is `mixed`, and the fix waits until you [explicitly permit it |configuration#risky-fixes]. The library marked the method `sendMessage()` with `@deprecated use send()`, and `fix` rewrites the call to `send()` right away.
 
 
 Not Just Style: Upgrading Code Too
@@ -59,7 +81,19 @@ return trim(strtolower(strip_tags($title)));
 return $title |> strip_tags(...) |> strtolower(...) |> trim(...);
 ```
 
-Upgrading third-party libraries works just as smoothly (see [Upgrading Code |upgrade]): bump dependency versions in `composer.json`, run `dresscode upgrade today`, and your code is rewritten to the new API required by the updated packages, with zero configuration and without disrupting your existing code style. For Nette, the `dresscode/upgrade-nette` package provides migrations across all libraries (mostly from version 3.0 up to the latest release): handling renamed classes, constants, methods, and parameters. Dedicated upgrade packages are also available for Symfony, Laravel, Dibi, and Texy. DressCode consults PHPStan for precise type analysis, ensuring deprecated APIs are rewritten based on what a variable actually is. Formatting and version upgrades are handled by a single tool, with one unified configuration and a clean, predictable diff.
+Upgrading third-party libraries works just as smoothly (see [Upgrading Code |upgrade]): bump dependency versions in `composer.json`, run `dresscode upgrade today`, and your code is rewritten to the new API required by the updated packages, with zero configuration and without disrupting your existing code style:
+
+```php .[before]
+$image->resize(300, 200, Image::FIT | Image::SHRINK_ONLY);
+file_put_contents($this->file, Json::encode($products, Json::PRETTY));
+```
+
+```php .[after]
+$image->resize(300, 200, Image::OrSmaller | Image::ShrinkOnly);
+file_put_contents($this->file, Json::encode($products, pretty: true));
+```
+
+For Nette, the `dresscode/upgrade-nette` package provides migrations across all libraries (mostly from version 3.0 up to the latest release): handling renamed classes, constants, methods, and parameters. Dedicated upgrade packages are also available for Symfony, Laravel, Dibi, and Texy. DressCode consults PHPStan for precise type analysis, ensuring deprecated APIs are rewritten based on what a variable actually is. Formatting and version upgrades are handled by a single tool, with one unified configuration and a clean, predictable diff.
 
 
 Coverage of PER Coding Style and PSR-12
@@ -82,34 +116,15 @@ Measured in October 2026 on PHP 8.5 against PHP CS Fixer 3.95, PHP_CodeSniffer 4
 
 Where to Go Next
 ----------------
-- [Getting Started with DressCode |getting-started] installation, your first check, and automated fixes.
-- [Configuration |configuration] choosing standards, sets, and keys that describe your code.
-- [Upgrading to a Newer PHP |upgrading-php] how DressCode rewrites code from PHP 8.0 all the way to PHP 8.6.
-- [Upgrading Code |upgrade] migrating Nette, Symfony, Laravel, and other libraries with a single command.
-- [Switch to DressCode Step by Step |migration] a practical migration guide if you currently use PHP CS Fixer, PHP_CodeSniffer, or Slevomat.
+- [Getting Started with DressCode |getting-started] installation, your first check, and a preview of the fix without changing a single file.
+- [Format Your Code Step by Step |php-code-style] how to adopt a coding standard in an existing project with a small first commit.
+- [Switch to DressCode Step by Step |migration] a practical migration guide if you currently use PHP CS Fixer, PHP_CodeSniffer, Nette Coding Standard, or Laravel Pint.
+- [Upgrading Code |upgrade] migrating Nette, Symfony, Laravel, and other libraries, and [upgrading to a newer PHP |upgrading-php] from 8.0 all the way to 8.6.
+- [How DressCode Works |how-it-works] a syntax tree instead of tokens, decisions instead of rules, and a glossary of terms.
+- [Configuration |configuration] and [Rules |decisions/@home] standards, sets, and every key with its values and examples.
+- [Integrations |integrations] style checks in CI, in a Git hook, in your editor, and for AI agents.
+- [Functions and Constants in Namespaces |php-functions-in-namespaces] why `strlen()` is ambiguous in a namespace and how DressCode resolves the doubt, and [faster function calls |php-compiler-optimizations], what PHP can shortcut and what stops it.
 - [How to Write Your Own Rule |custom-rule] how to build a custom check in an afternoon when the catalogue is missing one.
-
-
-Usage
------
-- [How DressCode Works |how-it-works] a syntax tree instead of tokens, decisions instead of rules, passes, and a glossary of terms.
-- [Types from PHPStan |phpstan-types] what DressCode can do when backed by PHPStan's type analysis in your codebase.
-- [Functions and Constants in Namespaces |php-functions-in-namespaces] why `strlen()` is ambiguous in a namespace and how DressCode eliminates the doubt.
-- [Faster Calls When the Name Is Certain |php-functions-in-namespaces#Faster Calls When the Name Is Certain] compiler shortcuts in PHP, what disables them, and how to write code that runs at full speed.
-- [Suppressions and the Baseline |suppressions-and-baseline] exceptions on a line, in a file, or for a path, and a baseline for existing debt.
-- [Command Line |cli] commands, options, output formats, and exit codes.
-
-
-Reference
----------
-- [Rules |decisions/@home] all sections and their configuration keys, complete with values and examples.
-- [Standards and Sets |php-coding-standards] exactly what PER Coding Style, PSR-12, Nette, Symfony, and the six built-in sets prescribe.
-
-
-Extensions and Integrations
----------------------------
-- [Extending DressCode |extending], [your own rule |custom-rule], [a rule in detail |rule-contract], [whitespace rules |whitespace-rules], [testing rules |testing-rules].
-- [Continuous integration |continuous-integration], [AI agents |ai-agents], [Git hooks |git-hooks].
 - [PhpSyntax |phpsyntax:] the standalone lossless syntax tree library powering DressCode.
 
 {{maintitle: DressCode: PHP Code Style Checker, Fixer and Code Upgrader}}

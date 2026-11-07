@@ -4,7 +4,7 @@ Switch to DressCode Step by Step
 .[perex]
 Your existing suppression comments continue to work with legacy rule names, and a single command converts your configuration while highlighting anything that couldn't be carried over automatically. Here is a practical, step-by-step guide for migrating from PHP CS Fixer, PHP_CodeSniffer, or Laravel Pint, along with an honest look at what will be different.
 
-[Getting Started |getting-started#Installation] covers installation, and the command line reference lists every option for [`migrate` |cli#migrate], [`init` |cli#init], and [`fix` |cli#fix].
+[Getting Started |getting-started#Installation] covers installation. The pages [PHP CS Fixer |from-php-cs-fixer], [PHP_CodeSniffer and Slevomat |from-phpcs], [Nette Coding Standard |from-nette-coding-standard] and [Laravel Pint |from-laravel-pint] add what is specific to the tool you use today.
 
 
 Why It Doesn't Hurt
@@ -12,9 +12,9 @@ Why It Doesn't Hurt
 
 I know how it goes: you have a configuration refined over years of fine-tuning, hundreds of `phpcs:ignore` comments scattered throughout your codebase, perhaps a few custom sniffs, and a CI pipeline relying on it all. Nobody switches tools just because a new one looks shiny. You switch when the transition is painless, and that is exactly how DressCode was designed.
 
-Crucially, **DressCode maps each of its decisions directly to the corresponding rules of PHP CS Fixer, PHP_CodeSniffer, and Slevomat.** When you run `dresscode catalogue`, you see these covered rules listed in parentheses marked `covers`. Everything else follows from this: your existing comments in code continue to work without changes, and your configuration can be translated automatically. In your new configuration and on the command line, however, you use clean, unified DressCode decision paths, such as `imports.unused`.
+In DressCode, your configuration does not list rules and their options; it holds **decisions**: a key that names a thing in the code and a value that says how it is written, such as `imports.unused: forbidden`. And **DressCode knows exactly which rules of PHP CS Fixer, PHP_CodeSniffer, and Slevomat each of its decisions covers.** When you run `dresscode catalogue`, you see these rules listed with each decision in parentheses marked `covers`. Everything else follows from this: your existing comments in code keep working without changes, and your configuration can be translated automatically.
 
-The migration takes three safe, predictable steps, and you can undo any of them at any time. Two subcommands of `dresscode migrate` take care of the second and third steps.
+The switch takes five steps, and you can undo any of them at any time: a first check without touching the code, translating the configuration, the first fix, an optional rewrite of the comments, and finally replacing the old tool in CI and hooks. Subcommands of `dresscode migrate` take care of translating the configuration and rewriting the comments.
 
 
 1. Leave the Code as It Is
@@ -28,22 +28,25 @@ dresscode check src tests --use perCs
 
 There is one important behavioral difference you should know: in PHP_CodeSniffer, a `phpcs:ignore` on a line of its own suppressed only the single line immediately following it. DressCode interprets it like its own native `dresscode:ignore` directive, meaning a standalone line comment applies to the entire next statement, even if it spans multiple lines. As a result, a standalone suppression comment may cover more code than it used to.
 
-Because you don't have a configuration file yet, and DressCode checks nothing without instructions, the `--use` option supplies the base standard. The value `perCs` selects [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/]. If you currently use `@PER-CS` or `PSR12`, you will see familiar results. If you had heavily customized rules beyond the base standard, you will see discrepancies that the next step resolves.
+Because you don't have a configuration file yet, and DressCode checks nothing without one, the `--use` option supplies the standard. Choose the one that matches what you use today: `perCs` is [PER Coding Style 3.1 |https://www.php-fig.org/per/coding-style/] (the `@PER-CS` set in PHP CS Fixer), `psr12` is PSR-12, `symfony` is the `@Symfony` set, `laravel` is the default style of Pint, and `nette` is the Nette Coding Standard. If you had heavily customized rules beyond the standard, you will see discrepancies that the next step resolves.
 
 
 2. Translate the Configuration .[#migrate-config]
 =================================================
 
-The `migrate config` command automatically locates your project's configuration (whether it belongs to PHP_CodeSniffer, PHP CS Fixer, or Laravel Pint) and writes its DressCode equivalent, including checked paths, directly to `dresscode.neon` (if you are migrating from a setup without a configuration file, let DressCode measure your existing code instead using [`dresscode init` |generate-configuration]):
+The `migrate config` command automatically locates your project's configuration, whether it belongs to PHP_CodeSniffer, PHP CS Fixer, or Laravel Pint, and writes its DressCode equivalent, including the checked paths, to `dresscode.neon`:
 
 ```shell
 dresscode migrate config
 dresscode migrate config conf/phpcs.xml --output dresscode.php
 ```
 
-The command scans standard locations to find the configuration your project actually executes. It proceeds methodically: first checking `composer.json` scripts to see if a command runs a formatter with an explicit configuration file (e.g. `phpcs --standard=conf/phpcs.xml`, even through nested script aliases like `@lint`); next checking the configuration of any formatter required in your dependencies; and finally checking files in the project root (preferring `.php-cs-fixer.php` over `.php-cs-fixer.dist.php`). If multiple candidates exist, it asks interactively in the terminal which one to use; outside a terminal, it selects the first and lists the alternatives. You can also specify an exact path as an argument. The `--output` option sets the target destination; the file format follows the `.neon` or `.php` extension, and `migrate config` will never overwrite an existing file. Before saving, it reads the generated file the way every run reads it to ensure it produces the translated decisions; `--dry-run` displays the output in the console without touching the disk. The file belongs in your project root, as all paths it contains are relative to that root.
+It picks the configuration your project actually uses, and when it finds several candidates, it asks; you can pass the path of another file as an argument. It never overwrites an existing file, and with `--dry-run` it only prints the result. If you had no configuration, or used a standard without customizations, let DressCode measure one from your code with [`dresscode init` |generate-configuration] instead.
 
-While `phpcs.xml` is standard XML and `pint.json` is JSON (both parsed natively without dependencies), `.php-cs-fixer.dist.php` is an executable PHP script that returns a configuration instance. When `migrate config` finds this file by itself, it prompts for permission before running it; outside an interactive terminal, it will not execute it and merely prints the recommended command. Because it runs the script in an isolated process using your project's autoloader, PHP CS Fixer must still be installed in your project (DressCode itself can run from anywhere, as explained on the [PHP CS Fixer |from-php-cs-fixer#Before You Start] page). For this reason, always translate your configuration before removing your legacy formatter. The Pint preset becomes the standard, and the rules in its `rules` key, which are rules of PHP CS Fixer, are translated just as for PHP CS Fixer. A preset Pint does not have is an error, and a key of `pint.json` that is not carried over, such as `notPath`, is named in the warnings.
+.[note]
+It looks for candidates in this order: scripts in `composer.json` that run a formatter with an explicit configuration file (e.g. `phpcs --standard=conf/phpcs.xml`, even through nested script aliases like `@lint`), the configuration of any formatter required in your dependencies, and files in the project root (preferring `.php-cs-fixer.php` over `.php-cs-fixer.dist.php`). Outside a terminal, it selects the first and lists the others. The file format follows the `.neon` or `.php` extension of the file in `--output`. Before saving, it reads the generated file the way every run reads it, to make sure it produces the translated decisions. The file belongs in your project root, as all paths it contains are relative to that root.
+
+Translate a PHP CS Fixer configuration before you remove the old tool from the project: it is a PHP script, and `migrate config` runs it with the project's autoloader, and only with your permission in a terminal, see [PHP CS Fixer |from-php-cs-fixer#Before You Start]. `phpcs.xml` and `pint.json` are read even when their tool is no longer installed.
 
 From a `phpcs.xml` file that checks `src` and `tests`, builds on `PSR12`, enforces a 100-character line limit, flags unused imports, and requires function documentation, DressCode produces this clean `dresscode.neon`:
 
@@ -74,15 +77,28 @@ Read 4 rules; set 4 decisions and 1 preset, the rules translated; `dresscode ini
 5 phpcs suppression comments: `dresscode migrate suppressions` rewrites them.
 \--
 
-These diagnostic lines are just as valuable as the configuration itself: they highlight explicit choices you need to make. In this example, you learn that DressCode preserves imports referenced solely by docblocks, whereas the original sniff without `searchAnnotations` deleted them. Warnings about partially translated rules are also saved directly as comments alongside the decision in the generated file, ensuring they don't disappear when you close your terminal. If `migrate config` issues any warnings, it exits with code 1, even though the file was written successfully. Rules without a direct counterpart are either ones you don't actually need, or ones you can easily [write yourself |porting-rules]. Generic sets like `@PSR12` or `PSR12` are mapped to standards; sets without a direct equivalent (such as `@PhpCsFixer`) trigger a recommendation to start from the `perCs` or `psr12` standard. The summary also reminds you of the alternative path: `dresscode init` measures your code's actual conventions rather than translating legacy rules. With `--format json`, the output is delivered as structured data containing the version in `version`, the project root in `root`, the configuration, the file it was written to, counts, warnings, and unmapped rules, and the command asks no questions, just as outside a terminal.
+These diagnostic lines are just as valuable as the configuration itself: they highlight explicit choices you need to make. In this example, you learn that DressCode preserves imports referenced solely by docblocks, whereas the original sniff without `searchAnnotations` deleted them. Warnings about partially translated rules are also saved directly as comments alongside the decision in the generated file, ensuring they don't disappear when you close your terminal. Rules without a direct counterpart are either ones you don't actually need, or ones you can easily [write yourself |porting-rules].
 
 A single legacy rule often maps to several granular decisions: for example, `Generic.Files.LineLength` with `absoluteLineLimit` yields `file.longLines`, `file.lineLength`, and `file.lineLengthExcept`. Options without a DressCode counterpart are clearly reported. Rules explicitly disabled in your legacy configuration are assigned the value `keep`. However, if another rule from the same tool maps to that same decision, the command leaves it untouched with a warning, since it cannot know whether one of those rules still applies. Review the generated file. It is usually pleasantly concise.
 
+.[note]
+If `migrate config` issues any warnings, it exits with code 1, even though the file was written successfully. With `--format json`, it prints a structured document with the version in `version`, the project root in `root`, the configuration, the file it was written to, counts, warnings, and unmapped rules; in this mode it asks no questions, just as outside a terminal.
 
-3. Rewrite the Comments
-=======================
 
-Legacy comments continue to work, but native decision paths are shorter, consistent, and much easier to read. The summary from `migrate config` already told you how many directives exist across your codebase. A single command handles the migration:
+3. The First Fix
+================
+
+Once your configuration is in place, run `dresscode fix` and commit the result in a dedicated commit with no other changes. Even when rules appear to do "the exact same thing," automated fixes can differ in whitespace details from legacy formatters. Reviewing thousands of lines individually makes little sense; what matters is having a clean, isolated commit that contains nothing else.
+
+In large codebases where a single massive diff is impractical, clean up incrementally by set or section: run `dresscode fix --only cleanup` or `dresscode fix --only blankLines` and commit each step separately. A final full `fix` will then polish the rest (see [Cleaning Up Old Code Step by Step |configuration#Cleaning Up Old Code Step by Step]).
+
+Anything that `fix` cannot resolve automatically will remain in the output. If there are more such findings than you can address today, run `dresscode baseline` to record them in a [baseline |suppressions-and-baseline#baseline], and only newly introduced violations will be reported.
+
+
+4. Rewrite the Comments .[#comments]
+====================================
+
+This step is optional: legacy comments keep working. But native decision paths are shorter, consistent, and much easier to read. The summary from `migrate config` already told you how many directives exist across your codebase. A single command handles the rewrite:
 
 ```shell
 dresscode migrate suppressions src tests
@@ -98,13 +114,18 @@ Widened    src/Legacy.php:10: a `dresscode:ignore` on a line of its own covers t
 
 This output provides an inventory of orphaned suppressions: directives referencing legacy rules that DressCode does not recognize and which therefore suppress nothing. Because these comments could not be migrated, the command exits with code 2. If only widened suppressions are present on the `Widened` line, the exit code is 1, indicating that the files merely warrant your review.
 
-Only genuine directives followed immediately by a newline or comment boundary are rewritten; casual mentions of `phpcs:ignore` inside regular comments remain untouched. Files with syntax errors or files modified during the rewrite process are skipped, noted on the `Skipped` line, and trigger exit code 2. With `--dry-run`, you can preview all replacements as a unified diff without writing changes to disk. With `--format json`, the command prints the counts, the diffs of a run with `--dry-run`, and what it kept, widened and skipped, as data.
+With `--dry-run`, the command previews all replacements as a unified diff without writing changes to disk.
+
+.[note]
+Only genuine directives followed immediately by a newline or comment boundary are rewritten; casual mentions of `phpcs:ignore` inside regular comments remain untouched. Files with syntax errors or files modified during the rewrite process are skipped, noted on the `Skipped` line, and trigger exit code 2. With `--format json`, the command prints the counts, the diffs of a run with `--dry-run`, and what it kept, widened and skipped, as data.
 
 
-The First Fix
-=============
+5. Replace the Old Tool in CI and Hooks
+=======================================
 
-Once your configuration is in place, run `dresscode fix` and commit the result in a dedicated commit with no other changes. Even when rules appear to do "the exact same thing," automated fixes can differ in whitespace details from legacy formatters. Reviewing thousands of lines individually makes little sense; what matters is having a clean, isolated commit that contains nothing else. In large codebases where a single massive diff is impractical, clean up incrementally by set or section: run `dresscode fix --only cleanup` or `dresscode fix --only blankLines` and commit each step separately. A final full `fix` will then polish the rest (see [Cleaning Up Old Code Step by Step |configuration#Cleaning Up Old Code Step by Step]). Anything that `fix` cannot resolve automatically will remain in the terminal output. If there are more manual findings than you can address today, run `dresscode baseline` to record them in a [baseline |suppressions-and-baseline#baseline], and only newly introduced violations will be reported.
+Finally, replace the old command wherever it ran: in the scripts of `composer.json`, in CI, in the Git hook, and in format on save in your editor. Where `phpcs` or `php-cs-fixer fix --dry-run` ran, run `dresscode check`, and where `phpcbf`, `php-cs-fixer fix` or `pint` ran, run `dresscode fix`. If you combined PHP_CodeSniffer and PHP CS Fixer, two steps in CI become one. [Integrations |integrations] shows how to set DressCode up in each of these places.
+
+Watch out for scripts that inspect the exit code: DressCode returns `0` for clean code, `1` for findings to deal with, `2` for a failure on some file, and `3` for an error on the command line or in the configuration (see [Command Line |cli#Exit Codes]). PHP_CodeSniffer and PHP CS Fixer use their own scales, so such a script needs a minor adjustment. Then you can uninstall the old tool from the project.
 
 
 What Will Be Different
@@ -115,14 +136,10 @@ A migration guide that promises a zero-friction transition loses your trust the 
 - **Decisions instead of rules.** Your configuration does not list rules and their options; it describes how your code should look: `blankLines.aroundMethods: 1` or `imports.unused: forbidden`. Which specific rules handle the execution is DressCode's business (see [Decisions Instead of Rules |how-it-works#Decisions Instead of Rules]). The complete catalogue is available on the [Rules |decisions/@home] page.
 - **Priority numbers do not exist.** If your previous results depended on carefully orchestrating the execution order of fixers, you may see a different shape of code in some files. DressCode executes rules in passes until the code settles (see [No Priorities: Rules Run Until the Code Settles |how-it-works#No Priorities: Rules Run Until the Code Settles]).
 - **Some rules have no counterpart.** Both `migrate config` and `migrate suppressions` will flag them explicitly. There are quite a few of them, primarily granular documentation sniffs and rules where the tools overlap with each other.
-- **Risky rules are not inherently risky here.** Fixers that PHP CS Fixer enabled only upon explicit request (because it could not distinguish safe from unsafe cases on a token stream) are resolved here using the syntax tree, allowing safe occurrences to be fixed automatically. Edits that might alter runtime behavior are reported as a [risky fix |configuration#risky-fixes] and require permission via `fixRisky` or `--fix-risky`. Decisions that change behavior by their very nature (`expressions.comparison.loose: forbidden`, converting `==` to `===`) remain entirely under your explicit control.
-- **Exit codes are different**: `0` for clean code, `1` for actionable violations, `2` for file processing failures, and `3` for errors on the command line or in the configuration. The full scale, the same for every command, is detailed in the [Command Line Reference |cli#Exit Codes]. Because PHP_CodeSniffer and PHP CS Fixer use their own scales, CI scripts inspecting exit codes will need a minor adjustment.
-- **One tool instead of two.** If you combined CodeSniffer and Fixer, you had two configurations and two CI stages. DressCode unifies both jobs under one engine.
-- **Preview decisions without touching configuration.** Running `dresscode check --set controlFlow.elseAfterReturn=forbidden --only controlFlow.elseAfterReturn --diff` shows the exact diff a single decision would produce, and `dresscode fix --set …` applies it on top of your existing configuration, formatting changes according to your project standard (see [One Decision for One Run |configuration#One Decision for One Run: --set and --only]).
-- **You configure intent rather than rule lists.** Configuration rests on two pillars: the standard defines visual appearance, and [sets |configuration#Standards and Sets] define what else you require from your code. There are exactly six curated sets, so adding `cleanup` to `use` will never mutate into twenty lines of rule names as the tool evolves.
-- **Code modernization is built in.** DressCode not only formats your code, but also upgrades it to modern PHP syntax and updates third-party library APIs, all in the same run and adhering to your chosen standard. You no longer need separate migration tools with independent configurations (see [Upgrading to a Newer PHP |upgrading-php] and [Upgrading Code |upgrade]).
+- **A standalone `phpcs:ignore` covers the whole statement**, not just the next line, as the [first step |#1. Leave the Code as It Is] describes.
+- **Risky fixes are permitted per decision.** What PHP CS Fixer enabled only on explicit request, because it could not tell a safe case from an unsafe one on a token stream, DressCode fixes by itself where it is safe. An edit that might alter runtime behavior is reported as a [risky fix |configuration#risky-fixes] and is made only after you permit it in `fixRisky` or with `--fix-risky`.
 
-Tool-specific guides: [PHP CS Fixer |from-php-cs-fixer], [PHP_CodeSniffer and Slevomat |from-phpcs], [Nette Coding Standard |from-nette-coding-standard], [Laravel Pint |from-laravel-pint].
+One more thing: DressCode not only formats your code, it can also rewrite it to a newer PHP and to the new API of your libraries in the same run, so you need no separate tool with its own configuration to upgrade your code (see [Upgrading to a Newer PHP |upgrading-php] and [Upgrading Code |upgrade]).
 
 {{maintitle: Migrate to DressCode from PHP CS Fixer, PHP_CodeSniffer or Pint}}
 {{description: Switch to DressCode from PHP CS Fixer, PHP_CodeSniffer or Laravel Pint: your suppression comments keep working, and one command converts the configuration.}}

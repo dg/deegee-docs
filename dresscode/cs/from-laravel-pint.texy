@@ -13,7 +13,6 @@ Pint stojí na PHP CS Fixeru a jeho výchozí preset `laravel` je seznam fixerů
 Co dostanete navíc:
 
 - **Upgrade v témže běhu.** Sada `modernizations` přepíše kód na konstrukce novější verze PHP, `deprecations` opraví, co PHP zavrhlo, a balíček `dresscode/upgrade-laravel` přepíše API, které Laravel mezi verzemi změnil. Viz [Přechod na novější PHP |upgrading-php] a [Laravel |upgrading-laravel].
-- **Jména tříd v phpDocu importuje v každém tagu**, i v `@template` a `@method`, kde je Pint nechává celá.
 - **Výstup pro AI agenty a editory.** Formát `agent` řekne agentovi, co se v souboru po jeho editaci změnilo, aby mu další editace neselhala. Viz [AI agenti |ai-agents].
 
 Pint má jednu výhodu, které se DressCode nevyrovná: přichází s Laravelem. Každá nová aplikace v Laravelu ho má v `require-dev`, takže tam je dřív, než kdokoli cokoli rozhodne, kdežto DressCode si [nainstalujete |getting-started#Instalace] sami.
@@ -22,19 +21,23 @@ Pint má jednu výhodu, které se DressCode nevyrovná: přichází s Laravelem.
 Převod konfigurace
 ==================
 
-V projektu, který vyžaduje `laravel/pint` nebo má `pint.json`, napíše [`dresscode init` |generate-configuration] standard odpovídající presetu Pintu sám; u výchozího `laravel` vypíše:
+Kterou cestou jít, záleží na tom, co je ve vašem `pint.json`.
 
-/--pre .[terminal]
-Standard   laravel (the style of Laravel Pint), Laravel Pint formats the project in this style
-\--
-
-Konfigurace napsaná ručně je jeden řádek:
+**Bez `pint.json` nebo jen s presetem** stačí jeden řádek konfigurace:
 
 ```neon
 use: laravel
 ```
 
-Má-li váš `pint.json` v klíči `rules` pravidla navíc k presetu, převede je `dresscode migrate config` spolu s presetem, protože jsou to pravidla PHP CS Fixeru; co protějšek nemá, vypíše, viz [Přechod na DressCode |migration#migrate-config]. Dohledat je můžete i sami: `dresscode catalogue` vypíše u každého rozhodnutí fixery PHP CS Fixeru, které pokrývá, takže `no_unused_imports` najdete jako `imports.unused`. Klíč `exclude` zapíše `migrate config` do `excludePaths`, viz [Konfigurace |configuration#Cesty].
+Napíše ho i [`dresscode init` |generate-configuration]: v projektu, který vyžaduje `laravel/pint` nebo má `pint.json`, zvolí standard odpovídající presetu Pintu sám a navíc změří, kde se od něj váš kód odchyluje. U výchozího presetu `laravel` vypíše:
+
+/--pre .[terminal]
+Standard   laravel (the style of Laravel Pint), Laravel Pint formats the project in this style
+\--
+
+**S pravidly v klíči `rules` navíc k presetu** pusťte `dresscode migrate config`. Jsou to pravidla PHP CS Fixeru, takže je přeloží spolu s presetem, klíč `exclude` zapíše do `excludePaths` a co protějšek nemá, vypíše, viz [Přechod na DressCode |migration#migrate-config]. `init` by pravidla do souboru nepřenesl, jen by je porovnal s kódem. Obě cesty zapisují `dresscode.neon` a `migrate config` existující soubor nepřepíše, takže zvolte jednu.
+
+Rozhodnutí k jednotlivým pravidlům dohledáte i sami: `dresscode catalogue` vypíše u každého rozhodnutí fixery PHP CS Fixeru, které pokrývá, takže `no_unused_imports` najdete jako `imports.unused`. Celou tabulku má stránka [Pravidla PHP CS Fixeru |php-cs-fixer-rules].
 
 | Pint | DressCode |
 |---|---|
@@ -56,6 +59,12 @@ Nad kódem, který formátoval Pint, narazíte na tyto odchylky:
 - O koncích řádků rozhoduje většina v souboru (`file.lineEnding: majority`), takže projekt na Windows s CRLF zůstane u CRLF. Pint píše LF.
 
 A co Pint dělá a DressCode zatím ne: testovací metody nepřejmenuje na snake_case (`php_unit_method_casing`), neseřadí traity (`ordered_traits`) a tagy phpDocu nezarovná ani neseřadí (`phpdoc_align`, `phpdoc_order`, `phpdoc_separation`). Celý preset i s komentáři ukazuje stránka [Standardy a sady |php-coding-standards#laravel].
+
+
+První oprava
+============
+
+První `dresscode fix` srovná kód s novou konfigurací. Udělejte z něj samostatný commit bez jiných změn, ať je v historii vidět, co přinesla výměna nástroje. Pak ve skriptech `composer.json`, v CI i v Git hooku nahraďte `pint` a `pint --test` příkazy `dresscode fix` a `dresscode check` (viz [Integrace |integrations]); balíček `laravel/pint` pak můžete z `require-dev` odebrat.
 
 {{maintitle: Alternativa k Laravel Pintu: přechod na DressCode}}
 {{description: Přechod z Laravel Pintu na DressCode je jeden řádek konfigurace: standard laravel má styl Pintu a týž běh převede kód i na novější PHP a Laravel.}}

@@ -10,24 +10,77 @@ What the Integration Does
 
 A check that runs only in continuous integration reports a violation after the push, when your mind is already on another task. That is why the most useful thing is **format on save**: after you save a file, it is fixed the way `dresscode fix` would fix it. Editors can do this in two ways. Some send the content of the buffer to a formatter on standard input and take back the result; that is what `fix --stdin` is for. Others run a command on the file on disk after saving and can read its output as a list of findings; that is what the `lines` format is for, one line per finding, in the form compilers use.
 
+Format on save also makes the fixes the project has accepted in `fixRisky`, so it does more than change the looks.
+
 Underlining violations directly in the code, fixing a single violation from the quick-fix menu, and suppressing with one click are planned; see [below |#Planned: A Language Server].
 
 
-A Formatter over Standard Input
-===============================
+PhpStorm
+========
 
-`dresscode fix --stdin <path>` is a formatter: it reads code from standard input, makes all the fixes the configuration allows, and prints the whole resulting text to standard output. The path tells DressCode which settings apply to the code (the overrides for paths and the exclusions); nothing is written to disk. The formatter exits with code 0 even when the code still contains something the fix cannot solve, because an editor treats any other exit code as a failure and would throw the result away. Findings are the job of `check --stdin`, which is why `fix --stdin` rejects the report options (`--format`, `--diff`, `--max-warnings`, `--ask-risky`).
+PhpStorm has no generic formatter over standard input, so you use a **File Watcher** (Settings › Tools › File Watchers) with these settings:
 
-| State | Standard output | Standard error | Exit |
-|---|---|---|---|
-| code without changes | exactly the original bytes | nothing | 0 |
-| fixed code, whatever remains in it | the whole resulting text | nothing | 0 |
-| a path excluded by `excludePaths`, with `--skip-excluded` | exactly the original bytes | nothing | 0 |
-| syntax error | the original text | one line with the error | 1 |
-| failure of a rule | the original text | one line with the failure | 2 |
-| error in the configuration or on the command line | nothing | the error | 3 |
+1. file type PHP,
+2. program `$ProjectFileDir$/vendor/bin/dresscode`,
+3. arguments `fix $FilePath$ -f lines --skip-excluded`,
+4. working directory `$ProjectFileDir$`,
+5. in the Output filters field, `$FILE_PATH$:$LINE$:$COLUMN$: $MESSAGE$`.
 
-The formatter never outputs a partially fixed intermediate result. It also makes the fixes the project has accepted in `fixRisky`, so format on save does more than change the looks.
+You can then click the findings the fix left in the output of the watcher, and for a clean file, the watcher is silent. The `--skip-excluded` option makes sure the watcher does not touch a file that the configuration excludes in `excludePaths`.
+
+Also turn off the built-in PHP formatting (Settings › Tools › Actions on Save › Reformat code); otherwise the two formatters fight each other and the file changes twice on every save.
+
+
+Visual Studio Code
+==================
+
+To format on save, use the **Run on Save** extension (`emeraldwalk.RunOnSave`) with a command for PHP files:
+
+```json
+{
+	"emeraldwalk.runonsave": {
+		"commands": [
+			{
+				"match": "\\.php$",
+				"cmd": "${workspaceFolder}/vendor/bin/dresscode fix ${file} -f lines --skip-excluded"
+			}
+		]
+	}
+}
+```
+
+To get the findings of the whole project into the Problems panel, add a task with a problem matcher to `.vscode/tasks.json`:
+
+```json
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "DressCode",
+			"type": "shell",
+			"command": "${workspaceFolder}/vendor/bin/dresscode check -f lines",
+			"problemMatcher": {
+				"owner": "dresscode",
+				"fileLocation": ["autoDetect", "${workspaceFolder}"],
+				"pattern": {
+					"regexp": "^(.+?):(\\d+)(?::(\\d+))?: (error|warning): (.*?)(?: \\[([^\\]]+)\\])?$",
+					"file": 1, "line": 2, "column": 3, "severity": 4, "message": 5, "code": 6
+				}
+			}
+		}
+	]
+}
+```
+
+Turn off any other PHP formatter (for example Intelephense) for format on save, or leave it only the things DressCode does not handle.
+
+Instead of Run on Save, you can also connect the [formatter over standard input |#A Formatter over Standard Input] through a generic extension for custom formatters.
+
+
+Zed, Helix, Neovim and Emacs
+============================
+
+These editors send the content of the buffer to a formatter on standard input and take back the result. The formatter is `dresscode fix --stdin <path>`: it prints the fixed text to standard output and writes nothing to disk; the path tells it which overrides and exclusions apply to the code. How exactly it behaves is described in [the last section |#A Formatter over Standard Input].
 
 **Zed** (`settings.json`):
 
@@ -79,8 +132,6 @@ require('conform').setup({
   (push '(php-mode . dresscode) apheleia-mode-alist))
 ```
 
-In **VS Code**, you either connect the formatter over standard input through a generic extension for custom formatters, or run a command on the file after saving; see [below |#Visual Studio Code].
-
 
 Findings in the Editor: the lines Format
 ========================================
@@ -96,64 +147,12 @@ src/Order.php:20:11: error: The `@` operator must not be used. [mistakes.errorSu
 The path is relative to the working directory, or absolute for a file outside it, and always uses forward slashes. The column is missing where the finding has none; a line break in the message becomes a space. With `fix`, these are the findings the fix left, with the lines of the fixed file. For a clean file the format prints nothing, and the same goes for a rewritten file with nothing left in it.
 
 
-PhpStorm
-========
-
-PhpStorm has no generic formatter over standard input, so you use a **File Watcher** (Settings › Tools › File Watchers): file type PHP, program `$ProjectFileDir$/vendor/bin/dresscode`, arguments `fix $FilePath$ -f lines --skip-excluded`, working directory `$ProjectFileDir$`. In the Output filters field, write `$FILE_PATH$:$LINE$:$COLUMN$: $MESSAGE$`, and you can then click the findings the fix left in the output of the watcher. For a clean file, the watcher is silent. The `--skip-excluded` option makes sure the watcher does not touch a file that the configuration excludes in `excludePaths`.
-
-Also turn off the built-in PHP formatting (Settings › Tools › Actions on Save › Reformat code); otherwise the two formatters fight each other and the file changes twice on every save.
-
-
-Visual Studio Code
-==================
-
-To format on save, use the **Run on Save** extension (`emeraldwalk.RunOnSave`) with a command for PHP files:
-
-```json
-{
-	"emeraldwalk.runonsave": {
-		"commands": [
-			{
-				"match": "\\.php$",
-				"cmd": "${workspaceFolder}/vendor/bin/dresscode fix ${file} -f lines --skip-excluded"
-			}
-		]
-	}
-}
-```
-
-To get the findings of the whole project into the Problems panel, add a task with a problem matcher to `.vscode/tasks.json`:
-
-```json
-{
-	"version": "2.0.0",
-	"tasks": [
-		{
-			"label": "DressCode",
-			"type": "shell",
-			"command": "${workspaceFolder}/vendor/bin/dresscode check -f lines",
-			"problemMatcher": {
-				"owner": "dresscode",
-				"fileLocation": ["autoDetect", "${workspaceFolder}"],
-				"pattern": {
-					"regexp": "^(.+?):(\\d+)(?::(\\d+))?: (error|warning): (.*?)(?: \\[([^\\]]+)\\])?$",
-					"file": 1, "line": 2, "column": 3, "severity": 4, "message": 5, "code": 6
-				}
-			}
-		}
-	]
-}
-```
-
-Turn off any other PHP formatter (for example Intelephense) for format on save, or leave it only the things DressCode does not handle.
-
-
 A File That Does Not Parse
 ==========================
 
 When a file cannot be parsed, `fix` leaves it untouched and reports only the syntax error: better an unfixed file than a mangled one.
 
-The same holds for every fix. DressCode writes a result only if it parses again and prints back as the same text. This is the same round trip the whole tool is built on: the printed tree gives back the original file byte by byte. In the editor, this guarantees that format on save cannot break the file.
+The same holds for every fix. DressCode writes a result only if it parses again and prints back as the same text. This is the same [round trip |how-it-works#A Syntax Tree Instead of an Array of Tokens] the whole tool is built on: the printed tree gives back the original file byte by byte. In the editor, this guarantees that format on save cannot break the file.
 
 
 Planned: A Language Server
@@ -167,5 +166,22 @@ We are planning a language server, `dresscode lsp`, which will ship with the pac
 - **a process that keeps running**, so PHP does not have to start on every save, and with `typeAnalysis: phpstan`, neither does PHPStan.
 
 The server will speak the Language Server Protocol, so Neovim, Zed, Helix and Sublime Text will get the same. Until then, the formatter over standard input and the `lines` format described above do the job.
+
+
+A Formatter over Standard Input
+===============================
+
+Whoever writes an integration for another editor needs the exact behavior of the formatter. `dresscode fix --stdin <path>` reads code from standard input, makes all the fixes the configuration allows, and prints the whole resulting text to standard output. The path tells DressCode which settings apply to the code (the overrides for paths and the exclusions); nothing is written to disk. The formatter exits with code 0 even when the code still contains something the fix cannot solve, because an editor treats any other exit code as a failure and would throw the result away. Findings are the job of `check --stdin`, which is why `fix --stdin` rejects the report options (`--format`, `--diff`, `--max-warnings`, `--ask-risky`).
+
+| State | Standard output | Standard error | Exit |
+|---|---|---|---|
+| code without changes | exactly the original bytes | nothing | 0 |
+| fixed code, whatever remains in it | the whole resulting text | nothing | 0 |
+| a path excluded by `excludePaths`, with `--skip-excluded` | exactly the original bytes | nothing | 0 |
+| syntax error | the original text | one line with the error | 1 |
+| failure of a rule | the original text | one line with the failure | 2 |
+| error in the configuration or on the command line | nothing | the error | 3 |
+
+The formatter never outputs a partially fixed intermediate result.
 
 {{maintitle: Format PHP on Save in PhpStorm and VS Code}}

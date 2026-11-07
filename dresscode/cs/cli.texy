@@ -12,11 +12,11 @@ Příkazy
 dresscode check [cesty...]
 dresscode fix [cesty...]
 dresscode baseline [cesty...]
+dresscode init
 dresscode upgrade estimate|plan|run|tasks|status|abort|today [cíl [verze]]
 dresscode config
 dresscode explain [rozhodnutí]
 dresscode catalogue
-dresscode init
 dresscode migrate config [soubor]
 dresscode migrate suppressions [cesty...]
 ```
@@ -36,13 +36,11 @@ Tyto přepínače můžete použít u kteréhokoliv příkazu:
 | přepínač | význam |
 |---|---|
 | `-c`, `--config <soubor>` | cesta ke konfiguračnímu souboru namísto nejbližšího `dresscode.neon` či `dresscode.php` (případně jejich šablony `.dist`) |
-| `--use <název>` | přidá nad konfiguraci preset nebo plugin; funguje i zcela bez konfiguračního souboru; u `init` určuje standard a sady k zápisu; lze uvést opakovaně (viz [níže |#Preset pro jeden běh: --use]) |
+| `--use <název>` | přidá nad konfiguraci preset nebo plugin; funguje i zcela bez konfiguračního souboru; u `init` určuje standard a sady k zápisu; jednotlivé rozhodnutí nepřijme, to nastaví `--set`; lze uvést opakovaně (viz [Konfigurace |configuration#Zkontrolovat cizí projekt bez konfigurace]) |
 | `--set <cesta=hodnota>` | nastaví hodnotu rozhodnutí pro jeden běh (hodnota se zapisuje v syntaxi NEONu); lze zadat opakovaně (viz [Konfigurace |configuration#Jedno rozhodnutí na jeden běh: --set a --only]) |
 | `--severity <název=závažnost>` | určí způsob počítání porušení pro dané rozhodnutí, sekci, preset či pravidlo: `název=warning` nebo `název=error` (má přednost před klíčem [`severity` |configuration#risky-fixes]); lze uvést opakovaně |
 | `--no-color` | vypne barevný výstup; totéž zařídí proměnná prostředí `NO_COLOR`, zatímco `FORCE_COLOR` barvy naopak vynutí |
 | `--version`, `--help` | zobrazí verzi nebo nápovědu |
-
-U přepínačů `--use`, `--only` a `--fix-risky` se vestavěné presety zapisují zkráceně: `--use nette` je ekvivalentem `dresscode/nette`. Stejně zkráceně lze zapsat oficiální balíčky od vendoru `dresscode` (např. `--only upgrade-nette`); presety z externích pluginů jiných autorů se uvádějí celým názvem (viz [Standardy a sady |configuration#Standardy a sady]). Rozhodnutí a sekce se zapisují svou cestou (např. `--only blankLines` nebo `--only blankLines.aroundMethods`); při překlepu vám hláška automaticky nabídne nejbližší známé jméno (<code>''Unknown preset `modernizaton`. Did you mean `modernizations`?''</code>).
 
 
 dresscode check .[#check]
@@ -50,7 +48,7 @@ dresscode check .[#check]
 
 Příkaz `check` zkontroluje kód, nahlásí porušení a do souborů nic nezapisuje. Jak se orientovat v jeho výstupu, ukazuje stránka [Začínáme s DressCode |getting-started#Kontrola PHP kódu bez jediné změny]; jeho exit kód předává výsledek do CI (viz [Exit kódy |#Exit kódy]).
 
-Tyto přepínače patří k příkazům `check` a `fix` (přepínače označené v tabulce platí i pro `baseline`):
+Tyto přepínače patří k příkazům `check` a `fix`; ty, u kterých tabulka uvádí "i u `baseline`", přijímá i `baseline`:
 
 | přepínač | význam |
 |---|---|
@@ -66,11 +64,13 @@ Tyto přepínače patří k příkazům `check` a `fix` (přepínače označené
 | `--jobs <n>` | počet paralelních pracovních procesů (`1` spustí běh v jediném procesu); i u `baseline` |
 | `--strict-rules` | porušení kontraktu pravidlem vyvolá chybu namísto varování; slouží pro vývoj vlastních pravidel; i u `baseline` |
 
+U přepínačů `--use`, `--only` a `--fix-risky` se vestavěné presety zapisují zkráceně: `--use nette` je ekvivalentem `dresscode/nette`. Stejně zkráceně lze zapsat oficiální balíčky od vendoru `dresscode` (např. `--only upgrade-nette`); presety z externích pluginů jiných autorů se uvádějí celým názvem (viz [Standardy a sady |configuration#Standardy a sady]). Rozhodnutí a sekce se zapisují svou cestou (např. `--only blankLines` nebo `--only blankLines.aroundMethods`); při překlepu vám hláška automaticky nabídne nejbližší známé jméno (<code>''Unknown preset `modernizaton`. Did you mean `modernizations`?''</code>).
+
 
 dresscode fix .[#fix]
 =====================
 
-Příkaz `fix` provede automatické opravy a zbytek nálezů vypíše. Soubor se na disk fyzicky zapíše pouze tehdy, pokud se jeho obsah reálně změnil a opravený výsledek lze bezchybně naparsovat na identický syntaktický strom. Soubor se syntaktickou chybou, soubor s chybujícím pravidlem i soubor, který mezitím zvenčí uložil editor nebo jiný nástroj, zůstane zcela nedotčen. Přejímá všechny přepínače příkazu `check` uvedené výše; s `--diff` ukáže provedené změny a s `--ask-risky` vám umožní projít zbývající rizikové úpravy jednu po druhé.
+Příkaz `fix` provede automatické opravy a zbytek nálezů vypíše. Soubor se na disk fyzicky zapíše pouze tehdy, pokud se jeho obsah reálně změnil a opravený text se znovu přečte přesně do stromu, který oprava vytvořila. Soubor se syntaktickou chybou, soubor s chybujícím pravidlem i soubor, který mezitím zvenčí uložil editor nebo jiný nástroj, zůstane zcela nedotčen. Přejímá všechny přepínače příkazu `check` uvedené výše; s `--diff` ukáže provedené změny a s `--ask-risky` vám umožní projít zbývající rizikové úpravy jednu po druhé.
 
 
 dresscode baseline .[#baseline]
@@ -99,7 +99,7 @@ Příkaz `init` vytvoří konfiguraci `dresscode.neon` přesně na míru vašemu
 dresscode upgrade .[#upgrade]
 =============================
 
-Příkaz `upgrade today` přepíše kód na nové API verzí knihoven a PHP, které projekt nově vyžaduje v `composer.json` (funguje i bez konfiguračního souboru a respektuje styl vašeho kódu; chybějící data pro upgrade nabídne doinstalovat). Podporuje přepínače `--modernize`, `--ask-risky` a `--yes`. Příkaz `upgrade estimate` bez jediné změny změří rozsah prací, `upgrade plan` sestaví plán po logických krocích, `upgrade run` tyto kroky provede, `upgrade tasks` vypíše zbývající ruční úkoly, `upgrade status` ukáže stav rozpracovaného plánu a `upgrade abort` vrátí nedokončený běh zpět (viz [Upgrade kódu krok za krokem |upgrade]).
+Příkaz `upgrade` přepíše kód na nové API knihoven a PHP. Podpříkaz `upgrade today` to udělá pro verze, které projekt už vyžaduje v `composer.json` (funguje i bez konfiguračního souboru, respektuje styl vašeho kódu a chybějící data pro upgrade nabídne doinstalovat); ostatní podpříkazy upgrade změří, naplánují a provedou po krocích. Průvodce najdete na stránkách [Upgrade kódu |upgrade] a [Plán upgradu krok za krokem |upgrade-plan].
 
 Samotný příkaz `dresscode upgrade` bez dalších argumentů vypíše přehled svých podpříkazů. Tyto měří, plánují a provádějí plán, říkají, kde stojí, nebo vracejí, co změnil nedokončený běh:
 
@@ -165,28 +165,19 @@ dresscode migrate .[#migrate]
 =============================
 
 - `migrate config` převede existující konfiguraci PHP CS Fixeru, PHP_CodeSnifferu nebo Laravel Pintu na rozhodnutí DressCode; bez argumentu automaticky vybere konfiguraci používanou projektem (viz [Přechod na DressCode |migration#migrate-config]).
-- `migrate suppressions` přepíše potlačovací komentáře `phpcs:*` na jejich nativní ekvivalenty `dresscode:*` (viz [tamtéž |migration#3. Přepište komentáře]).
-
-
-Preset pro jeden běh: --use
-===========================
-
-Přepínač `--use` připojí pro jeden konkrétní běh preset nebo plugin, tedy totéž, co se v souboru uvádí v klíči `use`. Takto přidaný preset stojí na samém vrcholu hierarchie nad konfigurací i nad lokálními přepisy:
-
-```shell
-dresscode check --use modernizations        # konfigurace a k ní sada modernizations
-dresscode check src --use psr12            # cizí projekt bez konfigurace
-```
-
-Bez konfiguračního souboru tvoří přepínače `--use` jediné zadání, které běh má. Díky tomu si můžete DressCode vyzkoušet na cizím projektu, aniž byste v něm vytvořili jediný soubor (viz [Konfigurace |configuration#Zkontrolovat cizí projekt bez konfigurace]). Přepínač `--use` nepřijímá jednotlivá rozhodnutí; k tomu slouží přepínač `--set` a hláška vás na to v případě chyby sama upozorní: <code>''Option `--use`: expects a preset or a plugin, `controlFlow.elseAfterReturn=forbidden` given; a decision is set by `--set path=value`.''</code>
+- `migrate suppressions` přepíše potlačovací komentáře `phpcs:*` na jejich nativní ekvivalenty `dresscode:*` (viz [tamtéž |migration#comments]).
 
 
 Formáty výstupu
 ===============
 
-Přepínač `--format` určuje celkovou podobu výstupu; jednotlivé formáty nelze vzájemně kombinovat.
+Přepínač `--format` určuje celkovou podobu výstupu; jednotlivé formáty nelze vzájemně kombinovat. Varování ke konfiguraci směřují ve všech formátech na standardní chybový výstup (STDERR).
 
-Výchozím formátem pro terminál je `console`: zobrazí hlavičku s použitou konfigurací, cílovou verzí PHP a rozsahem kontroly, následně projde jednotlivé soubory s nálezy (závažnost, řádek a sloupec, zpráva, cesta rozhodnutí) a na konci zobrazí souhrn. Hlavička jmenuje i případný soubor [baseline |suppressions-and-baseline#baseline]. U každého souboru vypíše nejvýše 20 nálezů a zbytek úsporně shrne na jednom řádku rozpadem podle rozhodnutí (`… and 3456 more: 3100 indentation.unit, 340 spacing.call, 16 others`), aby soubor v odlišném stylu nezahltil celou obrazovku (kompletní výčet poskytují strojové formáty). Nález, který konfigurační klíč [`severity` |configuration#risky-fixes] změkčil, nese označení `warning` namísto `error`. Riziková oprava, k níž běh nedostal svolení, nese štítek `risky`; pokud by o ní rozhodly typy nebo `nameResolution`, započítá ji souhrn jako varování. U příkazu `check` závěrečný souhrn navíc vyčíslí, kolik porušení by po automatickém spuštění `fix` v kódu ještě zůstalo:
+Výchozím formátem pro terminál je `console`: zobrazí hlavičku s použitou konfigurací, cílovou verzí PHP a rozsahem kontroly, následně projde jednotlivé soubory s nálezy (závažnost, řádek a sloupec, zpráva, cesta rozhodnutí) a na konci zobrazí souhrn. Hlavička jmenuje i případný soubor [baseline |suppressions-and-baseline#baseline].
+
+U každého souboru vypíše nejvýše 20 nálezů a zbytek úsporně shrne na jednom řádku rozpadem podle rozhodnutí (`… and 3456 more: 3100 indentation.unit, 340 spacing.call, 16 others`), aby soubor v odlišném stylu nezahltil celou obrazovku (kompletní výčet poskytují strojové formáty).
+
+Nález, který konfigurační klíč [`severity` |configuration#risky-fixes] změkčil, nese označení `warning` namísto `error`. Riziková oprava, k níž běh nedostal svolení, nese štítek `risky`; pokud by o ní rozhodly typy nebo `nameResolution`, započítá ji souhrn jako varování. U příkazu `check` závěrečný souhrn navíc vyčíslí, kolik porušení by po automatickém spuštění `fix` v kódu ještě zůstalo:
 
 /--pre .[terminal]
 src/Cart.php
@@ -239,7 +230,7 @@ Barevné zvýraznění se automaticky vypne, jakmile výstup nesměřuje do inte
 
 Formát `github` se aktivuje automaticky, pokud kontrola běží jako workflow krok v GitHub Actions (s výjimkou režimu `--stdin`, kde platí výhradně explicitně zadaný formát). Každé porušení se promění v nativní anotaci, která se zobrazí přímo v diffu pull requestu; u `fix` jsou to porušení, která oprava nechala.
 
-Formát `lines` je navržen pro Git hooky a vývojářské editory: jeden řádek na nález ve standardním formátu kompilátorů: `cesta:řádek:sloupec: závažnost: zpráva [rozhodnutí]`; u neprovedené rizikové opravy je za rozhodnutím uvedeno riziko. Číslo sloupce chybí, pokud ho nález nemá, zalomení v textu zprávy se nahradí mezerou a cesta je relativní k pracovnímu adresáři (mimo něj absolutní, vždy s lomítky). U příkazu `fix` jde o nálezy, které po opravě v kódu zůstaly; čistý soubor i opravený soubor bez dalších nálezů nevypíší vůbec nic. Varování ke konfiguraci směřují ve všech formátech na standardní chybový výstup (STDERR). Jak výstup zpracovávají editory, ukazuje stránka [Editory a IDE |editors#Nálezy v editoru: formát lines].
+Formát `lines` je navržen pro Git hooky a vývojářské editory: jeden řádek na nález ve standardním formátu kompilátorů: `cesta:řádek:sloupec: závažnost: zpráva [rozhodnutí]`; u neprovedené rizikové opravy je za rozhodnutím uvedeno riziko. Číslo sloupce chybí, pokud ho nález nemá, zalomení v textu zprávy se nahradí mezerou a cesta je relativní k pracovnímu adresáři (mimo něj absolutní, vždy s lomítky). U příkazu `fix` jde o nálezy, které po opravě v kódu zůstaly; čistý soubor i opravený soubor bez dalších nálezů nevypíší vůbec nic. Jak výstup zpracovávají editory, ukazuje stránka [Editory a IDE |editors#Nálezy v editoru: formát lines].
 
 /--pre .[terminal]
 src/Cart.php:13:10: warning: The `in_array()` call must pass `$strict = true`. [mistakes.strictArgument; risk=typeUnknown]
@@ -344,12 +335,22 @@ Exit kódy
 | kód | význam |
 |---|---|
 | `0` | hotovo a nic nezbývá; u příkazu `fix` také tehdy, pokud opravený kód již nic neporušuje; varování bez nastaveného limitu `--max-warnings` exit kód nemění |
-| `1` | hotovo, ale v kódu zůstala práce pro vývojáře: neopravená porušení, soubor se syntaktickou chybou, překročení limitu `--max-warnings`, odmítnutý příkaz `baseline` nad neopraveným kódem, nedokončené ruční úkoly po upgradu či to, co migrace nepřenesla; u běhu [plánu upgradu |upgrade#Provedení plánu] také krok vrácený kvůli pádům testů, nové nálezy při závěrečné kontrole či předchozí běh přerušený uprostřed kroku; u `upgrade abort` soubor ponechaný beze změny nebo selhání příkazu `composer install` |
-| `2` | nedokončeno kvůli chybě zpracování: pravidlo vyhodilo neošetřenou výjimku, pravidla se zacyklila nebo se soubor během opravy změnil pod rukama; proces upgradu (odhad, plán, běh, úkoly) nedokázal zpracovat některý soubor, chyběla data pro upgrade či odpověď Composeru; příkaz `init` měřil kód bez souborů, v nichž selhala pravidla; testy neběží už před zahájením prvního kroku `upgrade run`; Git odmítl automatický commit u `upgrade run --commit`; příkaz `migrate suppressions` narazil na jméno, které nic nepokrývá či přeskočil soubor |
+| `1` | hotovo, ale v kódu zůstala práce pro vývojáře |
+| `2` | nedokončeno, protože něco nešlo zpracovat |
 | `3` | chyba v syntaxi příkazové řádky nebo v konfiguraci: neznámý přepínač, neplatný konfigurační klíč či hodnota, chybějící konfigurace |
-| `4` | běh plánu upgradu čeká na externí zásah mimo DressCode: na zvednutí verzí v `composer.json` (i když ho Composer nedokončil) nebo na ruční krok, dokud lock soubor cílovou verzi nepustí; při spuštění DressCode uvnitř jiného nástroje také po úspěšné aktualizaci balíčků, kdy je nutné zavolat `upgrade run` znovu |
+| `4` | běh plánu upgradu čeká na krok mimo DressCode |
 
-Tato stupnice platí jednotně pro všechny příkazy. Dotazovací příkazy, které kód nemění (`upgrade estimate` a `upgrade plan`), končí s kódem `0` i tehdy, když najdou spoustu práce (nálezy jsou totiž jejich odpovědí); s kódem `2` skončí pouze tehdy, pokud nemohly projekt prověřit kompletně. Příkaz `upgrade status` končí vždy s kódem `0`.
+Tato stupnice platí jednotně pro všechny příkazy. Co přesně který kód znamená u jednotlivých příkazů:
+
+- `check` a `fix`: `1`, když zůstala neopravená porušení, soubor se syntaktickou chybou nebo víc varování, než dovoluje `--max-warnings`; `2`, když pravidlo vyhodilo neošetřenou výjimku, pravidla se zacyklila nebo se soubor během opravy změnil pod rukama.
+- `baseline`: `1`, když ho spustíte nad kódem, který by `fix` ještě změnil.
+- `init`: `2`, když měřil kód bez souborů, v nichž selhala pravidla.
+- `migrate`: `1`, když migrace něco nepřenesla; `migrate suppressions` skončí s `2`, když narazí na jméno, které nic nepokrývá, nebo přeskočí soubor.
+- `upgrade estimate` a `upgrade plan`: `0` i tehdy, když najdou spoustu práce, protože nálezy jsou jejich odpovědí; `2`, když nemohly projekt prověřit celý: nezpracovaly některý soubor, chyběla jim data pro upgrade nebo odpověď Composeru.
+- `upgrade run`: `1`, když zbývají ruční úkoly, krok se vrátil kvůli pádům testů, závěrečná kontrola našla nové nálezy nebo předchozí běh skončil uprostřed kroku; `2`, když nezpracoval soubor, testy neběží už před prvním krokem nebo Git odmítl commit u `--commit`; `4`, když čeká na zvednutí verzí v `composer.json` (i když ho Composer nedokončil) nebo na ruční krok, dokud lock soubor cílovou verzi nepustí, a při běhu uvnitř jiného nástroje i po aktualizaci balíčků, kdy je potřeba zavolat `upgrade run` znovu (viz [Plán upgradu krok za krokem |upgrade-plan#Provedení plánu]).
+- `upgrade tasks`: `1`, když zbývá ruční úkol nebo komentář `dresscode:ignore` bez důvodu, `2`, když nezpracoval soubor.
+- `upgrade status`: vždy `0`.
+- `upgrade abort`: `1`, když nechal soubor beze změny nebo selhal příkaz `composer install`.
 
 Selhání na jednom konkrétním souboru celý běh nezastaví: soubor se ohlásí jako nezpracovaný, nic se do něj nezapíše a kontrola plynule pokračuje na dalších souborech. Riziková oprava čekající na svolení, která mění chování kódu ze své podstaty, představuje plnohodnotné porušení a drží exit kód na hodnotě `1`, dokud ji neschválíte nebo nezapíšete do baseline; oprava, o níž by rozhodly typy či `nameResolution`, má charakter varování.
 
@@ -357,7 +358,7 @@ Selhání na jednom konkrétním souboru celý běh nezastaví: soubor se ohlás
 Cache a paralelní běh
 =====================
 
-DressCode si spolehlivě pamatuje každý soubor, který prošel kontrolou bez nálezu: ukládá si jeho relativní cestu, otisk obsahu a spolu s nimi otisk aplikované konfigurace (včetně lokálních přepisů), cílové verze PHP, souboru baseline a verzí nainstalovaných balíčků. Cesta tvoří součást klíče záměrně, protože identický kód může v různých částech projektu obdržet odlišný verdikt (například kvůli přepisu v `overrides`). Soubor se shodnou cestou, obsahem i konfigurací se při příštím spuštění okamžitě přeskočí; jakmile se cokoliv z toho změní, projde novou kontrolou. Celkové součty nálezů i varování o zastaralých položkách v baseline vycházejí s cache naprosto stejně jako bez ní. Obsah nově zapsaný příkazem `fix` si DressCode do cache ukládá pouze v projektech bez baseline. Cache sídlí ve výchozím nastavení v systémovém dočasném adresáři (nebo ve složce určené klíčem `cacheDir` v konfiguraci); přepínač `--no-cache` ji pro daný běh obejde.
+DressCode si spolehlivě pamatuje každý soubor, který prošel kontrolou bez nálezu: ukládá si jeho relativní cestu, otisk obsahu a spolu s nimi otisk aplikované konfigurace (včetně lokálních přepisů), cílové verze PHP, souboru baseline a verzí nainstalovaných balíčků. Cesta tvoří součást klíče záměrně, protože identický kód může v různých částech projektu obdržet odlišný verdikt (například kvůli přepisu v `overrides`). Soubor se shodnou cestou, obsahem i konfigurací se při příštím spuštění okamžitě přeskočí; jakmile se cokoliv z toho změní, projde novou kontrolou. Celkové součty nálezů i varování o zastaralých položkách v baseline vycházejí s cache naprosto stejně jako bez ní. Cache sídlí ve výchozím nastavení v systémovém dočasném adresáři (nebo ve složce určené klíčem `cacheDir` v konfiguraci); přepínač `--no-cache` ji pro daný běh obejde.
 
 Soubory, které cache nepokryje, se automaticky rozdělí mezi paralelní pracovní procesy. Výchozí počet procesů odpovídá počtu dostupných jader procesoru (maximálně však jeden proces na každé čtyři soubory, protože start procesu nese režii). Přepínač `--jobs 1` vypne paralelní procesy a spustí vše v jediném procesu, což je ideální při ladění vlastních pravidel; přepínač `--jobs 4` naopak nedovolí běhu na sdíleném stroji zabrat všechna jádra. V paralelních procesech probíhá i generování `baseline`, takže vytvoření soupisu netrvá déle než samotná běžná kontrola.
 
@@ -374,20 +375,5 @@ cat src/Cart.php | dresscode fix --stdin src/Cart.php > fixed.php
 
 Cesty k dalším souborům nelze s přepínačem `--stdin` kombinovat. Pro kód přicházející ze standardního vstupu se nepoužívá cache. Pravidla v `excludePaths` se standardně ignorují a kód se zkontroluje i pro cestu ležící ve vyloučené složce; s doplňujícím přepínačem `--skip-excluded` vrátí `fix --stdin` takový kód beze změny a `check --stdin` neohlásí žádné nálezy.
 
-
-DressCode uvnitř vlastního nástroje
-===================================
-
-Pokud DressCode integrujete do vlastního nástroje s vlastní binárkou, můžete přímo v procesu spustit celou konzolovou aplikaci reprezentovanou třídou `DressCode\Console\Application` a předat jí výchozí konfiguraci, která se použije v projektech bez vlastního konfiguračního souboru:
-
-```php
-use DressCode\Config;
-use DressCode\Console\Application;
-
-$application = new Application(script: __FILE__, defaultConfig: new Config(use: ['nette'], paths: ['src', 'tests']));
-exit($application->run($argv));
-```
-
-Parametr `script` odkazuje na vaši vlastní binárku: DressCode jej využije ke spouštění paralelních procesů i navazujících běhů upgradu, aby si potomci zachovali shodnou výchozí konfiguraci. Vše ostatní (příkazy, přepínače, výstupní formáty i paralelní běh) funguje naprosto stejně jako v samostatném `dresscode` a metoda `run()` vrací standardní exit kódy. Běžné provozní chyby vypíše aplikace sama na chybový výstup: syntaktické chyby volání a vadnou konfiguraci s kódem `3`, selhání pravidla, zacyklená pravidla a systémové výjimky typu `RuntimeException` (např. soubor, který nejde zapsat, či pád procesu) s kódem `2`. Ostatní výjimky (`LogicException`, `Error`) značí interní programátorskou chybu a metoda `run()` je nechá přirozeně probublat ven.
-
-{{description: Reference příkazové řádky DressCode: check, fix, baseline, init, upgrade, config, explain, catalogue a migrate se všemi přepínači, formáty výstupu pro CI a editory, exit kódy, cache a paralelní běh.}}
+{{maintitle: Příkazová řádka DressCode: příkazy, přepínače a exit kódy}}
+{{description: Příkazy a přepínače DressCode od check a fix po upgrade a explain, formáty výstupu pro CI a editory, exit kódy, cache a paralelní běh.}}

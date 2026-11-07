@@ -8,22 +8,14 @@ Databázová vrstva Dibi od verze 4.1 a Texy od verze 3.0 přejmenovaly třídy,
 Instalace
 =========
 
+Aplikaci, která ještě běží na PHP starším než 8.4, upgradujte s DressCode nainstalovaným globálně, protože sám potřebuje PHP 8.4 (viz [Kde DressCode běží |upgrade#Kde DressCode běží]):
+
 ```shell
-composer require --dev dresscode/upgrade-deegee phpstan/phpstan
-vendor/bin/dresscode upgrade today
+composer global require dresscode/dresscode dresscode/upgrade-deegee phpstan/phpstan
+dresscode upgrade today
 ```
 
-Druhý řádek už kód přepíše: `upgrade today` vezme data balíčku sám, bez konfigurace, a styl kódu nechá, jak je. Postup a co dělat s tím, co zbude, popisuje [Upgrade kódu |upgrade].
-
-Staré API pohlídá i každodenní kontrola, když konfigurace přidá typy a sadu `deprecations`, viz [Jak funguje upgrade knihoven |upgrading-libraries#Zapnutí v konfiguraci]:
-
-```neon
-typeAnalysis: phpstan
-
-use:
-	- perCs           # váš standard
-	- deprecations
-```
+Druhý řádek už kód přepíše: `upgrade today` vezme data balíčku sám, bez konfigurace, a styl kódu nechá, jak je. Postup a co dělat s tím, co zbude, popisuje [Upgrade kódu |upgrade]. Projekt, který už běží na PHP 8.4 až 8.6, si balíček může přidat i jako vývojovou závislost: `composer require --dev dresscode/upgrade-deegee phpstan/phpstan`, a pak spouští `vendor/bin/dresscode upgrade today`.
 
 
 Co se opraví
@@ -75,7 +67,7 @@ public function getColumnType(): string
 }
 ```
 
-Z Dibi se opraví konstanty `Dibi\Type`, `Fluent` a ovladačů dřív psané velkými písmeny, konstanty statické fasády `dibi` (`dibi::AFFECTED_ROWS` na `Dibi\Fluent::AffectedRows`), `affectedRows()` a `insertId()` na `getAffectedRows()` a `getInsertId()` i u fasády, `Dibi\DateTime::modifyClone($modify)` na `modify($modify)`, `DibiExtension22` na `DibiExtension3` a konstruktory `FileLogger` a `Panel` s filtrem `null`. Z Texy třídy s předponou `Texy` na jmenný prostor `Texy\`, pomocné metody `Texy` a `Utf` přesunuté do `Texy\Helpers`, `escapeHtml()` na `htmlspecialchars()`, `unescapeHtml()` na `Texy\Helpers::unescapeHtml()` a v projektu na Texy 3.0 až 3.1.0 na `html_entity_decode()`, vlastnost `$cleaner` na `$htmlOutputModule`, konstanty `HtmlElement` a přejmenované parametry `Modifier`.
+Z Dibi se opraví konstanty dřív psané velkými písmeny, u `Dibi\Type`, `Fluent`, ovladačů i statické fasády `dibi` (`dibi::AFFECTED_ROWS` na `Dibi\Fluent::AffectedRows`), přejmenované metody jako `insertId()` na `getInsertId()`, `DibiExtension22` na `DibiExtension3` a další. Z Texy třídy s předponou `Texy` na jmenný prostor `Texy\`, pomocné metody `Texy` a `Utf` přesunuté do `Texy\Helpers`, `escapeHtml()` na `htmlspecialchars()` a přejmenované vlastnosti, konstanty a parametry.
 
 
 Co zůstane na vás
@@ -88,9 +80,23 @@ Method `Dibi\Connection::translateArgs()` is forbidden: there is no replacement;
 Method `Texy\Texy::setOutputMode()` is forbidden: there is no replacement; the output is always HTML5.
 ```
 
-Z Dibi se dál hlásí rozšiřující metody `extensionMethod()`, trait `Dibi\Strict`, `modifyClone()` bez argumentu a `__sleep()` a `__wakeup()` potomka `Connection`, místo kterých patří `__serialize()` a `__unserialize()`. Z Texy výstupní režimy HTML4 a XHTML i s `setOutputMode()`, `getOutputMode()` a `$xhtml`, kódování jiné než UTF-8 (`$encoding`, `Utf::toUtf()`, `utfTo()` a `utf2html()`), metody modulů, které se ve verzi 3.2 staly privátními, `TexyMacro` pro Latte 2, `$removeOptional`, `Modifier::$cite` a trait `Texy\Strict`.
+Z Dibi se dál hlásí třeba rozšiřující metody `extensionMethod()` a trait `Dibi\Strict`, z Texy výstupní režimy HTML4 a XHTML, kódování jiné než UTF-8 a metody modulů, které se ve verzi 3.2 staly privátními.
 
-Co knihovna jen tiše označila jako zastaralé, v datech není; s typy to DressCode ohlásí, a kde anotace náhradu řekne, i přepíše podle `upgrading.declarations.deprecatedMember`. Změny chování data nezachytí vůbec.
+Co knihovna jen tiše označila jako zastaralé, v datech není; s typy to DressCode ohlásí, a kde anotace náhradu řekne, i přepíše. Změny chování data nezachytí vůbec.
+
+
+Aby se staré API nevracelo
+==========================
+
+Staré API pohlídá i každodenní kontrola, třeba v průběžné integraci, když konfigurace přidá typy a sadu `deprecations` (viz [Upgrade kódu |upgrade#Aby se staré API nevracelo]). Balíček nese jen data, žádný plugin, a tak jeho jméno do `use` psát nemusíte:
+
+```neon
+typeAnalysis: phpstan
+
+use:
+	- perCs           # váš standard
+	- deprecations
+```
 
 
 Co balíček pokrývá

@@ -19,12 +19,9 @@ Each rule is tested on its own directory of fixtures. A fixture is a group of up
 6: The message of an exception must end with a period.
 ```
 
-The report of a risky fix is followed by an indented line that names what would decide the risk, plus the reason if the rule gave one, so the tester also checks the cause of the risk:
+A fixture is not an example for the documentation: it should be ugly and full of edge cases. A comment in the middle of a construct, a construct on one line and across three, an empty body, an interpolated string, alternative syntax. These are exactly the places where rules break.
 
-```
-4: The loop must be written with `array_any()`.
-	risky TypeUnknown: the loop may go through an object, which `array_any()` does not take
-```
+You do not have to copy the `.expected` and `.violations` files by hand: `RuleTester::collectOutput()` and `RuleTester::collectViolations()` return them in their exact format from what the rule does on the fixture, so you have them written out and only check the diff (see [below |#RuleTester]).
 
 The fixture must give a value to the decisions the rule enforces; otherwise they are `keep` and the rule does nothing, and the tester then insists that the fixture changes nothing and reports nothing. The values for the whole directory go into a `values.neon` file next to the fixtures, written the same way as in the configuration:
 
@@ -33,7 +30,7 @@ acme:
 	debugCalls: forbidden
 ```
 
-In comments at its start, a fixture can add: values just for itself, as JSON layered on top of `values.neon`; the PHP version it is written for; the maximum line length to check against; and the word `risky`, which also allows the rule to make fixes that change the behavior of the code:
+In comments at its start, a fixture can add: values just for itself, as JSON layered on top of `values.neon`; the PHP version it is written for; the maximum line length to check against; the word `risky`, which also allows the rule to make fixes that change the behavior of the code; and the word `run`, with which the tester runs the code before and after the fix, and both runs must print the same and exit alike:
 
 ```php
 <?php
@@ -43,7 +40,16 @@ In comments at its start, a fixture can add: values just for itself, as JSON lay
 // risky
 ```
 
-A key is written with its full path. For a rule whose decisions are in a single section, the key without the section is enough, so `{"debugCalls": "keep"}` means `acme.debugCalls`. It also works for a key the rule reads but does not own, like the engine parameter `mistakes.debugOutputFunctions` here. When no length is given, lines are measured against 120 characters, as in the standards. When no version is given, the rule is tested on the version it asked for in `requires`, or on PHP 8.0 if it asked for none; a version passed to the tester through the `$phpVersion` parameter takes precedence over the header. It is never the version of the interpreter running the tests, because the verdict of a rule should not depend on the computer. Without `risky`, a risky occurrence is only reported, and the `.expected` file must leave it unchanged; a fixture with `risky` also gives the reference proof that the rule makes such fixes.
+A key is written with its full path. For a rule whose decisions are in a single section, the key without the section is enough, so `{"debugCalls": "keep"}` means `acme.debugCalls`. It also works for a key the rule reads but does not own, like the engine parameter `mistakes.debugOutputFunctions` here.
+
+When no length is given, lines are measured against 120 characters, as in the standards. When no version is given, the rule is tested on the version it asked for in `requires`, or on PHP 8.0 if it asked for none; a version passed to the tester through the `$phpVersion` parameter takes precedence over the header. It is never the version of the interpreter running the tests, because the verdict of a rule should not depend on the computer.
+
+Without `risky`, a risky occurrence is only reported, and the `.expected` file must leave it unchanged. With `risky`, the rule fixes it, and if an allowed risky fix is left undone after the run, the fixture fails. The report of a risky fix in the `.violations` file is followed by an indented line that names what would decide the risk, plus the reason if the rule gave one, so the tester also checks the cause of the risk:
+
+```
+4: The loop must be written with `array_any()`.
+	risky TypeUnknown: the loop may go through an object, which `array_any()` does not take
+```
 
 Headers tell what namespaces outside the fixture declare. They are written like the items of a `use` statement, just like the keys [`namespaces` and `nameResolution` |php-functions-in-namespaces] in the configuration:
 
@@ -54,9 +60,10 @@ Headers tell what namespaces outside the fixture declare. They are written like 
 // nameResolution certain
 ```
 
-A rule with `typesRequired` gets the types of the code from the PHPStan of the project in which the tests run, computed on the fixture and on the declarations from the `stubs/` subdirectory of the fixture directory. A rule that only benefits from types gets them where a `stubs/` directory exists, and a fixture with `// types off` in its header does not get them even there. This is how you test what the rule recognizes without types, only from the declarations it can see.
+A rule gets the types of the code from the PHPStan installed in the project in which the tests run, computed on the fixture and on the declarations from the `stubs/` subdirectory of the fixture directory. It gets them in two cases:
 
-A fixture is not an example for the documentation: it should be ugly and full of edge cases. A comment in the middle of a construct, a construct on one line and across three, an empty body, an interpolated string, alternative syntax. These are exactly the places where rules break.
+- a rule with `typesRequired` always, and the header `// types off` in its fixture is an error;
+- a rule that only benefits from types where a `stubs/` directory exists and the fixture has no `// types off` header. A fixture with this header tests what the rule recognizes without types, only from the declarations it can see.
 
 
 RuleTester
@@ -90,13 +97,13 @@ RuleTester::run(ClockRule::class, __DIR__ . '/fixtures/clock', analyses: [
 ]);
 ```
 
-For special cases there are smaller tools: `RuleTester::runFixture()` runs a single fixture, `RuleTester::check()` checks a finished instance of a rule on a string without files (useful for a quick reproduction), `RuleTester::collectViolations()` returns the reports for a fixture already in the format of a `.violations` file, and `collectOutput()` returns the output in the format of an `.expected` file, so you can have them written out and only check the diff instead of copying them by hand. `run()`, `runFixture()` and both `collect*()` methods accept `$phpVersion` and `analyses`. The `check()` method also accepts the whole style used to process the code (`style: new Style(indent: '    ', maxLineLength: 80)`) instead of the maximum line length from the header.
+For special cases there are smaller tools: `RuleTester::runFixture()` runs a single fixture, `RuleTester::check()` checks a finished instance of a rule on a string without files (useful for a quick reproduction), `RuleTester::collectViolations()` returns the reports for a fixture already in the format of a `.violations` file, and `collectOutput()` returns the output in the format of an `.expected` file. `run()`, `runFixture()` and both `collect*()` methods accept `$phpVersion` and `analyses`. The `check()` method also accepts the whole style used to process the code (`style: new Style(indent: '    ', maxLineLength: 80)`) instead of the maximum line length from the header.
 
 
 Data for Upgrading Libraries
 ============================
 
-A package that supplies [upgrade data |replacement-maps] instead of rules, or next to them, tests the data with the `Testing\UpgradingTester` class. The `collectProblems($file, $root, $packageRules)` method reads the file the way a run would read it in a project whose `vendor/` contains the library, and returns the problems found as sentences; an empty array means the file is fine. You pass the rules the package supplies itself as the third parameter. The method `collectPackageProblems($root)` checks that `extra.dresscode.packages` in the `composer.json` of the package names exactly the libraries its files talk about. The method `runSample()` then fixes a sample of code in the old API the way a project with the data turned on would fix it, and returns a `FileResult` with the fixed code and the findings. As the third parameter, it takes the decisions of the package's own rules that the data do not set, grouped by section. Both are described in detail on the page [Replacement Maps |replacement-maps].
+A package that supplies [upgrade data |replacement-maps] instead of rules, or next to them, tests the data with the `Testing\UpgradingTester` class: it checks the data files against the installed library and fixes a sample of code in the old API the way a project would. The page [Replacement Maps |replacement-maps#Checking the Data] describes it.
 
 
 A Test on Real Code
