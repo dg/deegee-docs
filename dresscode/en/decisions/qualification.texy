@@ -127,28 +127,30 @@ Risky Fixes
 Switching a bare function to an imported one, or the other way round, is safe only when the namespace declares no function with the same name. This cannot be seen from a single file, so the fix is risky: it needs your permission unless the configuration sets [`nameResolution: certain` |/php-functions-in-namespaces#name-resolution]. With that setting, DressCode knows what is in your namespaces and makes these fixes without asking.
 
 
-qualification.currentClass
+qualification.class.global
 ==========================
 
-How a class refers to itself in an expression: a static access, an instantiation, an `instanceof`.
+A class of the global namespace referenced in a namespace, `DateTime`, which a bare name there does not reach.
 
-- `self`: the class named `self` inside itself
+- `imported`: imported, `use DateTime;` and `DateTime`
+- `backslashed`: with the leading backslash, `\DateTime`
+- a list of these words, where each one passes and code matching none of them is written like the first
 - `keep`: nothing is enforced, the code stays as it is
 
-Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `self`, symfony `keep`, laravel `keep` · covers `self_accessor`, `SlevomatCodingStandard.Classes.UselessLateStaticBinding`, `Squiz.Classes.SelfMemberReference` .[decision-facts]
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `backslashed`, laravel `keep` · covers `global_namespace_import`, `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly` .[decision-facts]
 
 
-qualification.staticInFinalClass
-================================
+qualification.class.currentNamespace
+====================================
 
-`self` for `static` in a class no subclass can extend, a final class, an anonymous class, an enum: `self::create()`, `new self`.
+A class, interface, trait or enum of the namespace of the file, `Order` in `namespace Acme\Shop`.
 
-The return type `static` stays, saying what a subclass would return.
-
-- `required`: always there
+- `bare`: bare, `Order` relative to the namespace
+- `backslashed`: with the leading backslash, `\Acme\Shop\Order`
+- a list of these words, where each one passes and code matching none of them is written like the first
 - `keep`: nothing is enforced, the code stays as it is
 
-Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `required` · covers `self_static_accessor`, `SlevomatCodingStandard.Classes.UselessLateStaticBinding` .[decision-facts]
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `bare`, symfony `keep`, laravel `bare` · covers `fully_qualified_strict_types`, `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly` .[decision-facts]
 
 
 qualification.class.otherNamespace
@@ -166,32 +168,6 @@ A name relative to an import or to the namespace, `Shop\Order`, stays as it is.
 Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `imported`, symfony `keep`, laravel `imported` · covers `fully_qualified_strict_types`, `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly` .[decision-facts]
 
 
-qualification.function.otherNamespace
-=====================================
-
-A function of a namespace other than that of the file.
-
-- `imported`: imported, `use function Acme\Text\normalize;` and `normalize()`
-- `backslashed`: with the leading backslash, `\Acme\Text\normalize()`
-- a list of these words, where each one passes and code matching none of them is written like the first
-- `keep`: nothing is enforced, the code stays as it is
-
-Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` · covers `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly` .[decision-facts]
-
-
-qualification.constant.otherNamespace
-=====================================
-
-A constant of a namespace other than that of the file.
-
-- `imported`: imported, `use const Acme\Shop\STATUS_PAID;` and `STATUS_PAID`
-- `backslashed`: with the leading backslash, `\Acme\Shop\STATUS_PAID`
-- a list of these words, where each one passes and code matching none of them is written like the first
-- `keep`: nothing is enforced, the code stays as it is
-
-Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` · covers `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly` .[decision-facts]
-
-
 qualification.class.phpdoc
 ==========================
 
@@ -207,43 +183,20 @@ A name relative to an import or to the namespace, `Shop\Order`, stays as it is, 
 Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `imported`, symfony `keep`, laravel `imported` · covers `fully_qualified_strict_types` .[decision-facts]
 
 
-qualification.class.currentNamespace
-====================================
+qualification.function.global
+=============================
 
-A class, interface, trait or enum of the namespace of the file, `Order` in `namespace Acme\Shop`.
+A global function called in a namespace, `ucfirst()`, but one PHP optimizes a call of there, which `function.optimized` decides.
 
-- `bare`: bare, `Order` relative to the namespace
-- `backslashed`: with the leading backslash, `\Acme\Shop\Order`
+Not a function of the namespace of the file, nor a name in a file without a namespace, which `qualification.leadingBackslash` decides.
+
+- `bare`: bare, `ucfirst()` without an import or a backslash, reached by the fallback at run time
+- `imported`: imported, `use function ucfirst;` and `ucfirst()`
+- `backslashed`: with the leading backslash, `\ucfirst()`
 - a list of these words, where each one passes and code matching none of them is written like the first
 - `keep`: nothing is enforced, the code stays as it is
 
-Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `bare`, symfony `keep`, laravel `bare` · covers `fully_qualified_strict_types`, `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly` .[decision-facts]
-
-
-qualification.function.currentNamespace
-=======================================
-
-A function of the namespace of the file, `normalize()` in `namespace Acme\Text`.
-
-- `bare`: bare, `normalize()` relative to the namespace
-- `backslashed`: with the leading backslash, `\Acme\Text\normalize()`
-- a list of these words, where each one passes and code matching none of them is written like the first
-- `keep`: nothing is enforced, the code stays as it is
-
-Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` · covers `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly` .[decision-facts]
-
-
-qualification.constant.currentNamespace
-=======================================
-
-A constant of the namespace of the file, `STATUS_PAID` in `namespace Acme\Shop`.
-
-- `bare`: bare, `STATUS_PAID` relative to the namespace
-- `backslashed`: with the leading backslash, `\Acme\Shop\STATUS_PAID`
-- a list of these words, where each one passes and code matching none of them is written like the first
-- `keep`: nothing is enforced, the code stays as it is
-
-Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` · covers `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly` .[decision-facts]
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `[backslashed, bare]`, laravel `keep` · covers `global_namespace_import`, `native_function_invocation`, `SlevomatCodingStandard.Namespaces.FullyQualifiedGlobalFunctions`, `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly` .[decision-facts]
 
 
 qualification.function.optimized
@@ -262,33 +215,30 @@ A function is optimized in a namespace where one of its calls there is, an unpac
 Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `[backslashed, bare]`, laravel `keep` · covers `global_namespace_import`, `native_function_invocation`, `SlevomatCodingStandard.Namespaces.FullyQualifiedGlobalFunctions`, `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly`, `SlevomatCodingStandard.PHP.OptimizedFunctionsWithoutUnpacking` .[decision-facts]
 
 
-qualification.class.global
-==========================
+qualification.function.currentNamespace
+=======================================
 
-A class of the global namespace referenced in a namespace, `DateTime`, which a bare name there does not reach.
+A function of the namespace of the file, `normalize()` in `namespace Acme\Text`.
 
-- `imported`: imported, `use DateTime;` and `DateTime`
-- `backslashed`: with the leading backslash, `\DateTime`
+- `bare`: bare, `normalize()` relative to the namespace
+- `backslashed`: with the leading backslash, `\Acme\Text\normalize()`
 - a list of these words, where each one passes and code matching none of them is written like the first
 - `keep`: nothing is enforced, the code stays as it is
 
-Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `backslashed`, laravel `keep` · covers `global_namespace_import`, `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly` .[decision-facts]
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` · covers `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly` .[decision-facts]
 
 
-qualification.function.global
-=============================
+qualification.function.otherNamespace
+=====================================
 
-A global function called in a namespace, `ucfirst()`, but one PHP optimizes a call of there, which `function.optimized` decides.
+A function of a namespace other than that of the file.
 
-Not a function of the namespace of the file, nor a name in a file without a namespace, which `qualification.leadingBackslash` decides.
-
-- `bare`: bare, `ucfirst()` without an import or a backslash, reached by the fallback at run time
-- `imported`: imported, `use function ucfirst;` and `ucfirst()`
-- `backslashed`: with the leading backslash, `\ucfirst()`
+- `imported`: imported, `use function Acme\Text\normalize;` and `normalize()`
+- `backslashed`: with the leading backslash, `\Acme\Text\normalize()`
 - a list of these words, where each one passes and code matching none of them is written like the first
 - `keep`: nothing is enforced, the code stays as it is
 
-Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `[backslashed, bare]`, laravel `keep` · covers `global_namespace_import`, `native_function_invocation`, `SlevomatCodingStandard.Namespaces.FullyQualifiedGlobalFunctions`, `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly` .[decision-facts]
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` · covers `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly` .[decision-facts]
 
 
 qualification.constant.global
@@ -321,6 +271,32 @@ A constant merely passed to a call is not one the compiler computes with.
 Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `[backslashed, bare]`, laravel `keep` · covers `global_namespace_import`, `native_constant_invocation`, `SlevomatCodingStandard.Namespaces.FullyQualifiedGlobalConstants`, `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly` .[decision-facts]
 
 
+qualification.constant.currentNamespace
+=======================================
+
+A constant of the namespace of the file, `STATUS_PAID` in `namespace Acme\Shop`.
+
+- `bare`: bare, `STATUS_PAID` relative to the namespace
+- `backslashed`: with the leading backslash, `\Acme\Shop\STATUS_PAID`
+- a list of these words, where each one passes and code matching none of them is written like the first
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` · covers `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly` .[decision-facts]
+
+
+qualification.constant.otherNamespace
+=====================================
+
+A constant of a namespace other than that of the file.
+
+- `imported`: imported, `use const Acme\Shop\STATUS_PAID;` and `STATUS_PAID`
+- `backslashed`: with the leading backslash, `\Acme\Shop\STATUS_PAID`
+- a list of these words, where each one passes and code matching none of them is written like the first
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `keep` · covers `SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly` .[decision-facts]
+
+
 qualification.leadingBackslash
 ==============================
 
@@ -332,3 +308,27 @@ The leading backslash of a name where it changes nothing, in a file without a na
 Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `forbidden`, symfony `keep`, laravel `keep` · covers `PhpCsFixerCustomFixers/no_leading_slash_in_global_namespace` .[decision-facts]
 
 {{maintitle: PHP Name Qualification Rules}}
+
+
+qualification.currentClass
+==========================
+
+How a class refers to itself in an expression: a static access, an instantiation, an `instanceof`.
+
+- `self`: the class named `self` inside itself
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `self`, symfony `keep`, laravel `keep` · covers `self_accessor`, `SlevomatCodingStandard.Classes.UselessLateStaticBinding`, `Squiz.Classes.SelfMemberReference` .[decision-facts]
+
+
+qualification.staticInFinalClass
+================================
+
+`self` for `static` in a class no subclass can extend, a final class, an anonymous class, an enum: `self::create()`, `new self`.
+
+The return type `static` stays, saying what a subclass would return.
+
+- `required`: always there
+- `keep`: nothing is enforced, the code stays as it is
+
+Default `keep` · standards: perCs `keep`, psr12 `keep`, nette `keep`, symfony `keep`, laravel `required` · covers `self_static_accessor`, `SlevomatCodingStandard.Classes.UselessLateStaticBinding` .[decision-facts]
