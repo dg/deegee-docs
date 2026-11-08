@@ -51,38 +51,52 @@ Konfiguraci PHP CS Fixeru převeďte dřív, než starý nástroj z projektu odi
 Z konfigurace `phpcs.xml`, která kontroluje složky `src` a `tests`, vychází z `PSR12`, omezuje délku řádku na 100 znaků, hlídá nepoužité importy a vyžaduje dokumentaci funkcí, vznikne tento čistý `dresscode.neon`:
 
 ```neon
+# Translated from `phpcs.xml` of PHP_CodeSniffer
+# by `dresscode migrate config` of DressCode 1.5.0.
+# What could not be carried over is at the end of this file.
 use: psr12
 
 paths: [src, tests]
 
 file:
 	lineLength: 100
-	lineLengthExcept: [imports]
-	longLines: forbidden
 
 imports:
-	unused: forbidden             # `SlevomatCodingStandard.Namespaces.UnusedUses` without `searchAnnotations` removes an import only a doc comment uses; DressCode keeps it.
+	unused: forbidden
+
+# Left behind by the translation. Delete this block and the comment at the top once it is dealt with.
+#
+# Works a little differently
+#   ~ `SlevomatCodingStandard.Namespaces.UnusedUses` without `searchAnnotations` removes an import
+#       only a doc comment uses; DressCode keeps it.
+#
+# No DressCode rule, so nothing checks these now
+#   ✗ Squiz.Commenting.FunctionComment
 ```
 
-Příkaz vypíše, jakou konfiguraci našel a kam uložil výsledek, a pod tím zobrazí souhrn včetně věcí, které se nepodařilo přenést:
+Příkaz vypíše, jakou konfiguraci našel, jak dopadla jednotlivá pravidla a jako poslední, kam uložil výsledek:
 
 /--pre .[terminal]
 Found `phpcs.xml` of PHP_CodeSniffer.
-Written `dresscode.neon`.
 
-Read 4 rules; set 4 decisions and 1 preset, the rules translated; `dresscode init` measures the code instead.
-  `SlevomatCodingStandard.Namespaces.UnusedUses` without `searchAnnotations` removes an import only a doc comment uses; DressCode keeps it.
-  No DressCode rule covers `Squiz.Commenting.FunctionComment`.
+3 rules in your `phpcs.xml`, on the preset `psr12`:
+1  carried over exactly
+1  carried over, but DressCode's result may differ a little
+1  dropped, DressCode has no such rule, so nothing checks them now
 
+The details are at the end of `dresscode.neon`.
 5 phpcs suppression comments: `dresscode migrate suppressions` rewrites them.
+Next, `dresscode check` shows what the configuration finds in your code.
+
+WRITTEN  dresscode.neon
 \--
 
-Tyto řádky mají stejnou cenu jako vygenerovaná konfigurace: přesně pojmenovávají místa, kde se musíte rozhodnout sami. Zde vás například informují, že DressCode zachová import využívaný pouze v phpDoc komentáři, zatímco původní sniff bez volby `searchAnnotations` by jej smazal. Varování k pravidlu, které se podařilo přeložit jen částečně, se navíc uloží přímo jako komentář k danému rozhodnutí v souboru, aby nezmizelo se zavřením okna terminálu. Pravidlo bez přímého protějšku buď vůbec nepotřebujete, nebo si na něj snadno [napíšete vlastní kontrolu |porting-rules].
+Každé pravidlo se v souhrnu počítá jednou a ta, která musíte dokončit ručně, souhrn rovnou vyjmenuje. Co přesně se za čísly skrývá, najdete v bloku na konci vygenerovaného souboru, takže to nezmizí se zavřením okna terminálu. Tady se z něj dozvíte, že DressCode zachová import využívaný pouze v phpDoc komentáři, zatímco původní sniff bez volby `searchAnnotations` by jej smazal. Až poznámky vyřešíte, smažte blok i komentář na začátku souboru: popisují migraci, ne vaši konfiguraci. Pravidlo bez přímého protějšku buď vůbec nepotřebujete, nebo si na něj snadno [napíšete vlastní kontrolu |porting-rules].
 
-Jedno původní pravidlo se v DressCode často rozpadne do několika přesných rozhodnutí: například `Generic.Files.LineLength` s volbou `absoluteLineLimit` vygeneruje rozhodnutí `file.longLines`, `file.lineLength` a `file.lineLengthExcept`. Ne každá specifická volba má v DressCode svůj protějšek, což výpis opět transparentně přizná. Pravidlo, které bylo v původním nástroji výslovně vypnuté, získá hodnotu `keep`. Pokud však stejné rozhodnutí pokrývá i jiné pravidlo daného nástroje, nechá jej příkaz netknuté a vypíše varování, protože nemůže vědět, jestli z nich některé pořád platí. Výsledný soubor si projděte, bývá příjemně krátký.
+Jedno původní pravidlo se v DressCode často rozpadne do několika přesných rozhodnutí: například `Generic.Files.LineLength` s volbou `absoluteLineLimit` vygeneruje rozhodnutí `file.longLines`, `file.lineLength` a `file.lineLengthExcept`. Do souboru se zapíšou jen ta, která už neurčuje zvolený standard, proto v ukázce zůstalo pouze `file.lineLength`. Ne každá specifická volba má v DressCode svůj protějšek, což blok na konci souboru opět přizná. Pravidlo, které bylo v původním nástroji výslovně vypnuté, získá hodnotu `keep`. Pokud však stejné rozhodnutí pokrývá i jiné pravidlo daného nástroje, nechá jej příkaz netknuté a zapíše o tom poznámku, protože nemůže vědět, jestli z nich některé pořád platí. Výsledný soubor si projděte, bývá příjemně krátký.
 
 .[note]
-Pokud příkaz vypíše jakékoliv varování, skončí s exit kódem 1, i když soubor v pořádku zapsal. S přepínačem `--format json` vydá strukturovaný dokument s verzí v klíči `version`, kořenem projektu v klíči `root`, konfigurací, souborem, kam ji zapsal, počty, varováními a nepřeloženými pravidly; v tomto režimu se na nic neptá, stejně jako mimo terminál.
+Když překlad doběhne, příkaz skončí s exit kódem 0, ať se přeneslo všechno, nebo ne. S přepínačem `--format json` vydá strukturovaný dokument s verzí v klíči `version`, kořenem projektu v klíči `root`, konfigurací, souborem, kam ji zapsal, počty pravidel podle toho, jak dopadla, poznámkami a nepřeloženými pravidly; v tomto režimu se na nic neptá, stejně jako mimo terminál.
 
 
 3. První oprava
@@ -104,15 +118,19 @@ Tenhle krok je dobrovolný: komentáře v kódu fungují i se starými názvy. N
 dresscode migrate suppressions src tests
 ```
 
-Zápis `phpcs:ignore SlevomatCodingStandard.Namespaces.UnusedUses` se promění na `dresscode:ignore imports.unused`, z `phpcs:disable` a `phpcs:enable` vzniknou `dresscode:disable` a `dresscode:enable` a ze souborového `phpcs:ignoreFile` se stane `dresscode:ignoreFile`. Anotace `@phpcsSuppress` zůstane zachována a změní se v ní pouze název pravidla. Pokud příkaz narazí na `phpcs:ignore` na samostatném řádku, připomene [rozdíl v rozsahu platnosti |#1. Kód nechte, jak je] na řádku `Widened` a vypíše konkrétní místa, která stojí za kontrolu. Názvy, které žádné rozhodnutí nepokrývá, ponechá beze změny a vypíše je na řádku `Unknown`:
+Zápis `phpcs:ignore SlevomatCodingStandard.Namespaces.UnusedUses` se promění na `dresscode:ignore imports.unused`, z `phpcs:disable` a `phpcs:enable` vzniknou `dresscode:disable` a `dresscode:enable` a ze souborového `phpcs:ignoreFile` se stane `dresscode:ignoreFile`. Anotace `@phpcsSuppress` zůstane zachována a změní se v ní pouze název pravidla. Pokud příkaz narazí na `phpcs:ignore` na samostatném řádku, připomene [rozdíl v rozsahu platnosti |#1. Kód nechte, jak je] a uvede místa, která stojí za kontrolu. Názvy, které žádné rozhodnutí nepokrývá, ponechá beze změny a také je uvede:
 
 /--pre .[terminal]
-Migrated 5 suppressions in 1 file.
-Unknown    `Acme.Custom.Sniff`, kept as written, as no decision answers to it: src/Legacy.php:12
-Widened    src/Legacy.php:10: a `dresscode:ignore` on a line of its own covers the whole statement below it, not just the next line
+Of the 5 comments rewritten:
+1  names a rule DressCode does not know, which silences nothing: `Acme.Custom.Sniff` (src/Legacy.php:12)
+1  now silences the whole statement below it, not just the next line, so it may hide more than you meant (src/Legacy.php:10)
+
+Next, replace or remove the unknown names and check what the others hide; then `dresscode check` shows the violations left.
+
+REWRITTEN  5 comments in 1 file
 \--
 
-Získáte tak jasný přehled neplatných komentářů, které reálně nic nepotlačují, protože DressCode pravidlo s takovým jménem nezná. Jelikož tyto komentáře nebylo možné přenést, skončí příkaz s exit kódem 2. Pokud se objeví pouze rozšířená potlačení z řádku `Widened`, vrátí příkaz exit kód 1, protože tato místa pouze čekají na vaši zběžnou revizi.
+Získáte tak jasný přehled komentářů, které reálně nic nepotlačují, protože DressCode pravidlo s takovým jménem nezná, a těch, které potlačují víc než dřív. Obojí jsou věci k vaší kontrole, ne selhání, a příkaz proto skončí s exit kódem 0. Kód 2 vrátí jen tehdy, když některý soubor přeskočí.
 
 S přepínačem `--dry-run` ukáže příkaz všechny plánované změny v podobě diffu a nezapíše nic.
 

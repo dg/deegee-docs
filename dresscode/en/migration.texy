@@ -51,38 +51,52 @@ Translate a PHP CS Fixer configuration before you remove the old tool from the p
 From a `phpcs.xml` file that checks `src` and `tests`, builds on `PSR12`, enforces a 100-character line limit, flags unused imports, and requires function documentation, DressCode produces this clean `dresscode.neon`:
 
 ```neon
+# Translated from `phpcs.xml` of PHP_CodeSniffer
+# by `dresscode migrate config` of DressCode 1.5.0.
+# What could not be carried over is at the end of this file.
 use: psr12
 
 paths: [src, tests]
 
 file:
 	lineLength: 100
-	lineLengthExcept: [imports]
-	longLines: forbidden
 
 imports:
-	unused: forbidden             # `SlevomatCodingStandard.Namespaces.UnusedUses` without `searchAnnotations` removes an import only a doc comment uses; DressCode keeps it.
+	unused: forbidden
+
+# Left behind by the translation. Delete this block and the comment at the top once it is dealt with.
+#
+# Works a little differently
+#   ~ `SlevomatCodingStandard.Namespaces.UnusedUses` without `searchAnnotations` removes an import
+#       only a doc comment uses; DressCode keeps it.
+#
+# No DressCode rule, so nothing checks these now
+#   ✗ Squiz.Commenting.FunctionComment
 ```
 
-The command reports which configuration it found and where it saved the new file, followed by a summary and anything that could not be mapped automatically:
+The command reports which configuration it found, what became of your rules and, last of all, where it saved the new file:
 
 /--pre .[terminal]
 Found `phpcs.xml` of PHP_CodeSniffer.
-Written `dresscode.neon`.
 
-Read 4 rules; set 4 decisions and 1 preset, the rules translated; `dresscode init` measures the code instead.
-  `SlevomatCodingStandard.Namespaces.UnusedUses` without `searchAnnotations` removes an import only a doc comment uses; DressCode keeps it.
-  No DressCode rule covers `Squiz.Commenting.FunctionComment`.
+3 rules in your `phpcs.xml`, on the preset `psr12`:
+1  carried over exactly
+1  carried over, but DressCode's result may differ a little
+1  dropped, DressCode has no such rule, so nothing checks them now
 
+The details are at the end of `dresscode.neon`.
 5 phpcs suppression comments: `dresscode migrate suppressions` rewrites them.
+Next, `dresscode check` shows what the configuration finds in your code.
+
+WRITTEN  dresscode.neon
 \--
 
-These diagnostic lines are just as valuable as the configuration itself: they highlight explicit choices you need to make. In this example, you learn that DressCode preserves imports referenced solely by docblocks, whereas the original sniff without `searchAnnotations` deleted them. Warnings about partially translated rules are also saved directly as comments alongside the decision in the generated file, ensuring they don't disappear when you close your terminal. Rules without a direct counterpart are either ones you don't actually need, or ones you can easily [write yourself |porting-rules].
+The summary counts every rule once, and it names the ones you need to finish by hand. What lies behind the numbers is in the block at the end of the generated file, so it doesn't disappear when you close your terminal. Here it tells you that DressCode preserves imports referenced solely by docblocks, whereas the original sniff without `searchAnnotations` deleted them. Once you have dealt with the notes, delete both the block and the comment at the top of the file: they describe the migration, not your configuration. Rules without a direct counterpart are either ones you don't actually need, or ones you can easily [write yourself |porting-rules].
 
-A single legacy rule often maps to several granular decisions: for example, `Generic.Files.LineLength` with `absoluteLineLimit` yields `file.longLines`, `file.lineLength`, and `file.lineLengthExcept`. Options without a DressCode counterpart are clearly reported. Rules explicitly disabled in your legacy configuration are assigned the value `keep`. However, if another rule from the same tool maps to that same decision, the command leaves it untouched with a warning, since it cannot know whether one of those rules still applies. Review the generated file. It is usually pleasantly concise.
+A single legacy rule often maps to several granular decisions: for example, `Generic.Files.LineLength` with `absoluteLineLimit` yields `file.longLines`, `file.lineLength`, and `file.lineLengthExcept`. Only those the chosen standard does not already set are written to the file, which is why the example keeps just `file.lineLength`. Options without a DressCode counterpart are admitted in the block at the end of the file too. Rules explicitly disabled in your legacy configuration are assigned the value `keep`. However, if another rule from the same tool maps to that same decision, the command leaves it untouched and adds a note, since it cannot know whether one of those rules still applies. Review the generated file. It is usually pleasantly concise.
 
 .[note]
-If `migrate config` issues any warnings, it exits with code 1, even though the file was written successfully. With `--format json`, it prints a structured document with the version in `version`, the project root in `root`, the configuration, the file it was written to, counts, warnings, and unmapped rules; in this mode it asks no questions, just as outside a terminal.
+When the translation finishes, `migrate config` exits with code 0, whether everything came across or not. With `--format json`, it prints a structured document with the version in `version`, the project root in `root`, the configuration, the file it was written to, the counts of rules by what became of them, the notes, and unmapped rules; in this mode it asks no questions, just as outside a terminal.
 
 
 3. The First Fix
@@ -104,15 +118,19 @@ This step is optional: legacy comments keep working. But native decision paths a
 dresscode migrate suppressions src tests
 ```
 
-Directives like `phpcs:ignore SlevomatCodingStandard.Namespaces.UnusedUses` become `dresscode:ignore imports.unused`, `phpcs:disable` and `phpcs:enable` become `dresscode:disable` and `dresscode:enable`, and file-level `phpcs:ignoreFile` becomes `dresscode:ignoreFile`. The `@phpcsSuppress` annotation remains an annotation, with only the rule name updated. Whenever the command rewrites a standalone `phpcs:ignore`, it highlights the [difference in scope |#1. Leave the Code as It Is] on the `Widened` line, pointing out locations worth a quick manual review. Unrecognized rule names remain untouched and are listed on the `Unknown` line:
+Directives like `phpcs:ignore SlevomatCodingStandard.Namespaces.UnusedUses` become `dresscode:ignore imports.unused`, `phpcs:disable` and `phpcs:enable` become `dresscode:disable` and `dresscode:enable`, and file-level `phpcs:ignoreFile` becomes `dresscode:ignoreFile`. The `@phpcsSuppress` annotation remains an annotation, with only the rule name updated. Whenever the command rewrites a standalone `phpcs:ignore`, it points out the [difference in scope |#1. Leave the Code as It Is] and the locations worth a quick manual review. Unrecognized rule names remain untouched and are listed too:
 
 /--pre .[terminal]
-Migrated 5 suppressions in 1 file.
-Unknown    `Acme.Custom.Sniff`, kept as written, as no decision answers to it: src/Legacy.php:12
-Widened    src/Legacy.php:10: a `dresscode:ignore` on a line of its own covers the whole statement below it, not just the next line
+Of the 5 comments rewritten:
+1  names a rule DressCode does not know, which silences nothing: `Acme.Custom.Sniff` (src/Legacy.php:12)
+1  now silences the whole statement below it, not just the next line, so it may hide more than you meant (src/Legacy.php:10)
+
+Next, replace or remove the unknown names and check what the others hide; then `dresscode check` shows the violations left.
+
+REWRITTEN  5 comments in 1 file
 \--
 
-This output provides an inventory of orphaned suppressions: directives referencing legacy rules that DressCode does not recognize and which therefore suppress nothing. Because these comments could not be migrated, the command exits with code 2. If only widened suppressions are present on the `Widened` line, the exit code is 1, indicating that the files merely warrant your review.
+You get a clear picture of the comments that suppress nothing, because DressCode does not recognize their rule, and of those that now suppress more than before. Both are things for you to review, not failures, so the command exits with code 0. It returns code 2 only when it skips a file.
 
 With `--dry-run`, the command previews all replacements as a unified diff without writing changes to disk.
 
