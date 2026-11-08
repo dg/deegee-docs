@@ -27,26 +27,28 @@ dresscode upgrade estimate nette/utils 4.0
 /--pre .[terminal]
 DRESS|CODE 1.3.0
 Config     /var/www/shop/dresscode.neon
-Upgrade    nette/utils 4.0 over 3 files
+Upgrade    nette/utils 4.0 over 3 files, an estimate: nothing was changed
 
-Must change, 2 topics with 12 findings
-  nette/utils  10 findings in 3 files    needs ^4.0, automatic
-  nette/utils  2 findings in 1 file      works on ^3.2, automatic
+Must change, 12 findings, all fixed by DressCode
+  nette/utils  10 findings in 3 files    fixed by DressCode, once ^4.0 is installed
+  nette/utils  2 findings in 1 file      fixed by DressCode, already on ^3.2
 
-Today      2 findings of `deprecations` are rewritten on the versions allowed now by `dresscode upgrade today`
+Right now  `dresscode upgrade today` can rewrite 2 of these, on the versions you have
 Composer   nette/utils 4.0: nothing in the lock refuses it
-Moves      nette/utils v3.2.10 => v4.0.0
-Data       nette/application up to 3.3, nette/component-model up to 3.2, nette/http up to 3.4,
+Versions   nette/utils v3.2.10 => v4.0.0
+Rules for  nette/application up to 3.3, nette/component-model up to 3.2, nette/http up to 3.4,
            nette/routing up to 3.1.4, nette/utils up to 4.1.5, php up to 8.6
+
+Next       `dresscode upgrade plan nette/utils 4.0` orders this into steps you can run
 \--
 
 Each line in the output represents a single topic: either a library for which DressCode has [upgrade data |upgrading-libraries] (here `nette/utils`), or a specific [decision |configuration] for a change that no upgrade data describes. Next to the topic name, you see the number of findings (locations requiring modification), the number of affected files, and two descriptors outlining the nature of the edits.
 
-The first descriptor specifies **when** an edit can safely be made. The label `works on ^3.2` means the updated code is fully backward compatible with the constraints currently permitted by your `composer.json` (here `^3.2`), allowing DressCode to rewrite it immediately. Conversely, a location marked `needs ^4.0` must wait until you raise your dependency constraints, because code written for the new API would break on the older version. This is why a single library can appear on both lines: Nette deprecated `Arrays::searchKey()` back in the 3.x series and its replacement `getKeyOffset()` was introduced in 3.2, whereas `Strings::startsWith()` was removed entirely in 4.0.
+The first descriptor specifies **when** an edit can safely be made. The label `already on ^3.2` means the updated code is fully backward compatible with the constraints currently permitted by your `composer.json` (here `^3.2`), allowing DressCode to rewrite it immediately. Conversely, a location marked `once ^4.0 is installed` must wait until you raise your dependency constraints, because code written for the new API would break on the older version. This is why a single library can appear on both lines: Nette deprecated `Arrays::searchKey()` back in the 3.x series and its replacement `getKeyOffset()` was introduced in 3.2, whereas `Strings::startsWith()` was removed entirely in 4.0.
 
-The second descriptor identifies **who** handles the rewrite. DressCode resolves `automatic` items completely on its own. Items flagged as `manual` represent developer tasks: places where a human must evaluate the context and choose a replacement (the accompanying report explains exactly what to write). Locations marked `unknown types` are waiting on [static analysis from PHPStan |phpstan-types], while `uncertain names` indicates that the place waits until it is [certain which function |php-functions-in-namespaces#name-resolution] a call actually targets.
+The second descriptor identifies **who** handles the rewrite. DressCode resolves `fixed by DressCode` items completely on its own. Items flagged as `left to you` represent developer tasks: places where a human must evaluate the context and choose a replacement (the accompanying report explains exactly what to write). Locations marked `waiting for the types` are waiting on [static analysis from PHPStan |phpstan-types], while `waiting for certain names` indicates that the place waits until it is [certain which function |php-functions-in-namespaces#name-resolution] a call actually targets.
 
-The `Today` line highlights what running [`upgrade today` |upgrade#When You Have Already Raised the Versions] can fix right now. The `Composer` line warns of potential conflicts in `composer.lock`: if another package blocks the target version, it is listed here along with its conflicting constraint. The `Moves` line shows which packages a constraint bump would advance to a new major version, based on a Composer dry run. The final `Data` line lists all libraries covered by available upgrade packages and the version the data reaches for each.
+The `Right now` line highlights what running [`upgrade today` |upgrade#When You Have Already Raised the Versions] can fix right now. The `Composer` line warns of potential conflicts in `composer.lock`: if another package blocks the target version, it is listed here along with its conflicting constraint. The `Versions` line shows which packages a constraint bump would advance to a new major version, based on a Composer dry run. The `Rules for` line lists all libraries covered by available upgrade packages and the version the data reaches for each, and the final `Next` line gives you the command that turns the estimate into a plan.
 
 The estimate command is entirely passive and modifies no files. Omitting the target proposes the latest versions known to the data sets; running `dresscode upgrade estimate php` does the same strictly for PHP.
 
@@ -68,7 +70,7 @@ dresscode upgrade plan nette/utils 4.0 --save
 /--pre .[terminal]
 DRESS|CODE 1.3.0
 Config     /var/www/shop/dresscode.neon
-Upgrade    nette/utils 4.0 over 3 files
+Upgrade    nette/utils 4.0 over 3 files, an estimate: nothing was changed
 ...
 Mode       application, `composer.json` gives the type `project`
 Plan       nette/utils 4.0
@@ -189,7 +191,7 @@ If a file is modified externally after a step writes it (whether by tests or by 
 Manual Tasks Along the Way
 --------------------------
 
-Anything the automated fixer cannot safely resolve is listed under the steps as a manual task (the `Manual` line), complete with file coordinates and instructions on what to write instead. As long as any manual task remains, execution halts after the major jump and at the conclusion of the plan with exit code 1; a plan is only complete when zero manual tasks remain. Resolve each location manually, or confirm the existing code with an explanatory comment, and run `upgrade run` again:
+Anything the automated fixer cannot safely resolve is listed under the steps as a manual task (the `Manual` line), complete with file coordinates and instructions on what to write instead. With more than twenty of them, the run only counts them by topic and `dresscode upgrade tasks` gives the full list. As long as any manual task remains, execution halts after the major jump and at the conclusion of the plan with exit code 1; a plan is only complete when zero manual tasks remain. Resolve each location manually, or confirm the existing code with an explanatory comment, and run `upgrade run` again:
 
 ```php
 // dresscode:ignore upgrading.php.deprecatedApi -- the report needs the locale of the server
