@@ -42,11 +42,11 @@ $http = new Http\RetryClient(
 );
 ```
 
-Opakují se stavy **408 a 429** a serverové chyby **od 500 výš**, plus výpadky sítě, které nastaly dřív, než dorazila odpověď. Mezi pokusy se čeká, doba se pokaždé zdvojnásobí a navíc se náhodně rozkolísá, aby ti tisíc paralelních procesů nezaútočilo na providera v jednu chvíli. Když provider pošle hlavičku `Retry-After`, řídí se podle ní.
+Opakují se stavy **408 a 429** a serverové chyby **od 500 výš**, plus výpadky sítě, kvůli kterým se požadavek na server vůbec nedostal. U GET se opakují i výpadky po odeslání, protože čtení nic nestojí. Mezi pokusy se čeká, doba se pokaždé zdvojnásobí a navíc se náhodně rozkolísá, aby ti tisíc paralelních procesů nezaútočilo na providera v jednu chvíli. Když provider pošle hlavičku `Retry-After`, řídí se podle ní.
 
 Stejně poučné je, co se neopakuje. Chyby ve čtyřstovkách kromě 408 a 429 dopadnou podruhé úplně stejně, takže by opakování jen zdrželo. A ze serverových chyb jsou vyňaté **501 a 505**, protože ty neříkají "teď ne", ale "tohle neumím a nikdy umět nebudu".
 
-Nejzajímavější pravidlo se týká [streamování |streaming]: jakmile dorazil první kousek odpovědi, opakování se zakáže. Model už začal psát a ty už za to platíš; kdyby se požadavek přehrál, dostal bys odpověď dvakrát a zaplatil ji dvakrát.
+Nejzajímavější pravidlo se týká [streamování |streaming]: jakmile dorazil první kousek odpovědi, opakování se zakáže. Model už začal psát a ty už za to platíš; kdyby se požadavek přehrál, dostal bys odpověď dvakrát a zaplatil ji dvakrát. Stejně se zachází s výpadkem po odeslání: `POST`, kterému vypršel čas nebo spadlo spojení, mohl model mezitím zpracovat, a tak se neopakuje a dostaneš `CommunicationException`. Když požadavek vůbec neodešel, přijde její potomek `RequestNotSentException`.
 
 
 ObservableClient: Vidět, co se děje
