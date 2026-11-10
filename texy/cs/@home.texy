@@ -20,7 +20,7 @@ Knihovnu stáhnete a nainstalujete pomocí nástroje [Composer |https://getcompo
 composer require texy/markdown
 ```
 
-Tím získáte Texy i podporu Markdownu. Pokud chcete psát jen v syntaxi Texy, stačí `composer require texy/texy`. Texy 4.0 potřebuje PHP 8.2 nebo novější.
+Tím získáte Texy i podporu Markdownu. Pokud chcete psát jen v syntaxi Texy, stačí `composer require texy/texy`. Texy 4.0 potřebuje PHP 8.4 nebo novější.
 
 
 První článek
@@ -41,12 +41,12 @@ Kolik kódu je potřeba, aby z toho bylo HTML? Překvapivě málo:
 ```php
 require __DIR__ . '/vendor/autoload.php';
 
-$texy = new Texy\Texy;
 $markdown = new Texy\Markdown\Markdown;
-$html = $markdown->toHtml($text, $texy); // $text obsahuje článek výše
+$markdown->config->locale = 'cs';         // článek je česky
+$html = $markdown->toHtml($text);         // $text obsahuje článek výše
 ```
 
-Objekt `Texy\Texy` je samotný engine, který se postará o typografii a o výstup. Markdown mu jen dodá rozebraný dokument. A tohle je výsledek:
+Řádek s `locale` říká, v jakém jazyce je článek napsaný. Podle toho Texy volí uvozovky, bez něj by použilo anglické. A tohle je výsledek:
 
 ```html
 <h1>Jak jsme sušili švestky</h1>
@@ -74,10 +74,10 @@ Texy upravuje text tak, jak by to udělal sazeč, a vy přitom píšete jen znak
 - za předložky `k`, `s`, `v`, `z`, `o`, `u` a spojku `i` a mezi číslo a jednotku vloží pevnou mezeru, takže se na konci řádku neodtrhnou od slova, ke kterému patří
 - příliš dlouhá slova rozdělí podle slabik, aby v úzkém sloupci nezůstávaly díry
 
-Texy zná uvozovky 17 jazyků a výchozí je čeština. Pro anglický text stačí jeden řádek:
+Texy zná uvozovky 17 jazyků a jazyk nastavíte jedním řádkem, jak ukázal první článek. Dělení dlouhých slov je pro Markdown ve výchozím stavu vypnuté, zapnete ho stejně snadno:
 
 ```php
-$texy->typographyModule->locale = 'en';
+$markdown->config->hyphenation = true;
 ```
 
 Další úpravy, jako šipky `-->`, znak `×` v rozměrech `10x20` nebo `(C)`, popisuje [Syntaxe Texy |syntax#Typografie]. Platí stejně pro Markdown.
@@ -104,13 +104,13 @@ Dělá to vždy, takže jedna neuzavřená značka nikdy nerozbije zbytek strán
 Komentáře od návštěvníků
 ========================
 
-Pod článkem chcete komentáře. Tam už píše kdokoli, a tak Texy přepnete do bezpečného režimu:
+Pod článkem chcete komentáře. Tam už píše kdokoli, a tak si pro ně připravíte zvláštní objekt v bezpečném režimu. Zvláštní proto, aby přísná pravidla komentářů neplatila i pro vaše články:
 
 ```php
-$texy = new Texy\Texy;
-$markdown = new Texy\Markdown\Markdown;
-Texy\Markdown\Configurator::safeMode($markdown, $texy);
-$html = $markdown->toHtml($comment, $texy);
+$comments = new Texy\Markdown\Markdown;
+$comments->config->locale = 'cs';
+Texy\Markdown\Configurator::safeMode($comments);
+$html = $comments->toHtml($comment);    // $comment je text komentáře
 ```
 
 Podívejme se, co udělá s komentářem, jehož autor zkouší podstrčit skript:
@@ -138,7 +138,7 @@ Chcete do článku vložit video z YouTube? Texy se dá naučit nové věci, ani
 use Texy\Nodes\ImageNode;
 use Texy\Output\Html;
 
-$texy->htmlOutput->addRenderer(function (ImageNode $node, Html\Renderer $renderer, ?Closure $previous) {
+$markdown->htmlOutput->addRenderer(function (ImageNode $node, Html\Renderer $renderer, ?Closure $previous) {
 	if (!str_starts_with($node->url ?? '', 'youtube:')) {
 		return null; // ostatní obrázky vykreslí Texy jako obvykle
 	}
@@ -167,22 +167,23 @@ Obrázek s rozměry a popisem, zarovnaný doprava, s CSS třídou a s popiskem p
 [* susarna.jpg 300x200 .(Sušárna na půdě)[photo] >] *** Foto: Jana Nováková
 ```
 
-Text v syntaxi Texy převede metoda `process()`, žádný další balíček není potřeba:
+Text v syntaxi Texy převede objekt `Texy\Texy`, samotný engine, na kterém stojí i Markdown. Žádný další balíček není potřeba a čeština je u něj výchozí jazyk:
 
 ```php
-$html = $texy->process($text);
+$texy = new Texy\Texy;
+$html = $texy->toHtml($text);
 ```
 
 ```html
-<div style="float:right" class="figure"><img src="images/susarna.jpg"
-class="photo" alt="Sušárna na půdě" width="300" height="200">
-	<p>Foto: Jana Nováková</p>
-</div>
+<figure style="float:right"><img src="susarna.jpg" alt="Sušárna na půdě"
+class="photo" width="300" height="200">
+	<figcaption>Foto: Jana Nováková</figcaption>
+</figure>
 ```
 
-`300x200` jsou rozměry, text v kulatých závorkách popisuje obrázek pro ty, kdo ho nevidí, `[photo]` přidá třídu, `>` zarovná doprava a za `***` následuje viditelný popisek. Ta část s tečkou a závorkami se jmenuje modifikátor a stejně ji můžete připojit k odstavci, nadpisu, odkazu nebo buňce tabulky. Předponu `images/` přidalo Texy samo. Je výchozí a v [konfiguraci |configuration] ji změníte třeba na adresář s obrázky článků.
+`300x200` jsou rozměry, text v kulatých závorkách popisuje obrázek pro ty, kdo ho nevidí, `[photo]` přidá třídu, `>` zarovná doprava a za `***` následuje viditelný popisek. Ta část s tečkou a závorkami se jmenuje modifikátor a stejně ji můžete připojit k odstavci, nadpisu, odkazu nebo buňce tabulky.
 
-Syntaxe Texy umí i tabulky se sloučenými buňkami, titulky tabulek nebo nadpisy, které se samy zařadí pod nadpis stránky: článek, ve kterém autor začne nadpisem první úrovně, dostane po nastavení `$texy->headingModule->top = 2` nadpisy od `<h2>`. Všechno najdete na stránce [Syntaxe Texy |syntax].
+Syntaxe Texy umí i tabulky se sloučenými buňkami, titulky tabulek nebo nadpisy, které se samy vyváží: je jedno, jakým podtržením autor článek začne, jeho nejdůležitější nadpis dostane úroveň, kterou nastavíte v [konfiguraci |configuration#Nadpisy]. Všechno najdete na stránce [Syntaxe Texy |syntax].
 
 
 Nástroje nad zdrojovým textem
@@ -197,7 +198,7 @@ $source = Texy\Texy::normalize(file_get_contents($file));
 $document = $markdown->parse($source);
 $rewriter = new Texy\Rewriter($source);
 
-foreach (Texy\NodeHelpers::find($document, Texy\Nodes\LinkNode::class) as $link) {
+foreach ($document->find(Texy\Nodes\LinkNode::class) as $link) {
 	if ($link->urlRange === null) {
 		continue; // odkaz, jehož adresa ve zdrojovém textu není zapsaná
 	}
@@ -213,6 +214,18 @@ file_put_contents($file, $rewriter->getResult());
 Místo `toHtml()` tu voláme `parse()`, které text jen rozebere na strom a HTML nevyrábí. `normalize()` předtím sjednotí konce řádků a podobné drobnosti, aby pozice ve stromu přesně seděly na text. Adresa v ukázce kódu není odkaz, a proto zůstane, jak byla. Úplně stejně to funguje pro soubory v syntaxi Texy.
 
 Na stejném základu postavíte kontrolu dokumentace, která hlásí chyby i s číslem řádku, hromadné přepisy nebo podporu v editoru. A protože oba jazyky sdílejí jeden strom, převedete článek z Markdownu do syntaxe Texy jedním voláním `$markdown->toTexy($text)`. Jak na to, ukazuje stránka [Nástroje nad zdrojovým textem |source-tools].
+
+
+V šablonách Latte
+=================
+
+Píšete šablony v [Latte |https://latte.nette.org]? Texy do nich přidá filtr, takže článek převedete přímo v šabloně:
+
+```latte
+{$article->text|texy}
+```
+
+Jak filtr zaregistrovat a jak s ním převádět Markdown, popisuje stránka [Texy v Latte |latte].
 
 
 Napsané v Texy
