@@ -42,11 +42,13 @@ $http = new Http\RetryClient(
 );
 ```
 
-Statuses **408 and 429** are repeated, as are server errors **from 500 up**, plus network failures that kept the request from reaching the server at all. A GET is repeated even after a failure once it was sent, because reading costs nothing. Between attempts it waits, doubling the delay each time and scattering it slightly at random, so that a thousand parallel processes do not hit the provider at the same instant. When the provider sends a `Retry-After` header, that wins.
+Statuses **408 and 429** are repeated, as are server errors **from 500 up** (for a `POST` only some of them, see below), plus network failures that kept the request from reaching the server at all. Between attempts it waits, doubling the delay each time and scattering it slightly at random, so that a thousand parallel processes do not hit the provider at the same instant. When the provider sends a `Retry-After` header, that wins.
 
 What is not repeated is just as instructive. Errors in the four hundreds other than 408 and 429 would fail identically the second time, so repeating would only add delay. And among the server errors, **501 and 505** are excluded, because they do not say "not now" but "I cannot do this and never will".
 
-The most interesting rule concerns [streaming |streaming]: once the first piece of the answer has arrived, retrying is disabled. The model has started writing and you are already paying for it; replaying the request would give you the answer twice and bill it twice. A failure after sending is treated the same way: the model may already have processed a `POST` that timed out or lost its connection, so it is not repeated and you get a `CommunicationException`. When the request never left, you get its child `RequestNotSentException`.
+The most interesting rule concerns [streaming |streaming]: once the first piece of the answer has arrived, retrying is disabled. The model has started writing and you are already paying for it; replaying the request would give you the answer twice and bill it twice.
+
+The same care applies to every generation that may have reached the model. A `POST` that timed out or lost its connection after it was sent is not repeated, and you get a `CommunicationException`; only a request that never left your computer is repeated, and its failure is reported as `RequestNotSentException`, a child of `CommunicationException`. Of the server errors, a `POST` is repeated only after **500 and 503**, where the provider failed or turned the request away. With **502 and 504** a gateway between you and the model gave up waiting, while the model may still be writing the answer. A GET is repeated in all these cases, because reading costs nothing. .{data-version:1.2.0}
 
 
 ObservableClient: Seeing What Happens
