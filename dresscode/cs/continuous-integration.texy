@@ -2,15 +2,15 @@ Průběžná integrace: GitHub Actions a GitLab
 *******************************************
 
 .[perex]
-V průběžné integraci (CI) stačí spustit `dresscode check` a GitHub ukáže každé porušení stylu PHP kódu přímo u jeho řádku v pull requestu. Pro GitLab a Jenkins je tu formát `checkstyle`, cache omezí další běhy jen na změněné soubory a exit kód odliší porušení od kontroly, která vůbec neproběhla.
+V průběžné integraci (CI) stačí spustit `dresscode check` a GitHub každé porušení stylu PHP kódu ukáže přímo u příslušného řádku v pull requestu. Pro GitLab i Jenkins je připraven formát `checkstyle`, cache omezí další běhy výhradně na změněné soubory a exit kód spolehlivě odliší porušení od kontroly, která vůbec neproběhla.
 
 
 Co v CI spouštět
 ================
 
-`check`, ne `fix`. CI má říct, jestli je kód v pořádku, a při porušení job s exit kódem `1` selže; opravu dělá vývojář lokálně, kde ji vidí. Kdo chce, aby CI opravu i nabídlo, pustí `fix` a za ním `git diff --exit-code`. Diff ve výpisu jobu je pak přesně to, co má vývojář commitnout.
+`check`, nikoliv `fix`. Úkolem CI je říct, zda je kód v pořádku: jakmile narazí na porušení, job selže s exit kódem `1` a vývojář opravu provede pohodlně lokálně, kde má změny přímo před očima. Pokud chcete, aby CI rovnou nabídlo hotovou opravu, spusťte `fix` a hned za ním `git diff --exit-code`. Diff ve výstupu jobu pak ukáže přesně to, co má vývojář commitnout.
 
-Exit kódy jsou pevně dané: `0` znamená čisto; `1` porušení, soubor, který nejde parsovat, nebo víc varování, než dovoluje `--max-warnings`; `2` soubor, který selhal (výjimka v pravidle, zacyklená pravidla); `3` chybu na příkazové řádce nebo v konfiguraci. Na `2` a `3` má job selhat hlasitěji než na `1`: `3` znamená, že se nezkontrolovalo nic, a `2`, že některý soubor zkontrolovaný není. Celou stupnici popisuje [Příkazová řádka |cli#Exit kódy].
+Exit kódy jsou pevně dané. `0` znamená, že je kód čistý. Kód `1` hlásí porušení, soubor, který nelze naparsovat, nebo překročení limitu varování zadaného přepínačem `--max-warnings`. Kód `2` značí selhání na konkrétním souboru (výjimku v pravidle či zacyklení pravidel) a kód `3` chybu v syntaxi příkazové řádky nebo v konfiguraci. Na kódy `2` a `3` by měl job reagovat hlasitěji než na běžnou `1`: trojka totiž znamená, že se nezkontrolovalo vůbec nic, a dvojka varuje, že některý soubor zůstal neprověřený. Celou stupnici detailně popisuje [Příkazová řádka |cli#Exit kódy].
 
 
 GitHub Actions
@@ -33,15 +33,15 @@ jobs:
       - run: temp/dresscode/bin/dresscode check
 ```
 
-Nic dalšího potřeba není: DressCode pozná, že běží jako krok GitHub Actions, a přepne výstup na formát `github`, ve kterém je každé porušení anotací. V pull requestu se pak ukáže přímo u řádku, kterého se týká, se zprávou i cestou rozhodnutí. Ve výpisu jobu stojí u každého porušení soubor, řádek a rozhodnutí, na konci shrnutí.
+Nic dalšího nepotřebujete: DressCode sám pozná, že běží jako krok v GitHub Actions, a automaticky přepne výstup do formátu `github`, v němž se každé porušení promění v nativní anotaci. V pull requestu se pak zobrazí přímo u dotčeného řádku, i se zprávou a přesnou cestou rozhodnutí. Ve výstupu jobu najdete u každého porušení soubor, řádek i rozhodnutí a na konci nechybí celkový souhrn.
 
-Verzi DressCode si přibijte, ať už číslem u `create-project` (`dresscode/dresscode:1.3.0`), nebo v `composer.lock`: nové rozhodnutí sady nebo standardu v minoritní verzi může začít hlásit něco, co dosud procházelo, a to se má stát při vědomé aktualizaci, ne v cizím pull requestu. A pozor na verzi PHP v běžci: samotný DressCode potřebuje PHP 8.4 až 8.6, i když kontroluje projekt psaný pro starší verzi.
+Verzi DressCode si pevně uzamkněte, ať už číslem verze u `create-project` (`dresscode/dresscode:1.3.0`), nebo v `composer.lock`. Nové rozhodnutí přidané do sady či standardu v minoritní verzi totiž může začít hlásit něco, co dosud procházelo, a k tomu má dojít při vaší plánované aktualizaci, nikoliv v rozpracovaném pull requestu někoho jiného. A pohlídejte si verzi PHP na běžci: samotný DressCode vyžaduje PHP 8.4 až 8.6, i když prověřuje projekt psaný pro starší verzi.
 
 
 GitLab, Jenkins a ostatní
 =========================
 
-Kde nativní formát není, poslouží `checkstyle`, kterému rozumí Jenkins, nástroj `cs2pr` i většina převodníků do formátu Code Quality v GitLabu, a [`json` |cli#Výstup JSON pro nástroje] pro vlastní zpracování:
+Kde nativní formát chybí, poslouží `checkstyle`, kterému rozumí Jenkins, nástroj `cs2pr` i většina převodníků do formátu Code Quality v GitLabu, nebo [`json` |cli#Výstup JSON pro nástroje] pro vlastní zpracování:
 
 ```yaml
 dresscode:
@@ -53,26 +53,26 @@ dresscode:
     paths: [dresscode.xml]
 ```
 
-Tvar obou formátů se v minoritních verzích nemění, viz [Zpětná kompatibilita |compatibility#Výstup pro nástroje]. Formáty `console` a `github` jsou naopak pro lidi a měnit se mohou.
+Struktura obou těchto formátů se v minoritních verzích nemění, viz [Zpětná kompatibilita |compatibility#Výstup pro nástroje]. Formáty `console` a `github` jsou naopak určeny lidským očím a měnit se mohou.
 
 
 Projekt s typy
 ==============
 
-V projektu s klíčem `typeAnalysis: phpstan` patří DressCode i PHPStan do vývojových závislostí, aby se DressCode ptal té verze PHPStanu a té konfigurace, se kterými projekt pracuje ([Typy z PHPStanu |phpstan-types#enable]). Job pak nainstaluje závislosti projektu a DressCode pustí z `vendor/bin`:
+V projektu s klíčem `typeAnalysis: phpstan` patří DressCode i PHPStan přímo do vývojových závislostí, aby se DressCode dotazoval přesně té verze PHPStanu a té konfigurace, se kterými projekt reálně pracuje ([Typy z PHPStanu |phpstan-types#enable]). Job v CI pak jednoduše nainstaluje projektové závislosti a DressCode spustí z `vendor/bin`:
 
 ```yaml
       - run: composer install --no-progress
       - run: vendor/bin/dresscode check --no-cache
 ```
 
-Kontrolu s typy pouštějte bez cache, jako v ukázce. Cache si soubor pamatuje podle jeho obsahu, a tak nepozná, že metoda v jiném souboru dostala anotaci `@deprecated` nebo že se změnil `phpstan.neon`. Následující oddíl proto platí pro projekt bez typů.
+Kontrolu s typy pouštějte vždy bez cache, přesně jako v ukázce. Cache si totiž soubory pamatuje podle jejich obsahu, takže nezaznamená, když metoda v jiném souboru získala anotaci `@deprecated` nebo když se změnil soubor `phpstan.neon`. Následující oddíl proto platí výhradně pro projekty bez typů.
 
 
 Cache mezi běhy
 ===============
 
-DressCode si pamatuje otisky souborů, které prošly čistě, v systémovém dočasném adresáři. V CI, kde každý běh začíná načisto, z toho nic nemá. Když ale cache nasměrujete do projektu a ten adresář necháte CI uchovat, zkontroluje druhý běh jen změněné soubory:
+DressCode si otisky souborů, které prošly kontrolou bez nálezu, standardně ukládá do systémového dočasného adresáře. V prostředí CI, kde každý běh začíná od nuly, to logicky nepomůže. Když ale cache nasměrujete do složky uvnitř projektu a necháte CI tento adresář uchovat, prověří příští běh už jen změněné soubory:
 
 ```neon
 cacheDir: temp/dresscode-cache
@@ -86,12 +86,12 @@ cacheDir: temp/dresscode-cache
           restore-keys: dresscode-
 ```
 
-Cache s klíčem, který už existuje, `actions/cache` na konci jobu znovu neuloží, takže s pevným klíčem by zůstala ve stavu z prvního běhu. Proto má klíč v sobě commit: každý běh uloží novou cache a `restore-keys` na začátku dalšího obnoví tu nejnovější. Po změně konfigurace, aktualizaci nástroje nebo úpravě vlastního pravidla se soubory zkontrolují znovu samy, viz [Cache a paralelní běh |cli#Cache a paralelní běh].
+Akce `actions/cache` na konci jobu neuloží cache, jejíž klíč už existuje, takže s pevným klíčem by zůstala zamrzlá ve stavu z prvního běhu. Právě proto klíč nese otisk commitu: každý běh uloží novou cache a `restore-keys` na začátku příštího běhu obnoví tu nejnovější. Jakmile změníte konfiguraci, aktualizujete nástroj nebo upravíte vlastní pravidlo, soubory se automaticky prověří znovu, viz [Cache a paralelní běh |cli#Cache a paralelní běh].
 
 
 Paralelní běh
 =============
 
-Počet pracovních procesů se řídí počtem procesorů běžce, takže na dvoujádrovém běžci není co ladit. Kde běžec sdílí stroj s jinými úlohami, `--jobs 4` nedovolí běhu zabrat všechna jádra.
+Počet pracovních procesů se automaticky řídí počtem procesorů běžce, takže na dvoujádrovém běžci není co ladit. Pokud běžec sdílí stroj s dalšími úlohami, přepínač `--jobs 4` nedovolí běhu zabrat všechna jádra.
 
 {{maintitle: Styl PHP kódu v CI: GitHub Actions a GitLab}}
