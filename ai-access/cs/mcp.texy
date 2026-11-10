@@ -1,0 +1,133 @@
+AI Access MCP: Ať se tvůj AI asistent zeptá Gemini a GPT
+********************************************************
+
+.[perex]
+Každý model je dobrý v něčem jiném: Gemini přečte pár set stran naráz a přepíše text tak, aby se dobře četl, GPT kreslí obrázky a tvůj asistent zná tvůj kód. AI Access MCP dovolí tvému AI asistentovi předat každou úlohu modelu, který ji umí nejlíp, a ty přitom nenapíšeš ani řádek PHP.
+
+
+K čemu to je
+============
+
+AI asistenti jako Cursor, Gemini CLI nebo Claude Code umějí používat nástroje. Nástroj je cokoli, co asistent smí zavolat, zatímco pro tebe pracuje: přečíst soubor, spustit testy, podívat se do databáze. Nástroje se k asistentovi dostávají přes MCP (Model Context Protocol), společný způsob, jak je připojit, takže jednou napsaný nástroj funguje v každém asistentovi, který MCP umí.
+
+AI Access MCP je takový nástroj postavený na téhle knihovně. Dá tvému asistentovi dvě schopnosti, které sám nemá:
+
+- **`generate_text` se zeptá jiného modelu.** Gemini nebo GPT přečte soubory, odpoví, přepíše, přeloží nebo dá druhý názor.
+- **`generate_image` nakreslí obrázek** modelem od OpenAI a uloží ho do souboru, který asistent určí.
+
+S asistentem dál mluvíš, jak jsi zvyklý, a jen mu řekneš, koho se má zeptat:
+
+> Ať Gemini přepíše text v `docs/install.md` tak, aby ho pochopil začátečník, a návrh ulož vedle.
+
+
+Instalace
+=========
+
+Server je samostatný PHP projekt. Ulož ho kamkoli na svém počítači:
+
+```shell
+composer create-project ai-access/mcp ai-access-mcp
+```
+
+Potřebuje PHP 8.4 nebo novější s rozšířeními curl a gd a klíč z [Google AI Studia |https://aistudio.google.com/app/apikey] pro Gemini, od [OpenAI |https://platform.openai.com/api-keys] pro GPT a obrázky, nebo oba.
+
+
+Připojení k asistentovi
+=======================
+
+Server si asistent spouští sám, ty mu jen řekneš jak. V Claude Code k tomu slouží soubor `.mcp.json` v kořeni projektu:
+
+```json
+{
+	"mcpServers": {
+		"ai-access": {
+			"command": "php",
+			"args": ["/path/to/ai-access-mcp/server.php"],
+			"env": {
+				"GEMINI_API_KEY_FILE": "/home/me/keys/gemini.txt",
+				"OPENAI_API_KEY_FILE": "/home/me/keys/openai.txt",
+				"AI_ACCESS_READ_ROOTS": "/home/me/projects",
+				"AI_ACCESS_WRITE_ROOTS": "/home/me/projects"
+			}
+		}
+	}
+}
+```
+
+Všimni si, že samotné klíče v souboru nejsou. Každá proměnná obsahuje jen cestu k souboru s klíčem, takže konfiguraci můžeš sdílet i commitnout, aniž bys klíče prozradil. Nástroj se objeví, jen když má jeho provider klíč: se samotným klíčem od Gemini dostaneš `generate_text`, s klíčem od OpenAI oba nástroje.
+
+Kořeny říkají, ve kterých adresářích smějí nástroje číst a zapisovat; na Windows se oddělují `;`, jinde `:`. Dokud je nenastavíš, server nesáhne na žádný soubor. Víc o tom [níže |#Před čím tě chrání].
+
+Ostatní asistenti berou stejný blok, jen z jiného souboru:
+
+| Asistent       | Kam                                                                         |
+|----------------|-----------------------------------------------------------------------------|
+| Claude Code    | `.mcp.json` v projektu, nebo pro všechny projekty `claude mcp add --scope user` |
+| Claude Desktop | `claude_desktop_config.json` ve složce s nastavením aplikace                |
+| Cursor         | `.cursor/mcp.json` v projektu, nebo `~/.cursor/mcp.json`                    |
+| Gemini CLI     | `.gemini/settings.json` v projektu, nebo `~/.gemini/settings.json`          |
+
+Výchozí modely jsou `gemini-3.8-flash` pro text a `gpt-image-2` pro obrázky. Proměnné `AI_ACCESS_TEXT_MODEL` a `AI_ACCESS_IMAGE_MODEL` je změní a asistent si model může zvolit i pro jedno volání.
+
+
+Dotaz na jiný model
+===================
+
+Když asistenta požádáš, ať přes Gemini přepíše `docs/install.md`, zavolá `generate_text` takhle:
+
+```json
+{
+	"prompt": "Rewrite the prose of docs/install.md so a beginner can follow it. Keep code blocks and links as they are.",
+	"files": ["/home/me/projects/app/docs/install.md"],
+	"effort": "high",
+	"outputFile": "/home/me/projects/app/docs/install.proposal.md"
+}
+```
+
+Soubor se předává cestou, ne obsahem. Server si ho přečte sám a model ho dostane označený cestou, jak byla zapsaná, takže se na něj prompt může odvolat:
+
+```
+<file path="/home/me/projects/app/docs/install.md">
+...obsah souboru beze změny...
+</file>
+```
+
+Proč na tom záleží? Dlouhý text, který by šel přes asistenta, by mu zaplnil kontext a zaplatil bys ho dvakrát, jednou asistentovi a jednou Gemini. Takhle putuje rovnou z disku do Gemini. S `outputFile` jde do nového souboru i odpověď a asistent dostane zpátky jen krátkou zprávu: model, tokeny, kolik volání stálo, a v `problem` cokoli, co se pokazilo, třeba odpověď, kterou model nedokončil.
+
+Odpověď se může řídit JSON schématem v `responseSchema` a server zkontroluje, že to opravdu dělá. Každý výsledek nese `conversation`, a když ho asistent pošle zpátky, pokračuje stejný rozhovor: "tyhle tři řádky jsou pořád špatně, oprav je". Model, instrukce i všechno dříve poslané v něm zůstávají.
+
+
+Dlouhé vstupy a cache Gemini
+============================
+
+Některá práce přichází v dávkách s velkým společným vstupem. Přepisuješ manuál stránku po stránce a Gemini má pokaždé vidět stránky, které už jsou hotové, aby držel stejná slova a tón. Na to je `context`: soubory společné voláním dávky.
+
+U Gemini server uloží kontext spolu s instrukcemi do explicitní cache. Každé další volání se stejným modelem, instrukcemi a kontextem ji čte za desetinu ceny vstupu a výsledek ti řekne, jestli cache vznikla (`created`), nebo se použila (`reused`), a kolik tokenů z ní šlo. Jiný kontext cache nahradí a kontext příliš krátký na cache se pošle obyčejně. Uložení cache se platí po hodinách; výsledek to hlásí jako `storageCostPerHour`.
+
+
+Generování obrázků
+==================
+
+`generate_image` dostane prompt a absolutní cestu k novému souboru. Jeho přípona `.png`, `.jpg` nebo `.webp` určí formát a `size`, `quality` a `background` znamenají totéž, co u [generování obrázků |images] od OpenAI. S `referenceImages` model obrázek upraví nebo z něj vychází.
+
+Vedle obrázku server zapíše prompt do souboru `.txt` se stejným jménem, takže vždycky víš, z čeho obrázek vznikl. Výsledek nese malý náhled, takže asistent vidí, co vyšlo, a může ti to říct.
+
+
+Před čím tě chrání
+==================
+
+Model, který předává práci jinému, utrácí skutečné peníze, a dělá to v rozhovoru, ve kterém může být text z webu nebo z e-mailu. Server s tím počítá:
+
+- **Ptá se na tvůj souhlas.** Jeho instrukce asistentovi říkají, že každé volání stojí peníze a běží jen s tvým výslovným souhlasem a že obrázek posuzuješ jen ty.
+- **Nikdy nezaplatí jednu odpověď dvakrát.** Požadavek, který se mohl k providerovi dostat, se po vypršení času ani po spadlém spojení neopakuje, ani když to po cestě vzdá brána. Postará se o to [RetryClient |http] z této knihovny.
+- **Nikdy nepřepíše soubor.** Jméno výstupu si zarezervuje ještě před placeným voláním, takže dva asistenti pracující naráz nikdy nezapíšou tentýž soubor a obsazené jméno nic nestojí.
+- **Čte a zapisuje jen tam, kde dovolíš.** Mimo kořeny na nic nesáhne a adresář se souborem klíče a soubory `.env` odmítne i uvnitř nich. Textové odpovědi zapíše jen jako `.txt`, `.md`, `.json` a podobné, nikdy jako skript.
+
+
+Kolik to stojí
+==============
+
+Každý výsledek nese `cost`, cenu volání v USD, a `sessionCost`, součet od spuštění serveru, takže přímo v rozhovoru vidíš, kam peníze jdou. Ceny pocházejí z ceníku v balíčku, který zná i data, kdy je provideři mění; u modelu, který v něm chybí, je cena `null`.
+
+{{maintitle: AI Access MCP: Gemini, GPT a obrázky pro tvého AI asistenta}}
+{{description: Ať se tvůj AI asistent zeptá Gemini a GPT a nakreslí obrázek. Server sám čte soubory, využije cache Gemini a u každého volání hlásí jeho cenu.}}
