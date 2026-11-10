@@ -1,522 +1,228 @@
-Adding Custom Syntax
-********************
+Přidání vlastní syntaxe
+***********************
 
 .[perex]
-This chapter describes how to add **completely new markup constructs** to Texy that don't exist by default. If you only want to modify the behavior of existing elements (for example, adjust image or link processing), read the chapter [Custom Element Behavior |custom-handlers].
+GitHub rozšířil Markdown o tabulky a úkolové seznamy, protože je jeho uživatelé potřebovali. Totéž můžete udělat vy: naučit Markdown nebo syntaxi Texy zmínky `@@jana`, rámečky s tipem nebo zkratky, které se samy vysvětlí. Stačí regulární výraz, který zápis pozná, a funkce, která z něj vytvoří prvek dokumentu.
 
-Imagine you want to automatically create links to user profiles in documentation by writing `@@username`. Or you need special alert blocks like `:::warning`. Texy doesn't recognize these constructs, and you can't create them by modifying existing elements.
-
-Custom syntax allows you to define new markup constructs. You specify what the construct should look like (using a regular expression) and write a function to process it. Texy will then recognize your syntax just like its standard constructs.
+Tahle stránka je o úplně novém zápisu. Pokud chcete jen jinak vykreslit něco, co Texy už zná, třeba obrázek nebo nadpis, podívejte se na [úpravu chování prvků |custom-handlers].
 
 
-Syntax Registration
-===================
+Zmínky v komentářích
+====================
 
-Texy provides two methods for registering custom syntax, depending on whether it's an inline or block element.
+Na blogu chceme, aby se z `@@jana` v komentáři stal odkaz na profil uživatelky:
 
-
-Line Syntax
------------
-
-Line syntax is used for inline constructs within text lines. You register it using the `registerLinePattern()` method:
-
-```php
-$texy->registerLinePattern(
-	callable $handler,
-	string $pattern,
-	string $name,
-	?string $againTest = null,
-);
+```
+Díky, @@jana, vyzkouším to.
 ```
 
-**The `$handler` parameter** is a callback function that gets called when the syntax is found. It can be a function name, anonymous function, or array `[$object, 'method']`.
-
-**The `$pattern` parameter** is a regular expression (PCRE) that defines what your syntax looks like in the text. The pattern **should not be anchored** to the start of a line (`^`), since it's searched for anywhere in the text. Use capturing groups to capture the data you need to process.
-
-**The `$name` parameter** is a unique syntax name. It's used in the `$texy->allowed` array for enabling/disabling and passed to the handler for identification. We recommend using a prefix style like `custom/username` or `myapp/profile`.
-
-**The `$againTest` parameter** is an optional regex for optimization. If the main pattern fails to match at a position, Texy uses `$againTest` to decide whether it's worth searching for the pattern again further in the text; when `$againTest` no longer matches anywhere ahead, the pattern is dropped from the search. This significantly speeds up processing if you have a complex pattern that's rarely used.
-
-Registration example:
-
-```php
-$texy->registerLinePattern(
-	'usernameHandler',
-	'#@@([a-z0-9_]+)#i',
-	'custom/username',
-);
+```html
+<p>Díky, <a href="/uzivatel/jana">@jana</a>, vyzkouším to.</p>
 ```
 
-
-Block Syntax
-------------
-
-Block syntax is used for multi-line block constructs. You register it using the `registerBlockPattern()` method:
+Kolik kódu je potřeba? Jedno volání:
 
 ```php
-$texy->registerBlockPattern(
-	callable $handler,
-	string $pattern,
-	string $name,
-);
+use Texy\Nodes;
+use Texy\Parsing\ParseContext;
+
+$mention = function (ParseContext $context, array $matches, array $offsets): Nodes\LinkNode {
+	$name = $matches[1];
+	return new Nodes\LinkNode(
+		url: '/uzivatel/' . $name,
+		content: new Nodes\ContentNode([new Nodes\TextNode('@' . $name)]),
+		range: new Texy\Range($offsets[0], strlen($matches[0])),
+	);
+};
+
+$markdown = new Texy\Markdown\Markdown;
+$markdown->addLineSyntax('blog/mention', '~@@([a-z0-9_]+)~i', $mention);
+$html = $markdown->toHtml($comment, $texy);
 ```
 
-The `$handler` and `$name` parameters have the same meaning as for line syntax.
+`addLineSyntax()` dostane tři věci:
 
-**The `$pattern` parameter** is a regular expression that **must be anchored** to the start of a line (`^`) and often to the end (`$`) as well. BlockParser automatically adds the `m` (multiline) modifier, so don't add it to the pattern (you still write the `^` anchor yourself). The pattern should match the entire block or at least its beginning.
+- **jméno** zápisu, tady `blog/mention`. Pod ním jde zápis vypnout (`$markdown->allowed['blog/mention'] = false`). Předpona jako `blog/` zajistí, že se jméno nikdy nepotká se zápisem, který přidá budoucí verze Texy.
+- **regulární výraz**, který zápis v textu pozná. Texy k němu přidá jen příznak `u` pro UTF-8, takže se chová přesně tak, jak ho vyzkoušíte v kterémkoli testeru regulárních výrazů.
+- **funkci**, která z nalezeného zápisu vytvoří uzel dokumentu.
 
-Registration example:
+Funkce dostane v `$matches` nalezený text a jeho skupiny z regulárního výrazu (`$matches[1]` je jméno) a v `$offsets` jejich pozice v textu. Vrátí uzel, tady odkaz `LinkNode` s textem `@jana`. Z pozic sestavíme `Texy\Range`, rozsah textu, ze kterého uzel vznikl. HTML na něm nezávisí, ale nástroje, které pracují se zdrojovým textem, podle něj poznají, kde zmínka v textu leží.
+
+Protože vracíme odkaz, tedy uzel, který Texy zná, nemusíme řešit, jak se vykreslí. Vykreslí se jako každý jiný odkaz a funguje i v prostém textu z `toText()`.
+
+Úplně stejně funguje zápis i v syntaxi Texy, jen ho zaregistrujete na engine:
 
 ```php
-$texy->registerBlockPattern(
-	'alertHandler',
-	'#^:::(warning|info|danger)\n(.+)$#s',
-	'custom/alert',
-);
+$texy->addLineSyntax('blog/mention', '~@@([a-z0-9_]+)~i', $mention);
 ```
 
-
-Syntax Handler
-==============
-
-A syntax handler is a function called by the parser when it finds an occurrence of your syntax in the text. Its job is to process the found data and return an HTML element or string.
-
-A detailed explanation of the syntax handler's role in Texy's architecture can be found in the chapter [Architecture and Principles |architecture#syntax-handler].
+Zápis registrujte dřív, než začnete převádět text.
 
 
-For Line Syntax
----------------
-
-Syntax handler signature for line syntax:
-
-```php
-function(
-	Texy\LineParser $parser,
-	array $matches,
-	string $name,
-): Texy\HtmlElement|string|null
-```
-
-**The `$parser` parameter** provides access to the parser and Texy object. You'll most often use `$parser->getTexy()` to get the Texy instance.
-
-**The `$matches` parameter** contains the regex match results. `$matches[0]` is the entire matched string, `$matches[1]`, `$matches[2]` etc. are the capturing groups from your pattern.
-
-**The `$name` parameter** is the syntax name you specified during registration. Useful if one handler processes multiple syntaxes.
-
-**The return value** can be `Texy\HtmlElement` for structured HTML output, `string` for direct HTML code (which you must protect), or `null` to refuse processing.
-
-The handler can set `$parser->again = true` if it wants the content of the created element to be parsed again to find nested syntaxes.
-
-
-For Block Syntax
-----------------
-
-Syntax handler signature for block syntax:
-
-```php
-function(
-	Texy\BlockParser $parser,
-	array $matches,
-	string $name,
-): Texy\HtmlElement|string|null
-```
-
-The parameters have the same meaning as for line syntax, except you receive `Texy\BlockParser` instead of `LineParser`.
-
-BlockParser provides methods for working with multi-line structures:
-
-- **`$parser->next($pattern, &$matches)`** - matches the next line against the pattern and returns true/false
-- **`$parser->moveBackward($lines)`** - moves back the specified number of lines
-- **`$parser->isIndented()`** - returns true if the current block is indented
-
-
-LineParser API
-==============
-
-When working with line syntax, you have several useful properties and methods available.
-
-**The `$again` property** controls whether the currently processed syntax should be searched for again at the same position after processing. The default value is `false`. Set to `true` if you're creating an element with content that may contain other syntaxes:
-
-```php
-function(
-	Texy\LineParser $parser,
-	array $matches,
-	string $name,
-): Texy\HtmlElement
-{
-	$el = new Texy\HtmlElement('span');
-	$el->setText($matches[1]);
-
-	// content may contain additional formatting
-	$parser->again = true;
-
-	return $el;
-}
-```
-
-**The `getTexy()` method** returns the Texy object instance, which you need for working with `protect()` or accessing configuration.
-
-
-BlockParser API
+Rámečky s tipem
 ===============
 
-When working with block syntax, you have methods available for working with multi-line structures.
+Zmínka leží uvnitř řádku. Zápis, který zabírá celé řádky, se registruje jako blokový. V článcích chceme rámečky s tipem nebo upozorněním:
 
-**The `next($pattern, &$matches)` method** tries to match the next line in the text against the specified pattern. If successful, it fills `$matches` with the result and moves the internal position past this line. Returns `true` on success, `false` on failure:
-
-```php
-while ($parser->next('#^\-\s+(.+)$#', $matches)) {
-	// process next list item
-	$item = $matches[1];
-}
 ```
-
-**The `moveBackward($lines = 1)` method** moves the internal position back the specified number of lines. Useful when your pattern matched more than the block's start and you want to return to the beginning:
-
-```php
-// pattern matched 3 lines, but we want to read from the first
-$parser->moveBackward(2);
-```
-
-**The `isIndented()` method** returns `true` if the current block is indented (starts with a space or tab). This indicates that it's nested content.
-
-
-Practical Examples
-==================
-
-The following examples demonstrate real use cases for custom syntax.
-
-
-User Profiles
--------------
-
-Automatic creation of profile links by writing `@@username`:
-
-```php
-$texy->registerLinePattern(
-	function(
-		Texy\LineParser $parser,
-		array $matches,
-		string $name,
-	): Texy\HtmlElement
-	{
-		$username = $matches[1];
-
-		$el = new Texy\HtmlElement('a');
-		$el->attrs['href'] = '/user/' . urlencode($username);
-		$el->attrs['class'][] = 'user-profile';
-		$el->setText('@' . $username);
-
-		return $el;
-	},
-	'#@@([a-z0-9_]+)#i',
-	'custom/username'
-);
-```
-
-Usage in text:
-
-```texy
-Check out the profile of @@johndoe or @@jane_smith.
-```
-
-
-Alert Boxes
------------
-
-Special alert blocks with different types:
-
-```php
-$texy->registerBlockPattern(
-	function(
-		Texy\BlockParser $parser,
-		array $matches,
-		string $name,
-	): Texy\HtmlElement
-	{
-		$type = $matches[1];  // warning, info, danger
-		$content = $matches[2];
-
-		$el = new Texy\HtmlElement('div');
-		$el->attrs['class'][] = 'alert';
-		$el->attrs['class'][] = 'alert-' . $type;
-
-		$texy = $parser->getTexy();
-		$el->parseBlock($texy, trim($content));
-
-		return $el;
-	},
-	'#^:::(warning|info|danger)\n(.+?)(?=\n:::|$)#s',
-	'custom/alert'
-);
-```
-
-Usage in text:
-
-```texy
-:::warning
-This is an important warning!
-:::
-
-:::info
-For your information: the update will take place tomorrow.
+:::tip
+Sušte v **tenké** vrstvě a pravidelně [obracejte](https://example.com).
 :::
 ```
 
-
-Hashtags
---------
-
-Automatic creation of links from hashtags:
+```html
+<div class="box box-tip">
+	<p>Sušte v&nbsp;<strong>tenké</strong> vrstvě a pravidelně <a
+	href="https://example.com">obracejte</a>.</p>
+</div>
+```
 
 ```php
-$texy->registerLinePattern(
-	function(
-		Texy\LineParser $parser,
-		array $matches,
-		string $name,
-	): Texy\HtmlElement
-	{
-		$tag = $matches[1];
+$box = function (ParseContext $context, array $matches, array $offsets): Nodes\SectionNode {
+	$modifier = new Texy\Modifier;
+	$modifier->classes['box'] = true;
+	$modifier->classes['box-' . $matches[1]] = true;
+	return new Nodes\SectionNode(
+		$context->parseBlock($matches[2], $offsets[2]),
+		'div',
+		$modifier,
+		new Texy\Range($offsets[0], strlen($matches[0])),
+	);
+};
 
-		$el = new Texy\HtmlElement('a');
-		$el->attrs['href'] = '/tag/' . urlencode($tag);
-		$el->attrs['class'][] = 'hashtag';
-		$el->setText('#' . $tag);
-
-		return $el;
-	},
-	'#\#([a-z0-9_]+)#i',
-	'custom/hashtag',
-	'#\##'  // optimization - search only if # is in text
-);
+$markdown->addBlockSyntax('blog/box', '~^:::(tip|warning)\n(.+?)\n:::$~s', $box);
 ```
 
-Usage:
+Blokový výraz musí začínat `^`, tedy začátkem řádku, a Texy k němu samo přidá příznak `m`, aby `^` a `$` znamenaly začátek a konec řádku.
 
-```texy
-Article about #php and #webdesign.
-```
+Uvnitř rámečku chceme psát stejně jako jinde v článku, s tučným písmem i odkazy. Proto obsah nevkládáme jako text, ale necháme ho rozebrat voláním `$context->parseBlock()`. Dostaneme jeho uzly a vložíme je do `SectionNode`, uzlu pro obecný blok `<div>`. Druhý parametr, `$offsets[2]`, říká, kde vnitřní text začíná, aby i jeho uzly měly správné pozice. Pro obsah v rámci řádku slouží obdobně `$context->parseInline()`.
+
+Rámeček píšeme v Markdownu, a proto se jeho obsah rozebere jako Markdown. Zaregistrujete-li stejnou funkci na `$texy`, obsah se rozebere jako syntaxe Texy.
 
 
-Abbreviations
--------------
+Odmítnutí nalezeného textu
+==========================
 
-Automatic expansion of abbreviations with explanation:
+Funkce nemusí každý nalezený text přijmout. Když vrátí `null`, Texy text nechá být a dá šanci ostatním zápisům. Hodí se to, když regulární výraz najde víc, než chcete. Zkratky, které známe, se mají samy vysvětlit, ostatní slova velkými písmeny mají zůstat obyčejným textem:
 
 ```php
 $abbreviations = [
-	'HTML' => 'HyperText Markup Language',
 	'CSS' => 'Cascading Style Sheets',
-	'PHP' => 'PHP: Hypertext Preprocessor',
+	'HTML' => 'HyperText Markup Language',
 ];
 
-$texy->registerLinePattern(
-	function(
-		Texy\LineParser $parser,
-		array $matches,
-		string $name
-	) use ($abbreviations): ?Texy\HtmlElement
-	{
-		$abbr = $matches[1];
-
-		if (!isset($abbreviations[$abbr])) {
-			return null;  // unknown abbreviation
-		}
-
-		$el = new Texy\HtmlElement('abbr');
-		$el->attrs['title'] = $abbreviations[$abbr];
-		$el->setText($abbr);
-
-		return $el;
-	},
-	'#\b([A-Z]{2,})\b#',
-	'custom/abbreviation'
-);
+$markdown->addLineSyntax('blog/abbr', '~\b([A-Z]{2,})\b~', function (ParseContext $context, array $matches, array $offsets) use ($abbreviations): ?Nodes\PhraseNode {
+	if (!isset($abbreviations[$matches[1]])) {
+		return null; // neznámá zkratka, text zůstane, jak je
+	}
+	$modifier = new Texy\Modifier;
+	$modifier->title = $abbreviations[$matches[1]];
+	return new Nodes\PhraseNode(
+		new Nodes\ContentNode([new Nodes\TextNode($matches[1])]),
+		'phrase/acronym',
+		$modifier,
+		new Texy\Range($offsets[0], strlen($matches[0])),
+	);
+});
 ```
 
+```html
+<p>Web v&nbsp;<abbr title="HyperText Markup Language">HTML</abbr> a <abbr
+title="Cascading Style Sheets">CSS</abbr>, ale ne ABC.</p>
+```
 
-Inline Icons
-------------
+`PhraseNode` je uzel zvýrazněného textu. Typ `phrase/acronym` je zkratka, kterou Texy vykreslí jako `<abbr>` s titulkem z modifikátoru.
 
-Inserting icons using special syntax:
+Funkce může vrátit i `Nodes\ContentNode` s několika uzly, které se vloží za sebou místo jednoho. Prázdný `ContentNode` nalezený text spotřebuje a nevloží nic, což se hodí pro zápis, který jen sbírá data.
+
+
+Když se zápisy překrývají
+=========================
+
+Na jednom místě textu může začínat víc zápisů. Texy vybere ten, který začíná nejdřív. Pokud jich začíná víc na stejném místě, vyhraje delší, a při stejné délce ten zaregistrovaný dřív. V Markdownu jsou vestavěné zápisy zaregistrované před vašimi, takže při shodě vyhrají. V syntaxi Texy je to naopak, pokud svůj zápis zaregistrujete před prvním převodem. Nejlepší obranou je výraz, který pozná jen to, co opravdu chcete. Zmínka s dvěma zavináči se nesplete s e-mailovou adresou.
+
+Pokud váš zápis v nějaké situaci prohrát má, funkce vrátí `null` a Texy dá šanci zápisům za ním.
+
+.[note]
+V syntaxi Texy můžete zaregistrovat zápis pod jménem vestavěného zápisu (konstanty `Texy\Syntax`), a tím ho nahradit. Náhrada platí po celou dobu života objektu `Texy`.
+
+
+Vlastní uzel
+============
+
+Většinou vystačíte s uzly, které Texy zná, a dostanete tak vykreslení zadarmo. Když žádný nesedí, napíšete vlastní uzel a renderer, který ho vykreslí. Třeba když chcete, aby zmínky měly ve stromu vlastní uzel s jménem uživatele:
 
 ```php
-$texy->registerLinePattern(
-	function(
-		Texy\LineParser $parser,
-		array $matches,
-		string $name,
-	): Texy\HtmlElement
+use Texy\Output\Html;
+
+class MentionNode extends Nodes\InlineNode
+{
+	public function __construct(
+		public string $name,
+		public Nodes\ContentNode $content,
+		public ?Texy\Range $range = null,
+	) {
+	}
+
+
+	public function &getChildren(): Generator
 	{
-		$icon = $matches[1];
+		yield $this->content;
+	}
+}
 
-		$el = new Texy\HtmlElement('i');
-		$el->attrs['class'][] = 'icon';
-		$el->attrs['class'][] = 'icon-' . $icon;
-		$el->attrs['aria-hidden'] = 'true';
+$markdown->addLineSyntax('blog/mention', '~@@([a-z0-9_]+)~i', fn(ParseContext $context, array $matches, array $offsets) => new MentionNode(
+	$matches[1],
+	new Nodes\ContentNode([new Nodes\TextNode('@' . $matches[1])]),
+	new Texy\Range($offsets[0], strlen($matches[0])),
+));
 
-		return $el;
-	},
-	'#:icon-([a-z-]+):#',
-	'custom/icon'
-);
+$texy->htmlOutput->addRenderer(function (MentionNode $node, Html\Renderer $renderer, ?Closure $previous) {
+	$el = new Html\Element('a', ['href' => '/uzivatel/' . $node->name, 'class' => 'zminka']);
+	$el->setText('@' . $node->name);
+	return $el;
+});
 ```
 
-Usage:
-
-```texy
-Click the button :icon-download: to download.
+```html
+<p>Díky, <a href="/uzivatel/jana" class="zminka">@jana</a>.</p>
 ```
 
-
-Note Block
-----------
-
-Block for footnotes:
-
-```php
-$texy->registerBlockPattern(
-	function(
-		Texy\BlockParser $parser,
-		array $matches,
-		string $name
-	): Texy\HtmlElement
-	{
-		$parser->moveBackward();
-
-		$content = '';
-		while ($parser->next('#^NOTE:\s*(.+)$#', $matches)) {
-			$content .= $matches[1] . "\n";
-		}
-
-		$el = new Texy\HtmlElement('aside');
-		$el->attrs['class'][] = 'note';
-
-		$texy = $parser->getTexy();
-		$el->parseBlock($texy, trim($content));
-
-		return $el;
-	},
-	'#^NOTE:\s*(.+)$#',
-	'custom/note'
-);
-```
-
-Usage:
-
-```texy
-NOTE: This is an important note.
-NOTE: It can be multi-line.
-```
+Metoda `getChildren()` vrací obsah uzlu. Výstup, pro který renderer nemáte, třeba prostý text z `toText()`, vykreslí uzel jako jeho obsah, takže dostanete `Díky, @jana.`. Jak psát renderery, popisuje [úprava chování prvků |custom-handlers#Jiné HTML pro prvek].
 
 
-Custom Quotations with Author
------------------------------
+Rozdíly v Markdownu
+===================
 
-Extended syntax for quotations with author attribution:
+Markdown rozebírá text ve dvou krocích: nejdřív bloky a teprve potom obsah řádků, protože odkaz může odkazovat na definici, která je v textu až za ním. Pro vlastní blokové zápisy z toho plynou dvě pravidla:
 
-```php
-$texy->registerBlockPattern(
-	function(
-		Texy\BlockParser $parser,
-		array $matches,
-		string $name,
-	): Texy\HtmlElement
-	{
-		$author = $matches[1];
-		$quote = $matches[2];
-
-		$blockquote = new Texy\HtmlElement('blockquote');
-
-		$texy = $parser->getTexy();
-		$blockquote->parseBlock($texy, trim($quote));
-
-		$cite = new Texy\HtmlElement('cite');
-		$cite->setText($author);
-		$blockquote->add($cite);
-
-		return $blockquote;
-	},
-	'#^QUOTE\[([^\]]+)\]:\n(.+?)(?=\n\n|$)#s',
-	'custom/quote'
-);
-```
-
-Usage:
-
-```texy
-QUOTE[Albert Einstein]:
-Imagination is more important than knowledge,
-because knowledge is limited.
-```
+- Bloková funkce nesmí volat `$context->parseInline()`. Text, který se má rozebrat jako obsah řádku, vloží jako uzel `Texy\Markdown\Nodes\DeferredNode` a Markdown ho rozebere sám. `$context->parseBlock()` volat smí, jako v rámečku výše.
+- Podmínky, kdy blok nepřijmout, patří do regulárního výrazu, ne do `return null`. Odmítnutý blok by s sebou vzal i zápisy, které se v jeho rozsahu našly.
 
 
-Image Gallery
--------------
+Tipy
+====
 
-Special block for creating a gallery from multiple images:
-
-```php
-$texy->registerBlockPattern(
-	function(
-		Texy\BlockParser $parser,
-		array $matches,
-		string $name,
-	): Texy\HtmlElement
-	{
-		$parser->moveBackward();
-
-		$gallery = new Texy\HtmlElement('div');
-		$gallery->attrs['class'][] = 'gallery';
-
-		while ($parser->next('#^\[G\]\s*(.+)$#', $matches)) {
-			$img = new Texy\HtmlElement('img');
-			$img->attrs['src'] = trim($matches[1]);
-			$img->attrs['loading'] = 'lazy';
-			$gallery->add($img);
-		}
-
-		return $gallery;
-	},
-	'#^\[G\]\s*(.+)$#',
-	'custom/gallery'
-);
-```
-
-Usage:
-
-```texy
-[G] image1.jpg
-[G] image2.jpg
-[G] image3.jpg
-```
+- **Vracejte uzly, které Texy zná**, kdykoli to jde. Vykreslí se v každém výstupu, v HTML i v prostém textu.
+- **Používejte jména s předponou**, `blog/mention`, `firma/box`, aby se nepotkala s vestavěnými a aby šla vypnout přes `allowed`.
+- **Vyplňte `Range`** z `$offsets`, celý rozsah, který zápis zabírá. Nástroje nad zdrojovým textem podle něj poznají, kde prvek leží, a mohou ho třeba celý nahradit.
+- **Vyzkoušejte kombinace.** Co se stane, když zápis napíšete do odkazu, do citace nebo do bloku kódu?
 
 
-Syntax Collisions
+Přechod z verze 3
 =================
 
-When registering custom syntax, you must be careful that it doesn't collide with existing Texy syntaxes or other custom syntaxes.
+|---
+| Texy 3 | Texy 4
+|---
+| `registerLinePattern($handler, $pattern, $name)` | `addLineSyntax($name, $pattern, $handler)`, jméno je první
+| `registerBlockPattern($handler, $pattern, $name)` | `addBlockSyntax($name, $pattern, $handler)`
+| funkce vrací `HtmlElement` nebo řetězec | funkce vrací uzel dokumentu
+| `$parser->again`, `$againTest` | nejsou potřeba, odmítnutí je `return null`
+| `$el->parseLine($text)` | `$context->parseInline($text, $offset)`
+| `$el->parseBlock($text)` | `$context->parseBlock($text, $offset)`
 
-**Registration order matters.** Line syntaxes are searched in the order they were registered. If multiple syntaxes can match at the same position, the one registered earlier wins. Therefore, register more specific syntaxes before more general ones.
+Staré metody vyhodí výjimku, která pojmenuje náhradu.
 
-**Be specific in patterns.** The more concrete your pattern is, the lower the risk of collision. The pattern `#\#\w+#` also matches `#heading`, which could collide with headings. Better is `#(?<=\s)\#[a-z0-9_]+#i`, which requires a space before the hashtag.
-
-**Test combinations.** Try how your syntax works in combination with existing constructs. What happens when your markup is inside a link? What if it's inside a code block?
-
-**Use prefixed names.** Instead of `username`, use `custom/username` or `myapp/username`. This prevents conflicts if Texy adds syntax with the same name in the future.
-
-
-Best Practices
-==============
-
-**Return `null` on failure.** If the handler determines it can't or doesn't want to process the given match (for example, an unknown abbreviation), return `null`. The parser will then try other syntaxes.
-
-**Use `protect()` for HTML.** If you're returning a raw HTML string instead of `HtmlElement`, you must protect it using `$texy->protect($html, Texy::CONTENT_...)`. Otherwise it will be escaped.
-
-**Set `$parser->again` correctly.** For line syntaxes that create an element with text content that may contain other syntaxes (formatting, links), set `$parser->again = true`.
-
-**Respect `$texy->allowed`.** If you're creating a module with multiple syntaxes, check `$texy->allowed[$name]` before registering the pattern or in the handler before processing.
-
-{{maintitle: Adding Custom Syntax to Texy: LineParser and BlockParser}}
-{{description: Add completely new markup constructs to Texy: register a syntax, write its handler with the LineParser and BlockParser APIs and avoid syntax collisions.}}
+{{maintitle: Vlastní syntaxe v Texy: nové zápisy pro Markdown i syntaxi Texy}}
+{{description: Naučte Markdown nebo syntaxi Texy nový zápis, třeba zmínky, rámečky s tipem nebo zkratky: regulární výraz, který ho pozná, a funkce, která z něj vytvoří prvek dokumentu.}}

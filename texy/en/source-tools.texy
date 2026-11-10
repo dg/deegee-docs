@@ -1,0 +1,242 @@
+Nástroje nad zdrojovým textem
+*****************************
+
+.[perex]
+Chcete články kontrolovat na chyby, hromadně je upravovat nebo postavit editor, který ukáže, kde je problém? Texy vám dá strom dokumentu, ve kterém každý prvek ví, kde přesně ve zdrojovém textu leží. Úprava pak zasáhne jen to, co měnit chcete, a zbytek souboru zůstane takový, jaký byl. Funguje to pro Markdown i pro syntaxi Texy.
+
+
+Kontrola článků
+===============
+
+Články blogu jsou uložené jako soubory `.md`. Chceme nástroj, který najde obrázky bez popisu, protože čtenář, který obrázek nevidí, by se nedozvěděl, co na něm je. Hlášku chceme v podobě, jakou znáte z editorů a linterů, se jménem souboru, řádkem a sloupcem:
+
+```
+clanky/susarna.md:5:1 obrázek bez popisu
+clanky/susarna.md:7:11 obrázek bez popisu
+```
+
+```php
+use Texy\NodeHelpers;
+use Texy\Nodes;
+
+$markdown = new Texy\Markdown\Markdown;
+$source = Texy\Texy::normalize(file_get_contents($file));
+$document = $markdown->parse($source);
+
+foreach (NodeHelpers::find($document, Nodes\ImageNode::class) as $image) {
+	if (($image->modifier?->title ?? '') === '') {
+		$position = Texy\SourcePosition::fromOffset($source, $image->range->offset);
+		echo "$file:$position->line:$position->column obrázek bez popisu\n";
+	}
+}
+```
+
+Všimněte si tří věcí. Text nepřevádíme na HTML, ale voláme `parse()`, které ho jen rozebere na strom. Před tím ho necháme projít `Texy::normalize()`, které sjednotí konce řádků a podobné drobnosti. A každý uzel má v `$range` rozsah textu, ze kterého vznikl: `$range->offset` je jeho začátek a `$range->length` délka, obojí v bajtech normalizovaného textu.
+
+Z pozice v bajtech udělá `SourcePosition::fromOffset()` řádek a sloupec. Oba se počítají od jedničky a sloupec ve znacích, takže sedí s tím, co ukazuje editor, i když řádek obsahuje písmena s diakritikou.
+
+`NodeHelpers::find()` najde všechny uzly daného druhu, popis obrázku je v jeho modifikátoru. Jaké uzly ve stromu najdete a jaké mají vlastnosti, popisuje [přehled uzlů |custom-handlers#Přehled uzlů].
+
+
+Přepis zdrojového textu
+=======================
+
+Blog se přestěhoval na HTTPS a v článcích zůstaly odkazy na `http://muj-blog.cz`. Hledat a nahrazovat napříč soubory by nahradilo i adresy v ukázkách kódu. Strom ale ví, kde leží adresy odkazů, a jen ty změníme:
+
+```php
+$source = Texy\Texy::normalize(file_get_contents($file));
+$document = $markdown->parse($source);
+$rewriter = new Texy\Rewriter($source);
+
+foreach (NodeHelpers::find($document, Nodes\LinkNode::class) as $link) {
+	if ($link->urlRange === null) {
+		continue; // odkaz, jehož adresa ve zdrojovém textu není zapsaná
+	}
+	$url = substr($source, $link->urlRange->offset, $link->urlRange->length);
+	if (str_starts_with($url, 'http://muj-blog.cz')) {
+		$rewriter->replace($link->urlRange, 'https://' . substr($url, 7));
+	}
+}
+
+file_put_contents($file, $rewriter->getResult());
+```
+
+```
+Sušárnu máme z [obchodu](https://muj-blog.cz/obchod) a <https://muj-blog.cz/recept>.
+
+Adresu v kódu `http://muj-blog.cz` nechceme měnit.
+```
+
+Změnily se oba odkazy, ten v hranatých závorkách i ten ve špičatých, a adresa v kódu zůstala.
+
+`Texy\Rewriter` náhrady jen sbírá a provede je všechny najednou až v `getResult()`. Díky tomu rozsahy ze stromu platí po celou dobu, i když se text před nimi mezitím změnil. Hlídá také dvě chyby, na které by se jinak přišlo až v poškozeném souboru:
+
+- Dvě náhrady, které se překrývají, nejdou provést obě. Rewriter vyhodí `Texy\RewriteException` s pozicí: `Line 1, column 31: the replacement of 'https://example.com/susarna' overlaps another one.`
+- Když předáte i text, který na daném místě čekáte, ověří ho. Chrání to před rozsahem z jiného souboru nebo ze starší verze textu:
+
+```php
+$rewriter->replace($link->textRange, 'Sušárně u nádraží', expected: 'obchodě u nádraží');
+```
+
+
+Části zápisu
+============
+
+Rozsah celého uzlu zahrnuje celý jeho zápis, u odkazu tedy závorky, text i adresu. Uzly si ale pamatují i rozsahy částí, které nástroj typicky mění zvlášť:
+
+|---
+| Uzel | Vlastnost | Část zápisu
+|---
+| `LinkNode` | `$textRange` | text odkazu
+| `LinkNode` | `$urlRange` | adresa, u reference její jméno
+| `LinkNode` | `$syntax` | jakým zápisem byl odkaz napsaný, třeba `link` v Markdownu, `phrase/span` pro `"text":url` v syntaxi Texy
+| `ImageNode` | `$urlRange` | adresa obrázku
+| `HeadingNode` | `$textRange`, `$marker` | text nadpisu a znak, kterým je napsaný
+| `ListItemNode` | `$bulletRange`, `$bullet` | odrážka položky
+| `CodeBlockNode` | `$codeMap` | kde ve zdroji leží jednotlivé části kódu
+
+Třeba přejmenovat obchod v textu odkazu, aniž byste sáhli na adresu:
+
+```php
+$rewriter->replace($link->textRange, 'Sušárně u nádraží');
+```
+
+```
+Koupeno v [Sušárně u nádraží](https://example.com/susarna).
+```
+
+Části zná jen uzel vestavěného zápisu. Uzel vaší [vlastní syntaxe |custom-syntax] má jen rozsah celého zápisu, takže nástroj ho může jen celý nahradit.
+
+
+Nahrazení celého prvku
+======================
+
+Někdy je potřeba prvek napsat znovu, třeba s něčím navíc. Články v syntaxi Texy mají obrázky bez rozměrů a my je chceme doplnit podle skutečných souborů. Upravíme kopii uzlu, necháme ji vytisknout jako zdrojový text syntaxe Texy a dáme ji na místo původního zápisu:
+
+```php
+$imageDir = __DIR__ . '/www/images';
+$texy = new Texy\Texy;
+$document = $texy->parse($source);
+$rewriter = new Texy\Rewriter($source);
+$printer = new Texy\Output\Texy\Renderer;
+
+foreach (NodeHelpers::find($document, Nodes\ImageNode::class) as $image) {
+	if ($image->width !== null || $image->height !== null) {
+		continue; // rozměry už autor napsal
+	}
+	[$width, $height] = getimagesize("$imageDir/$image->url");
+	$sized = clone $image;
+	$sized->width = $width;
+	$sized->height = $height;
+	$rewriter->replace($image->range, $printer->renderNode($sized));
+}
+```
+
+```texy
+[* susarna.png .(Sušárna na půdě) >] *** Foto: Jana Nováková
+```
+
+se změní na
+
+```texy
+[* susarna.png 300x200 .(Sušárna na půdě) >] *** Foto: Jana Nováková
+```
+
+Uzel klonujeme, abychom neměnili strom, ze kterého ještě čteme. `Texy\Output\Texy\Renderer` je tiskárna, která uzel vypíše jako zdrojový text syntaxe Texy. Zápis, který autor napsal jednou z více podob, vytiskne ve stejné podobě, například stejnou odrážku nebo stejný druh nadpisu. Ostatní v jedné ustálené podobě, takže modifikátor vytiskne vždy jako `.(titulek)[třída]{styl}`.
+
+Uzel vaší vlastní syntaxe tiskárna vytisknout neumí a vyhodí výjimku. Naučíte ji to rendererem, který zaregistrujete přes `$printer->addRenderer()` stejně jako [renderer pro HTML |custom-handlers#Jiné HTML pro prvek], jen vrací zdrojový text.
+
+
+Syntaktický strom a dokument
+============================
+
+Proč nástroje volají `parse()` a ne `toHtml()` nebo `process()`? Strom totiž existuje ve dvou stavech.
+
+- **Syntaktický strom**, který vrátí `parse()`, popisuje, jak je text napsaný. Rozsahy přesně odpovídají zápisu, nic není dopočítané.
+- **Dokument** vznikne, když syntaktický strom projde úpravami v `transform()`. Ty mu dodají význam: najdou, kam vedou reference, vyrovnají úrovně nadpisů, vysází typografii. Rozsah pak říká, odkud uzel pochází, ne co je na tom místě napsané.
+
+Rozdíl je dobře vidět na odkazu přes referenci:
+
+```texy
+Viz "recept":[recept].
+
+[recept]: https://example.com/recept
+```
+
+V syntaktickém stromu je `$link->url` prázdné, `$link->ref` je `recept` a `$link->urlRange` ukazuje na `[recept]`, tedy na to, co je v textu skutečně napsané. Po `transform()` je v `$link->url` adresa `https://example.com/recept`, která na tom místě napsaná není. Nástroj, který by přepisoval podle dokumentu, by tak zapsal adresu na místo jména reference.
+
+Když potřebujete oba stavy, třeba nástroj, který hlásí chyby i ve výsledném HTML, naklonujte syntaktický strom před transformací: `NodeHelpers::clone($document)`.
+
+
+Pozice a konce řádků
+====================
+
+Rozsahy počítají bajty textu, který prošel `Texy::normalize()`. Normalizace převede konce řádků na `\n`, odstraní BOM, řídicí znaky, mezery na koncích řádků a prázdné řádky na začátku a na konci textu. Proto nástroj text normalizuje jednou na začátku a dál pracuje jen s výsledkem, stejně jako příklady výše.
+
+Nejjednodušší je ukládat soubory rovnou normalizované. Soubor na disku je pak totožný s textem, ke kterému se pozice vztahují, a pozice z nástroje můžete použít přímo v něm.
+
+.[note]
+`normalize()` odstraní i nový řádek na konci souboru. Pokud ho v souborech chcete mít, připojte ho při ukládání: `file_put_contents($file, $rewriter->getResult() . "\n")`.
+
+Soubory s konci řádků Windows (CRLF) zpracujte v normalizované podobě a CRLF vraťte až při zápisu:
+
+```php
+$source = Texy\Texy::normalize(file_get_contents($file));    // CRLF se změní na LF
+$rewriter = new Texy\Rewriter($source);
+// ... náhrady podle rozsahů ze stromu ...
+file_put_contents($file, str_replace("\n", "\r\n", $rewriter->getResult())); // na disku zase CRLF
+```
+
+Normalizovaný text žádné `\r` neobsahuje, takže převod je bezztrátový a při dalším načtení dostanete přesně týž text se stejnými pozicemi. Řádky a sloupce jsou v obou podobách stejné, liší se jen pozice v bajtech.
+
+
+Převod mezi Markdownem a syntaxí Texy
+=====================================
+
+Protože oba jazyky rozebírají text na tentýž strom, převod mezi nimi je jen otázka toho, který jazyk text přečte a který ho vytiskne. Článek v Markdownu převedete na syntaxi Texy jedním voláním:
+
+```php
+$markdown = new Texy\Markdown\Markdown;
+$texySource = $markdown->toTexy($text);
+```
+
+```
+# Recept na povidla
+
+- natrhat
+- [umýt](https://example.com)
+```
+
+```texy
+Recept na povidla
+#################
+
+- natrhat
+- "umýt":https://example.com
+```
+
+Obsah zůstane stejný, změní se jen zápis. Tabulky, úkolové seznamy a další rozšíření GFM se převedou, jen když text čtete objektem z `Markdown::gfm()`. Jinak jsou pro Markdown obyčejným textem.
+
+Opačným směrem převádí `Texy\Markdown\Output\Renderer`. Dostane dokument po `transform()`:
+
+```php
+$texy = new Texy\Texy;
+$document = $texy->parse($text);
+$texy->transform($document);
+$markdownSource = (new Texy\Markdown\Output\Renderer)->render($document);
+```
+
+Co Markdown zapsat neumí, převede na nejbližší podobu, kterou zná. Popisek pod obrázkem se stane kurzívou na dalším řádku, tabulka se sloučenými buňkami HTML tabulkou, a třídy, styly, rozměry a zarovnání obrázků se ztratí.
+
+
+Tisk zpět do syntaxe Texy
+=========================
+
+Celý syntaktický strom vytiskne `$texy->renderTexy($document)`. Výsledek se při novém rozebrání rozebere na tentýž strom a tiskem z něj vznikne opět tentýž text. Toho využívají právě nástroje, které strom upraví a chtějí ho uložit.
+
+Několik vzácných zápisů ale zpět přesně nevyjde: buňka tabulky pokračující na více řádků, než kolik řádků tabulky zabírá, řádek začínající `/--` nebo `\--` uvnitř bloku `html` nebo `text`, titulek modifikátoru přes zalomení řádku, prázdný blok `/--div`, zastaralý zápis obrázku `[* a | b *]` a řádky odstavce surového HTML, které by se po přesunu na začátek řádku četly jako blok.
+
+Tiskněte syntaktický strom z `parse()`, ne dokument po `transform()`. Dokument už má doplněné reference, vysázenou typografii a upravené HTML, takže jeho tiskem by nevznikl text, který autor napsal.
+
+{{maintitle: Nástroje nad zdrojovým textem v Texy: kontrola a přepis článků}}
+{{description: Kontrolujte články a hromadně je upravujte podle stromu dokumentu, ve kterém každý prvek zná své místo ve zdrojovém textu. A převod mezi Markdownem a syntaxí Texy.}}
