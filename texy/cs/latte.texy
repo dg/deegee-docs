@@ -1,0 +1,101 @@
+Texy v Latte
+************
+
+.[perex]
+Píšete šablony v [Latte |https://latte.nette.org]? Texy do nich přidá filtr `|texy` a značku `{texy}`, takže článek v Markdownu nebo v syntaxi Texy převedete na HTML přímo v šabloně, se vší typografií a bezpečností, kterou Texy umí.
+
+
+Filtr |texy
+===========
+
+Na blogu máme článek uložený jako text a v šabloně ho chceme vypsat jako HTML. Nejdřív Latte řekneme, že má Texy používat. Udělá to rozšíření `TexyExtension`, které dostane objekt `Texy\Texy`:
+
+```php
+$texy = new Texy\Texy;
+
+$latte = new Latte\Engine;
+$latte->addExtension(new Texy\Bridges\Latte\TexyExtension($texy));
+```
+
+V šabloně pak článek převede filtr `|texy`:
+
+```latte
+<article>
+	{$article->text|texy}
+</article>
+```
+
+Latte jinak každou proměnnou escapuje, aby se z ní nestalo HTML. Filtr `|texy` ale vrací hotové HTML, a Latte ho proto vypíše beze změny.
+
+Rozšíření se řídí nastavením objektu `$texy`, takže všechno z [konfigurace |configuration] platí i v šablonách.
+
+
+Markdown
+========
+
+Píšete články v Markdownu? Místo objektu `Texy\Texy` předejte rozšíření funkci, která text převede:
+
+```php
+$markdown = new Texy\Markdown\Markdown;
+$markdown->config->locale = 'cs';
+
+$latte->addExtension(new Texy\Bridges\Latte\TexyExtension(
+	fn(string $text): string => $markdown->toHtml(Texy\Helpers::outdent($text)),
+));
+```
+
+Filtr `|texy` i značka `{texy}` pak převádějí Markdown. `Texy\Helpers::outdent()` odebere odsazení, které mají všechny řádky textu společné. Potřebuje ho značka `{texy}` z další kapitoly: text v ní bývá odsazený podle okolní šablony a Markdown by řádky odsazené čtyřmi mezerami nebo tabulátorem četl jako blok kódu. Rozšíření, které dostane objekt `Texy\Texy`, odsazení odebírá samo.
+
+
+Značka {texy}
+=============
+
+Někdy je text přímo v šabloně, třeba úvod stránky nebo patička. Napište ho mezi `{texy}` a `{/texy}`:
+
+```latte
+<aside>
+	{texy}
+	## Jak na to
+
+	Sušte v **tenké** vrstvě a pravidelně obracejte.
+	{/texy}
+</aside>
+```
+
+S rozšířením pro Markdown z předchozí kapitoly z toho vznikne:
+
+```html
+<aside>
+<h2>Jak na to</h2>
+
+<p>Sušte v&nbsp;<strong>tenké</strong> vrstvě a pravidelně obracejte.</p>
+</aside>
+```
+
+Text, který neobsahuje žádnou proměnnou, převede Latte jen jednou, už když šablonu kompiluje, a ve zkompilované šabloně je rovnou hotové HTML. Šablona pak na Texy nečeká. Když ale změníte nastavení Texy, smažte cache Latte, jinak bude šablona dál vypisovat HTML podle starého nastavení.
+
+.[note]
+Proměnná uvnitř `{texy}` se stane součástí textu, který Texy čte, a to i s HTML, které obsahuje. Text od návštěvníků proto do `{texy}` nevkládejte. Patří do filtru s bezpečným režimem, jak ukazuje následující kapitola.
+
+
+Komentáře od návštěvníků
+========================
+
+Filtr `|texy` je určený pro vaše vlastní texty a výchozí nastavení Texy propustí skoro jakékoli HTML. Komentáře, které píše kdokoli, převádějte objektem v [bezpečném režimu |configuration#Bezpečný režim]. Filtr `|texy` může mít Latte jen jeden, a tak pro komentáře přidáme vlastní filtr:
+
+```php
+$comments = new Texy\Markdown\Markdown;
+$comments->config->locale = 'cs';
+Texy\Markdown\Configurator::safeMode($comments);
+
+$latte->addFilter('comment', fn(string $text) => new Latte\Runtime\Html($comments->toHtml($text)));
+```
+
+```latte
+<div class="komentar">{$comment->text|comment}</div>
+```
+
+`Latte\Runtime\Html` říká Latte, že výsledek je hotové HTML a nemá se znovu escapovat. Skript, který by autor komentáře zkusil podstrčit, se zobrazí jako neškodný text a odkazy dostanou `rel="nofollow"`.
+
+{{maintitle: Texy v Latte: Markdown a syntaxe Texy v šablonách}}
+{{description: Převádějte Markdown i syntaxi Texy přímo v šablonách Latte filtrem |texy nebo značkou {texy}, s typografií a bezpečným režimem pro komentáře.}}
