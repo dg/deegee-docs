@@ -39,12 +39,10 @@ Píšete články v Markdownu? Místo objektu `Texy\Texy` předejte rozšířen�
 $markdown = new Texy\Markdown\Markdown;
 $markdown->config->locale = 'cs';
 
-$latte->addExtension(new Texy\Bridges\Latte\TexyExtension(
-	fn(string $text): string => $markdown->toHtml(Texy\Helpers::outdent($text)),
-));
+$latte->addExtension(new Texy\Bridges\Latte\TexyExtension($markdown->toHtml(...)));
 ```
 
-Filtr `|texy` i značka `{texy}` pak převádějí Markdown. `Texy\Helpers::outdent()` odebere odsazení, které mají všechny řádky textu společné. Potřebuje ho značka `{texy}` z další kapitoly: text v ní bývá odsazený podle okolní šablony a Markdown by řádky odsazené čtyřmi mezerami nebo tabulátorem četl jako blok kódu. Rozšíření, které dostane objekt `Texy\Texy`, odsazení odebírá samo.
+Zápis `$markdown->toHtml(...)` metodu nevolá, ale předá ji rozšíření jako funkci. Filtr `|texy` i značka `{texy}` pak převádějí Markdown.
 
 
 Značka {texy}
@@ -71,6 +69,8 @@ S rozšířením pro Markdown z předchozí kapitoly z toho vznikne:
 <p>Sušte v&nbsp;<strong>tenké</strong> vrstvě a pravidelně obracejte.</p>
 </aside>
 ```
+
+Odsazení, které mají řádky textu společné kvůli okolní šabloně, rozšíření před převodem odebere. Markdown tak odsazené řádky nečte jako blok kódu.
 
 Text, který neobsahuje žádnou proměnnou, převede Latte jen jednou, už když šablonu kompiluje, a ve zkompilované šabloně je rovnou hotové HTML. Šablona pak na Texy nečeká. Když ale změníte nastavení Texy, smažte cache Latte, jinak bude šablona dál vypisovat HTML podle starého nastavení.
 
