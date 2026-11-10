@@ -39,11 +39,14 @@ Documentation is organized by package, language and article:
 
 The `version` field in `meta.json` says which version of the package the pages describe. It is the baseline for `.{data-version}` markers, see [below](#texy-documentation-modifiers).
 
+The package directory always holds the newest version. An older version that keeps its own documentation lives in a sibling directory `<package>-<version>` (`texy-3.x/`), whose `meta.json` names the package in `book`. The web makes the highest version the default one and serves the older ones at `/<lang>/<page>/<version>`.
+
 ### Package Inventory (5 packages)
 
 Each package is published on its own subdomain of deegee.dev, named after its directory, except DressCode, which has its own domain:
 
 - `texy/` - Texy, markup language processor (https://texy.deegee.dev)
+- `texy-3.x/` - Texy 3, the previous version
 - `dibi/` - Dibi, database abstraction layer (https://dibi.deegee.dev)
 - `ai-access/` - AI Access, one PHP interface for OpenAI, Claude, Gemini, DeepSeek and Grok (https://ai-access.deegee.dev)
 - `dresscode/` - DressCode, PHP code style checker and fixer built on a lossless syntax tree (https://dresscode.run)
@@ -56,7 +59,7 @@ Each package is published on its own subdomain of deegee.dev, named after its di
 - Every package has `@home.texy` (entry point). Most also have `@meta.texy` (metadata) and `@left-menu.texy` or `@menu.texy` (navigation).
 
 **Branch structure:**
-- `master` - Current documentation (latest versions)
+- `master` - All documentation, older versions of a package included
 
 ## CRITICAL: Always Write Plain ASCII Quotes
 
