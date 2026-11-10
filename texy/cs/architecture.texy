@@ -21,7 +21,7 @@ syntaxe Texy ──┘    (typografie, bezpečnost, …)    ├──> syntaxe T
 
 Proto Texy říkáme engine. Typografie, oprava HTML, bezpečný režim nebo renderery jsou napsané jednou a dostane je každý jazyk. A převod z Markdownu do syntaxe Texy je jen otázka toho, který jazyk text přečte a který ho vytiskne.
 
-Tenhle strom vznikne ze začátku článku v Markdownu. Syntaxe Texy z odpovídajícího textu vytvoří stejný:
+Tenhle strom, zjednodušeně a bez pomocných uzlů `ContentNode`, které drží obsah, vznikne ze začátku článku v Markdownu. Syntaxe Texy z odpovídajícího textu vytvoří stejný:
 
 ```
 DocumentNode
@@ -43,7 +43,7 @@ Uzly jsou dvojího druhu: **blokové**, jako odstavec nebo nadpis, a **řádkov�
 Čtyři kroky zpracování
 ======================
 
-Volání `$texy->process($text)` nebo `$markdown->toHtml($text, $texy)` provede čtyři kroky za sebou. Můžete je zavolat i jednotlivě, když se potřebujete ke stromu dostat:
+Volání `$texy->toHtml($text)` nebo `$markdown->toHtml($text)` provede čtyři kroky za sebou. Můžete je zavolat i jednotlivě, když se potřebujete ke stromu dostat:
 
 ```php
 $document = $texy->parse($text);      // 1. a 2. normalizace a rozebrání
@@ -51,13 +51,13 @@ $texy->transform($document);          // 3. úpravy dokumentu
 $html = $texy->renderHtml($document); // 4. vykreslení
 ```
 
-Pro Markdown je to `$markdown->parse($text)`, `$markdown->transform($document, $texy)` a vykreslení přes `$markdown->createHtmlRenderer($texy)->render($document)`.
+Markdown má tytéž tři metody, `$markdown->parse()`, `$markdown->transform()` a `$markdown->renderHtml()`. Jeden dokument jde upravit jen jednou, druhé volání `transform()` vyhodí výjimku.
 
 
 Normalizace
 -----------
 
-`Texy::normalize()` text uklidí: sjednotí konce řádků na `\n`, odstraní BOM, řídicí znaky, mezery na koncích řádků a prázdné řádky na začátku a na konci. Tabulátory zůstávají a v syntaxi se počítají jako jeden znak mezery. Text v neplatném UTF-8 vyhodí výjimku hned, místo aby někde dál způsobil nečekanou chybu.
+`Texy::normalize()` text uklidí: sjednotí konce řádků na `\n`, odstraní BOM, řídicí znaky, měkké spojovníky, mezery na koncích řádků a prázdné řádky na začátku a na konci. Tabulátory zůstávají a v syntaxi se počítají jako jeden znak mezery. Text v neplatném UTF-8 vyhodí výjimku hned, místo aby někde dál způsobil nečekanou chybu.
 
 
 Rozebrání
@@ -67,7 +67,7 @@ Každý zápis jazyka, třeba tučné písmo nebo tabulka, má jméno a regulár
 
 Vnořování funguje tak, že funkce zápisu nechá rozebrat vnitřní text znovu, například obsah citace jako další bloky. Výstup funkce se už nikdy znovu neprochází, takže se nestane, že by Texy omylem četlo jako zápis něco, co samo vytvořilo.
 
-Když na stejném místě může začínat víc zápisů, vyhraje ten, který začíná nejdřív, při stejném začátku delší a při stejné délce ten zaregistrovaný dřív. Funkce zápisu může nalezený text také odmítnout, a pak dostanou šanci zápisy za ní. Jak to využít pro vlastní zápis, popisuje [Přidání vlastní syntaxe |custom-syntax].
+Když na stejném místě může začínat víc zápisů, vyhraje ten, který začíná nejdřív, při stejném začátku delší, při stejné délce zápis aplikace před vestavěným a mezi nimi ten zaregistrovaný dřív. Funkce zápisu může nalezený text také odmítnout, a pak dostanou šanci zápisy za ní. Jak to využít pro vlastní zápis, popisuje [Přidání vlastní syntaxe |custom-syntax].
 
 Markdown rozebírá text na stejném jádru, jen ve dvou fázích: nejdřív celé bloky a teprve potom obsah řádků, protože odkaz se může odvolávat na definici, která je v textu až za ním. Že je jádro postavené dobře, dokazuje, že Markdown na něm projde všemi 652 příklady specifikace CommonMark.
 
@@ -80,18 +80,20 @@ Výsledkem rozebrání je **syntaktický strom**. Popisuje text tak, jak je naps
 `transform()` provede nad stromem úpravy, které mu dodají význam. Vestavěné úpravy syntaxe Texy proběhnou v tomto pořadí:
 
 1. direktivy `{{…}}` se obslouží a nahradí
-2. HTML značky napsané v textu se spárují a zkontrolují podle povolených značek, nepovolené se změní na text
-3. odkazy a obrázky zapsané referencí dostanou adresu z definice
-4. emotikony se nahradí znaky
-5. nadpisy dostanou vyrovnanou úroveň a `id`
+2. odkazy a obrázky zapsané referencí dostanou adresu z definice
+3. nadpisy se vyváží
+4. HTML značky napsané v textu se spárují a zkontrolují podle povolených značek, nepovolené se změní na text
+5. nadpisy se posunou podle `headingTop` a dostanou `id`
 
-Pořadí má své důvody. Kontrola HTML musí proběhnout před typografií, protože z nepovolené značky se stane text, který se má vysázet. A `id` nadpisů vzniknou dřív, než je čtou vaše úpravy.
+Markdown má jen poslední dva kroky, společné oběma jazykům, a před nimi filtr nebezpečných značek GFM.
+
+Pořadí má své důvody. Direktivy jsou první, protože mohou změnit nastavení, podle kterého se zbytek dokumentu zpracuje. Kontrola HTML musí proběhnout před typografií, protože z nepovolené značky se stane text, který se má vysázet. A `id` nadpisů vzniknou dřív, než je čtou vaše úpravy.
 
 Pak proběhnou [vaše průchody |custom-handlers#Úprava dokumentu] a nakonec **typografie**: uvozovky, pomlčky, pevné mezery a dělení dlouhých slov. Typografie neupravuje hotové HTML, ale text uzlů ve stromu. Proto ji dostane každý výstup a nikdy nezasáhne do bloku kódu.
 
 Po úpravách je strom **dokument**: popisuje, co text znamená, a obsahuje všechno, co výstup potřebuje.
 
-Ze stejného důvodu je v úpravách i bezpečnost. V syntaxi Texy se už tady rozhodne, které HTML značky jsou povolené, a ve stromu pak zůstane jen to, co povolené je. Platí tak pro každý výstup. Markdown surové HTML ve stromu drží tak, jak je napsané, a jeho bezpečný režim ho proto vypne už při rozebírání.
+Ze stejného důvodu je v úpravách i bezpečnost. Už tady se rozhodne, které HTML značky jsou povolené, a ve stromu pak zůstane jen to, co povolené je. Platí tak pro každý výstup a pro oba jazyky: Markdown rozebere své surové HTML na tytéž uzly značek jako syntaxe Texy a prochází stejnou kontrolou.
 
 
 Vykreslení
@@ -114,12 +116,12 @@ Jak do zpracování zasáhnout
 
 Každý krok má své místo pro rozšíření:
 
-- **nový zápis** pro rozebrání: `addLineSyntax()` a `addBlockSyntax()`, viz [Přidání vlastní syntaxe |custom-syntax]
+- **nový zápis** pro rozebrání: `addInlineSyntax()` a `addBlockSyntax()`, viz [Přidání vlastní syntaxe |custom-syntax]
 - **úprava dokumentu**: `addPass()` a direktivy, viz [Úprava chování prvků |custom-handlers#Úprava dokumentu]
 - **jiné vykreslení**: `$texy->htmlOutput->addRenderer()`, viz [Úprava chování prvků |custom-handlers#Jiné HTML pro prvek]
 - **práce se zdrojovým textem**: syntaktický strom z `parse()`, viz [Nástroje nad zdrojovým textem |source-tools]
 
-Kam která změna patří, napoví jednoduchá otázka: mění obsah dokumentu bez ohledu na výstup? Pak patří do úprav dokumentu a dostane ji každý výstup. Mění jen vzhled jednoho výstupu? Pak patří do rendereru. Stejně je rozdělené i [nastavení |configuration]: co mění význam textu, je u jazyka a jeho modulů, co mění jen vzhled HTML, je v `$texy->htmlOutput`.
+Kam která změna patří, napoví jednoduchá otázka: mění obsah dokumentu bez ohledu na výstup? Pak patří do úprav dokumentu a dostane ji každý výstup. Mění jen vzhled jednoho výstupu? Pak patří do rendereru. Stejně je rozdělené i [nastavení |configuration]: co mění význam textu, je v `$texy->config`, co mění jen vzhled HTML, je v `$texy->htmlOutput`.
 
 
 Pojmy
@@ -127,7 +129,7 @@ Pojmy
 
 **Uzel** je jeden prvek stromu dokumentu, objekt z `Texy\Nodes`.
 
-**Zápis** (syntax) je pojmenovaná konstrukce jazyka, třeba `phrase/strong` nebo `image`. Jeho jméno slouží k zapnutí a vypnutí v poli `allowed`.
+**Zápis** (syntax) je pojmenovaná konstrukce jazyka, třeba `phrase/strong` nebo `image`. Jeho jméno slouží k zapnutí a vypnutí v poli `allowedSyntax`.
 
 **Vzor** (pattern) je regulární výraz, podle kterého se zápis pozná v textu.
 
