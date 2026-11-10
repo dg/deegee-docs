@@ -27,6 +27,8 @@ use Texy\Nodes\ImageNode;
 use Texy\Output\Html;
 
 $texy = new Texy\Texy;
+$markdown = new Texy\Markdown\Markdown(htmlOutput: $texy->htmlOutput);
+
 $texy->htmlOutput->addRenderer(function (ImageNode $node, Html\Renderer $renderer, ?Closure $previous) {
 	if (!str_starts_with($node->url ?? '', 'youtube:')) {
 		return null; // ostatní obrázky vykreslí Texy jako obvykle
@@ -39,8 +41,7 @@ $texy->htmlOutput->addRenderer(function (ImageNode $node, Html\Renderer $rendere
 	]);
 });
 
-$markdown = new Texy\Markdown\Markdown;
-$html = $markdown->toHtml('![Video o sušení](youtube:dQw4w9WgXcQ)', $texy);
+$html = $markdown->toHtml('![Video o sušení](youtube:dQw4w9WgXcQ)');
 ```
 
 ```html
@@ -48,33 +49,33 @@ $html = $markdown->toHtml('![Video o sušení](youtube:dQw4w9WgXcQ)', $texy);
 height="360" allowfullscreen></iframe></div>
 ```
 
+Renderer patří k nastavení HTML výstupu, `htmlOutput`. Markdown ho tu sdílí s `$texy`, jak doporučuje [konfigurace |configuration], a proto renderer platí pro oba jazyky: v syntaxi Texy stejně vykreslí `[* youtube:dQw4w9WgXcQ *]`.
+
 Jaké uzly renderer obslouží, pozná Texy z typu prvního parametru, tady `ImageNode`. Funkce dostane tři parametry:
 
 - `$node` je uzel, který se má vykreslit. Jeho vlastnosti, jako `$node->url` nebo `$node->width`, popisuje [přehled uzlů |#Přehled uzlů].
-- `$renderer` je objekt, který právě vykresluje celý dokument. Předáváte ho dál, když voláte `$previous`.
+- `$renderer` je objekt, který právě vykresluje celý dokument. Hodí se, když vlastní značkou obalujete obsah uzlu: `$renderer->renderNodes($node->content->children)` ho vykreslí a výsledek vložíte do vlastnosti `children` svého prvku `Html\Element`.
 - `$previous` je renderer, který by uzel vykreslil, kdyby ten váš nebyl. Obvykle je to výchozí renderer Texy.
 
 Vrátit můžete:
 
-- `Html\Element`, HTML značku s atributy v poli a s obsahem, kterou Texy vypíše
+- `Html\Element`, HTML značku s atributy v poli, kterou Texy vypíše
 - `Html\Raw`, hotový kus HTML, který Texy vypíše beze změny
 - řetězec, obyčejný text, který Texy escapuje
 - `null`, když uzel obsloužit nechcete a má ho vykreslit `$previous`
-
-Renderer zaregistrovaný na `$texy->htmlOutput` platí pro Markdown i syntaxi Texy, stačí předat `$texy` do `toHtml()`.
 
 
 Úprava výchozího výsledku
 -------------------------
 
-Často nechcete uzel vykreslit celý sami, jen upravit to, co by vytvořilo Texy. Zavoláte tedy `$previous` a výsledek upravíte. Takhle dostane každý nadpis článku CSS třídu:
+Často nechcete uzel vykreslit celý sami, jen upravit to, co by vytvořilo Texy. Zavoláte tedy `$previous($node)` a výsledek upravíte. Takhle dostane každý nadpis článku CSS třídu:
 
 ```php
 use Texy\Nodes\HeadingNode;
 
-$texy->htmlOutput->addRenderer(function (HeadingNode $node, Html\Renderer $renderer, ?Closure $previous) {
-	$el = $previous($node, $renderer);
-	$el->attrs['class'][] = 'nadpis-clanku';
+$texy->htmlOutput->addRenderer(function (HeadingNode $node, Html\Renderer $renderer, Closure $previous) {
+	$el = $previous($node);
+	$el->addClass('nadpis-clanku');
 	return $el;
 });
 ```
@@ -85,13 +86,13 @@ $texy->htmlOutput->addRenderer(function (HeadingNode $node, Html\Renderer $rende
 <h2 class="nadpis-clanku">Sklizeň</h2>
 ```
 
-Renderery pro tentýž druh uzlu se řetězí. Ten zaregistrovaný naposledy se volá první a jeho `$previous` je ten zaregistrovaný před ním, až po výchozí renderer Texy.
+Renderery pro tentýž druh uzlu se řetězí. Ten zaregistrovaný naposledy se volá první a jeho `$previous` je ten zaregistrovaný před ním, až po výchozí renderer Texy. Pro vestavěné uzly tak `$previous` nikdy není `null` a parametr můžete psát bez otazníku, jako tady.
 
 
 Obarvení kódu
 -------------
 
-Bloky kódu jsou uzly `CodeBlockNode` a jejich jazyk je ve `$node->language`. Kód v PHP obarví vestavěná funkce `highlight_string()`, která vrací hotové HTML, a proto ho vrátíme jako `Html\Raw`:
+Bloky kódu jsou uzly `CodeBlockNode`, kód je ve `$node->code` a jazyk ve `$node->language`. Kód v PHP obarví vestavěná funkce `highlight_string()`, která vrací hotové HTML, a proto ho vrátíme jako `Html\Raw`:
 
 ```php
 use Texy\Nodes\CodeBlockNode;
@@ -104,10 +105,10 @@ $texy->htmlOutput->addRenderer(function (CodeBlockNode $node, Html\Renderer $ren
 });
 ```
 
-Obarví se blok ` ```php ` v Markdownu i `/--php` v syntaxi Texy. Bloky v jiných jazycích vykreslí Texy jako obvykle. Pro další jazyky můžete stejně zapojit kteroukoli knihovnu na obarvování kódu.
+Obarví se blok ` ```php ` v Markdownu i `/--php` v syntaxi Texy. Bloky v jiných jazycích vykreslí Texy jako obvykle, tedy `<pre class="language-xxx"><code>`, a třída podle jazyka se hodí i pro obarvování v prohlížeči. Pro další jazyky můžete stejně zapojit kteroukoli knihovnu na obarvování kódu.
 
 .[note]
-Renderer nesmí měnit uzel, který dostal: tentýž dokument se dá vykreslit víckrát a pokaždé musí dát stejné HTML. Když potřebujete pozměněnou kopii, uzel naklonujte.
+Renderer nesmí měnit uzel, který dostal: tentýž dokument se dá vykreslit víckrát a pokaždé musí dát stejné HTML. Když potřebujete pozměněnou kopii, uzel naklonujte, `clone $node` zkopíruje i všechno uvnitř.
 
 
 Úprava dokumentu
@@ -118,11 +119,10 @@ Průchod je funkce, která dostane celý dokument po rozebrání a smí ho libov
 Blog se přestěhoval a staré články odkazují na vlastní stránky absolutní adresou `http://muj-blog.cz/…`. Průchod je převede na adresy v rámci webu:
 
 ```php
-use Texy\NodeHelpers;
 use Texy\Nodes;
 
 $fixLinks = function (Nodes\DocumentNode $document): void {
-	foreach (NodeHelpers::find($document, Nodes\LinkNode::class) as $link) {
+	foreach ($document->find(Nodes\LinkNode::class) as $link) {
 		if ($link->url !== null && str_starts_with($link->url, 'http://muj-blog.cz/')) {
 			$link->url = substr($link->url, strlen('http://muj-blog.cz'));
 		}
@@ -138,7 +138,7 @@ $texy->addPass($fixLinks);      // pro články v syntaxi Texy
 href="https://example.com">jinde</a>.</p>
 ```
 
-`NodeHelpers::find()` vrátí všechny uzly daného druhu v pořadí, v jakém jsou v textu. Místo třídy můžete předat i funkci, která o každém uzlu rozhodne, jestli ho chcete. `NodeHelpers::findFirst()` vrátí jen první nalezený.
+`find()` vrátí všechny uzly daného druhu v pořadí, v jakém jsou v textu. Jako druhý parametr můžete předat funkci, která o každém nalezeném uzlu rozhodne, jestli ho chcete, třeba `$document->find(Nodes\LinkNode::class, fn($link) => $link->url === null)`. `findFirst()` vrátí jen první nalezený, nebo `null`. Obě metody má každý uzel, takže můžete hledat i jen uvnitř jednoho odstavce.
 
 Na rozdíl od rendererů se průchod registruje u jazyka: pro Markdown na `$markdown`, pro syntaxi Texy na `$texy`. Úpravou zdrojového textu průchod není, v souboru s článkem se nic nezmění. Jak přepsat i zdrojový text, ukazuje stránka [Nástroje nad zdrojovým textem |source-tools].
 
@@ -146,12 +146,13 @@ Na rozdíl od rendererů se průchod registruje u jazyka: pro Markdown na `$mark
 Nahrazení a odstranění uzlů
 ---------------------------
 
-Když potřebujete uzel nahradit jiným nebo ho odstranit, projděte strom pomocí `NodeTraverser`. V komentářích na blogu nechceme obrázky, ale chceme, aby čtenář věděl, co tam autor měl. Průchod nahradí každý obrázek textem s jeho popisem:
+Když potřebujete uzel nahradit jiným nebo ho odstranit, projděte strom metodou `traverse()`. V komentářích na blogu nechceme obrázky, ale chceme, aby čtenář věděl, co tam autor měl. Průchod nahradí každý obrázek textem s jeho popisem:
 
 ```php
-$markdown->addPass(function (Nodes\DocumentNode $document): void {
-	(new Texy\NodeTraverser)->traverse($document, fn(Texy\Node $node) => $node instanceof Nodes\ImageNode
-		? new Nodes\TextNode('[obrázek: ' . ($node->modifier?->title ?? '') . ']')
+$comments = new Texy\Markdown\Markdown;
+$comments->addPass(function (Nodes\DocumentNode $document): void {
+	$document->traverse(fn(Texy\Node $node) => $node instanceof Nodes\ImageNode
+		? new Nodes\TextNode('[obrázek: ' . $node->alt . ']')
 		: null);
 });
 ```
@@ -160,7 +161,7 @@ $markdown->addPass(function (Nodes\DocumentNode $document): void {
 <p>Podívejte se: [obrázek: moje sušárna] super.</p>
 ```
 
-Funkce předaná do `traverse()` dostane postupně každý uzel. Když vrátí jiný uzel, nahradí jím ten původní, když vrátí `null`, nechá ho být. Vrátit může i jednu z konstant: `NodeTraverser::RemoveNode` uzel odstraní, `DontTraverseChildren` přeskočí jeho vnitřek a `StopTraversal` procházení ukončí.
+Funkce předaná do `traverse()` dostane postupně každý uzel. Když vrátí jiný uzel, nahradí jím ten původní, když vrátí `null`, nechá ho být. Vrátit může i jednu z hodnot výčtu `Texy\TraverseAction`: `Remove` uzel odstraní, `SkipChildren` přeskočí jeho vnitřek a `Stop` procházení ukončí.
 
 
 Kdy průchod běží
@@ -176,6 +177,8 @@ $texy->addPass($pass, Texy\Stage::Finalize);
 - `Stage::Finalize` až po typografii, když chcete vidět výsledný text
 - `Stage::Syntax` hned při rozebírání textu, pro nástroje, které pracují se zdrojovým textem, viz [Nástroje nad zdrojovým textem |source-tools]
 
+Ve výchozím okamžiku už mají nadpisy spočítané úrovně a id a HTML je zkontrolované podle povolených značek. Nadpis, který průchod vloží, proto id nedostane. Když potřebujete do dokumentu přidat nadpisy, převeďte text po krocích, jak ukazuje [konfigurace |configuration#Nadpisy], a nadpisy vložte po `parse()` a před `transform()`.
+
 
 Direktivy
 =========
@@ -183,9 +186,9 @@ Direktivy
 Zápis `{{jméno: hodnota}}` v syntaxi Texy je direktiva. Sám nic nedělá, význam mu dáte vy. Na blogu chceme, aby `{{autor: jana}}` vytvořilo odkaz na profil autorky:
 
 ```php
-$texy->directiveModule->addDirective('autor', fn(?string $value) => new Nodes\LinkNode(
-	url: '/uzivatel/' . $value,
-	content: new Nodes\ContentNode([new Nodes\TextNode('@' . $value)]),
+$texy->config->addDirective('autor', fn(Nodes\DirectiveNode $directive) => new Nodes\LinkNode(
+	url: '/uzivatel/' . $directive->value,
+	content: Nodes\ContentNode::fromText('@' . $directive->value),
 ));
 ```
 
@@ -197,9 +200,19 @@ $texy->directiveModule->addDirective('autor', fn(?string $value) => new Nodes\Li
 <p>Článek napsala <a href="/uzivatel/jana">@jana</a>.</p>
 ```
 
-Funkce dostane hodnotu za dvojtečkou, pole argumentů oddělených čárkou a uzel direktivy. Vrátí uzel, který se do dokumentu vloží místo direktivy, nebo `null`, když se má direktiva jen odstranit. Direktivu, kterou nikdo neobslouží, Texy nechá v textu tak, jak ji autor napsal. Chcete-li se o takových dozvědět, zaregistrujte funkci přes `$texy->directiveModule->setFallback()`.
+Funkce dostane uzel direktivy. Hodnotu za dvojtečkou najde v `$directive->value`, argumenty oddělené čárkou v poli `$directive->args` a jméno v `$directive->name`. Vrátí uzel, který se do dokumentu vloží místo direktivy. Když nevrátí nic, direktiva se odstraní.
 
-Direktivy běží jako úplně první úprava dokumentu. Mohou proto změnit i nastavení, podle kterého se zbytek dokumentu zpracuje, například úroveň nadpisů.
+Direktivu, kterou nikdo neobslouží, Texy nechá v textu tak, jak ji autor napsal. Chcete-li se o takových dozvědět, zaregistrujte záložní funkci. Funguje stejně jako ta pojmenovaná, takže když direktivu chcete v textu nechat, vraťte uzel, který dostala:
+
+```php
+$unknown = [];
+$texy->config->setDirectiveFallback(function (Nodes\DirectiveNode $directive) use (&$unknown) {
+	$unknown[] = $directive->name;  // jména neznámých direktiv si poznamenáme
+	return $directive;              // direktiva zůstane v textu
+});
+```
+
+Direktivy běží jako úplně první úprava dokumentu. Mohou proto změnit i nastavení, podle kterého se zbytek dokumentu zpracuje, například úroveň nadpisů v `$texy->config->headingTop`. Taková změna ale patří objektu `$texy`, ne dokumentu, a zůstane i pro další převody. Pokud ji direktivy dělají, převádějte každý dokument vlastním objektem `Texy\Texy`.
 
 
 Kterou cestu zvolit
@@ -219,48 +232,37 @@ Uzly jsou ve jmenném prostoru `Texy\Nodes`. Markdown i syntaxe Texy vytvářej�
 |---
 | Uzel | Prvek | Důležité vlastnosti
 |---
-| `DocumentNode` | celý dokument | `$content`
+| `DocumentNode` | celý dokument | `$content`, `getHeadings()`
 | `ParagraphNode` | odstavec | `$content`, `$modifier`
 | `HeadingNode` | nadpis | `$level`, `$id`, `$content`, `getTitle()`
-| `ListNode`, `ListItemNode` | seznam a jeho položka | `$items`, `$type`, `$start`; položka `$content`
-| `DefinitionListNode` | seznam definic |
-| `TableNode`, `TableRowNode`, `TableCellNode` | tabulka, řádek, buňka | buňka `$content`, `$colspan`, `$rowspan`, `$header`
+| `ListNode`, `ListItemNode` | seznam a jeho položka | `$items`, `$type`, `$start`; položka `$content`, `$checked` u úkolového seznamu
+| `DefinitionListNode` | seznam definic | `$items`
+| `TableNode`, `TableRowNode`, `TableCellNode` | tabulka, řádek, buňka | tabulka `$rows`, `$caption`; buňka `$content`, `$colspan`, `$rowspan`, `$header`
 | `BlockQuoteNode` | citace | `$content`
 | `CodeBlockNode` | blok kódu | `$code`, `$language`
-| `HorizontalRuleNode` | vodorovná čára |
-| `SectionNode` | blok `/--div` | `$content`
-| `FigureNode` | obrázek s popiskem | `$image`, `$caption`
+| `PreformattedNode` | předformátovaný text, blok `/--` bez typu | `$content`
+| `HtmlBlockNode` | blok HTML, v Markdownu i v syntaxi Texy (`/--html`) | `$content`
+| `TextBlockNode`, `CommentNode`, `TexySourceNode` | bloky `/--text`, `/--comment` a `/--texysource` |
+| `HorizontalRuleNode` | vodorovná čára | `$type`
+| `DivNode` | blok `/--div` | `$content`, `$modifier`
+| `FigureNode` | obrázek s popiskem | `$image`, `$caption`, `$float`
 | `TextNode` | text | `$text`
-| `PhraseNode` | zvýrazněný text | `$type` (např. `phrase/strong`, `phrase/em`, `phrase/code`), `$content`
+| `PhraseNode` | zvýrazněný text | `$type` (např. `phrase/strong`, `phrase/em`), `$content`
+| `InlineCodeNode` | kód v textu | `$code`
 | `LinkNode` | odkaz | `$url`, `$content`
-| `UrlNode`, `EmailNode` | adresa a e-mail napsané přímo v textu |
-| `ImageNode` | obrázek | `$url`, `$width`, `$height`, `$modifier->title` (popis)
-| `LineBreakNode` | zalomení řádku |
-| `HtmlElementNode`, `HtmlTagNode`, `HtmlCommentNode` | HTML napsané v syntaxi Texy |
-| `DirectiveNode` | direktiva `{{…}}` |
+| `UrlNode`, `EmailNode` | adresa a e-mail napsané přímo v syntaxi Texy |
+| `ImageNode` | obrázek | `$url`, `$alt` (popis), `$width`, `$height`, `$float`
+| `LineBreakNode`, `SoftBreakNode` | zalomení řádku a v Markdownu obyčejný konec řádku v odstavci |
+| `HtmlTagNode`, `HtmlElementNode`, `HtmlCommentNode` | HTML značka a komentář napsané v textu | `$name`, `$attributes`
+| `RawTextNode` | instrukce a deklarace v HTML Markdownu, zobrazené jako text | `$text`
+| `DirectiveNode` | direktiva `{{…}}` | `$name`, `$value`, `$args`
 | `EmoticonNode` | emotikon |
 
 Uzel s `$modifier` nese třídy, ID, styly a titulek z [modifikátoru |syntax#Modifikátory] v objektu `Texy\Modifier`: `$classes`, `$id`, `$styles`, `$attrs`, `$title`.
 
-Markdown má navíc několik vlastních uzlů v `Texy\Markdown\Nodes`, hlavně pro surové HTML (`HtmlBlockNode`, `RawInlineNode`), které Markdown podle specifikace propouští beze změny.
-
 Uzel, pro který žádný renderer neexistuje, Texy nevykreslí jako chybu, ale vykreslí jen jeho obsah. Díky tomu jde dokument vykreslit vždy, i když obsahuje uzel, který zná jen jedno rozšíření.
 
-
-Přechod z verze 3
-=================
-
-Texy 3 mělo pro úpravy chování události a handlery (`addHandler('image', …)`, `beforeParse`, `afterParse`) s metodou `proceed()`. Ve verzi 4 je nahrazují renderery a průchody z této stránky a volání `addHandler()` vyhodí výjimku, která pojmenuje náhradu:
-
-|---
-| Texy 3 | Texy 4
-|---
-| `addHandler('image', …)` a další handlery prvků | `$texy->htmlOutput->addRenderer()`
-| `$invocation->proceed()` | `$previous($node, $renderer)`
-| `addHandler('afterParse', …)` | `$texy->addPass()`
-| `Texy\HtmlElement` | `Texy\Output\Html\Element`
-| `$texy->protect()` | `new Texy\Output\Html\Raw($html)`
-| `addHandler('script', …)` | `$texy->directiveModule->addDirective()`
+Přecházíte z Texy 3, kde se chování měnilo handlery a událostmi? Jak je přepsat na renderery a průchody, popisuje [Přechod z Texy 3 |upgrading].
 
 {{maintitle: Úprava chování prvků v Texy: renderery, průchody a direktivy}}
 {{description: Změňte, jak Texy vykreslí obrázky, odkazy, nadpisy nebo bloky kódu, upravte dokument před vykreslením a obsluhujte direktivy. Pro Markdown i syntaxi Texy.}}
