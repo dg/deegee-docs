@@ -1,0 +1,133 @@
+AI Access MCP: Let Your AI Assistant Ask Gemini and GPT
+********************************************************
+
+.[perex]
+Every model is good at something else: Gemini reads a few hundred pages in one go and rewrites prose so it reads well, GPT draws pictures, and your assistant knows your code. AI Access MCP lets your AI assistant hand each task to the model that does it best, without you writing a single line of PHP.
+
+
+What It Is For
+==============
+
+AI assistants such as Cursor, Gemini CLI or Claude Code can use tools. A tool is anything the assistant may call while working for you: read a file, run the tests, look into a database. The tools reach the assistant through MCP (Model Context Protocol), a common way of plugging them in, so a tool written once works in every assistant that speaks MCP.
+
+AI Access MCP is such a tool, built on this library. It gives your assistant two abilities it does not have on its own:
+
+- **`generate_text` asks another model.** Gemini or GPT reads files, answers, rewrites, translates or gives a second opinion.
+- **`generate_image` draws an image** with an OpenAI model and saves it to the file the assistant names.
+
+You keep talking to your assistant the way you are used to, and you only tell it whom to ask:
+
+> Ask Gemini to rewrite the prose of `docs/install.md` so a beginner can follow it, and save the proposal next to it.
+
+
+Installation
+============
+
+The server is a PHP project of its own. Put it anywhere on your computer:
+
+```shell
+composer create-project ai-access/mcp ai-access-mcp
+```
+
+It needs PHP 8.4 or later with the curl and gd extensions, and a key of [Google AI Studio |https://aistudio.google.com/app/apikey] for Gemini, of [OpenAI |https://platform.openai.com/api-keys] for GPT and images, or both.
+
+
+Connecting It to Your Assistant
+===============================
+
+The assistant starts the server itself, so you only tell it how. In Claude Code that is the file `.mcp.json` in the root of your project:
+
+```json
+{
+	"mcpServers": {
+		"ai-access": {
+			"command": "php",
+			"args": ["/path/to/ai-access-mcp/server.php"],
+			"env": {
+				"GEMINI_API_KEY_FILE": "/home/me/keys/gemini.txt",
+				"OPENAI_API_KEY_FILE": "/home/me/keys/openai.txt",
+				"AI_ACCESS_READ_ROOTS": "/home/me/projects",
+				"AI_ACCESS_WRITE_ROOTS": "/home/me/projects"
+			}
+		}
+	}
+}
+```
+
+Notice that the keys themselves are not in the file. Each variable holds only the path to a file with the key, so the configuration can be shared or committed without giving the keys away. A tool appears only when its provider has a key: with the Gemini key alone you get `generate_text`, with the OpenAI key both tools.
+
+The roots say which directories the tools may read and write; on Windows they are separated by `;`, elsewhere by `:`. Until you set them, the server touches no file at all. More about that [below |#What It Guards You Against].
+
+Other assistants take the same block, only from another file:
+
+| Assistant      | Where                                                                       |
+|----------------|-----------------------------------------------------------------------------|
+| Claude Code    | `.mcp.json` in the project, or for all projects `claude mcp add --scope user` |
+| Claude Desktop | `claude_desktop_config.json` in the folder of the application settings      |
+| Cursor         | `.cursor/mcp.json` in the project, or `~/.cursor/mcp.json`                  |
+| Gemini CLI     | `.gemini/settings.json` in the project, or `~/.gemini/settings.json`        |
+
+The default models are `gemini-3.8-flash` for text and `gpt-image-2` for images. The variables `AI_ACCESS_TEXT_MODEL` and `AI_ACCESS_IMAGE_MODEL` change them, and the assistant may also pick a model for a single call.
+
+
+Asking Another Model
+====================
+
+When you ask the assistant to rewrite `docs/install.md` through Gemini, it calls `generate_text` like this:
+
+```json
+{
+	"prompt": "Rewrite the prose of docs/install.md so a beginner can follow it. Keep code blocks and links as they are.",
+	"files": ["/home/me/projects/app/docs/install.md"],
+	"effort": "high",
+	"outputFile": "/home/me/projects/app/docs/install.proposal.md"
+}
+```
+
+The file goes by its path, not by its content. The server reads it itself and the model gets it marked with the path as written, so the prompt can refer to it:
+
+```
+<file path="/home/me/projects/app/docs/install.md">
+...the content of the file, unchanged...
+</file>
+```
+
+Why does that matter? A long text that went through the assistant would fill its context and you would pay for it twice, once to the assistant and once to Gemini. This way it travels straight from the disk to Gemini. With `outputFile` the answer goes to a new file as well, and the assistant gets back only a short report: the model, the tokens, what the call cost and in `problem` anything that went wrong, such as an answer the model did not finish.
+
+The answer can follow a JSON schema given in `responseSchema`, and the server checks that it really does. Each result carries a `conversation`, and passing it back continues the same conversation: "these three lines are still wrong, fix them". The model, the instructions and everything sent earlier stay with it.
+
+
+Long Inputs and the Gemini Cache
+================================
+
+Some work comes in batches with a large shared input. You rewrite a manual page by page, and each time Gemini should see the pages already finished, so that it keeps the same words and tone. That is what `context` is for: files shared by the calls of the batch.
+
+With Gemini the server stores the context together with the instructions in an explicit cache. Every later call with the same model, instructions and context reads it at a tenth of the input price, and the result tells you whether the cache was `created` or `reused` and how many tokens came from it. Another context replaces the cache, and a context too short to be cached is sent the ordinary way. Keeping the cache is paid by the hour; the result reports it as `storageCostPerHour`.
+
+
+Generating Images
+=================
+
+`generate_image` takes the prompt and the absolute path of a new file. Its extension `.png`, `.jpg` or `.webp` decides the format, and `size`, `quality` and `background` mean the same as in [image generation |images] with OpenAI. With `referenceImages` the model edits an image or works from it.
+
+Beside the image the server writes the prompt to a `.txt` file of the same name, so you always know what an image was made from. The result carries a small preview, so the assistant sees what came out and can tell you.
+
+
+What It Guards You Against
+==========================
+
+A model that hands work over to another one spends real money, and it does so in a conversation that may contain text from the web or from an e-mail. The server counts with that:
+
+- **It asks for your consent.** Its instructions tell the assistant that every call costs money and runs only with your explicit consent, and that only you judge an image.
+- **It never pays twice for one answer.** A request that may have reached the provider is not repeated after a timeout or a lost connection, nor after a gateway gave up. That is the [RetryClient |http] of this library at work.
+- **It never overwrites a file.** The name of the output is claimed before the paid call, so two assistants working at once never write the same file and a taken name costs nothing.
+- **It reads and writes only where you allow.** Outside the roots nothing is touched, and the directory of a key file and `.env` files are refused even inside them. Text answers are written only as `.txt`, `.md`, `.json` and similar, never as a script.
+
+
+What It Costs
+=============
+
+Every result carries `cost`, the price of the call in USD, and `sessionCost`, the sum since the server started, so you see where the money goes right in the conversation. The prices come from a price list in the package, which also knows the dates the providers change them; for a model missing there the cost is `null`.
+
+{{maintitle: AI Access MCP: Gemini, GPT and Images for Your AI Assistant}}
+{{description: Let your AI assistant ask Gemini and GPT and generate images, with files read by the server, a Gemini cache and the cost of every call reported.}}
