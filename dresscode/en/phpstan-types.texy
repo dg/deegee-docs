@@ -232,12 +232,12 @@ How They Work Together
 
 DressCode never abandons its lossless syntax tree to obtain static types. It prints the tree to memory, lets PHPStan parse and analyze the code, and attaches each deduced type directly to its corresponding node based on source coordinates. Rules then query the node directly: What object is being called? Which method does this access target? What does its signature declare? PHPStan rewrites nothing and reports nothing; it acts as an oracle of facts. All actual refactoring and formatting is performed by DressCode, keeping all original indentation, whitespace, and comments intact.
 
-This analysis involves overhead: every file passes through two separate parsers, and PHPStan must infer types. Running with `typeAnalysis: phpstan` is therefore noticeably slower than a purely syntactic check. However, results are cached, so you will primarily feel the performance impact on the initial run or after a configuration change.
+This analysis involves overhead: every file passes through two separate parsers, and PHPStan must infer types. Running with `typeAnalysis: phpstan` is therefore noticeably slower than a purely syntactic check. Results are cached, but with types the cache saves time only when nothing in the project has changed since the last run.
 
-The cache operates on individual file contents rather than the broader project state. If a method in one of your classes is annotated with `@deprecated`, files calling that method have not changed on disk, so the cache will skip them until they are touched. Similarly, the cache cannot detect changes made to `phpstan.neon`. It does, however, invalidate automatically when libraries, PHPStan, or its extensions are updated, as their versions form part of the cache fingerprint. After making changes that the cache cannot observe, run DressCode with `--no-cache`.
+The types of a file also depend on what the other files of the project declare. When a method in one of your classes gains a `@deprecated` annotation, the files calling it do not change, yet they now have a finding. With types, the cache fingerprint therefore holds the time and size of every file in the analyzed paths, `phpstan.neon` and the files PHPStan loads from it, and the installed packages. As soon as any of them changes, the whole cache is thrown away. A verdict from the cache thus stays true after a pull or a rebase, and you do not need `--no-cache` to get correct results. The price is that after any edit of the code, the whole project is checked again.
 
-.[warning]
-In CI, where builds pass or fail, always run the check with types enabled and the cache disabled.
+.[note]
+In CI, the cache saves nothing with types, because a fresh checkout gives every file a new time. How to run the check with types in CI is described in [Continuous Integration |continuous-integration#Projects with Types].
 
 
 Where to Go Next

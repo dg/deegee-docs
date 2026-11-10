@@ -232,12 +232,12 @@ Jak to spolu funguje
 
 DressCode kvůli typové analýze nikdy neopouští svůj bezztrátový syntaktický strom. Strom vytiskne do paměti, nechá PHPStan tento kód zanalyzovat a odvodit typy, a každou odpověď přesně přiřadí ke správnému uzlu podle jeho pozice v souboru. Jednotlivá pravidla se pak dotazují přímo uzlu: jaký objekt toto volání představuje, kterou konkrétní metodu volá a jak vypadá její deklarace. PHPStan sám o sobě nic nepřepisuje ani nehlásí, pouze dodává fakta. Vlastní úpravy provádí výhradně DressCode, se všemi mezerami, odsazením a komentáři na svých původních místech.
 
-Tato analýza přirozeně něco stojí: každý soubor projde dvěma parsery a PHPStan pro něj musí spočítat typy. Běh s `typeAnalysis: phpstan` je proto znatelně pomalejší než kontrola čistě na úrovni stromu. Výsledky se však ukládají do cache, takže zpomalení pocítíte především při prvním spuštění a po změně konfigurace.
+Tato analýza přirozeně něco stojí: každý soubor projde dvěma parsery a PHPStan pro něj musí spočítat typy. Běh s `typeAnalysis: phpstan` je proto znatelně pomalejší než kontrola čistě na úrovni stromu. Výsledky se sice ukládají do cache, s typy ale ušetří čas jen tehdy, když se od minulého běhu v projektu nic nezměnilo.
 
-Cache se nicméně orientuje podle obsahu konkrétního souboru, nikoliv podle celkového kontextu projektu. Pokud metoda ve vaší třídě získá anotaci `@deprecated`, obsah souborů, které ji volají, se nezměnil, cache je proto přeskočí, dokud je neupravíte. Stejně tak cache nezachytí změnu v `phpstan.neon`. Aktualizaci knihoven, samotného PHPStanu či jeho rozšíření naopak pozná spolehlivě, protože jejich verze tvoří součást otisku cache. Po změnách, které cache nemůže vidět, spusťte kontrolu s přepínačem `--no-cache`.
+Typy souboru totiž závisí i na tom, co deklarují ostatní soubory projektu. Když metoda ve vaší třídě získá anotaci `@deprecated`, soubory, které ji volají, se nezmění, a přesto v nich přibude nález. Do otisku cache proto s typy patří časy a velikosti všech souborů v analyzovaných cestách, `phpstan.neon` i soubory, které z něj PHPStan načítá, a nainstalované balíčky. Jakmile se kterýkoliv z nich změní, cache se zahodí celá. Verdikt z cache tak platí i po pullu nebo rebase a přepínač `--no-cache` kvůli správnosti nepotřebujete. Cenou je, že po každé úpravě kódu se znovu kontroluje celý projekt.
 
-.[warning]
-V CI, kde se rozhoduje o úspěchu buildu, pouštějte kontrolu s typy a bez cache vždy.
+.[note]
+V CI cache s typy nic neušetří, protože čerstvý checkout dá každému souboru nový čas. Jak spustit kontrolu s typy v CI, popisuje [Průběžná integrace |continuous-integration#Projekt s typy].
 
 
 Kam dál
