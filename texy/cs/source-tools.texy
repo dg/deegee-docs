@@ -16,15 +16,14 @@ clanky/susarna.md:7:11 obrázek bez popisu
 ```
 
 ```php
-use Texy\NodeHelpers;
 use Texy\Nodes;
 
 $markdown = new Texy\Markdown\Markdown;
 $source = Texy\Texy::normalize(file_get_contents($file));
 $document = $markdown->parse($source);
 
-foreach (NodeHelpers::find($document, Nodes\ImageNode::class) as $image) {
-	if (($image->modifier?->title ?? '') === '') {
+foreach ($document->find(Nodes\ImageNode::class) as $image) {
+	if (($image->alt ?? '') === '') {
 		$position = Texy\SourcePosition::fromOffset($source, $image->range->offset);
 		echo "$file:$position->line:$position->column obrázek bez popisu\n";
 	}
@@ -35,7 +34,7 @@ Všimněte si tří věcí. Text nepřevádíme na HTML, ale voláme `parse()`, 
 
 Z pozice v bajtech udělá `SourcePosition::fromOffset()` řádek a sloupec. Oba se počítají od jedničky a sloupec ve znacích, takže sedí s tím, co ukazuje editor, i když řádek obsahuje písmena s diakritikou.
 
-`NodeHelpers::find()` najde všechny uzly daného druhu, popis obrázku je v jeho modifikátoru. Jaké uzly ve stromu najdete a jaké mají vlastnosti, popisuje [přehled uzlů |custom-handlers#Přehled uzlů].
+`find()` najde ve stromu všechny uzly daného druhu, popis obrázku je v jeho vlastnosti `$alt`. Jaké uzly ve stromu najdete a jaké mají vlastnosti, popisuje [přehled uzlů |custom-handlers#Přehled uzlů].
 
 
 Přepis zdrojového textu
@@ -48,7 +47,7 @@ $source = Texy\Texy::normalize(file_get_contents($file));
 $document = $markdown->parse($source);
 $rewriter = new Texy\Rewriter($source);
 
-foreach (NodeHelpers::find($document, Nodes\LinkNode::class) as $link) {
+foreach ($document->find(Nodes\LinkNode::class) as $link) {
 	if ($link->urlRange === null) {
 		continue; // odkaz, jehož adresa ve zdrojovém textu není zapsaná
 	}
@@ -93,7 +92,8 @@ Rozsah celého uzlu zahrnuje celý jeho zápis, u odkazu tedy závorky, text i a
 | `ImageNode` | `$urlRange` | adresa obrázku
 | `HeadingNode` | `$textRange`, `$marker` | text nadpisu a znak, kterým je napsaný
 | `ListItemNode` | `$bulletRange`, `$bullet` | odrážka položky
-| `CodeBlockNode` | `$codeMap` | kde ve zdroji leží jednotlivé části kódu
+| `InlineCodeNode` | `$codeRange` | kód v textu bez zpětných apostrofů
+| `CodeBlockNode` a ostatní bloky s doslovným obsahem | `$codeMap` | kde ve zdroji leží jednotlivé části obsahu
 
 Třeba přejmenovat obchod v textu odkazu, aniž byste sáhli na adresu:
 
@@ -118,9 +118,9 @@ $imageDir = __DIR__ . '/www/images';
 $texy = new Texy\Texy;
 $document = $texy->parse($source);
 $rewriter = new Texy\Rewriter($source);
-$printer = new Texy\Output\Texy\Renderer;
+$printer = new Texy\Output\Texy\Renderer($texy);
 
-foreach (NodeHelpers::find($document, Nodes\ImageNode::class) as $image) {
+foreach ($document->find(Nodes\ImageNode::class) as $image) {
 	if ($image->width !== null || $image->height !== null) {
 		continue; // rozměry už autor napsal
 	}
@@ -133,16 +133,16 @@ foreach (NodeHelpers::find($document, Nodes\ImageNode::class) as $image) {
 ```
 
 ```texy
-[* susarna.png .(Sušárna na půdě) >] *** Foto: Jana Nováková
+[* susarna.png .(Sušárna na půdě) *] *** Foto: Jana Nováková
 ```
 
 se změní na
 
 ```texy
-[* susarna.png 300x200 .(Sušárna na půdě) >] *** Foto: Jana Nováková
+[* susarna.png 300x200 .(Sušárna na půdě) *] *** Foto: Jana Nováková
 ```
 
-Uzel klonujeme, abychom neměnili strom, ze kterého ještě čteme. `Texy\Output\Texy\Renderer` je tiskárna, která uzel vypíše jako zdrojový text syntaxe Texy. Zápis, který autor napsal jednou z více podob, vytiskne ve stejné podobě, například stejnou odrážku nebo stejný druh nadpisu. Ostatní v jedné ustálené podobě, takže modifikátor vytiskne vždy jako `.(titulek)[třída]{styl}`.
+Uzel klonujeme, abychom neměnili strom, ze kterého ještě čteme. `Texy\Output\Texy\Renderer` je tiskárna, která uzel vypíše jako zdrojový text syntaxe Texy. Dostane objekt `$texy`, aby věděla, jak bude text znovu čten, a mohla zneplatnit to, co by se jinak četlo jako zápis. Zápis, který autor napsal jednou z více podob, vytiskne ve stejné podobě, například stejnou odrážku nebo stejný druh nadpisu. Ostatní v jedné ustálené podobě, takže modifikátor vytiskne vždy jako `.(titulek)[třída]{styl}`.
 
 Uzel vaší vlastní syntaxe tiskárna vytisknout neumí a vyhodí výjimku. Naučíte ji to rendererem, který zaregistrujete přes `$printer->addRenderer()` stejně jako [renderer pro HTML |custom-handlers#Jiné HTML pro prvek], jen vrací zdrojový text.
 
@@ -150,7 +150,7 @@ Uzel vaší vlastní syntaxe tiskárna vytisknout neumí a vyhodí výjimku. Nau
 Syntaktický strom a dokument
 ============================
 
-Proč nástroje volají `parse()` a ne `toHtml()` nebo `process()`? Strom totiž existuje ve dvou stavech.
+Proč nástroje volají `parse()` a ne `toHtml()`? Strom totiž existuje ve dvou stavech.
 
 - **Syntaktický strom**, který vrátí `parse()`, popisuje, jak je text napsaný. Rozsahy přesně odpovídají zápisu, nic není dopočítané.
 - **Dokument** vznikne, když syntaktický strom projde úpravami v `transform()`. Ty mu dodají význam: najdou, kam vedou reference, vyrovnají úrovně nadpisů, vysází typografii. Rozsah pak říká, odkud uzel pochází, ne co je na tom místě napsané.
@@ -165,13 +165,13 @@ Viz "recept":[recept].
 
 V syntaktickém stromu je `$link->url` prázdné, `$link->ref` je `recept` a `$link->urlRange` ukazuje na `[recept]`, tedy na to, co je v textu skutečně napsané. Po `transform()` je v `$link->url` adresa `https://example.com/recept`, která na tom místě napsaná není. Nástroj, který by přepisoval podle dokumentu, by tak zapsal adresu na místo jména reference.
 
-Když potřebujete oba stavy, třeba nástroj, který hlásí chyby i ve výsledném HTML, naklonujte syntaktický strom před transformací: `NodeHelpers::clone($document)`.
+Když potřebujete oba stavy, třeba nástroj, který hlásí chyby i ve výsledném HTML, naklonujte syntaktický strom před transformací: `clone $document` zkopíruje celý strom.
 
 
 Pozice a konce řádků
 ====================
 
-Rozsahy počítají bajty textu, který prošel `Texy::normalize()`. Normalizace převede konce řádků na `\n`, odstraní BOM, řídicí znaky, mezery na koncích řádků a prázdné řádky na začátku a na konci textu. Proto nástroj text normalizuje jednou na začátku a dál pracuje jen s výsledkem, stejně jako příklady výše.
+Rozsahy počítají bajty textu, který prošel `Texy::normalize()`. Normalizace převede konce řádků na `\n`, odstraní BOM, řídicí znaky, měkké spojovníky, mezery na koncích řádků a prázdné řádky na začátku a na konci textu. Text, který není platné UTF-8, odmítne výjimkou `Texy\InvalidArgumentException`. Proto nástroj text normalizuje jednou na začátku a dál pracuje jen s výsledkem, stejně jako příklady výše.
 
 Nejjednodušší je ukládat soubory rovnou normalizované. Soubor na disku je pak totožný s textem, ke kterému se pozice vztahují, a pozice z nástroje můžete použít přímo v něm.
 
@@ -217,16 +217,20 @@ Recept na povidla
 
 Obsah zůstane stejný, změní se jen zápis. Tabulky, úkolové seznamy a další rozšíření GFM se převedou, jen když text čtete objektem z `Markdown::gfm()`. Jinak jsou pro Markdown obyčejným textem.
 
-Opačným směrem převádí `Texy\Markdown\Output\Renderer`. Dostane dokument po `transform()`:
+Opačným směrem převádí `Texy\Markdown\Output\Markdown\Renderer`. Dostane dokument po `transform()`:
 
 ```php
 $texy = new Texy\Texy;
 $document = $texy->parse($text);
 $texy->transform($document);
-$markdownSource = (new Texy\Markdown\Output\Renderer)->render($document);
+
+$renderer = new Texy\Markdown\Output\Markdown\Renderer;
+$markdownSource = $renderer->render($document);
 ```
 
 Co Markdown zapsat neumí, převede na nejbližší podobu, kterou zná. Popisek pod obrázkem se stane kurzívou na dalším řádku, tabulka se sloučenými buňkami HTML tabulkou, a třídy, styly, rozměry a zarovnání obrázků se ztratí.
+
+Podobu výsledného Markdownu nastavíte vlastnostmi rendereru, třeba jakým znakem začínají odrážky nebo jak se píšou nadpisy a bloky kódu: `$unorderedListMarker`, `$headingStyle`, `$codeBlockStyle`, `$codeFence`, `$emphasisMarker`, `$strongMarker` a další.
 
 
 Tisk zpět do syntaxe Texy
@@ -237,6 +241,8 @@ Celý syntaktický strom vytiskne `$texy->renderTexy($document)`. Výsledek se p
 Několik vzácných zápisů ale zpět přesně nevyjde: buňka tabulky pokračující na více řádků, než kolik řádků tabulky zabírá, řádek začínající `/--` nebo `\--` uvnitř bloku `html` nebo `text`, titulek modifikátoru přes zalomení řádku, prázdný blok `/--div`, zastaralý zápis obrázku `[* a | b *]` a řádky odstavce surového HTML, které by se po přesunu na začátek řádku četly jako blok.
 
 Tiskněte syntaktický strom z `parse()`, ne dokument po `transform()`. Dokument už má doplněné reference, vysázenou typografii a upravené HTML, takže jeho tiskem by nevznikl text, který autor napsal.
+
+Adresy tiskárna zapíše tak, jak jsou ve stromu. Když bude výsledný text publikovat někdo další a chcete z něj odstranit nebezpečné adresy, předejte politiku adres: `$texy->renderTexy($document, $texy->urlPolicy)`. Odkaz, který politika odmítne, zůstane jen textem, a obrázek jeho popisem.
 
 {{maintitle: Nástroje nad zdrojovým textem v Texy: kontrola a přepis článků}}
 {{description: Kontrolujte články a hromadně je upravujte podle stromu dokumentu, ve kterém každý prvek zná své místo ve zdrojovém textu. A převod mezi Markdownem a syntaxí Texy.}}
