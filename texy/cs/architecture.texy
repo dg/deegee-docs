@@ -21,7 +21,7 @@ syntaxe Texy ──┘    (typografie, bezpečnost, …)    ├──> syntaxe T
 
 Proto Texy říkáme engine. Typografie, oprava HTML, bezpečný režim nebo renderery jsou napsané jednou a dostane je každý jazyk. A převod z Markdownu do syntaxe Texy je jen otázka toho, který jazyk text přečte a který ho vytiskne.
 
-Tenhle strom, zjednodušeně a bez pomocných uzlů `ContentNode`, které drží obsah, vznikne ze začátku článku v Markdownu. Syntaxe Texy z odpovídajícího textu vytvoří stejný:
+Tenhle strom, zjednodušeně a bez pomocných uzlů `ContentNode`, které drží obsah, vznikne z [článku na úvodní stránce |@home#První článek] napsaného v Markdownu. Syntaxe Texy z odpovídajícího textu vytvoří stejný:
 
 ```
 DocumentNode
@@ -29,12 +29,14 @@ DocumentNode
     TextNode "Jak jsme sušili švestky"
   ParagraphNode
     TextNode "Letos jsme sklidili "
-    PhraseNode phrase/strong
+    PhraseNode Strong
       TextNode "přes 40 kg"
-    TextNode " švestek, viz "
+    TextNode " švestek. Co s nimi? Babička říká: …"
+  ParagraphNode
+    TextNode "Sušárnu jsme koupili v "
     LinkNode https://example.com/susarna
-      TextNode "obchod"
-    TextNode "."
+      TextNode "obchodě u nádraží"
+    TextNode ", stála 1500-2000 Kč."
 ```
 
 Uzly jsou dvojího druhu: **blokové**, jako odstavec nebo nadpis, a **řádkové**, jako text, zvýraznění nebo odkaz uvnitř odstavce. Všechny jsou ve jmenném prostoru `Texy\Nodes` a jejich přehled najdete na stránce [Úprava chování prvků |custom-handlers#Přehled uzlů].
@@ -57,7 +59,7 @@ Markdown má tytéž tři metody, `$markdown->parse()`, `$markdown->transform()`
 Normalizace
 -----------
 
-`Texy::normalize()` text uklidí: sjednotí konce řádků na `\n`, odstraní BOM, řídicí znaky, měkké spojovníky, mezery na koncích řádků a prázdné řádky na začátku a na konci, jen nový řádek za posledním řádkem nechá. Tabulátory zůstávají a v syntaxi se počítají jako jeden znak mezery. Text v neplatném UTF-8 vyhodí výjimku hned, místo aby někde dál způsobil nečekanou chybu.
+`Texy::normalize()` text uklidí: sjednotí konce řádků na `\n`, odstraní BOM, řídicí znaky, měkké spojovníky, mezery na koncích řádků a prázdné řádky na začátku a na konci, jen nový řádek za posledním řádkem nechá. Tabulátory zůstávají a v syntaxi se počítají jako jeden znak mezery. Markdown má vlastní, šetrnější `Markdown::normalize()`, která sjednotí konce řádků a odstraní řídicí znaky, ale mezery na koncích řádků nechá, protože dvě z nich znamenají zalomení řádku. Text v neplatném UTF-8 vyhodí výjimku hned, místo aby někde dál způsobil nečekanou chybu.
 
 
 Rozebrání
@@ -67,11 +69,11 @@ Každý zápis jazyka, třeba tučné písmo nebo tabulka, má jméno a regulár
 
 Vnořování funguje tak, že funkce zápisu nechá rozebrat vnitřní text znovu, například obsah citace jako další bloky. Výstup funkce se už nikdy znovu neprochází, takže se nestane, že by Texy omylem četlo jako zápis něco, co samo vytvořilo.
 
-Když na stejném místě může začínat víc zápisů, vyhraje ten, který začíná nejdřív, při stejném začátku delší, při stejné délce zápis aplikace před vestavěným a mezi nimi ten zaregistrovaný dřív. Funkce zápisu může nalezený text také odmítnout, a pak dostanou šanci zápisy za ní. Jak to využít pro vlastní zápis, popisuje [Přidání vlastní syntaxe |custom-syntax].
+Když se o tentýž text uchází víc zápisů, vyhraje ten, který začíná nejdřív. U řádkových zápisů při stejném začátku delší, při stejné délce zápis aplikace před vestavěným a mezi nimi ten zaregistrovaný dřív. U blokových délka nerozhoduje a vyhraje rovnou zápis aplikace před vestavěným a ten zaregistrovaný dřív. Funkce zápisu může nalezený text také odmítnout, a pak dostanou šanci zápisy za ní. Jak to využít pro vlastní zápis, popisuje [Přidání vlastní syntaxe |custom-syntax].
 
 Markdown rozebírá text na stejném jádru, jen ve dvou fázích: nejdřív celé bloky a teprve potom obsah řádků, protože odkaz se může odvolávat na definici, která je v textu až za ním. Že je jádro postavené dobře, dokazuje, že Markdown na něm projde všemi 652 příklady specifikace CommonMark.
 
-Výsledkem rozebrání je **syntaktický strom**. Popisuje text tak, jak je napsaný: každý uzel nese v `$range` rozsah zápisu, ze kterého vznikl, reference ještě nejsou dohledané a nadpisy mají úroveň, jakou jim dal autor. S tímto stromem pracují [nástroje nad zdrojovým textem |source-tools].
+Výsledkem rozebrání je **syntaktický strom**. Popisuje text tak, jak je napsaný: každý uzel nese v `$range` rozsah zápisu, ze kterého vznikl, reference syntaxe Texy ještě nejsou dohledané a nadpisy mají úroveň, jakou jim dal autor. Markdown reference dohledá už při rozebrání, protože podle nich pozná, co je odkaz. S tímto stromem pracují [nástroje nad zdrojovým textem |source-tools].
 
 
 Úpravy dokumentu
@@ -85,7 +87,7 @@ Výsledkem rozebrání je **syntaktický strom**. Popisuje text tak, jak je naps
 4. HTML značky napsané v textu se spárují a zkontrolují podle povolených značek, nepovolené se změní na text
 5. nadpisy se posunou podle `headingTop` a dostanou `id`
 
-Markdown má jen poslední dva kroky, společné oběma jazykům, a před nimi filtr nebezpečných značek GFM.
+Markdown má jen poslední dva kroky, společné oběma jazykům, a v režimu GFM před nimi filtr nebezpečných značek.
 
 Pořadí má své důvody. Direktivy jsou první, protože mohou změnit nastavení, podle kterého se zbytek dokumentu zpracuje. Kontrola HTML musí proběhnout před typografií, protože z nepovolené značky se stane text, který se má vysázet. A `id` nadpisů vzniknou dřív, než je čtou vaše úpravy.
 
@@ -108,7 +110,9 @@ $html = $texy->renderHtml($document);   // HTML
 $text = $texy->renderText($document);   // prostý text, třeba pro e-mail nebo vyhledávání
 ```
 
-Uzel, pro který výstup žádný renderer nemá, se vykreslí jako svůj obsah. Dokument s uzlem, který zná jen jedno rozšíření, tak jde vykreslit vždy a do každého výstupu.
+Markdown metodu `renderText()` nemá, prostý text z jeho dokumentu vytvoří `(new Texy\Output\Text\Renderer)->render($document)`.
+
+Uzel, pro který HTML ani prostý text žádný renderer nemá, se vykreslí jako svůj obsah. Dokument s uzlem, který zná jen jedno rozšíření, tak jde do těchto výstupů vykreslit vždy. Tisk zpět do zdrojového textu takový uzel odmítne.
 
 
 Jak do zpracování zasáhnout

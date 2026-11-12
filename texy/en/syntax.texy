@@ -60,7 +60,7 @@ Až tady, po prázdném řádku, začíná úplně nový, druhý odstavec.
 Spojování řádků lze nicméně vypnout v konfiguraci a pak se zalomí každý řádek:
 
 ```php
-$texy->paragraphModule->mergeLines = false;
+$texy->config->mergeLines = false;
 ```
 
 
@@ -98,7 +98,7 @@ Formátování textu
 | syntax                             |  výstup                     | ID syntaxe
 |-----------------------------------------------------------------------------
 | .[text-code] ''**tučný text**''    | **tučný text**              | `phrase/strong`
-| ''*kurzíva* nebo //kurzíva//''     | *kurzíva*                   | `phrase/em-alt`, `phrase/em`
+| ''*kurzíva* nebo //kurzíva//''     | *kurzíva*                   | `phrase/em-alt`, `phrase/em-alt2`, `phrase/em`
 | ''***tučná kurzíva***''            | ***tučná kurzíva***         | `phrase/strong+em`
 | ''`inline kód`''                   | `inline kód`                | `phrase/code`
 | ''x^2 … O_2''                      | x^2 … O_2                   | `phrase/sup-alt`, `phrase/sub-alt`
@@ -113,9 +113,9 @@ Formátování textu
 
 Syntaxe označené 🔸 nejsou ve výchozím stavu povolené a musíte je zapnout. Příklad:
 
-/--php
-$texy->allowed['phrase/ins'] = true;
-\--
+```php
+$texy->allowedSyntax['phrase/ins'] = true;
+```
 
 Pro jednoduché číselné indexy můžete použít zkrácenou syntaxi `x^2` a `O_2`, ale pro složitější případy je robustnější varianta s dvojitými znaky, nebo můžete použít HTML značky `<sup>` a `<sub>`.
 
@@ -162,7 +162,7 @@ Psaní speciálních znaků
 
 Co když chcete napsat doslova `**text**` včetně hvězdiček, aniž by se z něj stal tučný text? Máte tři možnosti:
 
-- zpětné lomítko je nejrychlejší způsob, jak "zneplatnit" jeden speciální znak `\**text\**`
+- zpětné lomítko je nejrychlejší způsob, jak "zneplatnit" hvězdičku `\**text\**`, před jinými znaky ale nefunguje a zůstane v textu
 - dvojité apostrofy [vypnou Texy|#Vypnutí formátování] pro celou frázi `''**text**''`
 - můžete použít standardní HTML entity `&ast;&ast;text&ast;&ast;`
 
@@ -186,7 +186,7 @@ Výhodou je, že Texy je inteligentní a sám pozná, kde URL končí. Nemusíte
 "Přečtěte si náš článek":[https://example.com/novinky?id=1&kategorie=články]
 ```
 
-ID syntaxe `phrase/span`, `phrase/span-alt`
+ID syntaxe `phrase/span`, `phrase/span-alt`, `phrase/link`
 
 
 Alternativní syntaxe odkazů
@@ -200,7 +200,7 @@ Jste zvyklí na formát, který používá Markdown nebo Wikipedia? Texy rozumí
 text:[cílová URL nebo reference]         // Jednoslovný odkaz
 ```
 
-ID syntaxe `phrase/markdown`, `phrase/wikilink`, `phrase/quicklink`
+ID syntaxe `phrase/markdown`, `phrase/wikilink`, `phrase/quicklink`, `phrase/link`
 
 
 Udržujte si pořádek s referencemi
@@ -227,7 +227,7 @@ ID syntaxe `link/reference`, `link/definition`
 Automatické odkazy
 ------------------
 
-Kdykoli do textu napíšete URL adresu (začínající na `http://`, `https://`, `www.`) nebo e-mail, Texy ji automaticky rozpozná a převede na klikatelný odkaz. Nemusíte dělat vůbec nic.
+Kdykoli do textu napíšete URL adresu (začínající na `http://`, `https://`, `ftp://`, `www.`) nebo e-mail, Texy ji automaticky rozpozná a převede na klikatelný odkaz. Nemusíte dělat vůbec nic.
 
 ```texy
 Náš web najdete na adrese www.example.com.
@@ -292,7 +292,9 @@ Možná si říkáte, že vkládání přímého HTML může být riskantní. Co
 
 Máte tak plnou kontrolu nad tím, jaké HTML mohou například redaktoři používat. Jak povolené značky nastavit, popisuje [konfigurace |configuration#Povolené HTML značky, třídy a styly].
 
-ID syntaxe `html/tag`, `html/comment`
+Skript (`<script>`) pište do bloku [`/--html` |#Vypnutí formátování]. V běžném textu by se jeho řádky slily do jednoho a komentář `//` by pohltil zbytek kódu.
+
+ID syntaxe `html/tag`, `html/comment`, `html/entity`
 
 
 Nadpisy
@@ -332,6 +334,8 @@ Tento způsob je velmi rychlý na psaní. Text nadpisu "zabalíte" mezi znaky `#
 
 Můžete použít ohraničení na obou stranách (pro lepší vizuální přehlednost) nebo jen na začátku. Texy si s oběma variantami poradí.
 
+Úrovně H1, H2, H3 v ukázkách ale nejsou pevné. Texy nadpisy v článku vyváží, takže nejdůležitější z nich dostane nejvyšší úroveň, ať ho autor zapsal jakkoli. Jak to funguje, popisuje [konfigurace |configuration#Vyvažování nadpisů].
+
 ID syntaxe `heading/surrounded`
 
 
@@ -355,13 +359,13 @@ Nechcete vymýšlet ID pro každý nadpis ručně? Texy to umí udělat za vás!
 
 ```php
 // Povolit automatické generování ID
-$texy->headingModule->generateID = true;
+$texy->config->headingIds = true;
 
-// Volitelně nastavit předponu pro generovaná ID (např. "sekce-")
-$texy->headingModule->idPrefix = 'toc-';
+// Volitelně změnit předponu generovaných ID, výchozí je 'toc-'
+$texy->config->headingIdPrefix = 'sekce-';
 ```
 
-S tímto nastavením nadpis `## Moje kapitola` automaticky dostane například ID `id="toc-moje-kapitola"`, aniž byste museli cokoliv psát navíc.
+S tímto nastavením nadpis `## Moje kapitola` automaticky dostane například ID `id="sekce-moje-kapitola"`, aniž byste museli cokoliv psát navíc.
 
 
 Seznamy
@@ -393,15 +397,20 @@ Texy podporuje různé styly číslování:
 | `1)`    | Arabské číslice (se závorkou)
 | `a)`    | Malá písmena abecedy
 | `A)`    | Velká písmena abecedy
-| `I)`    | Římské číslice
+| `I.`    | Římské číslice (s tečkou)
+| `I)`    | Římské číslice (se závorkou)
 
 Kouzlo spočívá v tom, že se vůbec nemusíte starat o správné číslování. I když všechny řádky očíslujete jedničkou, Texy je automaticky přečísluje za vás. To je obrovská výhoda, když později potřebujete nějakou položku přidat, smazat nebo přesunout.
+
+Seznam s tečkou (`1.` a `I.`) musí začínat jedničkou a mít aspoň dvě položky, jinak z něj zůstane obyčejný odstavec. Seznam se závorkou může začít i jiným číslem nebo písmenem, třeba `3)` nebo `c)`, a číslování pak pokračuje od něj.
+
+ID syntaxe `list/decimal`, `list/roman`, `list/alpha`
 
 
 Vnořené a kombinované seznamy
 -----------------------------
 
-Síla seznamů se naplno projeví, když je začnete kombinovat a vnořovat. Můžete tak vytvářet přehledné, víceúrovňové struktury. Vnoření vytvoříte jednoduše tak, že daný řádek odsadíte alespoň o **dvě mezery** (nebo jeden tabulátor).
+Síla seznamů se naplno projeví, když je začnete kombinovat a vnořovat. Můžete tak vytvářet přehledné, víceúrovňové struktury. Vnoření vytvoříte jednoduše tak, že daný řádek odsadíte mezerami nebo tabulátorem.
 
 ```texy
 1) První kapitola
@@ -484,11 +493,15 @@ Správně vložený obrázek by měl mít i tzv. "alternativní text", který se
 [* fotka-krajiny.jpg .(Krásná horská krajina při západu slunce)[main-photo] *]
 ```
 
+Obrázek, který stojí sám na řádku, Texy obalí do `<figure>`, stejně jako obrázek s [popiskem |#Viditelný popisek pod obrázkem]. Modifikátor napsaný za ním na stejném řádku, třeba `[* foto.jpg *] .[galerie]`, patří k `<figure>`.
+
+ID syntaxe `image`, `figure`
+
 
 Rozměry obrázků
 ---------------
 
-Texy umí u lokálních obrázků automaticky zjistit jejich rozměry (pokud programátor nastaví cestu `$texy->htmlOutput->imageFileRoot`) a doplnit je do HTML, takže prohlížeč může rozvrhnout stránku dřív, než se obrázky načtou. Pokud ale chcete rozměry nastavit ručně, máte několik možností:
+Texy umí u lokálních obrázků automaticky zjistit jejich rozměry (pokud programátor nastaví cestu `$texy->htmlOutput->imageBasePath`) a doplnit je do HTML, takže prohlížeč může rozvrhnout stránku dřív, než se obrázky načtou. Pokud ale chcete rozměry nastavit ručně, máte několik možností:
 
 | `[* img.jpg 150x100 *]` | Přesná šířka 150px a výška 100px
 | `[* img.jpg 150x? *]`   | Šířka bude 150px, výšku dopočítá prohlížeč se zachováním poměru stran
@@ -507,13 +520,13 @@ Chcete, aby se po kliknutí na malý náhled zobrazil velký obrázek? Nebo aby 
 
 Pro galerie existuje i šikovná zkratka `::`. Ta z obrázku udělá odkaz na tentýž soubor, takže `[* foto.jpg *]::` po kliknutí otevře obrázek samotný.
 
-Starší zápis odkazu na velký obrázek uvnitř závorek, `[* maly.jpg | velky.jpg *]`, je zastaralý a Texy 4 z něj vykreslí jen malý obrázek. Používejte místo něj `[* maly.jpg *]:velky.jpg`.
+Starší zápis odkazu na velký obrázek uvnitř závorek, `[* maly.jpg | velky.jpg *]`, je zastaralý a Texy 4 z něj vykreslí jen malý obrázek a programátorovi ohlásí varování `E_USER_DEPRECATED`. Používejte místo něj `[* maly.jpg *]:velky.jpg`.
 
 
 Viditelný popisek pod obrázkem
 ------------------------------
 
-Pokud chcete pod obrázek přidat viditelný popisek (např. jméno autora nebo popis scény), napište za něj tři hvězdičky `***` a text popisku. Texy z toho vytvoří figure strukturu - standardně `<div class="figure">`, nebo sémantické `<figure>` a `<figcaption>`, pokud programátor nastaví `$texy->htmlOutput->figureTagName = 'figure'`.
+Pokud chcete pod obrázek přidat viditelný popisek (např. jméno autora nebo popis scény), napište za něj tři hvězdičky `***` a text popisku. Texy z toho vytvoří sémantické HTML5, obrázek v `<figure>` a popisek v `<figcaption>`. Jinou podobu může programátor nastavit v [konfiguraci |configuration#Obrázky].
 
 ```texy
 [* fotka.jpg *] *** Toto je popisek. Může obsahovat i **další formátování**.
@@ -551,17 +564,17 @@ function hello() {
 \--
 ```
 
-Aby byl váš kód ještě čitelnější, můžete Texy sdělit, v jakém programovacím jazyce je napsaný. Web pak podle něj může kód obarvit, jak ukazuje stránka [Úprava chování prvků |custom-handlers]. Stačí za úvodní značku `/--` přidat klíčové slovo `code` a název jazyka, nebo rovnou jen název jazyka:
+Uvnitř takového bloku Texy nic nezpracuje, ani své značky, ani HTML, a vypíše ho jako `<pre>`.
+
+Aby byl váš kód ještě čitelnější, můžete Texy sdělit, v jakém programovacím jazyce je napsaný. Web pak podle něj může kód obarvit, jak ukazuje stránka [Úprava chování prvků |custom-handlers]. Stačí za úvodní značku `/--` přidat klíčové slovo `code` a název jazyka:
 
 ```texy
 /--code javascript
 console.log('JavaScript');
 \--
-
-/--php
-echo 'PHP';
-\--
 ```
+
+Samotný název jazyka, třeba `/--php`, nestačí. Blok s typem, který Texy nezná, se zobrazí tak, jak je napsaný, včetně řádků `/--php` a `\--`. Programátor ale může takový typ obsloužit, jak popisuje [Přidání vlastní syntaxe |custom-syntax#Nový typ bloku v syntaxi Texy].
 
 Texy rozumí i blokům kódu, jak je znáte z Markdownu, mezi řádky se třemi zpětnými apostrofy. Za ty první můžete připsat jazyk i [modifikátor |#Modifikátory]:
 
@@ -572,6 +585,17 @@ Texy rozumí i blokům kódu, jak je znáte z Markdownu, mezi řádky se třemi 
 ```
 
 Uvnitř bloku kódu se nic neformátuje a tabulátory i mezery zůstanou přesně tak, jak jste je napsali.
+
+Blok `/--pre` je předformátovaný text, ve kterém se mezery a konce řádků zachovají, ale HTML značky platí. Značky Texy se v něm nezpracují:
+
+```texy
+/--pre
+Jméno:    <b>Jana</b>
+Telefon:  776 552 046
+\--
+```
+
+ID syntaxe `blocks`, `block/default`, `block/code`, `block/pre`, `fenced-code`
 
 
 Obsahové bloky (divy)
@@ -604,6 +628,8 @@ Síla `<div>` bloků spočívá také v možnosti je vnořovat do sebe. Tím mů
 \--
 ```
 Díky této jednoduché syntaxi můžete udržovat svůj obsah přehledný a sémanticky správně strukturovaný.
+
+ID syntaxe `block/div`
 
 
 Vypnutí formátování
@@ -638,6 +664,10 @@ Pokud chcete ukázat, jak se píše tučný text, napíšete: Syntaxe je ''**tu�
 ```
 
 Výsledkem nebude tučný text, ale doslova se vypíše řetězec `**tučný text**`.
+
+A text, který do výstupu vůbec nepatří, třeba poznámku pro ostatní autory, uzavřete do bloku `/--comment`. Texy ho celý vynechá.
+
+ID syntaxe `block/html`, `block/text`, `block/comment`, `phrase/notexy`
 
 
 Tabulky
@@ -793,6 +823,8 @@ Texy dokonce podporuje vnořené citace, což se hodí, pokud citujete někoho, 
 
 Uvnitř citací můžete samozřejmě používat i další formátování, jako je **tučný text** nebo *kurzíva*.
 
+ID syntaxe `blockquote`
+
 
 Horizontální čáry
 =================
@@ -822,8 +854,8 @@ Síla Texy nespočívá jen ve formátování, ale také v automatických typogr
 Klasické ''"strojopisné uvozovky"'' automaticky převede na správné české „uvozovky“ a vnořené ‚uvozovky‘. Typ uvozovek závisí na nastavení locale:
 
 ```php
-$texy->typographyModule->locale = 'cs'; // české
-$texy->typographyModule->locale = 'en'; // anglické
+$texy->config->locale = 'cs'; // české
+$texy->config->locale = 'en'; // anglické
 ```
 
 **Pomlčky a spojovníky:** Inteligentně rozpozná, kdy použít krátký spojovník (v dělených slovech), a kdy delší pomlčku - například v rozsazích (10-15) nebo mezi slovy.
@@ -831,11 +863,12 @@ $texy->typographyModule->locale = 'en'; // anglické
 ```texy
 10-15           → 10–15            (en dash pro rozsahy)
 česko-slovenský → česko-slovenský  (spojovník zůstává)
+slovo - slovo   → slovo – slovo    (en dash mezi slovy)
 slovo -- slovo  → slovo – slovo    (en dash mezi slovy)
 slovo --- slovo → slovo — slovo    (em dash)
 ```
 
-**Nezlomitelné mezery**: Jednou z největších výhod je automatické vkládání pevných (nezlomitelných) mezer tam, kde je to potřeba. Tím zabraňuje, aby na konci řádku zůstala osamocená jednopísmenná slova (jako `k`, `s`, `v`, `z`), což je častý typografický prohřešek.
+**Nezlomitelné mezery**: Jednou z největších výhod je automatické vkládání pevných (nezlomitelných) mezer tam, kde je to potřeba. Tím zabraňuje, aby na konci řádku zůstala osamocená jednopísmenná slova (jako `k`, `s`, `v`, `z`), což je v češtině, slovenštině i polštině častý typografický prohřešek.
 
 ```texy
 // Vy napíšete:
@@ -877,14 +910,12 @@ nejneobhospoda&shy;řovávatelnější&shy;mi
 
 Díky tomu se váš text vždy krásně přizpůsobí jakékoliv šířce obrazovky bez nechtěného horizontálního posouvání.
 
-Dělení je ve výchozím stavu zapnuté pro slova delší než 20 znaků. Programátor může délku změnit nebo dělení vypnout:
+Dělení je ve výchozím stavu zapnuté pro slova od 20 znaků. Řídí se českými slabikami, a proto platí pro text v češtině a slovenštině. Programátor může délku změnit nebo dělení vypnout:
 
 ```php
-$texy->hyphenationModule->wordLimit = 25;
-$texy->allowed['longwords'] = false;
+$texy->config->hyphenationWordLimit = 25;
+$texy->config->hyphenation = false;
 ```
-
-ID syntaxe `longwords`
 
 
 Emotikony
@@ -903,7 +934,7 @@ Texy umí automaticky převádět klasické textové smajlíky na grafické emot
 Aby se předešlo nechtěným převodům například v technických textech, je tato funkce ve výchozím nastavení vypnutá. Pokud ji chcete používat, stačí ji jednoduše povolit:
 
 ```php
-$texy->allowed['emoticon'] = true;
+$texy->allowedSyntax['emoticon'] = true;
 ```
 
 Celou sadu emotikonů a jak přidat vlastní, popisuje [konfigurace |configuration#Emotikony].
@@ -926,14 +957,17 @@ Modifikátor přidá prvku CSS třídu, ID, styl, HTML atribut, titulek nebo zar
 | ''.<'' ''.>'' ''.<>'' ''.=''              | zarovnání doleva, doprava, na střed, do bloku
 | ''.^'' ''.-'' ''._''                      | svislé zarovnání nahoru, na střed, dolů
 
-Části můžete libovolně kombinovat v jednom modifikátoru, třeba `.(Foto na půdě)[photo #susarna]{border: 1px solid}<>`.
+Části můžete libovolně kombinovat v jednom modifikátoru, třeba `.(Důležité)[box #upozorneni]{border: 1px solid}<>`. Obrázek se zarovnává jinak, značkou `<]` nebo `>]` na konci, a zarovnání v jeho modifikátoru by se přečetlo jako tato značka.
 
 Kam modifikátor napsat, záleží na prvku:
 
 - **odstavec, nadpis, položka seznamu, řádek tabulky:** na konec řádku, u odstavce také na samostatný řádek před něj
 - **celý seznam, tabulka:** na samostatný řádek před něj
 - **formátovaný text a odkaz:** těsně před uzavírací značku, například `**text .[trida]**` nebo `"odkaz .[trida]":url`
-- **obrázek:** před uzavírací `*]`
+- **obrázek:** před uzavírací `*]`, a k obrázku samotnému na řádku i za něj, pak patří k `<figure>`
+- **citace:** na samostatný řádek před ni
+- **vodorovná čára:** za ni, například `--- .[trida]`
+- **buňka a sloupec tabulky:** jak ukazuje kapitola [#Tabulky]
 - **blok:** za úvodní značku, například `/--div .[trida]`
 
 Ukázky najdete u jednotlivých prvků na této stránce. Které třídy a styly smí autoři použít, určuje programátor v [konfiguraci |configuration#Povolené HTML značky, třídy a styly].

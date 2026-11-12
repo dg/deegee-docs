@@ -62,7 +62,7 @@ Vrátit můžete:
 - `Html\Element`, HTML značku s atributy v poli, kterou Texy vypíše
 - `Html\Raw`, hotový kus HTML, který Texy vypíše beze změny
 - řetězec, obyčejný text, který Texy escapuje
-- `null`, když uzel obsloužit nechcete a má ho vykreslit `$previous`
+- `null`, když uzel obsloužit nechcete a má ho vykreslit `$previous`. U uzlu [vlastní syntaxe |custom-syntax#Vlastní uzel], pro který jiný renderer není, je `$previous` také `null` a vrácené `null` skončí výjimkou.
 
 
 Úprava výchozího výsledku
@@ -105,7 +105,7 @@ $texy->htmlOutput->addRenderer(function (CodeBlockNode $node, Html\Renderer $ren
 });
 ```
 
-Obarví se blok ` ```php ` v Markdownu i `/--php` v syntaxi Texy. Bloky v jiných jazycích vykreslí Texy jako obvykle, tedy `<pre class="language-xxx"><code>`, a třída podle jazyka se hodí i pro obarvování v prohlížeči. Pro další jazyky můžete stejně zapojit kteroukoli knihovnu na obarvování kódu.
+Obarví se blok <code>&#96;&#96;&#96;php</code> v Markdownu i v syntaxi Texy, kde ho lze napsat také jako `/--code php`. Bloky v jiných jazycích vykreslí Texy jako obvykle, tedy `<pre class="language-xxx"><code>`, a třída podle jazyka se hodí i pro obarvování v prohlížeči. Pro další jazyky můžete stejně zapojit kteroukoli knihovnu na obarvování kódu.
 
 .[note]
 Renderer nesmí měnit uzel, který dostal: tentýž dokument se dá vykreslit víckrát a pokaždé musí dát stejné HTML. Když potřebujete pozměněnou kopii, uzel naklonujte, `clone $node` zkopíruje i všechno uvnitř.
@@ -161,7 +161,9 @@ $comments->addPass(function (Nodes\DocumentNode $document): void {
 <p>Podívejte se: [obrázek: moje sušárna] super.</p>
 ```
 
-Funkce předaná do `traverse()` dostane postupně každý uzel. Když vrátí jiný uzel, nahradí jím ten původní, když vrátí `null`, nechá ho být. Vrátit může i jednu z hodnot výčtu `Texy\TraverseAction`: `Remove` uzel odstraní, `SkipChildren` přeskočí jeho vnitřek a `Stop` procházení ukončí.
+Funkce předaná do `traverse()` dostane postupně každý uzel. Když vrátí jiný uzel, nahradí jím ten původní, když vrátí `null`, nechá ho být. Vrátit může i jednu z hodnot výčtu `Texy\TraverseAction`: `Remove` uzel odstraní, `SkipChildren` přeskočí jeho vnitřek a `Stop` procházení ukončí. Odstranit jde jen uzel, který je jedním z řady sourozenců, třeba odstavec v dokumentu nebo uzel v textu odstavce. Uzel na pevném místě, jako je `$content` odstavce, odstranit nejde a `Remove` skončí výjimkou.
+
+Druhým parametrem `traverse()` můžete předat funkci, kterou Texy zavolá u každého uzlu až po projití jeho vnitřku. Vracet může totéž.
 
 
 Kdy průchod běží
@@ -186,10 +188,13 @@ Direktivy
 Zápis `{{jméno: hodnota}}` v syntaxi Texy je direktiva. Sám nic nedělá, význam mu dáte vy. Na blogu chceme, aby `{{autor: jana}}` vytvořilo odkaz na profil autorky:
 
 ```php
-$texy->config->addDirective('autor', fn(Nodes\DirectiveNode $directive) => new Nodes\LinkNode(
-	url: '/uzivatel/' . $directive->value,
-	content: Nodes\ContentNode::fromText('@' . $directive->value),
-));
+$texy->config->directiveHandler = fn(Nodes\DirectiveNode $directive) => match (strtolower($directive->name)) {
+	'autor' => new Nodes\LinkNode(
+		url: '/uzivatel/' . $directive->value,
+		content: Nodes\ContentNode::fromText('@' . $directive->value),
+	),
+	default => $directive,
+};
 ```
 
 ```texy
@@ -200,16 +205,22 @@ $texy->config->addDirective('autor', fn(Nodes\DirectiveNode $directive) => new N
 <p>Článek napsala <a href="/uzivatel/jana">@jana</a>.</p>
 ```
 
-Funkce dostane uzel direktivy. Hodnotu za dvojtečkou najde v `$directive->value`, argumenty oddělené čárkou v poli `$directive->args` a jméno v `$directive->name`. Vrátí uzel, který se do dokumentu vloží místo direktivy. Když nevrátí nic, direktiva se odstraní.
+Funkce je jedna pro všechny direktivy a Texy ji zavolá pro každou kromě `{{texy: …}}`. Dostane uzel direktivy: jméno najde v `$directive->name`, hodnotu za dvojtečkou v `$directive->value` a argumenty oddělené čárkou v poli `$directive->args`. Uzel, který vrátí, se do dokumentu vloží místo direktivy. Když vrátí samotnou direktivu, jako tady ve větvi `default`, zůstane direktiva v textu tak, jak ji autor napsal. Když vrátí cokoli jiného, třeba `null`, direktiva se odstraní.
 
-Direktivu, kterou nikdo neobslouží, Texy nechá v textu tak, jak ji autor napsal. Chcete-li se o takových dozvědět, zaregistrujte záložní funkci. Funguje stejně jako ta pojmenovaná, takže když direktivu chcete v textu nechat, vraťte uzel, který dostala:
+Bez funkce zůstanou v textu všechny direktivy. Chcete-li se dozvědět o těch, které nikdo neobslouží, třeba kvůli překlepu autora, poznamenejte si je ve funkci:
 
 ```php
 $unknown = [];
-$texy->config->setDirectiveFallback(function (Nodes\DirectiveNode $directive) use (&$unknown) {
+$texy->config->directiveHandler = function (Nodes\DirectiveNode $directive) use (&$unknown) {
+	if (strtolower($directive->name) === 'autor') {
+		return new Nodes\LinkNode(
+			url: '/uzivatel/' . $directive->value,
+			content: Nodes\ContentNode::fromText('@' . $directive->value),
+		);
+	}
 	$unknown[] = $directive->name;  // jména neznámých direktiv si poznamenáme
 	return $directive;              // direktiva zůstane v textu
-});
+};
 ```
 
 Direktivy běží jako úplně první úprava dokumentu. Mohou proto změnit i nastavení, podle kterého se zbytek dokumentu zpracuje, například úroveň nadpisů v `$texy->config->headingTop`. Taková změna ale patří objektu `$texy`, ne dokumentu, a zůstane i pro další převody. Pokud ji direktivy dělají, převádějte každý dokument vlastním objektem `Texy\Texy`.
@@ -219,7 +230,7 @@ Kterou cestu zvolit
 ===================
 
 - **Mění se jen vzhled HTML** (jiná značka, třída, video místo obrázku): renderer.
-- **Mění se obsah dokumentu** (adresa, odstraněný prvek, spočítaná data): průchod. Platí pak pro každý výstup, třeba i pro prostý text z `toText()`.
+- **Mění se obsah dokumentu** (adresa, odstraněný prvek, spočítaná data): průchod. Platí pak pro každý výstup, třeba i pro prostý text.
 - **Autor má něco napsat a vy to obsloužíte** v syntaxi Texy: direktiva.
 - **Autor má psát úplně nový zápis**, třeba `@@jana`: [vlastní syntaxe |custom-syntax].
 
@@ -232,7 +243,7 @@ Uzly jsou ve jmenném prostoru `Texy\Nodes`. Markdown i syntaxe Texy vytvářej�
 |---
 | Uzel | Prvek | Důležité vlastnosti
 |---
-| `DocumentNode` | celý dokument | `$content`, `getHeadings()`
+| `DocumentNode` | celý dokument | `$content`, `$meta`
 | `ParagraphNode` | odstavec | `$content`, `$modifier`
 | `HeadingNode` | nadpis | `$level`, `$id`, `$content`, `getTitle()`
 | `ListNode`, `ListItemNode` | seznam a jeho položka | `$items`, `$type`, `$start`; položka `$content`, `$checked` u úkolového seznamu
@@ -245,9 +256,11 @@ Uzly jsou ve jmenném prostoru `Texy\Nodes`. Markdown i syntaxe Texy vytvářej�
 | `TextBlockNode`, `CommentNode`, `TexySourceNode` | bloky `/--text`, `/--comment` a `/--texysource` |
 | `HorizontalRuleNode` | vodorovná čára | `$type`
 | `DivNode` | blok `/--div` | `$content`, `$modifier`
-| `FigureNode` | obrázek s popiskem | `$image`, `$caption`, `$float`
+| `UnknownDelimitedNode` | blok `/--` s typem, který nikdo neobslouží, celý tak, jak je napsaný | `$code`, `$type`
+| `FigureNode` | obrázek s popiskem nebo samotný na řádku | `$image` (`ImageNode`, nebo `LinkNode`, když je obrázek odkazem), `$caption`, `$float`
 | `TextNode` | text | `$text`
-| `PhraseNode` | zvýrazněný text | `$type` (např. `phrase/strong`, `phrase/em`), `$content`
+| `PhraseNode` | zvýrazněný text | `$type` (výčet `PhraseType`, např. `PhraseType::Strong`, `PhraseType::Emphasis`), `$content`
+| `AnnotationNode` | text s vysvětlivkou, vykreslí se jako `<abbr title>`, vestavěné zápisy ho nevytvářejí | `$text`, `$annotation`
 | `InlineCodeNode` | kód v textu | `$code`
 | `LinkNode` | odkaz | `$url`, `$content`
 | `UrlNode`, `EmailNode` | adresa a e-mail napsané přímo v syntaxi Texy |
@@ -260,7 +273,7 @@ Uzly jsou ve jmenném prostoru `Texy\Nodes`. Markdown i syntaxe Texy vytvářej�
 
 Uzel s `$modifier` nese třídy, ID, styly a titulek z [modifikátoru |syntax#Modifikátory] v objektu `Texy\Modifier`: `$classes`, `$id`, `$styles`, `$attrs`, `$title`.
 
-Uzel, pro který žádný renderer neexistuje, Texy nevykreslí jako chybu, ale vykreslí jen jeho obsah. Díky tomu jde dokument vykreslit vždy, i když obsahuje uzel, který zná jen jedno rozšíření.
+Uzel, pro který žádný renderer neexistuje, Texy v HTML ani v prostém textu nevykreslí jako chybu, ale vykreslí jen jeho obsah. Díky tomu jde dokument do těchto výstupů vykreslit vždy, i když obsahuje uzel, který zná jen jedno rozšíření. Tisk zpět do zdrojového textu takový uzel odmítne, jak popisují [nástroje nad zdrojovým textem |source-tools#Nahrazení celého prvku].
 
 Přecházíte z Texy 3, kde se chování měnilo handlery a událostmi? Jak je přepsat na renderery a průchody, popisuje [Přechod z Texy 3 |upgrading].
 

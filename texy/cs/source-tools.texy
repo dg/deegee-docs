@@ -19,7 +19,7 @@ clanky/susarna.md:7:11 obrázek bez popisu
 use Texy\Nodes;
 
 $markdown = new Texy\Markdown\Markdown;
-$source = Texy\Texy::normalize(file_get_contents($file));
+$source = Texy\Markdown\Markdown::normalize(file_get_contents($file));
 $document = $markdown->parse($source);
 
 foreach ($document->find(Nodes\ImageNode::class) as $image) {
@@ -30,7 +30,7 @@ foreach ($document->find(Nodes\ImageNode::class) as $image) {
 }
 ```
 
-Všimněte si tří věcí. Text nepřevádíme na HTML, ale voláme `parse()`, které ho jen rozebere na strom. Před tím ho necháme projít `Texy::normalize()`, které sjednotí konce řádků a podobné drobnosti. A každý uzel má v `$range` rozsah textu, ze kterého vznikl: `$range->offset` je jeho začátek a `$range->length` délka, obojí v bajtech normalizovaného textu.
+Všimněte si tří věcí. Text nepřevádíme na HTML, ale voláme `parse()`, které ho jen rozebere na strom. Před tím ho necháme projít `Markdown::normalize()`, které sjednotí konce řádků a podobné drobnosti. A každý uzel má v `$range` rozsah textu, ze kterého vznikl: `$range->offset` je jeho začátek a `$range->length` délka, obojí v bajtech normalizovaného textu.
 
 Z pozice v bajtech udělá `SourcePosition::fromOffset()` řádek a sloupec. Oba se počítají od jedničky a sloupec ve znacích, takže sedí s tím, co ukazuje editor, i když řádek obsahuje písmena s diakritikou.
 
@@ -43,7 +43,7 @@ Přepis zdrojového textu
 Blog se přestěhoval na HTTPS a v článcích zůstaly odkazy na `http://muj-blog.cz`. Hledat a nahrazovat napříč soubory by nahradilo i adresy v ukázkách kódu. Strom ale ví, kde leží adresy odkazů, a jen ty změníme:
 
 ```php
-$source = Texy\Texy::normalize(file_get_contents($file));
+$source = Texy\Markdown\Markdown::normalize(file_get_contents($file));
 $document = $markdown->parse($source);
 $rewriter = new Texy\Rewriter($source);
 
@@ -66,9 +66,9 @@ Sušárnu máme z [obchodu](https://muj-blog.cz/obchod) a <https://muj-blog.cz/r
 Adresu v kódu `http://muj-blog.cz` nechceme měnit.
 ```
 
-Změnily se oba odkazy, ten v hranatých závorkách i ten ve špičatých, a adresa v kódu zůstala.
+Změnily se oba odkazy, ten v hranatých závorkách i ten ve špičatých, a adresa v kódu zůstala. Definice referenčních odkazů, tedy řádky `[nazev]: http://…`, ale ve stromu adresu nemají a tahle ukázka je nezmění. Odkaz `[text][nazev]` má v `$urlRange` jen jméno reference.
 
-`Texy\Rewriter` náhrady jen sbírá a provede je všechny najednou až v `getResult()`. Díky tomu rozsahy ze stromu platí po celou dobu, i když se text před nimi mezitím změnil. Hlídá také dvě chyby, na které by se jinak přišlo až v poškozeném souboru:
+`Texy\Rewriter` náhrady jen sbírá a provede je všechny najednou až v `getResult()`. Díky tomu rozsahy ze stromu platí po celou dobu, i když se text před nimi mezitím změnil. Kolik náhrad text skutečně změní, řekne `$rewriter->count()`, takže soubor stačí zapsat, jen když je větší než nula. Hlídá také dvě chyby, na které by se jinak přišlo až v poškozeném souboru:
 
 - Dvě náhrady, které se překrývají, nejdou provést obě. Rewriter vyhodí `Texy\RewriteException` s pozicí: `Line 1, column 31: the replacement of 'https://example.com/susarna' overlaps another one.`
 - Když předáte i text, který na daném místě čekáte, ověří ho. Chrání to před rozsahem z jiného souboru nebo ze starší verze textu:
@@ -142,7 +142,7 @@ se změní na
 [* susarna.png 300x200 .(Sušárna na půdě) >] *** Foto: Jana Nováková
 ```
 
-Uzel klonujeme, abychom neměnili strom, ze kterého ještě čteme. `Texy\Output\Texy\Renderer` je tiskárna, která uzel vypíše jako zdrojový text syntaxe Texy. Dostane objekt `$texy`, aby věděla, jak bude text znovu čten, a mohla zneplatnit to, co by se jinak četlo jako zápis. Zápis, který autor napsal jednou z více podob, vytiskne ve stejné podobě, například stejnou odrážku nebo stejný druh nadpisu. Ostatní v jedné ustálené podobě, takže modifikátor vytiskne vždy jako `.(titulek)[třída]{styl}`.
+Uzel klonujeme, abychom neměnili strom, ze kterého ještě čteme. `Texy\Output\Texy\Renderer` je tiskárna, která uzel vypíše jako zdrojový text syntaxe Texy. Dostane objekt `$texy`, aby věděla, jak bude text znovu čten, a mohla zneplatnit to, co by se jinak četlo jako zápis. Zápis, který autor napsal jednou z více podob, vytiskne ve stejné podobě, například stejnou odrážku nebo stejný druh nadpisu. Ostatní v jedné ustálené podobě, takže modifikátor vytiskne vždy jako `.(titulek)[třída]{styl}` a blok kódu vždy mezi řádky <code>&#96;&#96;&#96;</code>.
 
 Uzel vaší vlastní syntaxe tiskárna vytisknout neumí a vyhodí výjimku. Naučíte ji to rendererem, který zaregistrujete přes `$printer->addRenderer()` stejně jako [renderer pro HTML |custom-handlers#Jiné HTML pro prvek], jen vrací zdrojový text.
 
@@ -171,7 +171,7 @@ Když potřebujete oba stavy, třeba nástroj, který hlásí chyby i ve výsled
 Pozice a konce řádků
 ====================
 
-Rozsahy počítají bajty textu, který prošel `Texy::normalize()`. Normalizace převede konce řádků na `\n`, odstraní BOM, řídicí znaky, měkké spojovníky, mezery na koncích řádků a prázdné řádky na začátku a na konci textu. Nový řádek, kterým končí poslední řádek, nechá, takže soubor po přepisu končí stejně jako předtím. Text, který není platné UTF-8, odmítne výjimkou `Texy\InvalidArgumentException`. Proto nástroj text normalizuje jednou na začátku a dál pracuje jen s výsledkem, stejně jako příklady výše.
+Rozsahy počítají bajty normalizovaného textu. Pro syntaxi Texy ho normalizuje `Texy::normalize()`: převede konce řádků na `\n`, odstraní BOM, řídicí znaky, měkké spojovníky, mezery na koncích řádků a prázdné řádky na začátku a na konci textu. Nový řádek, kterým končí poslední řádek, nechá, takže soubor po přepisu končí stejně jako předtím. Markdown má vlastní `Markdown::normalize()`, která převede konce řádků a odstraní řídicí znaky, ale nic dalšího, protože dvě mezery na konci řádku jsou v Markdownu zalomení. Text, který není platné UTF-8, odmítnou obě výjimkou `Texy\InvalidInputException`. Proto nástroj text normalizuje jednou na začátku a dál pracuje jen s výsledkem, stejně jako příklady výše.
 
 Nejjednodušší je ukládat soubory rovnou normalizované. Soubor na disku je pak totožný s textem, ke kterému se pozice vztahují, a pozice z nástroje můžete použít přímo v něm.
 
@@ -212,7 +212,7 @@ Recept na povidla
 - "umýt":https://example.com
 ```
 
-Obsah zůstane stejný, změní se jen zápis. Tabulky, úkolové seznamy a další rozšíření GFM se převedou, jen když text čtete objektem z `Markdown::gfm()`. Jinak jsou pro Markdown obyčejným textem.
+Obsah zůstane stejný, změní se jen zápis. Rozšíření GFM, jako jsou tabulky, se převedou, jen když text čtete objektem z `Markdown::gfm()`. Jinak jsou pro Markdown obyčejným textem. Úkolové seznamy syntaxe Texy nezná, takže zaškrtnutí zůstane jako text `[x]`, a přeškrtnutý text se zapíše jako HTML značka `<del>`.
 
 Opačným směrem převádí `Texy\Markdown\Output\Markdown\Renderer`. Dostane dokument po `transform()`:
 
@@ -227,7 +227,7 @@ $markdownSource = $renderer->render($document);
 
 Co Markdown zapsat neumí, převede na nejbližší podobu, kterou zná. Popisek pod obrázkem se stane kurzívou na dalším řádku, tabulka se sloučenými buňkami HTML tabulkou, a třídy, styly, rozměry a zarovnání obrázků se ztratí.
 
-Podobu výsledného Markdownu nastavíte vlastnostmi rendereru, třeba jakým znakem začínají odrážky nebo jak se píšou nadpisy a bloky kódu: `$unorderedListMarker`, `$headingStyle`, `$codeBlockStyle`, `$codeFence`, `$emphasisMarker`, `$strongMarker` a další.
+Podobu výsledného Markdownu nastavíte vlastnostmi rendereru, třeba jakým znakem začínají odrážky nebo jak se píšou nadpisy a bloky kódu: `$unorderedListMarker`, `$headingStyle`, `$codeBlockStyle`, `$codeFence`, `$emphasisMarker`, `$strongMarker` a další. Adresy renderer zapíše tak, jak jsou ve stromu, i odkaz na `javascript:`. Pokud je chcete filtrovat, předejte mu v konstruktoru politiku adres, jak popisuje následující kapitola.
 
 
 Tisk zpět do syntaxe Texy
@@ -239,7 +239,15 @@ Několik vzácných zápisů ale zpět přesně nevyjde: buňka tabulky pokraču
 
 Tiskněte syntaktický strom z `parse()`, ne dokument po `transform()`. Dokument už má doplněné reference, vysázenou typografii a upravené HTML, takže jeho tiskem by nevznikl text, který autor napsal.
 
-Adresy tiskárna zapíše tak, jak jsou ve stromu. Když bude výsledný text publikovat někdo další a chcete z něj odstranit nebezpečné adresy, předejte politiku adres: `$texy->renderTexy($document, $texy->urlPolicy)`. Odkaz, který politika odmítne, zůstane jen textem, a obrázek jeho popisem.
+Adresy tiskárna zapíše tak, jak jsou ve stromu. Když bude výsledný text publikovat někdo další a chcete z něj odstranit nebezpečné adresy, předejte politiku adres, která je odmítá. Výchozí politika objektu `$texy` povolí všechno, vezměte proto třeba tu z objektu v [bezpečném režimu |configuration#Bezpečný režim]:
+
+```php
+$safe = new Texy\Texy;
+Texy\Configurator::safeMode($safe);
+$output = $texy->renderTexy($document, $safe->urlPolicy);
+```
+
+Odkaz, který politika odmítne, zůstane jen textem, a obrázek jeho popisem. Stejnou politiku můžete předat rendereru Markdownu: `new Texy\Markdown\Output\Markdown\Renderer($safe->urlPolicy)`.
 
 {{maintitle: Nástroje nad zdrojovým textem v Texy: kontrola a přepis článků}}
 {{description: Kontrolujte články a hromadně je upravujte podle stromu dokumentu, ve kterém každý prvek zná své místo ve zdrojovém textu. A převod mezi Markdownem a syntaxí Texy.}}

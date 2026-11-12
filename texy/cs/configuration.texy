@@ -46,23 +46,23 @@ Jak typografie vypadá, ukazuje [úvod |@home#Typografie]. Jazyk textu, podle kt
 $texy->config->locale = 'en';
 ```
 
-Texy zná `bg`, `cs`, `de`, `el`, `en`, `es`, `fr`, `hu`, `it`, `ja`, `pl`, `pt`, `ro`, `ru`, `sk`, `sl`, `tr` a `uk`. Jazyk, který nezná, ohlásí výjimkou `Texy\InvalidArgumentException` při převodu. Další jazyk přidáte do pole `locales` jako čtveřici uvozovek: otevírací a zavírací hlavní, pak otevírací a zavírací vnořené.
+Texy zná `bg`, `cs`, `de`, `el`, `en`, `es`, `fr`, `hu`, `it`, `ja`, `pl`, `pt`, `ro`, `ru`, `sk`, `sl`, `tr` a `uk`. Jazyk, který nezná, ohlásí výjimkou `Texy\InvalidArgumentException` při převodu. Další jazyk přidáte do pole `locales`. Jeho klíč `quotes` obsahuje čtveřici uvozovek: otevírací a zavírací hlavní, pak otevírací a zavírací vnořené.
 
 ```php
-$texy->config->locales['xx'] = ["\u{00BB}", "\u{00AB}", "\u{203A}", "\u{2039}"];
+$texy->config->locales['xx'] = ['quotes' => ["\u{00BB}", "\u{00AB}", "\u{203A}", "\u{2039}"]];
 $texy->config->locale = 'xx';
 ```
 
-V češtině, slovenštině a polštině nesmí jednopísmenná předložka nebo spojka zůstat na konci řádku, a Texy ji proto spojí s následujícím slovem pevnou mezerou. V češtině jsou to `k`, `s`, `v`, `z`, `o`, `u`, `i` a velké `A`. Která slova to jsou, určuje pole `oneLetterWords` podle jazyka, a jazyk, který v něm není, pevné mezery nedostane. Seznam můžete upravit nebo přidat další jazyk:
+V češtině, slovenštině a polštině nesmí jednopísmenná předložka nebo spojka zůstat na konci řádku, a Texy ji proto spojí s následujícím slovem pevnou mezerou. V češtině jsou to `k`, `s`, `v`, `z`, `o`, `u` a `i`, malá i velká, a velké `A`. Která slova to jsou, určuje klíč `oneLetterWords` v řádku jazyka v poli `locales`, a jazyk, který ho nemá, pevné mezery nedostane. Seznam můžete upravit nebo ho přidat dalšímu jazyku:
 
 ```php
-$texy->config->oneLetterWords['cs'] .= 'a';  // vázat i spojku a
+$texy->config->locales['cs']['oneLetterWords'] .= 'a';  // vázat i spojku a
 ```
 
 Dlouhá slova v češtině a slovenštině Texy rozdělí vložením měkkých spojovníků, neviditelných znaků, na kterých prohlížeč smí slovo zlomit. Dělí podle českých slabik, a text v jiném jazyce proto nechá celý:
 
 ```php
-$texy->config->hyphenationWordLimit = 20;  // dělit slova delší než 20 znaků
+$texy->config->hyphenationWordLimit = 20;  // dělit slova od 20 znaků
 ```
 
 Typografii i dělení slov můžete vypnout:
@@ -94,7 +94,7 @@ Seznam nadpisů pro obsah článku nebo pro `<title>` stránky přečtete z doku
 $document = $markdown->parse($text);
 $markdown->transform($document);
 
-foreach ($document->getHeadings() as $heading) {
+foreach ($document->find(Texy\Nodes\HeadingNode::class) as $heading) {
 	echo $heading->level, ' ', $heading->getTitle(), ' ', $heading->id, "\n";
 }
 
@@ -107,7 +107,7 @@ $html = $markdown->renderHtml($document);
 3 Sušení toc-suseni
 ```
 
-`parse()` text rozebere, `transform()` mimo jiné spočítá úrovně a id nadpisů a `renderHtml()` z dokumentu vytvoří HTML, stejné jako by vrátil `toHtml()`. Titulek stránky je `getTitle()` prvního nadpisu. U syntaxe Texy se volají tytéž metody na `$texy`. Co přesně se v jednotlivých krocích děje, popisuje [architektura |architecture].
+`parse()` text rozebere, `transform()` mimo jiné spočítá úrovně a id nadpisů a `renderHtml()` z dokumentu vytvoří HTML, stejné jako by vrátil `toHtml()`. Titulek stránky je `$document->findFirst(Texy\Nodes\HeadingNode::class)?->getTitle()`. U syntaxe Texy se volají tytéž metody na `$texy`. Co přesně se v jednotlivých krocích děje, popisuje [architektura |architecture].
 
 
 Cesty k obrázkům a odkazům
@@ -185,7 +185,7 @@ $texy->htmlOutput->figureClass = 'figure'; // výchozí null, bez třídy
 </div>
 ```
 
-Odstavec, ve kterém jsou jen obrázky, Texy neobalí do `<p>`, ale do `<div>`. Jinou značku nastavíte v `imageParagraphTag`:
+Obrázek, který v syntaxi Texy stojí sám na řádku, dostane `figureTag` i bez popisku. Odstavec s více obrázky, a v Markdownu i s jediným, Texy neobalí do `<p>`, ale do `<div>`. Jinou značku nastavíte v `imageParagraphTag`:
 
 ```php
 $texy->htmlOutput->imageParagraphTag = 'p';  // výchozí 'div'
@@ -195,7 +195,7 @@ $texy->htmlOutput->imageParagraphTag = 'p';  // výchozí 'div'
 Zarovnání
 ---------
 
-Modifikátory zarovnání (`.<`, `.>`, `.<>`, `.=` a svislé `.^`, `.-`, `._`) i zarovnání sloupců tabulky v Markdownu vytvoří ve výchozím stavu inline styl, třeba `style="text-align:center"`. Pokud máte v CSS hotové třídy, přiřaďte je:
+Modifikátory zarovnání (`.<`, `.>`, `.<>`, `.=` a v buňkách tabulky i svislé `.^`, `.-`, `._`) i zarovnání sloupců tabulky v Markdownu vytvoří ve výchozím stavu inline styl, třeba `style="text-align:center"`. Pokud máte v CSS hotové třídy, přiřaďte je:
 
 ```php
 $texy->htmlOutput->textAlignClasses['left'] = 'text-left';
@@ -211,13 +211,13 @@ Značky a třídy prvků
 
 ```php
 $g = $texy->htmlOutput;
-$g->phraseTags['phrase/strong'] = 'b';    // tučný text jako <b> místo <strong>
+$g->phraseTags['strong'] = 'b';           // tučný text jako <b> místo <strong>
 $g->horizontalRuleClasses['-'] = 'cara';  // třída vodorovné čáry podle znaku, kterým je napsaná
 $g->emoticonClass = null;                 // třída <span> kolem emotikonů
 $g->passHtmlComments = true;              // HTML komentáře z textu zachovat ve výstupu
 ```
 
-`phraseTags` určuje, jakou značku dostane který druh zvýraznění. Klíče jsou názvy zápisů syntaxe Texy z [tabulky níže |#Které zápisy jsou zapnuté], tučný text `phrase/strong` a kurzíva `phrase/em` platí i pro Markdown. Vodorovná čára napsaná pomlčkami `---` má klíč `-`, hvězdičkami `***` klíč `*`, a to v obou jazycích.
+`phraseTags` určuje, jakou značku dostane který druh zvýraznění. Klíče pojmenovávají význam, ne zápis, a proto platí pro oba jazyky: `strong` (tučně), `emphasis` (kurzíva, ať je napsaná `*…*`, `//…//` nebo `_…_`), `inserted`, `deleted`, `superscript`, `subscript`, `span`, `abbreviation`, `quote` a `code` pro kód v textu. Vodorovná čára napsaná pomlčkami `---` má klíč `-`, hvězdičkami `***` klíč `*`, a to v obou jazycích. Podtržítka `___` v Markdownu mají klíč `_`.
 
 
 Formátování HTML kódu
@@ -267,7 +267,7 @@ $texy->htmlPolicy->allowedClasses = ['photo', '#main'];  // výchozí true
 $texy->htmlPolicy->allowedStyles = ['color'];            // výchozí true
 ```
 
-Z `.[photo]` pak vznikne `class="photo"`, `.[reklama]` se zahodí.
+Z `.[photo]` pak vznikne `class="photo"`, `.[reklama]` se zahodí. Atributy `class` a `style` v HTML napsaném přímo do textu tyto seznamy nehlídají, o těch rozhoduje jen `allowedTags`.
 
 Texy 3 kontrolovalo atributy podle definice HTML 4 a zahodilo každý, který k dané značce nepatřil. Texy 4 propustí, co povolí `allowedTags`, protože HTML5 žádný pevný seznam nemá a `data-*` nebo `aria-*` atributy by se musely vyjmenovat. Chcete-li atributy omezit, vyjmenujte je.
 
@@ -282,9 +282,9 @@ $texy->urlPolicy->linkPattern = '~https?:|ftp:|mailto:~A';
 $texy->urlPolicy->imagePattern = '~https?:~A';
 ```
 
-Kontrolují se jen adresy se schématem. Relativní adresy jako `clanky/sklizen` projdou vždy. Odkaz na nepovolenou adresu nevznikne a zůstane po něm jen text.
+Kontrolují se jen adresy se schématem. Relativní adresy jako `clanky/sklizen` projdou vždy. Odkaz na nepovolenou adresu nevznikne a zůstane po něm jen text. Z obrázku zůstane v Markdownu jeho popis, v syntaxi Texy celý jeho zápis jako text.
 
-`urlPolicy` patří k `htmlPolicy`, která podle ní kontroluje adresy v HTML značkách. Markdownu proto stačí předat `htmlPolicy`, `urlPolicy` si vezme s ní.
+`urlPolicy` patří k `htmlPolicy`, která podle ní kontroluje adresy v HTML značkách. Markdownu proto stačí předat `htmlPolicy`, `urlPolicy` si vezme s ní. Když předáte obě, musí to být právě ta `urlPolicy`, kterou `htmlPolicy` používá, jinak Markdown vyhodí `Texy\InvalidArgumentException`.
 
 
 Bezpečný režim
@@ -374,8 +374,8 @@ $markdown->allowedSyntax[Syntax::HtmlInline] = false;
 | `Syntax::HeadingSetext` | nadpis podtržený `===` nebo `---`
 | `Syntax::BlockQuote` | citace `>`
 | `Syntax::List` | seznamy
-| `Syntax::CodeFenced` | blok kódu mezi <code>&#96;&#96;&#96;</code> nebo `~~~`
-| `Syntax::CodeIndented` | blok kódu odsazený čtyřmi mezerami
+| `Syntax::FencedCode` | blok kódu mezi <code>&#96;&#96;&#96;</code> nebo `~~~`
+| `Syntax::IndentedCode` | blok kódu odsazený čtyřmi mezerami
 | `Syntax::ThematicBreak` | vodorovná čára
 | `Syntax::HtmlBlock` | blok surového HTML
 | `Syntax::HtmlInline` | značka HTML v textu
@@ -437,6 +437,7 @@ Pole se čte jednou na začátku převodu, jeho změna během převodu se neproj
 | `phrase/wikilink` | zapnuto | odkaz `[text\|adresa]`
 | `phrase/markdown` | zapnuto | odkaz `[text](adresa)`
 | `phrase/escaped-asterix` | zapnuto | hvězdička zneplatněná zpětným lomítkem
+| `phrase/link` | zapnuto | odkaz na frázi `"text":adresa` nebo `**text**:adresa`, vypnutím zmizí i odkazy `slovo:[adresa]`, `[text\|adresa]` a `[text](adresa)`
 | `link/url` | zapnuto | adresa v textu jako odkaz
 | `link/email` | zapnuto | e-mail v textu jako odkaz
 | `link/definition` | zapnuto | definice odkazu `[jméno]: adresa`
@@ -448,13 +449,15 @@ Pole se čte jednou na začátku převodu, jeho změna během převodu se neproj
 | `heading/underlined` | zapnuto | podtržené nadpisy
 | `heading/surrounded` | zapnuto | nadpisy `### Nadpis`
 | `list` | zapnuto | seznamy
+| `list/decimal`, `list/roman`, `list/alpha` | zapnuto | číslování `1.` a `1)`, `I.` a `I)`, `a)` a `A)`
 | `list/definition` | zapnuto | seznamy definic
 | `table` | zapnuto | tabulky
 | `blockquote` | zapnuto | citace `>`
 | `horizline` | zapnuto | vodorovná čára
 | `blocks` | zapnuto | všechny bloky `/--`
-| `block/code`, `block/pre`, `block/html`, `block/text`, `block/div`, `block/comment`, `block/texysource`, `block/default` | zapnuto | jednotlivé druhy bloků `/--`
-| `block/fenced` | zapnuto | blok kódu mezi <code>&#96;&#96;&#96;</code>
+| `block/code`, `block/pre`, `block/html`, `block/text`, `block/div`, `block/comment`, `block/default` | zapnuto | jednotlivé druhy bloků `/--`
+| `block/texysource` | vypnuto | blok `/--texysource`, který ukáže HTML svého obsahu jako zdrojový kód
+| `fenced-code` | zapnuto | blok kódu mezi <code>&#96;&#96;&#96;</code>
 | `html/tag` | zapnuto | HTML značky v textu
 | `html/comment` | zapnuto | HTML komentáře
 | `html/entity` | zapnuto | HTML entity jako `&amp;`
@@ -478,11 +481,10 @@ Vyvažování nadpisů
 
 V syntaxi Texy autor nemusí přemýšlet, jestli článek začíná nadpisem první, nebo druhé úrovně. Texy nadpisy vyváží: nejdůležitější nadpis v článku dostane úroveň `headingTop` a ostatní se seřadí pod něj, ať autor začal kterýmkoli podtržením. Důležitost určuje znak podtržení: `#` je nejdůležitější, pak `*`, `=` a `-`.
 
-Vyvažování můžete vypnout. Každý znak podtržení pak má pevnou úroveň podle pole `headingLevels`, posunutou podle `headingTop`:
+Vyvažování můžete vypnout. Každý znak podtržení pak má pevnou úroveň, `#` první, `*` druhou, `=` třetí a `-` čtvrtou, posunutou podle `headingTop`:
 
 ```php
 $texy->config->headingBalancing = Texy\HeadingBalancing::Fixed;   // výchozí Dynamic
-$texy->config->headingLevels = ['#' => 1, '*' => 2, '=' => 3, '-' => 4];
 ```
 
 U nadpisů zapsaných mřížkami na začátku řádku, jako `### Nadpis`, určuje `headingMoreMeansHigher` (výchozí `true`), že víc mřížek znamená důležitější nadpis.
@@ -490,28 +492,33 @@ U nadpisů zapsaných mřížkami na začátku řádku, jako `### Nadpis`, urču
 Markdown nadpisy nevyvažuje. `#` je vždy první úroveň, `##` druhá a tak dál, posunuté jen podle `headingTop`.
 
 
-Odkazy a obrázky definované předem
-----------------------------------
+Odkazy zapsané jménem
+---------------------
 
-Adresy, na které články často odkazují, můžete definovat v kódu. Autoři pak píšou jen jméno:
+Adresy, na které články často odkazují, nemusí autoři vypisovat. Napíšou jen jméno v hranatých závorkách a adresu k němu doplní vaše funkce:
 
 ```php
-$texy->config->addLinkDefinition('obchod', 'https://example.com/susarna');
-$texy->config->addImageDefinition('logo', 'logo.png', 100, 50, 'Logo blogu');
+$texy->config->linkResolver = fn(string $name) => match ($name) {
+	'obchod' => 'https://example.com/susarna',
+	'wiki' => 'https://cs.wikipedia.org/wiki/%s',  // %s zastupuje text odkazu
+	default => null,
+};
 ```
 
 ```texy
-"Sušárnu":[obchod] jsme koupili levně. [*logo*]
+"Sušárnu":[obchod] jsme koupili levně a sušíme v ní "švestky":[wiki].
 ```
 
 ```html
-<p><a href="https://example.com/susarna">Sušárnu</a> jsme koupili levně. <img
-src="logo.png" alt="Logo blogu" width="100" height="50"></p>
+<p><a href="https://example.com/susarna">Sušárnu</a> jsme koupili levně a
+sušíme v ní <a href="https://cs.wikipedia.org/wiki/%C5%A1vestky">švestky</a>.</p>
 ```
 
-Definice platí pro všechny další převody. Definice se stejným jménem napsaná přímo v článku má přednost.
+Texy se funkce zeptá jednou za každý odkaz, jehož jméno článek sám nedefinuje. Definice se stejným jménem napsaná přímo v článku tedy má přednost. Funkce dostane jméno tak, jak ho autor napsal, i s případnou kotvou `#sekce`. Vrátí adresu, nebo `null`, když jméno nezná, a adresou pak zůstane samotné jméno. Vrácená adresa projde kontrolou [povolených adres |#Povolené adresy] jako každá jiná.
 
-V syntaxi Texy může být odkazem i zvýrazněný text, třeba `**recept**:https://example.com`. Pokud to nechcete, nastavte `$texy->config->phraseLinks = false` a ze zvýraznění odkaz nevznikne.
+Jako druhý parametr dostane funkce uzel odkazu `Texy\Nodes\LinkNode` a smí ho upravit, třeba mu změnit text v `$link->content`. Odkaz zapsaný jen jménem, `[stranka]`, poznáte podle `$link->isBareRef`. Obrázky se takhle doplnit nedají: obrázek definuje autor přímo v článku, `[*logo*]: logo.png 100x50 .(Logo blogu)`, nebo mu adresu nastaví váš [průchod |custom-handlers#Úprava dokumentu] nad uzly `ImageNode`.
+
+V syntaxi Texy může být odkazem i zvýrazněný text, třeba `**recept**:https://example.com`. Pokud to nechcete, nastavte `$texy->allowedSyntax['phrase/link'] = false` a ze zvýraznění odkaz nevznikne. Pozor, tím vypnete všechny odkazy zapsané na text, tedy i `"text":adresa`, `[text|adresa]`, `[text](adresa)` a `slovo:[adresa]`. Zůstanou jen adresy a e-maily napsané přímo v textu.
 
 
 Emotikony
@@ -530,7 +537,15 @@ Výchozí sada je `:-)`, `:-(`, `;-)`, `:-D`, `8-O`, `8-)`, `:-?`, `:-x`, `:-P` 
 Seznamy
 -------
 
-Pole `$texy->config->listBullets` definuje znaky, kterými mohou začínat položky seznamů. Ve výchozím stavu jsou to `*`, `-` a `+` pro odrážkové seznamy a `1.`, `1)`, `I.`, `I)`, `a)` a `A)` pro číslované.
+Položky odrážkových seznamů začínají znakem `*`, `-` nebo `+`, položky číslovaných `1.`, `1)`, `I.`, `I)`, `a)` nebo `A)`. Tyto znaky jsou pevné, jednotlivé druhy číslování ale můžete vypnout jako zápisy:
+
+```php
+$texy->allowedSyntax['list/decimal'] = false;  // 1. a 1)
+$texy->allowedSyntax['list/roman'] = false;    // I. a I)
+$texy->allowedSyntax['list/alpha'] = false;    // a) a A)
+```
+
+Vypnutá značka zůstane obyčejným textem. Výjimkou jsou `I)`, `V)` a `X)`, které se s vypnutými římskými číslicemi čtou jako písmena, takže řádky `I) …` a `J) …` vytvoří seznam označený písmeny od I.
 
 
 Direktivy
