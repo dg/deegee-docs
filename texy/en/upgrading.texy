@@ -1,24 +1,24 @@
-Přechod z Texy 3
-****************
+Upgrading from Texy 3
+*********************
 
 .[perex]
-Texy 4 je postavené znovu: text nejdřív rozebere na strom dokumentu a teprve z něj vytvoří HTML. Pro vás to znamená typografii a bezpečnost pro Markdown i syntaxi Texy, nástroje nad zdrojovým textem a čistší API. Konfigurace z verze 3 přitom poběží dál a sama vám řekne, co přepsat. Tady najdete, co se změnilo a jak na přechod.
+Texy 4 is rebuilt from the ground up: it first parses the text into a document tree and only then creates HTML from it. For you, that means typography and security for both Markdown and Texy syntax, source text tools and a cleaner API. Your configuration from version 3 keeps working, and it tells you what to rewrite. Here you will find what has changed and how to upgrade.
 
 
-Instalace
-=========
+Installation
+============
 
 ```shell
 composer require texy/texy:^4.0
 ```
 
-Texy 4 potřebuje PHP 8.4 nebo novější a rozšíření `mbstring`. Kdo používá integraci s Latte, potřebuje Latte 3.1.7 nebo novější. Pokud nadpisům generujete `id` (`headingIds`), potřebujete i rozšíření `intl`. Texy 3 si bez něj vystačilo s iconv, Texy 4 bez něj vyhodí výjimku.
+Texy 4 requires PHP 8.4 or newer and the `mbstring` extension. If you use the Latte integration, you need Latte 3.1.7 or newer. If you generate `id` attributes for headings (`headingIds`), you also need the `intl` extension. Texy 3 managed without it using iconv; Texy 4 throws an exception without it.
 
 
-Co poběží dál
-=============
+What Keeps Working
+==================
 
-Kód, který Texy jen nastavuje a převádí text, poběží beze změny, až na pár [konstant a jednu vlastnost |#Kam se přestěhovala nastavení], které zmizely úplně. Každé staré jméno ale vyvolá upozornění `E_USER_DEPRECATED`, které řekne, čím ho nahradit:
+Code that only configures Texy and converts text keeps working unchanged, apart from a few [constants and one property |#Where the Settings Moved] that are gone entirely. Every old name, however, triggers an `E_USER_DEPRECATED` notice that tells you what to replace it with:
 
 ```php
 $texy = new Texy;
@@ -34,39 +34,39 @@ $texy->headingModule->top is deprecated, use $texy->config->headingTop instead.
 Texy::process() is deprecated, use Texy::toHtml() instead.
 ```
 
-Kód tedy můžete převádět postupně, podle toho, co upozornění hlásí. Nastavení, které ve verzi 4 nemá náhradu, ohlásí varováním, a čtení výsledků, které ve verzi 3 žily na modulech, třeba `$texy->headingModule->title`, vyhodí výjimku s návodem. Stejně dopadne `addReference()` modulu odkazů a obrázků, protože dostává objekty `Texy\Link` a `Texy\Image`, které ve verzi 4 nejsou. Kompatibilní vrstva zmizí ve verzi 5.
+So you can migrate your code step by step, following what the notices report. A setting that has no replacement in version 4 is reported with a warning, and reading results that lived on modules in version 3, such as `$texy->headingModule->title`, throws an exception with instructions. The same goes for `addReference()` of the link and image modules, because it takes `Texy\Link` and `Texy\Image` objects, which no longer exist in version 4. The compatibility layer goes away in version 5.
 
-Úpravy chování přes handlery a vlastní syntaxe přes `registerLinePattern()` dál nefungují, ty je potřeba přepsat. Jak, popisuje [poslední kapitola |#Rozšíření].
+Behavior changes made through handlers and custom syntax added through `registerLinePattern()`, on the other hand, no longer work and need to be rewritten. The [last section |#Extensions] describes how.
 
 
-Co se změnilo ve výstupu
+What Changed in the Output
+==========================
+
+Some things look different by default. Go through them if your CSS or JavaScript relies on the shape of the HTML:
+
+- **An image with a caption** is a `<figure>` with `<figcaption>` instead of a `<div class="figure">` with `<p>`. `$texy->htmlOutput->figureTag = 'div'` and `figureClass = 'figure'` bring back the old form.
+- **A code block** is `<pre class="language-php"><code>` instead of `<pre class="php">`, as syntax highlighting libraries expect.
+- **An image on a line of its own is always a `<figure>`**, even without a caption, and it does not get a `max-width` style. In version 3 it needed a caption for that.
+- **Non-breaking spaces after one-letter words** are added only for languages that have them configured, that is Czech, Slovak and Polish. Version 3 inserted them in every language, so English output, for example, will change. Texy hyphenates long words only in Czech and Slovak.
+- **Images have no URL prefix.** Version 3 prepended `images/`; in version 4 you set the prefix in `$texy->htmlOutput->imageBaseUrl`.
+- **Safe mode also disables images with captions and image definitions**, not just inline images. You allow images in comments by calling `Texy\Configurator::safeMode($texy, images: true)`.
+- **A link written only as the name of a reference**, `[name]`, is disabled by default, because it was easily confused with text in brackets. `$texy->allowedSyntax['link/reference'] = true` turns it on.
+- **HTML attributes are not checked against HTML 4.** Whatever `allowedTags` allows gets through, see [configuration |configuration#Allowed HTML Tags, Classes and Styles].
+
+And a few changes in how text is read:
+
+- **A tab is a single space character**; it no longer expands to eight spaces. Text that mixed tabs and spaces and relied on alignment to eight columns may be parsed differently.
+- **Soft hyphens typed directly in the text are removed**, always. If you want to keep a soft hyphen, write the entity `&shy;`.
+- **Text in invalid UTF-8 throws** a `Texy\InvalidInputException` right at the start.
+- **A block of a type Texy does not know, such as `/--php`, is no longer a code block.** It is displayed exactly as written, including the `/--php` and `\--` lines. Write code in a language as <code>&#96;&#96;&#96;php</code> or `/--code php`, or handle the type with your own function, see [Adding Custom Syntax |custom-syntax#A New Block Type in Texy Syntax].
+- **Obsolete syntax in stored texts** triggers an `E_USER_DEPRECATED` notice: the image `[* small.jpg | large.jpg *]`, of which only the small image remains, and a description or modifier in a link definition, `[ref]: url description .(title)`, which Texy ignores. Write a link to a large image as `[* small.jpg *]:large.jpg`.
+- **The `/--texysource` block is disabled by default.** You turn it on with `$texy->allowedSyntax['block/texysource'] = true`. Headings inside it count among the document's headings.
+
+
+Where the Settings Moved
 ========================
 
-Některé věci vypadají ve výchozím stavu jinak. Projděte je, pokud na podobu HTML spoléhá vaše CSS nebo JavaScript:
-
-- **Obrázek s popiskem** je `<figure>` s `<figcaption>` místo `<div class="figure">` s `<p>`. Starou podobu vrátí `$texy->htmlOutput->figureTag = 'div'` a `figureClass = 'figure'`.
-- **Blok kódu** je `<pre class="language-php"><code>` místo `<pre class="php">`, jak to čekají knihovny na obarvování kódu.
-- **Obrázek sám na řádku je vždy `<figure>`**, i když nemá popisek, a nedostane styl `max-width`. Ve verzi 3 k tomu potřeboval popisek.
-- **Pevné mezery za jednopísmennými slovy** dostanou jen jazyky, které je mají nastavené, tedy čeština, slovenština a polština. Verze 3 je vkládala v každém jazyce, takže se změní třeba anglický výstup. Dlouhá slova Texy dělí jen v češtině a slovenštině.
-- **Obrázky nemají předponu adresy.** Verze 3 doplňovala `images/`, ve verzi 4 ji nastavíte v `$texy->htmlOutput->imageBaseUrl`.
-- **Bezpečný režim vypne i obrázky s popiskem a definice obrázků**, nejen obrázky v textu. Obrázky v komentářích povolíte voláním `Texy\Configurator::safeMode($texy, images: true)`.
-- **Odkaz zapsaný jen jménem reference**, `[jmeno]`, je ve výchozím stavu vypnutý, protože se snadno spletl s textem v závorkách. Zapne ho `$texy->allowedSyntax['link/reference'] = true`.
-- **Atributy HTML se nekontrolují podle HTML 4.** Projde, co povolí `allowedTags`, viz [konfigurace |configuration#Povolené HTML značky, třídy a styly].
-
-A několik změn ve čtení textu:
-
-- **Tabulátor je jeden znak mezery**, nerozvíjí se na osm mezer. Text, který kombinoval tabulátory a mezery a spoléhal na zarovnání po osmi znacích, se může rozebrat jinak.
-- **Měkké spojovníky napsané přímo v textu se odstraní** vždy. Kdo chce měkký spojovník zachovat, napíše entitu `&shy;`.
-- **Text v neplatném UTF-8 vyhodí výjimku** `Texy\InvalidInputException` hned na začátku.
-- **Blok s typem, který Texy nezná, třeba `/--php`, už není blok kódu.** Zobrazí se tak, jak je napsaný, včetně řádků `/--php` a `\--`. Kód v jazyce pište jako <code>&#96;&#96;&#96;php</code> nebo `/--code php`, případně typ obslužte vlastní funkcí, viz [Přidání vlastní syntaxe |custom-syntax#Nový typ bloku v syntaxi Texy].
-- **Zastaralé zápisy v uložených textech** vyvolají upozornění `E_USER_DEPRECATED`: obrázek `[* maly.jpg | velky.jpg *]`, ze kterého zůstane jen malý obrázek, a popisek nebo modifikátor v definici odkazu, `[ref]: adresa popisek .(titulek)`, které Texy ignoruje. Odkaz na velký obrázek pište `[* maly.jpg *]:velky.jpg`.
-- **Blok `/--texysource` je ve výchozím stavu vypnutý.** Zapnete ho přes `$texy->allowedSyntax['block/texysource'] = true`. Nadpisy uvnitř něj patří mezi nadpisy dokumentu.
-
-
-Kam se přestěhovala nastavení
-=============================
-
-Nastavení jsou ve verzi 4 rozdělená podle toho, čeho se týkají: `$texy->config` určuje význam textu, `$texy->htmlOutput` podobu HTML a `$texy->htmlPolicy` s `$texy->urlPolicy` to, co je dovolené. Všechna popisuje [konfigurace |configuration].
+In version 4, settings are divided by what they concern: `$texy->config` determines the meaning of the text, `$texy->htmlOutput` the shape of the HTML, and `$texy->htmlPolicy` with `$texy->urlPolicy` what is allowed. All of them are described in [configuration |configuration].
 
 |---
 | Texy 3 | Texy 4
@@ -83,9 +83,9 @@ Nastavení jsou ve verzi 4 rozdělená podle toho, čeho se týkají: `$texy->co
 | `$texy->longWordsModule->wordLimit` | `$texy->config->hyphenationWordLimit`
 | `$texy->headingModule->top`, `generateID`, `idPrefix` | `$texy->config->headingTop`, `headingIds`, `headingIdPrefix`
 | `$texy->headingModule->balancing`, `moreMeansHigher` | `$texy->config->headingBalancing`, `headingMoreMeansHigher`
-| `$texy->headingModule->title`, `TOC` | `$document->findFirst(HeadingNode::class)?->getTitle()`, `$document->find(HeadingNode::class)`, viz [konfigurace |configuration#Nadpisy]
+| `$texy->headingModule->title`, `TOC` | `$document->findFirst(HeadingNode::class)?->getTitle()`, `$document->find(HeadingNode::class)`, see [configuration |configuration#Headings]
 | `$texy->figureModule->tagName`, `class` | `$texy->htmlOutput->figureTag`, `figureClass`
-| `leftClass`, `rightClass` u obrázků a obrázků s popiskem | `$texy->htmlOutput->floatClasses['left']`, `['right']`
+| `leftClass`, `rightClass` for images and images with captions | `$texy->htmlOutput->floatClasses['left']`, `['right']`
 | `$texy->imageModule->root`, `fileRoot` | `$texy->htmlOutput->imageBaseUrl`, `imageBasePath`
 | `$texy->linkModule->root`, `forceNoFollow`, `shorten` | `$texy->htmlOutput->linkBaseUrl`, `linkNoFollow`, `shortenUrls`
 | `$texy->phraseModule->tags` | `$texy->htmlOutput->phraseTags`
@@ -93,21 +93,21 @@ Nastavení jsou ve verzi 4 rozdělená podle toho, čeho se týkají: `$texy->co
 | `$texy->htmlModule->passComment` | `$texy->htmlOutput->passHtmlComments`
 | `$texy->htmlOutputModule->indent`, `lineWrap`, … | `$texy->htmlOutput->indent`, `lineWrap`, …
 | `$texy->emoticonModule->icons`, `class` | `$texy->config->emoticons`, `$texy->htmlOutput->emoticonClass`
-| `$texy->listModule->bullets` | `$texy->allowedSyntax['list/decimal']`, `['list/roman']`, `['list/alpha']`, vypínač pro každý druh číslování, znaky jsou pevné
+| `$texy->listModule->bullets` | `$texy->allowedSyntax['list/decimal']`, `['list/roman']`, `['list/alpha']`, a switch for each kind of numbering; the characters are fixed
 | `$texy->phraseModule->linksAllowed` | `$texy->allowedSyntax['phrase/link']`
-| `$texy->typographyModule->locales` | `$texy->config->locales`, řádek jazyka má tvar `['quotes' => […]]`
-| `$texy->linkModule->addReference($name, $link)` | `$texy->config->linkResolver`, funkce, která ke jménu vrátí adresu, viz [konfigurace |configuration#Odkazy zapsané jménem]
-| `$texy->imageModule->addReference($name, $image)` | obrázek definovaný v dokumentu, nebo adresa nastavená průchodem nad `ImageNode`
+| `$texy->typographyModule->locales` | `$texy->config->locales`, where a language's entry has the form `['quotes' => […]]`
+| `$texy->linkModule->addReference($name, $link)` | `$texy->config->linkResolver`, a function that returns the address for a name, see [configuration |configuration#Links Written by Name]
+| `$texy->imageModule->addReference($name, $image)` | an image defined in the document, or an address set by a pass over `ImageNode`
 
-Bez náhrady zmizely `$summary`, `$tabWidth`, `$removeSoftHyphens`, `headingModule->levels` (úrovně znaků podtržení jsou pevné), `figureModule->widthDelta` a `requireCaption`, `tableModule->oddClass` a `evenClass`, `scriptModule->separator`, `linkModule->imageClass`, `imageModule->linkedRoot` a `defaultAlt` a obrázkové emotikony (`emoticonModule->root` a `fileRoot`). Emotikony se vypisují jako znaky Unicode.
+Removed without replacement: `$summary`, `$tabWidth`, `$removeSoftHyphens`, `headingModule->levels` (the levels of underline characters are fixed), `figureModule->widthDelta` and `requireCaption`, `tableModule->oddClass` and `evenClass`, `scriptModule->separator`, `linkModule->imageClass`, `imageModule->linkedRoot` and `defaultAlt`, and image emoticons (`emoticonModule->root` and `fileRoot`). Emoticons are output as Unicode characters.
 
-Konstanty mají nová jména: místo `Texy::ALL` a `Texy::NONE` pište `true` a `false`, `HeadingModule::DYNAMIC` a `FIXED` jsou výčet `Texy\HeadingBalancing::Dynamic` a `Fixed`, `Texy::VERSION` je `Texy::Version`.
+Constants have new names: instead of `Texy::ALL` and `Texy::NONE`, write `true` and `false`; `HeadingModule::DYNAMIC` and `FIXED` are now the enum cases `Texy\HeadingBalancing::Dynamic` and `Fixed`; `Texy::VERSION` is `Texy::Version`.
 
-Bez upozornění, rovnou chybou, skončí to, co zmizelo úplně. Konstanty režimu výstupu `Texy::HTML5`, `Texy::XHTML1_STRICT` a ostatní smažte, výstup je vždy HTML5. Statická vlastnost `Texy\Configurator::$safeTags` je teď konstanta `SafeTags` a změnit nejde. Povolené značky komentářů proto upravte až po `safeMode()`, v `$texy->htmlPolicy->allowedTags`.
+Anything that is gone entirely fails right away with an error, without a notice. Delete the output mode constants `Texy::HTML5`, `Texy::XHTML1_STRICT` and the others; the output is always HTML5. The static property `Texy\Configurator::$safeTags` is now the constant `SafeTags` and cannot be changed. So adjust the tags allowed in comments only after calling `safeMode()`, through `$texy->htmlPolicy->allowedTags`.
 
 
-Převody textu
-=============
+Text Conversions
+================
 
 |---
 | Texy 3 | Texy 4
@@ -115,33 +115,33 @@ Převody textu
 | `process($text)` | `toHtml($text)`
 | `process($text, true)`, `processLine($text)` | `toInlineHtml($text)`
 | `processTypo($text)` | `applyTypography($text)`
-| `toText()` bez parametru, pro naposledy převedený text | `toText($text)`, pro rozebraný dokument `renderText($document)`
-| `getDOM()` | `parse($text)`, které vrátí strom dokumentu
+| `toText()` without a parameter, for the last converted text | `toText($text)`, for a parsed document `renderText($document)`
+| `getDOM()` | `parse($text)`, which returns the document tree
 | `checkURL()` | `$texy->urlPolicy->isLinkAllowed()`, `isImageAllowed()`
 
-Markdown, jeho čtení i převod do něj, obstarává samostatný balíček [texy/markdown |markdown].
+Markdown, both reading it and converting to it, is handled by the separate package [texy/markdown |markdown].
 
 
-Rozšíření
-=========
+Extensions
+==========
 
-Tady je změna největší. Verze 3 měnila chování handlery a událostmi, verze 4 má místo nich místa pro rozšíření se stejnými pravidly pro Markdown i syntaxi Texy:
+This is where the biggest change lies. Version 3 changed behavior through handlers and events; version 4 replaces them with extension points that follow the same rules for Markdown and Texy syntax:
 
 |---
 | Texy 3 | Texy 4
 |---
-| `addHandler('image', …)` a další handlery prvků | renderer, `$texy->htmlOutput->addRenderer()`
+| `addHandler('image', …)` and other element handlers | a renderer, `$texy->htmlOutput->addRenderer()`
 | `$invocation->proceed()` | `$previous($node)`
-| `addHandler('afterParse', …)`, `beforeParse` | průchod, `$texy->addPass()`
-| `addHandler('script', …)` | direktiva, `$texy->config->directiveHandler`
-| `addHandler('block', …)` | typ bloku `/--`, `$texy->config->delimitedBlockHandler`
-| `registerLinePattern($handler, $pattern, $name)` | `addInlineSyntax($name, $pattern, $handler)`, jméno je první
+| `addHandler('afterParse', …)`, `beforeParse` | a pass, `$texy->addPass()`
+| `addHandler('script', …)` | a directive, `$texy->config->directiveHandler`
+| `addHandler('block', …)` | a `/--` block type, `$texy->config->delimitedBlockHandler`
+| `registerLinePattern($handler, $pattern, $name)` | `addInlineSyntax($name, $pattern, $handler)`, the name comes first
 | `registerBlockPattern($handler, $pattern, $name)` | `addBlockSyntax($name, $pattern, $handler)`
 | `Texy\HtmlElement` | `Texy\Output\Html\Element`
 | `$texy->protect()` | `new Texy\Output\Html\Raw($html)`
-| vlastní modul | registrace zápisů, průchodů a rendererů, moduly jsou vnitřní
+| a custom module | registering syntaxes, passes and renderers; modules are internal
 
-Staré metody vyhodí výjimku `LogicException`, která pojmenuje náhradu. Handler, který přidával obrázkům atribut, ve verzi 3 vypadal takhle:
+The old methods throw a `LogicException` that names the replacement. In version 3, a handler that added an attribute to images looked like this:
 
 ```php
 $texy->addHandler('image', function (Texy\HandlerInvocation $invocation, Texy\Image $image, ?Texy\Link $link) {
@@ -151,7 +151,7 @@ $texy->addHandler('image', function (Texy\HandlerInvocation $invocation, Texy\Im
 });
 ```
 
-Ve verzi 4 je to renderer pro uzel obrázku. Místo `proceed()` zavolá `$previous($node)`, který vykreslí obrázek jako obvykle:
+In version 4, it is a renderer for the image node. Instead of `proceed()`, it calls `$previous($node)`, which renders the image as usual:
 
 ```php
 use Texy\Nodes\ImageNode;
@@ -164,13 +164,13 @@ $texy->htmlOutput->addRenderer(function (ImageNode $node, Html\Renderer $rendere
 });
 ```
 
-Funkce vlastní syntaxe nevrací HTML, ale uzel dokumentu, a nalezený text odmítne vrácením `null`. Parametr `$againTest` ani `$parser->again` už nejsou potřeba. Vnitřní text rozebere `$context->parseInline()` nebo `$context->parseBlock()` místo `$el->parseLine()` a `$el->parseBlock()`.
+A custom syntax function does not return HTML but a document node, and it rejects the matched text by returning `null`. Neither the `$againTest` parameter nor `$parser->again` is needed anymore. Inner text is parsed by `$context->parseInline()` or `$context->parseBlock()` instead of `$el->parseLine()` and `$el->parseBlock()`.
 
-Regulární výrazy převedené z verze 3 si zkontrolujte. Konstanty `Texy\Patterns` mají nová jména a stará zmizela: `MODIFIER` je `Modifier`, `MODIFIER_H` je `ModifierHAlign`, `MODIFIER_HV` je `ModifierHVAlign`, `LINK_URL` je `LinkUrl` a `CHAR` je `Letter`. Jsou psané pro výrazy ohraničené `~`, ve výrazu ohraničeném `#` nefungují. Příznak `u` Texy přidá samo a skupina, která se v nalezeném textu neuplatnila, má v `$matches` hodnotu `null` místo prázdného řetězce.
+Check the regular expressions you carried over from version 3. The `Texy\Patterns` constants have new names and the old ones are gone: `MODIFIER` is `Modifier`, `MODIFIER_H` is `ModifierHAlign`, `MODIFIER_HV` is `ModifierHVAlign`, `LINK_URL` is `LinkUrl` and `CHAR` is `Letter`. They are written for expressions delimited by `~` and do not work in an expression delimited by `#`. Texy adds the `u` flag itself, and a group that did not take part in the match has the value `null` in `$matches` instead of an empty string.
 
-Při stavbě HTML pozor na dvě změny. Druhý parametr konstruktoru `Html\Element` obsahuje jen atributy, text přidáte metodou `setText()`. A `new Texy\Modifier('[foo]')` už řetězec nerozebere, ale udělá z něj ID. Modifikátor z řetězce vytvoří `Texy\Modifier::parse('[foo]')`.
+When building HTML, watch out for two changes. The second parameter of the `Html\Element` constructor holds only attributes; you add text with the `setText()` method. And `new Texy\Modifier('[foo]')` no longer parses the string but turns it into an ID. To create a modifier from a string, use `Texy\Modifier::parse('[foo]')`.
 
-Všechno podrobně a s příklady popisují stránky [Úprava chování prvků |custom-handlers] a [Přidání vlastní syntaxe |custom-syntax].
+All of this is described in detail, with examples, on the pages [Customizing Elements |custom-handlers] and [Adding Custom Syntax |custom-syntax].
 
-{{maintitle: Přechod z Texy 3 na Texy 4: co se změnilo a jak upgradovat}}
-{{description: Jak přejít z Texy 3 na Texy 4: konfigurace poběží dál s upozorněními, co se změnilo ve výstupu HTML, kam se přestěhovala nastavení a jak přepsat handlery.}}
+{{maintitle: Upgrading from Texy 3 to Texy 4: What Changed and How}}
+{{description: How to move from Texy 3 to Texy 4: old configuration keeps working with notices, what changed in HTML output, where settings moved, how to rewrite handlers.}}

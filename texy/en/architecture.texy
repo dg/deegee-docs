@@ -1,149 +1,149 @@
-Architektura a principy
-***********************
+Architecture and Principles
+***************************
 
 .[perex]
-Co se s textem děje od chvíle, kdy ho Texy dostane, až po hotové HTML? A jak je možné, že Markdown i syntaxe Texy dostanou stejnou typografii, stejné opravy HTML i stejné nástroje? Tahle stránka vysvětluje, jak je Texy postavené uvnitř. K běžnému používání ji nepotřebujete, ale pomůže vám, když budete Texy rozšiřovat.
+What happens to a text from the moment Texy receives it until the HTML is ready? And how come Markdown and Texy syntax get the same typography, the same HTML fixes and the same tools? This page explains how Texy is built on the inside. You don't need it for everyday use, but it will help you when you extend Texy.
 
 
-Jeden strom pro všechny jazyky
-==============================
+One Tree for All Languages
+==========================
 
-Jednoduché převodníky mění text na HTML postupnými náhradami: najdou `**`, nahradí ho `<strong>`, a tak dál. Texy to dělá jinak. Text nejdřív **rozebere na strom dokumentu**, ve kterém je každý prvek, odstavec, nadpis, odkaz, jeden objekt. Teprve z tohoto stromu vznikne výstup.
+Simple converters turn text into HTML through a series of replacements: they find `**`, replace it with `<strong>`, and so on. Texy works differently. It first **parses the text into a document tree**, in which each element, be it a paragraph, a heading or a link, is one object. Only then is the output created from this tree.
 
-Strom nezávisí na tom, v jakém jazyce byl text napsaný. Markdown i syntaxe Texy z textu udělají tytéž uzly, a všechno, co následuje, už pracuje jen se stromem:
+The tree doesn't depend on the language the text was written in. Markdown and Texy syntax turn text into the same nodes, and everything that follows works with the tree alone:
 
 ```
 Markdown ──────┐                                   ┌──> HTML
-               ├──> strom ──> úpravy dokumentu ──>─┼──> prostý text
-syntaxe Texy ──┘    (typografie, bezpečnost, …)    ├──> syntaxe Texy
+               ├──> tree ──> transformations ──>───┼──> plain text
+Texy syntax ───┘    (typography, security, …)      ├──> Texy syntax
                                                    └──> Markdown
 ```
 
-Proto Texy říkáme engine. Typografie, oprava HTML, bezpečný režim nebo renderery jsou napsané jednou a dostane je každý jazyk. A převod z Markdownu do syntaxe Texy je jen otázka toho, který jazyk text přečte a který ho vytiskne.
+That's why we call Texy an engine. Typography, HTML repair, safe mode and renderers are written once, and every language gets them. And converting Markdown to Texy syntax is simply a matter of which language reads the text and which one prints it.
 
-Tenhle strom, zjednodušeně a bez pomocných uzlů `ContentNode`, které drží obsah, vznikne z [článku na úvodní stránce |@home#První článek] napsaného v Markdownu. Syntaxe Texy z odpovídajícího textu vytvoří stejný:
+Here is the tree created from the Markdown [article on the home page |@home#The First Article], simplified and without the helper `ContentNode` nodes that hold the content. The same text written in Texy syntax produces the same tree:
 
 ```
 DocumentNode
   HeadingNode level=1
-    TextNode "Jak jsme sušili švestky"
+    TextNode "How We Dried Plums"
   ParagraphNode
-    TextNode "Letos jsme sklidili "
+    TextNode "This year we picked "
     PhraseNode Strong
-      TextNode "přes 40 kg"
-    TextNode " švestek. Co s nimi? Babička říká: …"
+      TextNode "over 40 kg"
+    TextNode " of plums. What to do with them? Grandma says: …"
   ParagraphNode
-    TextNode "Sušárnu jsme koupili v "
-    LinkNode https://example.com/susarna
-      TextNode "obchodě u nádraží"
-    TextNode ", stála 1500-2000 Kč."
+    TextNode "We bought the dryer at the "
+    LinkNode https://example.com/dryer
+      TextNode "shop by the station"
+    TextNode " for $60-80."
 ```
 
-Uzly jsou dvojího druhu: **blokové**, jako odstavec nebo nadpis, a **řádkové**, jako text, zvýraznění nebo odkaz uvnitř odstavce. Všechny jsou ve jmenném prostoru `Texy\Nodes` a jejich přehled najdete na stránce [Úprava chování prvků |custom-handlers#Přehled uzlů].
+Nodes come in two kinds: **block** nodes, such as a paragraph or a heading, and **inline** nodes, such as text, emphasis or a link inside a paragraph. They all live in the `Texy\Nodes` namespace, and you'll find an overview of them on the [Customizing Elements |custom-handlers#Node Overview] page.
 
 
-Čtyři kroky zpracování
-======================
+Four Processing Steps
+=====================
 
-Volání `$texy->toHtml($text)` nebo `$markdown->toHtml($text)` provede čtyři kroky za sebou. Můžete je zavolat i jednotlivě, když se potřebujete ke stromu dostat:
+Calling `$texy->toHtml($text)` or `$markdown->toHtml($text)` runs four steps one after another. You can also call them one by one when you need to get at the tree:
 
 ```php
-$document = $texy->parse($text);      // 1. a 2. normalizace a rozebrání
-$texy->transform($document);          // 3. úpravy dokumentu
-$html = $texy->renderHtml($document); // 4. vykreslení
+$document = $texy->parse($text);      // steps 1 and 2: normalization and parsing
+$texy->transform($document);          // step 3: transformations of the document
+$html = $texy->renderHtml($document); // step 4: rendering
 ```
 
-Markdown má tytéž tři metody, `$markdown->parse()`, `$markdown->transform()` a `$markdown->renderHtml()`. Jeden dokument jde upravit jen jednou, druhé volání `transform()` vyhodí výjimku.
+Markdown has the same three methods, `$markdown->parse()`, `$markdown->transform()` and `$markdown->renderHtml()`. A document can be transformed only once; a second call to `transform()` throws an exception.
 
 
-Normalizace
------------
+Normalization
+-------------
 
-`Texy::normalize()` text uklidí: sjednotí konce řádků na `\n`, odstraní BOM, řídicí znaky, měkké spojovníky, mezery na koncích řádků a prázdné řádky na začátku a na konci, jen nový řádek za posledním řádkem nechá. Tabulátory zůstávají a v syntaxi se počítají jako jeden znak mezery. Markdown má vlastní, šetrnější `Markdown::normalize()`, která sjednotí konce řádků a odstraní řídicí znaky, ale mezery na koncích řádků nechá, protože dvě z nich znamenají zalomení řádku. Text v neplatném UTF-8 vyhodí výjimku hned, místo aby někde dál způsobil nečekanou chybu.
+`Texy::normalize()` tidies up the text: it converts all line endings to `\n` and removes the BOM, control characters, soft hyphens, trailing spaces, and blank lines at the beginning and the end, keeping just the newline after the last line. Tabs stay, and the syntax counts each as a single space. Markdown has its own, gentler `Markdown::normalize()`, which unifies line endings and removes control characters but keeps trailing spaces, because two of them mean a line break. Text that is not valid UTF-8 makes it throw an exception right away, instead of causing an unexpected error somewhere further down the line.
 
 
-Rozebrání
+Parsing
+-------
+
+Each syntax of the language, such as bold text or a table, has a name, a regular expression that recognizes it in the text, and a function, the handler, that creates a node from the matched text. Parsing happens on two levels. The block parser goes through the lines and finds blocks: headings, lists, tables. It splits the text between them into paragraphs. The inline parser then finds emphasis, links and images in the content of the blocks.
+
+Nesting works by having the handler parse the inner text again, for example the content of a blockquote as further blocks. A handler's output is never scanned again, so Texy can never mistake something it produced itself for syntax.
+
+When several syntaxes compete for the same text, the one that starts earliest wins. For inline syntaxes with the same start, the longer one wins; with the same length, an application's syntax beats a built-in one, and after that the one registered first wins. For block syntaxes, length doesn't matter: an application's syntax beats a built-in one right away, and after that the one registered first wins. A handler can also reject the matched text, and then the syntaxes after it get their chance. [Adding Custom Syntax |custom-syntax] shows how to use this for your own syntax.
+
+Markdown parses text with the same core, just in two phases: first all the blocks, and only then their inline content, because a link may refer to a definition that appears later in the text. And the proof that the core is well built: Markdown running on it passes all 652 examples of the CommonMark specification.
+
+The result of parsing is the **syntax tree**. It describes the text as written: each node's `$range` holds the range of the syntax it came from, references in Texy syntax are not resolved yet, and headings have the level the author gave them. Markdown resolves references during parsing already, because they decide what counts as a link. The [source text tools |source-tools] work with this tree.
+
+
+Transforming the Document
+-------------------------
+
+`transform()` runs the transformations that give the tree its meaning. The built-in transformations of Texy syntax run in this order:
+
+1. `{{…}}` directives are handled and replaced
+2. links and images written as references get their URL from the definition
+3. headings are balanced
+4. HTML tags written in the text are paired and checked against the allowed tags, and disallowed ones become text
+5. headings are shifted according to `headingTop` and get an `id`
+
+Markdown has only the last two steps, which both languages share, plus a filter for dangerous tags before them in GFM mode.
+
+The order is deliberate. Directives come first because they can change the settings the rest of the document is processed with. The HTML check has to run before typography, because a disallowed tag becomes text that needs to be typeset. And headings get their `id` before your passes read them.
+
+Then [your passes |custom-handlers#Modifying the Document] run, and finally **typography**: quotes, dashes, non-breaking spaces and hyphenation of long words. Typography works not on the finished HTML but on the text of the nodes in the tree. That's why every output gets it and it never touches a code block.
+
+After the transformations, the tree is a **document**: it describes what the text means and contains everything the output needs.
+
+Security belongs to the transformations for the same reason. This is where it is decided which HTML tags are allowed, and only what is allowed stays in the tree. So it applies to every output and to both languages: Markdown parses its raw HTML into the same tag nodes as Texy syntax, and they go through the same check.
+
+
+Rendering
 ---------
 
-Každý zápis jazyka, třeba tučné písmo nebo tabulka, má jméno a regulární výraz, kterým se pozná v textu, a funkci, která z nalezeného textu vytvoří uzel. Rozebírají se ve dvou úrovních. Blokový parser projde řádky a najde bloky: nadpisy, seznamy, tabulky. Text mezi nimi rozdělí na odstavce. Řádkový parser pak v obsahu bloků najde zvýraznění, odkazy a obrázky.
+A renderer walks through the document and produces the output for each node. For HTML this is `Texy\Output\Html\Renderer`, which follows the `$texy->htmlOutput` settings. At the end it checks the HTML: it closes unclosed tags, fixes improperly nested ones, and drops a tag that doesn't belong in a given place, keeping only its content. It indents and wraps the result so that it is readable.
 
-Vnořování funguje tak, že funkce zápisu nechá rozebrat vnitřní text znovu, například obsah citace jako další bloky. Výstup funkce se už nikdy znovu neprochází, takže se nestane, že by Texy omylem četlo jako zápis něco, co samo vytvořilo.
-
-Když na stejném místě může začínat víc zápisů, vyhraje ten, který začíná nejdřív. U řádkových zápisů při stejném začátku delší, při stejné délce zápis aplikace před vestavěným a mezi nimi ten zaregistrovaný dřív. U blokových délka nerozhoduje a vyhraje rovnou zápis aplikace před vestavěným a ten zaregistrovaný dřív. Funkce zápisu může nalezený text také odmítnout, a pak dostanou šanci zápisy za ní. Jak to využít pro vlastní zápis, popisuje [Přidání vlastní syntaxe |custom-syntax].
-
-Markdown rozebírá text na stejném jádru, jen ve dvou fázích: nejdřív celé bloky a teprve potom obsah řádků, protože odkaz se může odvolávat na definici, která je v textu až za ním. Že je jádro postavené dobře, dokazuje, že Markdown na něm projde všemi 652 příklady specifikace CommonMark.
-
-Výsledkem rozebrání je **syntaktický strom**. Popisuje text tak, jak je napsaný: každý uzel nese v `$range` rozsah zápisu, ze kterého vznikl, reference syntaxe Texy ještě nejsou dohledané a nadpisy mají úroveň, jakou jim dal autor. Markdown reference dohledá už při rozebrání, protože podle nich pozná, co je odkaz. S tímto stromem pracují [nástroje nad zdrojovým textem |source-tools].
-
-
-Úpravy dokumentu
-----------------
-
-`transform()` provede nad stromem úpravy, které mu dodají význam. Vestavěné úpravy syntaxe Texy proběhnou v tomto pořadí:
-
-1. direktivy `{{…}}` se obslouží a nahradí
-2. odkazy a obrázky zapsané referencí dostanou adresu z definice
-3. nadpisy se vyváží
-4. HTML značky napsané v textu se spárují a zkontrolují podle povolených značek, nepovolené se změní na text
-5. nadpisy se posunou podle `headingTop` a dostanou `id`
-
-Markdown má jen poslední dva kroky, společné oběma jazykům, a v režimu GFM před nimi filtr nebezpečných značek.
-
-Pořadí má své důvody. Direktivy jsou první, protože mohou změnit nastavení, podle kterého se zbytek dokumentu zpracuje. Kontrola HTML musí proběhnout před typografií, protože z nepovolené značky se stane text, který se má vysázet. A `id` nadpisů vzniknou dřív, než je čtou vaše úpravy.
-
-Pak proběhnou [vaše průchody |custom-handlers#Úprava dokumentu] a nakonec **typografie**: uvozovky, pomlčky, pevné mezery a dělení dlouhých slov. Typografie neupravuje hotové HTML, ale text uzlů ve stromu. Proto ji dostane každý výstup a nikdy nezasáhne do bloku kódu.
-
-Po úpravách je strom **dokument**: popisuje, co text znamená, a obsahuje všechno, co výstup potřebuje.
-
-Ze stejného důvodu je v úpravách i bezpečnost. Už tady se rozhodne, které HTML značky jsou povolené, a ve stromu pak zůstane jen to, co povolené je. Platí tak pro každý výstup a pro oba jazyky: Markdown rozebere své surové HTML na tytéž uzly značek jako syntaxe Texy a prochází stejnou kontrolou.
-
-
-Vykreslení
-----------
-
-Renderer projde dokument a ke každému uzlu vytvoří jeho podobu ve výstupu. Pro HTML je to `Texy\Output\Html\Renderer`, který se řídí nastavením `$texy->htmlOutput`. Na konci HTML zkontroluje: uzavře neuzavřené značky, opraví křížené, a značku, která na dané místo nepatří, vynechá a zachová jen její obsah. Výsledek odsadí a zalomí, aby se dal číst.
-
-Vykreslení stromu nemění. Stejný dokument můžete vykreslit kolikrát chcete, a do různých výstupů:
+Rendering doesn't change the tree. You can render the same document as many times as you like, and into different outputs:
 
 ```php
 $html = $texy->renderHtml($document);   // HTML
-$text = $texy->renderText($document);   // prostý text, třeba pro e-mail nebo vyhledávání
+$text = $texy->renderText($document);   // plain text, e.g. for email or search
 ```
 
-Markdown metodu `renderText()` nemá, prostý text z jeho dokumentu vytvoří `(new Texy\Output\Text\Renderer)->render($document)`.
+Markdown has no `renderText()` method; you get plain text from its document with `(new Texy\Output\Text\Renderer)->render($document)`.
 
-Uzel, pro který HTML ani prostý text žádný renderer nemá, se vykreslí jako svůj obsah. Dokument s uzlem, který zná jen jedno rozšíření, tak jde do těchto výstupů vykreslit vždy. Tisk zpět do zdrojového textu takový uzel odmítne.
+A node with no renderer for HTML or plain text is rendered simply as its content. So a document containing a node known only to one extension can always be rendered into these outputs. The printer that turns a document back into source text, however, rejects such a node.
 
 
-Jak do zpracování zasáhnout
+Hooking into the Processing
 ===========================
 
-Každý krok má své místo pro rozšíření:
+Each step has its own extension point:
 
-- **nový zápis** pro rozebrání: `addInlineSyntax()` a `addBlockSyntax()`, viz [Přidání vlastní syntaxe |custom-syntax]
-- **úprava dokumentu**: `addPass()` a direktivy, viz [Úprava chování prvků |custom-handlers#Úprava dokumentu]
-- **jiné vykreslení**: `$texy->htmlOutput->addRenderer()`, viz [Úprava chování prvků |custom-handlers#Jiné HTML pro prvek]
-- **práce se zdrojovým textem**: syntaktický strom z `parse()`, viz [Nástroje nad zdrojovým textem |source-tools]
+- **a new syntax** for parsing: `addInlineSyntax()` and `addBlockSyntax()`, see [Adding Custom Syntax |custom-syntax]
+- **modifying the document**: `addPass()` and directives, see [Customizing Elements |custom-handlers#Modifying the Document]
+- **different rendering**: `$texy->htmlOutput->addRenderer()`, see [Customizing Elements |custom-handlers#Different HTML for an Element]
+- **working with the source text**: the syntax tree from `parse()`, see [Source Text Tools |source-tools]
 
-Kam která změna patří, napoví jednoduchá otázka: mění obsah dokumentu bez ohledu na výstup? Pak patří do úprav dokumentu a dostane ji každý výstup. Mění jen vzhled jednoho výstupu? Pak patří do rendereru. Stejně je rozdělené i [nastavení |configuration]: co mění význam textu, je v `$texy->config`, co mění jen vzhled HTML, je v `$texy->htmlOutput`.
+A simple question tells you where a change belongs: does it change the content of the document regardless of the output? Then it belongs in the transformations, and every output gets it. Does it change only how one output looks? Then it belongs in the renderer. The [settings |configuration] are split the same way: what changes the meaning of the text is in `$texy->config`, what changes only how the HTML looks is in `$texy->htmlOutput`.
 
 
-Pojmy
-=====
+Glossary
+========
 
-**Uzel** je jeden prvek stromu dokumentu, objekt z `Texy\Nodes`.
+A **node** is one element of the document tree, an object from `Texy\Nodes`.
 
-**Zápis** (syntax) je pojmenovaná konstrukce jazyka, třeba `phrase/strong` nebo `image`. Jeho jméno slouží k zapnutí a vypnutí v poli `allowedSyntax`.
+A **syntax** is a named construct of the language, such as `phrase/strong` or `image`. Its name is used to turn it on and off in the `allowedSyntax` array.
 
-**Vzor** (pattern) je regulární výraz, podle kterého se zápis pozná v textu.
+A **pattern** is the regular expression by which a syntax is recognized in the text.
 
-**Funkce zápisu** (syntax handler) z nalezeného textu vytvoří uzel, nebo nalezený text odmítne.
+A **syntax handler** creates a node from the matched text, or rejects the matched text.
 
-**Průchod** (pass) je funkce, která dostane celý dokument a smí ho měnit.
+A **pass** is a function that receives the whole document and may modify it.
 
-**Renderer** vytvoří z jednoho uzlu jeho podobu ve výstupu.
+A **renderer** produces the output for a single node.
 
-**Rozsah** (`Texy\Range`) říká, ze kterého místa zdrojového textu uzel vznikl.
+A **range** (`Texy\Range`) tells you which part of the source text a node came from.
 
-{{maintitle: Architektura Texy: strom dokumentu a čtyři kroky zpracování}}
-{{description: Jak Texy převádí Markdown i svou syntaxi do HTML: text rozebere na strom dokumentu, upraví ho a vykreslí. Kde do zpracování zasáhnout a co znamenají jeho pojmy.}}
+{{maintitle: Texy Architecture: Document Tree and Four Processing Steps}}
+{{description: How Texy turns Markdown and its own syntax into HTML: it parses text into a document tree, transforms and renders it. Where to hook in and what its terms mean.}}

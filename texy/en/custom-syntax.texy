@@ -1,26 +1,26 @@
-Přidání vlastní syntaxe
-***********************
+Adding Custom Syntax
+********************
 
 .[perex]
-GitHub rozšířil Markdown o tabulky a úkolové seznamy, protože je jeho uživatelé potřebovali. Totéž můžete udělat vy: naučit Markdown nebo syntaxi Texy zmínky `@@jana`, rámečky s tipem nebo zkratky, které se samy vysvětlí. Stačí regulární výraz, který zápis pozná, a funkce, která z něj vytvoří prvek dokumentu.
+GitHub extended Markdown with tables and task lists because its users needed them. You can do the same: teach Markdown or Texy syntax `@@jane` mentions, tip boxes or abbreviations that explain themselves. All it takes is a regular expression that recognizes the syntax and a function that turns it into an element of the document.
 
-Tahle stránka je o úplně novém zápisu. Pokud chcete jen jinak vykreslit něco, co Texy už zná, třeba obrázek nebo nadpis, podívejte se na [úpravu chování prvků |custom-handlers].
+This page is about a completely new syntax. If you only want to render something Texy already knows in a different way, such as an image or a heading, see [Customizing Elements |custom-handlers].
 
 
-Zmínky v komentářích
+Mentions in Comments
 ====================
 
-Na blogu chceme, aby se z `@@jana` v komentáři stal odkaz na profil uživatelky:
+On our blog, we want `@@jane` in a comment to become a link to the user's profile:
 
 ```
-Díky, @@jana, vyzkouším to.
+Thanks, @@jane, I'll give it a try.
 ```
 
 ```html
-<p>Díky, <a href="/uzivatel/jana">@jana</a>, vyzkouším to.</p>
+<p>Thanks, <a href="/user/jane">@jane</a>, I'll give it a try.</p>
 ```
 
-Kolik kódu je potřeba? Jedno volání:
+How much code does it take? A single call:
 
 ```php
 use Texy\Nodes;
@@ -29,7 +29,7 @@ use Texy\Parsing\ParseContext;
 $mention = function (ParseContext $context, array $matches, array $offsets): Nodes\LinkNode {
 	$name = $matches[1];
 	return new Nodes\LinkNode(
-		url: '/uzivatel/' . $name,
+		url: '/user/' . $name,
 		content: Nodes\ContentNode::fromText('@' . $name),
 		range: new Texy\Range($offsets[0], strlen($matches[0])),
 	);
@@ -37,46 +37,46 @@ $mention = function (ParseContext $context, array $matches, array $offsets): Nod
 
 $comments = new Texy\Markdown\Markdown;
 $comments->addInlineSyntax('blog/mention', '~@@([a-z0-9_]+)~i', $mention);
-$html = $comments->toHtml($comment);  // $comment je text komentáře
+$html = $comments->toHtml($comment);  // $comment is the text of the comment
 ```
 
-`addInlineSyntax()` dostane tři věci:
+`addInlineSyntax()` takes three things:
 
-- **jméno** zápisu, tady `blog/mention`. Pod ním jde zápis vypnout (`$comments->allowedSyntax['blog/mention'] = false`). Předpona jako `blog/` zajistí, že se jméno nikdy nepotká se zápisem, který přidá budoucí verze Texy.
-- **regulární výraz**, který zápis v textu pozná. Texy k němu přidá jen příznak `u` pro UTF-8, takže se chová přesně tak, jak ho vyzkoušíte v kterémkoli testeru regulárních výrazů.
-- **funkci**, která z nalezeného zápisu vytvoří uzel dokumentu.
+- the **name** of the syntax, here `blog/mention`. You can use it to turn the syntax off (`$comments->allowedSyntax['blog/mention'] = false`). A prefix like `blog/` ensures the name never clashes with a syntax added by a future version of Texy.
+- a **regular expression** that recognizes the syntax in the text. Texy adds only the `u` flag for UTF-8 to it, so it behaves exactly as it does when you try it in any regular expression tester.
+- a **function** that turns the matched text into a document node.
 
-Funkce dostane v `$matches` nalezený text a jeho skupiny z regulárního výrazu (`$matches[1]` je jméno) a v `$offsets` jejich pozice v textu. Vrátí uzel, tady odkaz `LinkNode` s textem `@jana`, který vytvoří `ContentNode::fromText()`. Z pozic sestavíme `Texy\Range`, rozsah textu, ze kterého uzel vznikl. HTML na něm nezávisí, ale nástroje, které pracují se zdrojovým textem, podle něj poznají, kde zmínka v textu leží.
+The function receives the matched text and its regular expression groups in `$matches` (`$matches[1]` is the name), and their positions in the text in `$offsets`. It returns a node, here a link (`LinkNode`) whose text `@jane` is created by `ContentNode::fromText()`. From the positions we build a `Texy\Range`, the range of text the node came from. The HTML does not depend on it, but tools that work with the source text use it to find where the mention sits in the text.
 
-Jako čtvrtý parametr dostane funkce jméno zápisu, takže jedna funkce může obsluhovat několik zápisů. Skupina výrazu, která se v nalezeném textu neuplatnila, má v `$matches` i `$offsets` hodnotu `null`.
+As its fourth parameter, the function receives the name of the syntax, so one function can handle several syntaxes. A group that did not participate in the match is `null` in both `$matches` and `$offsets`.
 
-Protože vracíme odkaz, tedy uzel, který Texy zná, nemusíme řešit, jak se vykreslí. Vykreslí se jako každý jiný odkaz, v HTML i v prostém textu.
+Because we return a link, a node Texy already knows, we don't have to worry about how it gets rendered. It renders like any other link, in HTML as well as in plain text.
 
-Úplně stejně funguje zápis i v syntaxi Texy, jen ho zaregistrujete na `$texy`:
+The syntax works exactly the same way in Texy syntax; you just register it on `$texy`:
 
 ```php
 $texy = new Texy\Texy;
 $texy->addInlineSyntax('blog/mention', '~@@([a-z0-9_]+)~i', $mention);
 ```
 
-Zápis registrujte dřív, než začnete převádět text.
+Register the syntax before you start converting text.
 
 
-Rámečky s tipem
-===============
+Tip Boxes
+=========
 
-Zmínka leží uvnitř řádku. Zápis, který zabírá celé řádky, se registruje jako blokový. V článcích chceme rámečky s tipem nebo upozorněním:
+A mention sits inside a line. A syntax that takes up whole lines is registered as a block syntax. In our articles, we want boxes with a tip or a warning:
 
 ```
 :::tip
-Sušte v **tenké** vrstvě a pravidelně [obracejte](https://example.com).
+Dry them in a **thin** layer and [turn them](https://example.com) regularly.
 :::
 ```
 
 ```html
 <div class="box box-tip">
-	<p>Sušte v&nbsp;<strong>tenké</strong> vrstvě a pravidelně <a
-	href="https://example.com">obracejte</a>.</p>
+	<p>Dry them in a <strong>thin</strong> layer and <a
+	href="https://example.com">turn them</a> regularly.</p>
 </div>
 ```
 
@@ -89,22 +89,22 @@ $box = function (ParseContext $context, array $matches, array $offsets): Nodes\D
 	);
 };
 
-$markdown = new Texy\Markdown\Markdown;  // články
-$markdown->config->locale = 'cs';
+$markdown = new Texy\Markdown\Markdown;  // articles
+$markdown->config->locale = 'en';       // typography rules of the articles' language
 $markdown->addBlockSyntax('blog/box', '~^:::(tip|warning)\n(.+?)\n:::$~s', $box);
 ```
 
-Blokový výraz musí začínat `^`, tedy začátkem řádku, a Texy k němu samo přidá příznak `m`, aby `^` a `$` znamenaly začátek a konec řádku.
+A block expression must start with `^`, the start of a line, and Texy adds the `m` flag to it automatically, so that `^` and `$` mean the start and end of a line.
 
-Uvnitř rámečku chceme psát stejně jako jinde v článku, s tučným písmem i odkazy. Proto obsah nevkládáme jako text, ale necháme ho rozebrat voláním `$context->parseBlock()`. Dostaneme jeho uzly a vložíme je do `DivNode`, uzlu pro obecný blok `<div>`. Třídy mu dá `Texy\Modifier`, stejný objekt, jaký vzniká z [modifikátoru |syntax#Modifikátory] v textu. Druhý parametr `parseBlock()`, `$offsets[2]`, říká, kde vnitřní text začíná, aby i jeho uzly měly správné pozice. Pro obsah v rámci řádku slouží obdobně `$context->parseInline()`.
+Inside the box, we want to write the same way as anywhere else in the article, with bold text and links. That is why we don't insert the content as text but have it parsed by calling `$context->parseBlock()`. We get its nodes and put them into a `DivNode`, the node for a generic `<div>` block. Its classes come from a `Texy\Modifier`, the same object that a [modifier |syntax#Modifiers] in the text produces. The second parameter of `parseBlock()`, `$offsets[2]`, says where the inner text starts, so that its nodes get correct positions too. For content within a line, there is the analogous `$context->parseInline()`.
 
-Rámeček píšeme v Markdownu, a proto se jeho obsah rozebere jako Markdown. Zaregistrujete-li stejnou funkci na `$texy`, obsah se rozebere jako syntaxe Texy.
+We write the box in Markdown, so its content is parsed as Markdown. If you register the same function on `$texy`, the content is parsed as Texy syntax.
 
 
-Nový typ bloku v syntaxi Texy
------------------------------
+A New Block Type in Texy Syntax
+-------------------------------
 
-Syntaxe Texy má pro bloky vlastní zápis `/--typ … \--`, jako `/--div` nebo `/--html`. Rámeček do něj zapadne bez regulárního výrazu, stačí obsloužit nový typ ve funkci `delimitedBlockHandler`:
+Texy syntax has its own construct for blocks, `/--type … \--`, such as `/--div` or `/--html`. The box fits into it without any regular expression; all you need to do is handle the new type in the `delimitedBlockHandler` function:
 
 ```php
 $texy->config->delimitedBlockHandler = fn(ParseContext $context, string $type, string $content, ?string $param, ?Texy\Modifier $modifier, Closure $next) => match ($type) {
@@ -118,19 +118,19 @@ $texy->config->delimitedBlockHandler = fn(ParseContext $context, string $type, s
 
 ```texy
 /--tip
-Sušte v **tenké** vrstvě.
+Dry them in a **thin** layer.
 \--
 ```
 
-Funkce je jedna pro všechny bloky `/--` a Texy ji zavolá pro každý, vestavěný i neznámý. Dostane typ malými písmeny (u holého `/--` prázdný řetězec), obsah bloku se společným odsazením odebraným, text napsaný za typem (`/--tip něco`) a modifikátor bloku. Pozice si Texy dopočítá samo. Ostatní typy funkce předá `$next()`, které vrátí, co z bloku udělá Texy samo. Když funkce vrátí `null`, blok zůstane jako text.
+There is one function for all `/--` blocks, and Texy calls it for each of them, built-in and unknown alike. It receives the type in lowercase (an empty string for a bare `/--`), the content of the block with the common indentation removed, the text written after the type (`/--tip something`) and the modifier of the block. Texy works out the positions by itself. The function passes other types to `$next()`, which returns whatever Texy itself would make of the block. When the function returns `null`, the block stays as text.
 
-Stejně můžete vestavěný typ, třeba `code`, nahradit vlastním uzlem, nebo obsloužit `/--php` jako blok kódu. Blok s typem, který nikdo neobslouží, Texy zobrazí tak, jak je napsaný, včetně řádků `/--typ` a `\--`. Vestavěný typ vypnutý v `$texy->allowedSyntax` se k funkci nedostane, vypnutí vlastních typů je na ní.
+In the same way, you can replace a built-in type, such as `code`, with your own node, or handle `/--php` as a code block. A block whose type nobody handles is shown by Texy exactly as written, including the `/--type` and `\--` lines. A built-in type turned off in `$texy->allowedSyntax` never reaches the function; turning off your own types is up to the function.
 
 
-Odmítnutí nalezeného textu
-==========================
+Rejecting a Match
+=================
 
-Funkce nemusí každý nalezený text přijmout. Když vrátí `null`, Texy text nechá být a dá šanci ostatním zápisům. Hodí se to, když regulární výraz najde víc, než chcete. Zkratky, které známe, se mají samy vysvětlit, ostatní slova velkými písmeny mají zůstat obyčejným textem:
+The function doesn't have to accept every match. When it returns `null`, Texy leaves the text alone and gives the other syntaxes a chance. This is useful when the regular expression matches more than you want. Abbreviations we know should explain themselves, while other words in capital letters should stay plain text:
 
 ```php
 $abbreviations = [
@@ -140,7 +140,7 @@ $abbreviations = [
 
 $markdown->addInlineSyntax('blog/abbr', '~\b([A-Z]{2,})\b~', function (ParseContext $context, array $matches, array $offsets) use ($abbreviations): ?Nodes\AnnotationNode {
 	if (!isset($abbreviations[$matches[1]])) {
-		return null; // neznámá zkratka, text zůstane, jak je
+		return null; // unknown abbreviation, the text stays as it is
 	}
 	return new Nodes\AnnotationNode(
 		$matches[1],
@@ -151,32 +151,32 @@ $markdown->addInlineSyntax('blog/abbr', '~\b([A-Z]{2,})\b~', function (ParseCont
 ```
 
 ```html
-<p>Web v&nbsp;<abbr title="HyperText Markup Language">HTML</abbr> a <abbr
-title="Cascading Style Sheets">CSS</abbr>, ale ne ABC.</p>
+<p>A website in <abbr title="HyperText Markup Language">HTML</abbr> and <abbr
+title="Cascading Style Sheets">CSS</abbr>, but not ABC.</p>
 ```
 
-`AnnotationNode` je text s vysvětlivkou, Texy ho vykreslí jako `<abbr>` s vysvětlivkou v titulku.
+`AnnotationNode` is text with an explanation; Texy renders it as `<abbr>` with the explanation in its title.
 
-Funkce může vrátit i `Nodes\ContentNode` s několika uzly, které se vloží za sebou místo jednoho. Prázdný `ContentNode` nalezený text spotřebuje a nevloží nic, což se hodí pro zápis, který jen sbírá data.
+The function can also return a `Nodes\ContentNode` with several nodes, which are inserted one after another instead of a single node. An empty `ContentNode` consumes the matched text and inserts nothing, which is handy for a syntax that only collects data.
 
-U blokového zápisu ale `null` stojí víc: odmítnutý blok s sebou vezme i místa, kde by stejný výraz našel další blok, a ta pak zůstanou obyčejným textem. Podmínky, kdy blok nepřijmout, proto pište rovnou do regulárního výrazu. Platí to pro Markdown i pro syntaxi Texy.
+With a block syntax, however, `null` costs more: a rejected block also swallows the places where the same expression would have found another block, and those then stay plain text. So write the conditions for rejecting a block straight into the regular expression. This applies to Markdown and Texy syntax alike.
 
 
-Když se zápisy překrývají
-=========================
+When Syntaxes Overlap
+=====================
 
-Na jednom místě textu může začínat víc zápisů. Texy vybere ten, který začíná nejdřív. Pokud jich v řádku začíná víc na stejném místě, vyhraje delší, a při stejné délce váš zápis nad vestavěným a mezi vašimi ten zaregistrovaný dřív. U blokových zápisů délka nerozhoduje, vyhraje rovnou váš nad vestavěným a mezi vašimi ten zaregistrovaný dřív. Platí to stejně pro Markdown i pro syntaxi Texy. Nejlepší obranou je výraz, který pozná jen to, co opravdu chcete. Zmínka s dvěma zavináči se nesplete s e-mailovou adresou.
+Several syntaxes can match the same stretch of text. Texy picks the one that starts first. If several start at the same position in a line, the longer one wins; with the same length, your syntax beats a built-in one, and among yours the one registered earlier wins. For block syntaxes, length does not matter: yours beats a built-in one outright, and among yours the one registered earlier wins. This applies to Markdown and Texy syntax alike. The best defense is an expression that recognizes only what you really want. A mention with two at signs will never be mistaken for an email address.
 
-Pokud váš zápis v nějaké situaci prohrát má, funkce vrátí `null` a Texy dá šanci zápisům za ním.
+If your syntax should lose in a particular situation, have the function return `null`, and Texy gives the syntaxes after it a chance.
 
 .[note]
-Zápis můžete zaregistrovat i pod jménem vestavěného zápisu (konstanty `Texy\Syntax` a `Texy\Markdown\Syntax`), a tím ho nahradit. Náhrada platí po celou dobu života objektu.
+You can also register a syntax under the name of a built-in syntax (the constants `Texy\Syntax` and `Texy\Markdown\Syntax`) and thereby replace it. The replacement lasts for the whole lifetime of the object.
 
 
-Vlastní uzel
-============
+Custom Node
+===========
 
-Většinou vystačíte s uzly, které Texy zná, a dostanete tak vykreslení zadarmo. Když žádný nesedí, napíšete vlastní uzel a renderer, který ho vykreslí. Třeba když chcete, aby zmínky měly ve stromu vlastní uzel se jménem uživatele. Zápis zaregistrujeme stejně jako na začátku stránky, jen funkce vrátí nový uzel `MentionNode`:
+Most of the time, the nodes Texy knows are enough, and you get their rendering for free. When none fits, you write your own node and a renderer that renders it. Say you want mentions to have their own node in the tree, holding the user's name. We register the syntax just as at the start of the page, only the function returns a new `MentionNode`:
 
 ```php
 use Texy\Output\Html;
@@ -204,34 +204,34 @@ $comments->addInlineSyntax('blog/mention', '~@@([a-z0-9_]+)~i', fn(ParseContext 
 ));
 
 $comments->htmlOutput->addRenderer(function (MentionNode $node, Html\Renderer $renderer, ?Closure $previous) {
-	$el = new Html\Element('a', ['href' => '/uzivatel/' . $node->name, 'class' => 'zminka']);
+	$el = new Html\Element('a', ['href' => '/user/' . $node->name, 'class' => 'mention']);
 	$el->setText('@' . $node->name);
 	return $el;
 });
 ```
 
 ```html
-<p>Díky, <a href="/uzivatel/jana" class="zminka">@jana</a>.</p>
+<p>Thanks, <a href="/user/jane" class="mention">@jane</a>.</p>
 ```
 
-Metoda `getChildren()` vrací obsah uzlu. Výstup do HTML nebo do prostého textu, pro který renderer nemáte, vykreslí uzel jako jeho obsah, takže prostý text bude `Díky, @jana.`. Markdown sám metodu `toText()` nemá, prostý text z něj vytvoříte voláním `(new Texy\Output\Text\Renderer)->render($document)` nad dokumentem po `transform()`. Tisk zpět do zdrojového textu, třeba `toTexy()`, ale uzel bez rendereru odmítne výjimkou, jak popisují [nástroje nad zdrojovým textem |source-tools#Nahrazení celého prvku]. Jak psát renderery, popisuje [úprava chování prvků |custom-handlers#Jiné HTML pro prvek].
+The `getChildren()` method returns the content of the node. When the HTML or plain-text output has no renderer for the node, it renders just its content, so the plain text will be `Thanks, @jane.`. Markdown itself has no `toText()` method; you get plain text from it by calling `(new Texy\Output\Text\Renderer)->render($document)` on the document after `transform()`. Printing back to source text, such as with `toTexy()`, however, throws an exception for a node without a renderer, as described in [Source Text Tools |source-tools#Replacing a Whole Element]. How to write renderers is described in [Customizing Elements |custom-handlers#Different HTML for an Element].
 
 
-Rozdíly v Markdownu
-===================
+Differences in Markdown
+=======================
 
-Markdown rozebírá text ve dvou krocích: nejdřív bloky a teprve potom obsah řádků, protože odkaz může odkazovat na definici, která je v textu až za ním. Pro vlastní blokové zápisy z toho plyne jedno pravidlo: `$context->parseInline()` v blokové funkci text jen odloží a Markdown ho rozebere až ve druhém kroku. Výsledek do uzlu vložit můžete, jen ho ve funkci nečtěte jako hotový strom. `$context->parseBlock()` funguje beze změny, jako v rámečku výše.
+Markdown parses text in two steps: first the blocks and only then the content of the lines, because a link can refer to a definition that comes later in the text. For custom block syntaxes, this leads to one rule: `$context->parseInline()` in a block function only sets the text aside, and Markdown parses it in the second step. You can put the result into a node, just don't read it as a finished tree inside the function. `$context->parseBlock()` works as usual, as in the box above.
 
 
-Tipy
+Tips
 ====
 
-- **Vracejte uzly, které Texy zná**, kdykoli to jde. Vykreslí se v každém výstupu, v HTML i v prostém textu.
-- **Používejte jména s předponou**, `blog/mention`, `firma/box`, aby se nepotkala s vestavěnými a aby šla vypnout přes `allowedSyntax`.
-- **Vyplňte `Range`** z `$offsets`, celý rozsah, který zápis zabírá. Nástroje nad zdrojovým textem podle něj poznají, kde prvek leží, a mohou ho třeba celý nahradit.
-- **Vyzkoušejte kombinace.** Co se stane, když zápis napíšete do odkazu, do citace nebo do bloku kódu?
+- **Return nodes Texy knows** whenever you can. They render in every output, in HTML as well as in plain text.
+- **Use prefixed names**, such as `blog/mention` or `acme/box`, so they never clash with the built-in ones and can be turned off via `allowedSyntax`.
+- **Fill in the `Range`** from `$offsets`, the whole range the syntax takes up. Source text tools use it to find where the element lies and can, for example, replace it as a whole.
+- **Try combinations.** What happens when you write the syntax inside a link, a blockquote or a code block?
 
-Přecházíte z Texy 3, kde se zápisy registrovaly přes `registerLinePattern()`? Jak je převést, popisuje [Přechod z Texy 3 |upgrading].
+Coming from Texy 3, where syntaxes were registered with `registerLinePattern()`? How to convert them is described in [Upgrading from Texy 3 |upgrading].
 
-{{maintitle: Vlastní syntaxe v Texy: nové zápisy pro Markdown i syntaxi Texy}}
-{{description: Naučte Markdown nebo syntaxi Texy nový zápis, třeba zmínky, rámečky s tipem nebo zkratky: regulární výraz, který ho pozná, a funkce, která z něj vytvoří prvek dokumentu.}}
+{{maintitle: Custom Syntax in Texy: New Syntaxes for Markdown and Texy}}
+{{description: Teach Markdown or Texy syntax something new, like mentions, tip boxes or abbreviations: a regex that recognizes it and a function that builds the node.}}

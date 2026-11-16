@@ -1,18 +1,18 @@
-Nástroje nad zdrojovým textem
-*****************************
+Source Text Tools
+*****************
 
 .[perex]
-Chcete články kontrolovat na chyby, hromadně je upravovat nebo postavit editor, který ukáže, kde je problém? Texy vám dá strom dokumentu, ve kterém každý prvek ví, kde přesně ve zdrojovém textu leží. Úprava pak zasáhne jen to, co měnit chcete, a zbytek souboru zůstane takový, jaký byl. Funguje to pro Markdown i pro syntaxi Texy.
+Do you want to check your articles for mistakes, edit them in bulk, or build an editor that points out exactly where a problem is? Texy gives you a document tree in which every element knows exactly where it sits in the source text. An edit then touches only what you want to change, and the rest of the file stays exactly as it was. It works for Markdown and for Texy syntax alike.
 
 
-Kontrola článků
-===============
+Checking Articles
+=================
 
-Články blogu jsou uložené jako soubory `.md`. Chceme nástroj, který najde obrázky bez popisu, protože čtenář, který obrázek nevidí, by se nedozvěděl, co na něm je. Hlášku chceme v podobě, jakou znáte z editorů a linterů, se jménem souboru, řádkem a sloupcem:
+The blog's articles are stored as `.md` files. We want a tool that finds images without a description, because a reader who cannot see an image would never learn what is in it. We want the message in the form you know from editors and linters, with the file name, line and column:
 
 ```
-clanky/susarna.md:5:1 obrázek bez popisu
-clanky/susarna.md:7:11 obrázek bez popisu
+articles/dryer.md:5:1 image without a description
+articles/dryer.md:7:10 image without a description
 ```
 
 ```php
@@ -25,22 +25,22 @@ $document = $markdown->parse($source);
 foreach ($document->find(Nodes\ImageNode::class) as $image) {
 	if (($image->alt ?? '') === '') {
 		$position = Texy\SourcePosition::fromOffset($source, $image->range->offset);
-		echo "$file:$position->line:$position->column obrázek bez popisu\n";
+		echo "$file:$position->line:$position->column image without a description\n";
 	}
 }
 ```
 
-Všimněte si tří věcí. Text nepřevádíme na HTML, ale voláme `parse()`, které ho jen rozebere na strom. Před tím ho necháme projít `Markdown::normalize()`, které sjednotí konce řádků a podobné drobnosti. A každý uzel má v `$range` rozsah textu, ze kterého vznikl: `$range->offset` je jeho začátek a `$range->length` délka, obojí v bajtech normalizovaného textu.
+Notice three things. We don't convert the text to HTML; we call `parse()`, which only parses it into a tree. Before that, we pass it through `Markdown::normalize()`, which unifies line endings and similar details. And each node's `$range` holds the span of text it came from: `$range->offset` is where it starts and `$range->length` how long it is, both in bytes of the normalized text.
 
-Z pozice v bajtech udělá `SourcePosition::fromOffset()` řádek a sloupec. Oba se počítají od jedničky a sloupec ve znacích, takže sedí s tím, co ukazuje editor, i když řádek obsahuje písmena s diakritikou.
+`SourcePosition::fromOffset()` turns a byte position into a line and a column. Both count from one, and the column counts characters, so it matches what your editor shows even when the line contains accented letters.
 
-`find()` najde ve stromu všechny uzly daného druhu, popis obrázku je v jeho vlastnosti `$alt`. Jaké uzly ve stromu najdete a jaké mají vlastnosti, popisuje [přehled uzlů |custom-handlers#Přehled uzlů].
+`find()` returns all nodes of a given kind in the tree, and an image's description is in its `$alt` property. Which nodes you will find in the tree and what properties they have is described in the [node overview |custom-handlers#Node Overview].
 
 
-Přepis zdrojového textu
-=======================
+Rewriting the Source Text
+=========================
 
-Blog se přestěhoval na HTTPS a v článcích zůstaly odkazy na `http://muj-blog.cz`. Hledat a nahrazovat napříč soubory by nahradilo i adresy v ukázkách kódu. Strom ale ví, kde leží adresy odkazů, a jen ty změníme:
+The blog has moved to HTTPS, and the articles still contain links to `http://my-blog.com`. A search and replace across the files would also replace the addresses in code samples. The tree, however, knows where the link addresses are, so we change only those:
 
 ```php
 $source = Texy\Markdown\Markdown::normalize(file_get_contents($file));
@@ -49,10 +49,10 @@ $rewriter = new Texy\Rewriter($source);
 
 foreach ($document->find(Nodes\LinkNode::class) as $link) {
 	if ($link->urlRange === null) {
-		continue; // odkaz, jehož adresa ve zdrojovém textu není zapsaná
+		continue; // a link whose address is not written in the source text
 	}
 	$url = substr($source, $link->urlRange->offset, $link->urlRange->length);
-	if (str_starts_with($url, 'http://muj-blog.cz')) {
+	if (str_starts_with($url, 'http://my-blog.com')) {
 		$rewriter->replace($link->urlRange, 'https://' . substr($url, 7));
 	}
 }
@@ -61,57 +61,57 @@ file_put_contents($file, $rewriter->getResult());
 ```
 
 ```
-Sušárnu máme z [obchodu](https://muj-blog.cz/obchod) a <https://muj-blog.cz/recept>.
+We bought the dryer from the [shop](https://my-blog.com/shop) and <https://my-blog.com/recipe>.
 
-Adresu v kódu `http://muj-blog.cz` nechceme měnit.
+The address `http://my-blog.com` in code must stay as it is.
 ```
 
-Změnily se oba odkazy, ten v hranatých závorkách i ten ve špičatých, a adresa v kódu zůstala. Definice referenčních odkazů, tedy řádky `[nazev]: http://…`, ale ve stromu adresu nemají a tahle ukázka je nezmění. Odkaz `[text][nazev]` má v `$urlRange` jen jméno reference.
+Both links changed, the one in square brackets and the one in angle brackets, while the address in code stayed. Reference link definitions, the lines `[name]: http://…`, have no address in the tree, though, so this example leaves them alone. A link `[text][name]` has only the name of the reference in its `$urlRange`.
 
-`Texy\Rewriter` náhrady jen sbírá a provede je všechny najednou až v `getResult()`. Díky tomu rozsahy ze stromu platí po celou dobu, i když se text před nimi mezitím změnil. Kolik náhrad text skutečně změní, řekne `$rewriter->count()`, takže soubor stačí zapsat, jen když je větší než nula. Hlídá také dvě chyby, na které by se jinak přišlo až v poškozeném souboru:
+`Texy\Rewriter` only collects the replacements and performs them all at once in `getResult()`. That is why the ranges from the tree stay valid the whole time, even when the text before them has changed in the meantime. `$rewriter->count()` tells you how many replacements actually change the text, so you only need to write the file when it is greater than zero. The rewriter also guards against two mistakes that you would otherwise only discover in a damaged file:
 
-- Dvě náhrady, které se překrývají, nejdou provést obě. Rewriter vyhodí `Texy\RewriteException` s pozicí: `Line 1, column 31: the replacement of 'https://example.com/susarna' overlaps another one.`
-- Když předáte i text, který na daném místě čekáte, ověří ho. Chrání to před rozsahem z jiného souboru nebo ze starší verze textu:
+- Two overlapping replacements cannot both be performed. The rewriter throws `Texy\RewriteException` with the position: `Line 1, column 30: the replacement of 'https://example.com/dryer' overlaps another one.`
+- When you also pass the text you expect at that place, it checks it. This protects you against a range from another file or from an older version of the text:
 
 ```php
-$rewriter->replace($link->textRange, 'Sušárně u nádraží', expected: 'obchodě u nádraží');
+$rewriter->replace($link->textRange, 'the Station Dryer Shop', expected: 'the station shop');
 ```
 
 
-Části zápisu
-============
+Parts of the Syntax
+===================
 
-Rozsah celého uzlu zahrnuje celý jeho zápis, u odkazu tedy závorky, text i adresu. Uzly si ale pamatují i rozsahy částí, které nástroj typicky mění zvlášť:
+The range of a whole node covers all of its syntax, so for a link that means the brackets, the text and the address. But nodes also remember the ranges of the parts that a tool typically changes separately:
 
 |---
-| Uzel | Vlastnost | Část zápisu
+| Node | Property | Part of the syntax
 |---
-| `LinkNode` | `$textRange` | text odkazu
-| `LinkNode` | `$urlRange` | adresa, u reference její jméno
-| `LinkNode` | `$syntax` | jakým zápisem byl odkaz napsaný, třeba `link` v Markdownu, `phrase/span` pro `"text":url` v syntaxi Texy
-| `ImageNode` | `$urlRange` | adresa obrázku
-| `HeadingNode` | `$textRange`, `$marker` | text nadpisu a znak, kterým je napsaný
-| `ListItemNode` | `$bulletRange`, `$bullet` | odrážka položky
-| `InlineCodeNode` | `$codeRange` | kód v textu bez zpětných apostrofů
-| `CodeBlockNode` a ostatní bloky s doslovným obsahem | `$codeMap` | kde ve zdroji leží jednotlivé části obsahu
+| `LinkNode` | `$textRange` | the link text
+| `LinkNode` | `$urlRange` | the address, or the name of a reference
+| `LinkNode` | `$syntax` | which syntax the link was written in, for example `link` in Markdown, `phrase/span` for `"text":url` in Texy syntax
+| `ImageNode` | `$urlRange` | the image address
+| `HeadingNode` | `$textRange`, `$marker` | the heading text and the character it is written with
+| `ListItemNode` | `$bulletRange`, `$bullet` | the item's bullet
+| `InlineCodeNode` | `$codeRange` | inline code without the backticks
+| `CodeBlockNode` and other blocks with literal content | `$codeMap` | where the individual parts of the content lie in the source
 
-Třeba přejmenovat obchod v textu odkazu, aniž byste sáhli na adresu:
+For example, to rename the shop in the link text without touching the address:
 
 ```php
-$rewriter->replace($link->textRange, 'Sušárně u nádraží');
+$rewriter->replace($link->textRange, 'the Station Dryer Shop');
 ```
 
 ```
-Koupeno v [Sušárně u nádraží](https://example.com/susarna).
+Bought at [the Station Dryer Shop](https://example.com/dryer).
 ```
 
-Části zná jen uzel vestavěného zápisu. Uzel vaší [vlastní syntaxe |custom-syntax] má jen rozsah celého zápisu, takže nástroj ho může jen celý nahradit.
+Only the nodes of built-in syntaxes know their parts. A node of your [own syntax |custom-syntax] has only the range of its whole syntax, so a tool can only replace it as a whole.
 
 
-Nahrazení celého prvku
-======================
+Replacing a Whole Element
+=========================
 
-Někdy je potřeba prvek napsat znovu, třeba s něčím navíc. Články v syntaxi Texy mají obrázky bez rozměrů a my je chceme doplnit podle skutečných souborů. Upravíme kopii uzlu, necháme ji vytisknout jako zdrojový text syntaxe Texy a dáme ji na místo původního zápisu:
+Sometimes you need to write an element anew, for example with something added. Articles in Texy syntax have images without dimensions, and we want to fill them in from the actual files. We modify a copy of the node, have it printed as Texy source text, and put it in place of the original syntax:
 
 ```php
 $imageDir = __DIR__ . '/www/images';
@@ -122,7 +122,7 @@ $printer = new Texy\Output\Texy\Renderer($texy);
 
 foreach ($document->find(Nodes\ImageNode::class) as $image) {
 	if ($image->width !== null || $image->height !== null) {
-		continue; // rozměry už autor napsal
+		continue; // the author already wrote the dimensions
 	}
 	[$width, $height] = getimagesize("$imageDir/$image->url");
 	$sized = clone $image;
@@ -133,64 +133,64 @@ foreach ($document->find(Nodes\ImageNode::class) as $image) {
 ```
 
 ```texy
-[* susarna.png .(Sušárna na půdě) >] *** Foto: Jana Nováková
+[* dryer.png .(Dryer in the attic) >] *** Photo: Jane Smith
 ```
 
-se změní na
+becomes
 
 ```texy
-[* susarna.png 300x200 .(Sušárna na půdě) >] *** Foto: Jana Nováková
+[* dryer.png 300x200 .(Dryer in the attic) >] *** Photo: Jane Smith
 ```
 
-Uzel klonujeme, abychom neměnili strom, ze kterého ještě čteme. `Texy\Output\Texy\Renderer` je tiskárna, která uzel vypíše jako zdrojový text syntaxe Texy. Dostane objekt `$texy`, aby věděla, jak bude text znovu čten, a mohla zneplatnit to, co by se jinak četlo jako zápis. Zápis, který autor napsal jednou z více podob, vytiskne ve stejné podobě, například stejnou odrážku nebo stejný druh nadpisu. Ostatní v jedné ustálené podobě, takže modifikátor vytiskne vždy jako `.(titulek)[třída]{styl}` a blok kódu vždy mezi řádky <code>&#96;&#96;&#96;</code>.
+We clone the node so that we don't change the tree we are still reading from. `Texy\Output\Texy\Renderer` is the printer, which writes a node out as Texy source text. It gets the `$texy` object so that it knows how the text will be read again and can escape whatever would otherwise be read as syntax. Syntax that can be written in several forms is printed in the form the author used, for example the same bullet or the same kind of heading. Everything else is printed in one fixed form, so a modifier always comes out as `.(title)[class]{style}` and a code block always between <code>&#96;&#96;&#96;</code> lines.
 
-Uzel vaší vlastní syntaxe tiskárna vytisknout neumí a vyhodí výjimku. Naučíte ji to rendererem, který zaregistrujete přes `$printer->addRenderer()` stejně jako [renderer pro HTML |custom-handlers#Jiné HTML pro prvek], jen vrací zdrojový text.
+The printer cannot print a node of your own syntax and throws an exception. You teach it with a renderer registered through `$printer->addRenderer()`, just like a [renderer for HTML |custom-handlers#Different HTML for an Element], except that it returns source text.
 
 
-Syntaktický strom a dokument
-============================
+Syntax Tree and Document
+========================
 
-Proč nástroje volají `parse()` a ne `toHtml()`? Strom totiž existuje ve dvou stavech.
+Why do the tools call `parse()` and not `toHtml()`? Because the tree exists in two states.
 
-- **Syntaktický strom**, který vrátí `parse()`, popisuje, jak je text napsaný. Rozsahy přesně odpovídají zápisu, nic není dopočítané.
-- **Dokument** vznikne, když syntaktický strom projde úpravami v `transform()`. Ty mu dodají význam: najdou, kam vedou reference, vyrovnají úrovně nadpisů, vysází typografii. Rozsah pak říká, odkud uzel pochází, ne co je na tom místě napsané.
+- The **syntax tree**, which `parse()` returns, describes how the text is written. The ranges match the syntax exactly, and nothing is filled in.
+- The **document** is what you get when the syntax tree goes through the transformations in `transform()`. They give it meaning: they resolve where references lead, even out the heading levels, apply typography. A range then tells you where a node came from, not what is written at that place.
 
-Rozdíl je dobře vidět na odkazu přes referenci:
+The difference is easy to see on a reference link:
 
 ```texy
-Viz "recept":[recept].
+See "recipe":[recipe].
 
-[recept]: https://example.com/recept
+[recipe]: https://example.com/recipe
 ```
 
-V syntaktickém stromu je `$link->url` prázdné, `$link->ref` je `recept` a `$link->urlRange` ukazuje na `[recept]`, tedy na to, co je v textu skutečně napsané. Po `transform()` je v `$link->url` adresa `https://example.com/recept`, která na tom místě napsaná není. Nástroj, který by přepisoval podle dokumentu, by tak zapsal adresu na místo jména reference.
+In the syntax tree, `$link->url` is empty, `$link->ref` is `recipe` and `$link->urlRange` points to `[recipe]`, which is what the text actually says. After `transform()`, `$link->url` holds the address `https://example.com/recipe`, which is not written at that place. A tool that rewrote the text based on the document would thus write the address where the name of the reference was.
 
-Když potřebujete oba stavy, třeba nástroj, který hlásí chyby i ve výsledném HTML, naklonujte syntaktický strom před transformací: `clone $document` zkopíruje celý strom.
+When you need both states, for example in a tool that reports mistakes in the resulting HTML too, clone the syntax tree before the transformation: `clone $document` copies the whole tree.
 
 
-Pozice a konce řádků
-====================
+Positions and Line Endings
+==========================
 
-Rozsahy počítají bajty normalizovaného textu. Pro syntaxi Texy ho normalizuje `Texy::normalize()`: převede konce řádků na `\n`, odstraní BOM, řídicí znaky, měkké spojovníky, mezery na koncích řádků a prázdné řádky na začátku a na konci textu. Nový řádek, kterým končí poslední řádek, nechá, takže soubor po přepisu končí stejně jako předtím. Markdown má vlastní `Markdown::normalize()`, která převede konce řádků a odstraní řídicí znaky, ale nic dalšího, protože dvě mezery na konci řádku jsou v Markdownu zalomení. Text, který není platné UTF-8, odmítnou obě výjimkou `Texy\InvalidInputException`. Proto nástroj text normalizuje jednou na začátku a dál pracuje jen s výsledkem, stejně jako příklady výše.
+Ranges count bytes of the normalized text. For Texy syntax, the text is normalized by `Texy::normalize()`: it converts line endings to `\n` and removes the BOM, control characters, soft hyphens, spaces at the ends of lines and blank lines at the start and end of the text. It keeps the newline that ends the last line, so after a rewrite the file ends just as it did before. Markdown has its own `Markdown::normalize()`, which converts line endings and removes control characters but nothing else, because two spaces at the end of a line are a line break in Markdown. Both reject text that is not valid UTF-8 with a `Texy\InvalidInputException`. That is why a tool normalizes the text once at the start and from then on works only with the result, just like the examples above.
 
-Nejjednodušší je ukládat soubory rovnou normalizované. Soubor na disku je pak totožný s textem, ke kterému se pozice vztahují, a pozice z nástroje můžete použít přímo v něm.
+The simplest approach is to save the files already normalized. The file on disk is then identical to the text the positions refer to, and you can use the positions from the tool directly in it.
 
-Soubory s konci řádků Windows (CRLF) zpracujte v normalizované podobě a CRLF vraťte až při zápisu:
+Process files with Windows line endings (CRLF) in their normalized form and restore CRLF only when writing:
 
 ```php
-$source = Texy\Texy::normalize(file_get_contents($file));    // CRLF se změní na LF
+$source = Texy\Texy::normalize(file_get_contents($file));    // CRLF becomes LF
 $rewriter = new Texy\Rewriter($source);
-// ... náhrady podle rozsahů ze stromu ...
-file_put_contents($file, str_replace("\n", "\r\n", $rewriter->getResult())); // na disku zase CRLF
+// ... replacements based on ranges from the tree ...
+file_put_contents($file, str_replace("\n", "\r\n", $rewriter->getResult())); // CRLF again on disk
 ```
 
-Normalizovaný text žádné `\r` neobsahuje, takže převod je bezztrátový a při dalším načtení dostanete přesně týž text se stejnými pozicemi. Řádky a sloupce jsou v obou podobách stejné, liší se jen pozice v bajtech.
+Normalized text contains no `\r`, so the conversion is lossless, and the next time you load the file you get exactly the same text with the same positions. Lines and columns are the same in both forms; only the byte positions differ.
 
 
-Převod mezi Markdownem a syntaxí Texy
-=====================================
+Converting Between Markdown and Texy Syntax
+===========================================
 
-Protože oba jazyky rozebírají text na tentýž strom, převod mezi nimi je jen otázka toho, který jazyk text přečte a který ho vytiskne. Článek v Markdownu převedete na syntaxi Texy jedním voláním:
+Because both languages parse text into the same tree, converting between them is just a matter of which language reads the text and which one prints it. You convert a Markdown article to Texy syntax with a single call:
 
 ```php
 $markdown = new Texy\Markdown\Markdown;
@@ -198,23 +198,23 @@ $texySource = $markdown->toTexy($text);
 ```
 
 ```
-# Recept na povidla
+# Plum Butter Recipe
 
-- natrhat
-- [umýt](https://example.com)
+- pick
+- [wash](https://example.com)
 ```
 
 ```texy
-Recept na povidla
-#################
+Plum Butter Recipe
+##################
 
-- natrhat
-- "umýt":https://example.com
+- pick
+- "wash":https://example.com
 ```
 
-Obsah zůstane stejný, změní se jen zápis. Rozšíření GFM, jako jsou tabulky, se převedou, jen když text čtete objektem z `Markdown::gfm()`. Jinak jsou pro Markdown obyčejným textem. Úkolové seznamy syntaxe Texy nezná, takže zaškrtnutí zůstane jako text `[x]`, a přeškrtnutý text se zapíše jako HTML značka `<del>`.
+The content stays the same; only the syntax changes. GFM extensions such as tables are converted only when you read the text with the object from `Markdown::gfm()`. Otherwise they are ordinary text to Markdown. Texy syntax has no task lists, so a check mark stays as the text `[x]`, and strikethrough text is written as the HTML tag `<del>`.
 
-Opačným směrem převádí `Texy\Markdown\Output\Markdown\Renderer`. Dostane dokument po `transform()`:
+The opposite direction is handled by `Texy\Markdown\Output\Markdown\Renderer`. It takes the document after `transform()`:
 
 ```php
 $texy = new Texy\Texy;
@@ -225,21 +225,21 @@ $renderer = new Texy\Markdown\Output\Markdown\Renderer;
 $markdownSource = $renderer->render($document);
 ```
 
-Co Markdown zapsat neumí, převede na nejbližší podobu, kterou zná. Popisek pod obrázkem se stane kurzívou na dalším řádku, tabulka se sloučenými buňkami HTML tabulkou, a třídy, styly, rozměry a zarovnání obrázků se ztratí.
+Whatever Markdown cannot express is converted to the closest form it knows. A caption under an image becomes italics on the next line, a table with merged cells becomes an HTML table, and classes, styles, dimensions and alignment of images are lost.
 
-Podobu výsledného Markdownu nastavíte vlastnostmi rendereru, třeba jakým znakem začínají odrážky nebo jak se píšou nadpisy a bloky kódu: `$unorderedListMarker`, `$headingStyle`, `$codeBlockStyle`, `$codeFence`, `$emphasisMarker`, `$strongMarker` a další. Adresy renderer zapíše tak, jak jsou ve stromu, i odkaz na `javascript:`. Pokud je chcete filtrovat, předejte mu v konstruktoru politiku adres, jak popisuje následující kapitola.
+You set the shape of the resulting Markdown with the renderer's properties, for example which character starts bullets or how headings and code blocks are written: `$unorderedListMarker`, `$headingStyle`, `$codeBlockStyle`, `$codeFence`, `$emphasisMarker`, `$strongMarker` and others. The renderer writes addresses just as they are in the tree, even a link to `javascript:`. If you want to filter them, pass it a URL policy in the constructor, as the next section describes.
 
 
-Tisk zpět do syntaxe Texy
-=========================
+Printing Back to Texy Syntax
+============================
 
-Celý syntaktický strom vytiskne `$texy->renderTexy($document)`. Výsledek se při novém rozebrání rozebere na tentýž strom a tiskem z něj vznikne opět tentýž text. Toho využívají právě nástroje, které strom upraví a chtějí ho uložit.
+`$texy->renderTexy($document)` prints the whole syntax tree. Parsing the result again yields the same tree, and printing that tree yields the same text again. This is exactly what tools that modify the tree and want to save it rely on.
 
-Několik vzácných zápisů ale zpět přesně nevyjde: buňka tabulky pokračující na více řádků, než kolik řádků tabulky zabírá, řádek začínající `/--` nebo `\--` uvnitř bloku `html` nebo `text`, titulek modifikátoru přes zalomení řádku, prázdný blok `/--div`, zastaralý zápis obrázku `[* a | b *]` a řádky odstavce surového HTML, které by se po přesunu na začátek řádku četly jako blok.
+A few rare constructs do not come back exactly, though: a table cell that continues over more lines than the table rows it spans, a line starting with `/--` or `\--` inside an `html` or `text` block, a modifier title spanning a line break, an empty `/--div` block, the obsolete image syntax `[* a | b *]`, and lines of a raw HTML paragraph that would be read as a block once moved to the start of a line.
 
-Tiskněte syntaktický strom z `parse()`, ne dokument po `transform()`. Dokument už má doplněné reference, vysázenou typografii a upravené HTML, takže jeho tiskem by nevznikl text, který autor napsal.
+Print the syntax tree from `parse()`, not the document after `transform()`. The document already has its references resolved, typography applied and HTML adjusted, so printing it would not give you the text the author wrote.
 
-Adresy tiskárna zapíše tak, jak jsou ve stromu. Když bude výsledný text publikovat někdo další a chcete z něj odstranit nebezpečné adresy, předejte politiku adres, která je odmítá. Výchozí politika objektu `$texy` povolí všechno, vezměte proto třeba tu z objektu v [bezpečném režimu |configuration#Bezpečný režim]:
+The printer writes addresses just as they are in the tree. When someone else is going to publish the resulting text and you want to remove dangerous addresses from it, pass a URL policy that rejects them. The default policy of the `$texy` object allows everything, so take, for example, the one from an object in [safe mode |configuration#Safe Mode]:
 
 ```php
 $safe = new Texy\Texy;
@@ -247,7 +247,7 @@ Texy\Configurator::safeMode($safe);
 $output = $texy->renderTexy($document, $safe->urlPolicy);
 ```
 
-Odkaz, který politika odmítne, zůstane jen textem, a obrázek jeho popisem. Stejnou politiku můžete předat rendereru Markdownu: `new Texy\Markdown\Output\Markdown\Renderer($safe->urlPolicy)`.
+A link the policy rejects remains plain text, and an image is reduced to its description. You can pass the same policy to the Markdown renderer: `new Texy\Markdown\Output\Markdown\Renderer($safe->urlPolicy)`.
 
-{{maintitle: Nástroje nad zdrojovým textem v Texy: kontrola a přepis článků}}
-{{description: Kontrolujte články a hromadně je upravujte podle stromu dokumentu, ve kterém každý prvek zná své místo ve zdrojovém textu. A převod mezi Markdownem a syntaxí Texy.}}
+{{maintitle: Source Text Tools in Texy: Lint and Rewrite Articles}}
+{{description: Check articles and edit them in bulk using a document tree in which every element knows its place in the source. Plus Markdown to Texy conversion.}}

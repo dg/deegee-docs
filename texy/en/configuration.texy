@@ -1,71 +1,71 @@
-Konfigurace
-***********
+Configuration
+*************
 
 .[perex]
-Kam vedou odkazy a obrázky, jak vypadá výstupní HTML, jaká typografie se použije, co smí návštěvníci v komentářích a které zápisy Markdownu a syntaxe Texy jsou zapnuté. Tady najdete všechna nastavení a jejich výchozí hodnoty.
+Where links and images point, what the HTML output looks like, which typography applies, what visitors may write in comments, and which Markdown and Texy syntaxes are enabled. Here you'll find every setting and its default value.
 
-Všechno se nastavuje přes veřejné vlastnosti objektů. Pro blog z [úvodu |@home] je stačí připravit jednou, na jednom místě, a pak s nimi převádět všechny články:
+Everything is set through public properties of objects. For the blog from the [introduction |@home], you prepare them once, in one place, and then convert every article with them:
 
 ```php
 $texy = new Texy\Texy;
 $texy->config->headingTop = 2;
-$texy->htmlOutput->imageBaseUrl = '/images/clanky/';
+$texy->htmlOutput->imageBaseUrl = '/images/articles/';
 
 $markdown = Texy\Markdown\Markdown::gfm(
 	config: $texy->config,
 	htmlOutput: $texy->htmlOutput,
 	htmlPolicy: $texy->htmlPolicy,
 );
-$html = $markdown->toHtml($text);  // $text je článek v Markdownu
+$html = $markdown->toHtml($text);  // $text is an article written in Markdown
 ```
 
-Nastavení jsou rozdělená do několika objektů podle toho, čeho se týkají:
+The settings are split into several objects, according to what they affect:
 
-- `$texy->config` určuje, co text znamená: typografii, dělení slov, nadpisy a u syntaxe Texy i to, jak se čtou její zápisy
-- `$texy->htmlOutput` určuje, jak vypadá výsledné HTML: adresy obrázků a odkazů, značky, třídy a odsazení
-- `$texy->htmlPolicy` a `$texy->urlPolicy` hlídají, co je dovolené: HTML značky, třídy, styly a adresy
-- `$texy->allowedSyntax` zapíná a vypíná jednotlivé zápisy
+- `$texy->config` decides what the text means: typography, hyphenation, headings, and for Texy syntax also how its syntaxes are read
+- `$texy->htmlOutput` decides what the resulting HTML looks like: image and link URLs, tags, classes and indentation
+- `$texy->htmlPolicy` and `$texy->urlPolicy` guard what is allowed: HTML tags, classes, styles and URLs
+- `$texy->allowedSyntax` turns individual syntaxes on and off
 
-Markdown má tytéž objekty. Když mu při vytvoření předáte ty z `$texy`, jako v ukázce, oba jazyky je sdílejí: nastavení napíšete jednou a platí pro články v Markdownu i v syntaxi Texy, včetně pozdějších změn. Jen `allowedSyntax` má každý jazyk vlastní, protože každý má jiné zápisy. Objekty samotné vyměnit nejde, `$texy->config = …` skončí chybou, měníte jen jejich hodnoty.
+Markdown has the same objects. When you pass it the objects from `$texy` while creating it, as in the example above, both languages share them: you write a setting once and it applies to articles in Markdown and in Texy syntax alike, including any later change. Only `allowedSyntax` is separate for each language, because each has different syntaxes. The objects themselves cannot be replaced (`$texy->config = …` throws an error); you only change their values.
 
-Stránka je proto rozdělená na tři části: [nastavení enginu |#Engine], která platí pro oba jazyky, [Markdown |#Markdown] a [syntaxi Texy |#Syntaxe Texy]. Přecházíte z verze 3? Kam se přestěhovala stará nastavení, najdete na stránce [Přechod z Texy 3 |upgrading].
+That is why the page has three parts: the [engine settings |#Engine], which apply to both languages, [Markdown |#Markdown] and [Texy syntax |#Texy Syntax]. Coming from version 3? The page [Upgrading from Texy 3 |upgrading] shows where the old settings moved.
 
 
 Engine
 ======
 
-Nastavení v této části platí stejně pro Markdown i pro syntaxi Texy, pokud Markdown sdílí objekty enginu, jak ukazuje úvod stránky.
+The settings in this part apply equally to Markdown and to Texy syntax, provided Markdown shares the engine objects as shown at the top of the page.
 
 
-Typografie
+Typography
 ----------
 
-Jak typografie vypadá, ukazuje [úvod |@home#Typografie]. Jazyk textu, podle kterého Texy volí uvozovky, je výchozí `cs`:
+The [introduction |@home#Typography] shows what typography looks like. The language of the text, which tells Texy which quotation marks to use, defaults to `cs` (Czech):
 
 ```php
 $texy->config->locale = 'en';
 ```
 
-Texy zná `bg`, `cs`, `de`, `el`, `en`, `es`, `fr`, `hu`, `it`, `ja`, `pl`, `pt`, `ro`, `ru`, `sk`, `sl`, `tr` a `uk`. Jazyk, který nezná, ohlásí výjimkou `Texy\InvalidArgumentException` při převodu. Další jazyk přidáte do pole `locales`. Jeho klíč `quotes` obsahuje čtveřici uvozovek: otevírací a zavírací hlavní, pak otevírací a zavírací vnořené.
+Texy knows `bg`, `cs`, `de`, `el`, `en`, `es`, `fr`, `hu`, `it`, `ja`, `pl`, `pt`, `ro`, `ru`, `sk`, `sl`, `tr` and `uk`. An unknown language throws `Texy\InvalidArgumentException` during conversion. To add another language, put it in the `locales` array. Its `quotes` key holds four quotation marks: the opening and closing primary ones, then the opening and closing nested ones.
 
 ```php
 $texy->config->locales['xx'] = ['quotes' => ["\u{00BB}", "\u{00AB}", "\u{203A}", "\u{2039}"]];
 $texy->config->locale = 'xx';
 ```
 
-V češtině, slovenštině a polštině nesmí jednopísmenná předložka nebo spojka zůstat na konci řádku, a Texy ji proto spojí s následujícím slovem pevnou mezerou. V češtině jsou to `k`, `s`, `v`, `z`, `o`, `u` a `i`, malá i velká, a velké `A`. Která slova to jsou, určuje klíč `oneLetterWords` v řádku jazyka v poli `locales`, a jazyk, který ho nemá, pevné mezery nedostane. Seznam můžete upravit nebo ho přidat dalšímu jazyku:
+In Czech, Slovak and Polish, a one-letter preposition or conjunction must not be left at the end of a line, so Texy joins it to the following word with a non-breaking space. In Czech these are `k`, `s`, `v`, `z`, `o`, `u` and `i`, lowercase and uppercase, plus an uppercase `A`. The words are listed in the `oneLetterWords` key of the language's entry in the `locales` array, and a language without that key gets no non-breaking spaces. You can change the list, or add one to another language:
 
 ```php
-$texy->config->locales['cs']['oneLetterWords'] .= 'a';  // vázat i spojku a
+$texy->config->locales['cs']['oneLetterWords'] .= 'a';  // also bind the Czech conjunction a
 ```
 
-Dlouhá slova v češtině a slovenštině Texy rozdělí vložením měkkých spojovníků, neviditelných znaků, na kterých prohlížeč smí slovo zlomit. Dělí podle českých slabik, a text v jiném jazyce proto nechá celý:
+Texy breaks long Czech and Slovak words by inserting soft hyphens, invisible characters where the browser may break the word. It splits words by Czech syllables, so it leaves text in any other language whole:
 
 ```php
-$texy->config->hyphenationWordLimit = 20;  // dělit slova od 20 znaků
+$texy->config->hyphenationWordLimit = 20;  // hyphenate words of 20 characters or more
 ```
 
-Typografii i dělení slov můžete vypnout:
+You can turn off both typography and hyphenation:
 
 ```php
 $texy->config->typography = false;
@@ -73,22 +73,22 @@ $texy->config->hyphenation = false;
 ```
 
 
-Nadpisy
--------
+Headings
+--------
 
-Článek na blogu je pod nadpisem stránky, takže jeho nadpisy mají začínat od `<h2>`. Tohle zařídí `headingTop`:
+A blog article sits below the page title, so its headings should start at `<h2>`. That is what `headingTop` takes care of:
 
 ```php
-$texy->config->headingTop = 2;           // nejvyšší nadpis bude <h2>, výchozí 1
-$texy->config->headingIds = true;        // každý nadpis dostane id, výchozí false
-$texy->config->headingIdPrefix = 'toc-'; // předpona vygenerovaných id
+$texy->config->headingTop = 2;           // the top heading becomes <h2>, default 1
+$texy->config->headingIds = true;        // every heading gets an id, default false
+$texy->config->headingIdPrefix = 'toc-'; // prefix of the generated ids
 ```
 
-Z nadpisu `# Jak jsme sušili švestky` je pak `<h2 id="toc-jak-jsme-susili-svestky">` a z `## Sklizeň` `<h3 id="toc-sklizen">`. Nadpis, který by po posunu vyšel hlouběji než `<h6>`, zůstane `<h6>`.
+The heading `# How We Dried Plums` then becomes `<h2 id="toc-how-we-dried-plums">` and `## Harvest` becomes `<h3 id="toc-harvest">`. A heading that would end up deeper than `<h6>` after the shift stays `<h6>`.
 
-Syntaxe Texy navíc umí nadpisy vyvažovat, tedy sama určit, který nadpis v článku je nejdůležitější. Jak, popisuje [Vyvažování nadpisů |#Vyvažování nadpisů].
+Texy syntax can also balance headings, which means it works out by itself which heading in the article is the most important. [Heading Balancing |#Heading Balancing] explains how.
 
-Seznam nadpisů pro obsah článku nebo pro `<title>` stránky přečtete z dokumentu. Místo `toHtml()` převedete text ve dvou krocích, abyste se k dokumentu dostali:
+To build a table of contents or the page's `<title>`, read the headings from the document. Instead of `toHtml()`, convert the text in two steps so you can get at the document:
 
 ```php
 $document = $markdown->parse($text);
@@ -102,27 +102,27 @@ $html = $markdown->renderHtml($document);
 ```
 
 ```
-2 Jak jsme sušili švestky toc-jak-jsme-susili-svestky
-3 Sklizeň toc-sklizen
-3 Sušení toc-suseni
+2 How We Dried Plums toc-how-we-dried-plums
+3 Harvest toc-harvest
+3 Drying toc-drying
 ```
 
-`parse()` text rozebere, `transform()` mimo jiné spočítá úrovně a id nadpisů a `renderHtml()` z dokumentu vytvoří HTML, stejné jako by vrátil `toHtml()`. Titulek stránky je `$document->findFirst(Texy\Nodes\HeadingNode::class)?->getTitle()`. U syntaxe Texy se volají tytéž metody na `$texy`. Co přesně se v jednotlivých krocích děje, popisuje [architektura |architecture].
+`parse()` parses the text, `transform()` works out the heading levels and ids among other things, and `renderHtml()` creates the HTML from the document, the same HTML `toHtml()` would return. The page title is `$document->findFirst(Texy\Nodes\HeadingNode::class)?->getTitle()`. For Texy syntax, you call the same methods on `$texy`. What exactly happens in each step is described in [Architecture and Principles |architecture].
 
 
-Cesty k obrázkům a odkazům
---------------------------
+Image and Link Paths
+--------------------
 
-Autor v článku napíše jen `susarna.jpg` nebo `clanky/sklizen` a Texy před relativní adresu doplní předponu:
+The author writes just `dryer.jpg` or `articles/harvest` in the article, and Texy puts a prefix in front of the relative URL:
 
 ```php
-$texy->htmlOutput->imageBaseUrl = '/images/clanky/';  // výchozí null, bez předpony
-$texy->htmlOutput->linkBaseUrl = '/blog/';            // výchozí null, bez předpony
+$texy->htmlOutput->imageBaseUrl = '/images/articles/';  // default null, no prefix
+$texy->htmlOutput->linkBaseUrl = '/blog/';              // default null, no prefix
 ```
 
-Z `susarna.jpg` se tak stane `/images/clanky/susarna.jpg` a z odkazu na `clanky/sklizen` adresa `/blog/clanky/sklizen`. Adresy, které začínají lomítkem, schématem jako `https:` nebo `mailto:`, a odkazy na kotvu `#sekce` zůstanou, jak je autor napsal.
+So `dryer.jpg` becomes `/images/articles/dryer.jpg` and a link to `articles/harvest` becomes `/blog/articles/harvest`. URLs that start with a slash or with a scheme such as `https:` or `mailto:`, and links to an anchor `#section`, stay exactly as the author wrote them.
 
-Když Texy prozradíte, kde obrázky leží na disku, zjistí jejich rozměry a doplní je do HTML. Prohlížeč pak může stránku rozvrhnout dřív, než se obrázky načtou:
+When you tell Texy where the images are on disk, it finds out their dimensions and adds them to the HTML. The browser can then lay out the page before the images load:
 
 ```php
 $texy->htmlOutput->imageBaseUrl = '/images/';
@@ -130,167 +130,167 @@ $texy->htmlOutput->imageBasePath = __DIR__ . '/www/images';
 ```
 
 ```html
-<img src="/images/susarna.png" alt="Sušárna" width="300" height="200">
+<img src="/images/dryer.png" alt="Dryer" width="300" height="200">
 ```
 
-Rozměry, které autor napíše sám, mají přednost.
+Dimensions the author writes explicitly take precedence.
 
 
-Odkazy
-------
+Links
+-----
 
 ```php
-$texy->htmlOutput->linkNoFollow = false;   // rel="nofollow" u absolutních odkazů
-$texy->htmlOutput->obfuscateEmail = true;  // e-mailové adresy zamaskovat před roboty
-$texy->htmlOutput->shortenUrls = true;     // dlouhé adresy zobrazit zkráceně
+$texy->htmlOutput->linkNoFollow = false;   // rel="nofollow" on absolute links
+$texy->htmlOutput->obfuscateEmail = true;  // hide email addresses from bots
+$texy->htmlOutput->shortenUrls = true;     // display long URLs shortened
 ```
 
-S `linkNoFollow` dostanou `rel="nofollow"` odkazy na absolutní adresy, tedy na cizí weby. Odkazy v rámci webu, jako `/kontakt`, ho nedostanou.
+With `linkNoFollow`, links to absolute URLs, that is, to other websites, get `rel="nofollow"`. Links within your site, such as `/contact`, do not.
 
-`obfuscateEmail` vloží do zobrazené adresy HTML komentář, takže `jana@example.com` zůstane pro čtenáře stejná, ale jednoduchý robot sbírající adresy ji nepozná. `shortenUrls` zkrátí dlouhou adresu, která se v textu zobrazuje jako odkaz, na `https://example.com/…tek/a/jablek`. Obě nastavení platí jen pro syntaxi Texy, Markdown zobrazuje adresy přesně tak, jak je autor napsal.
+`obfuscateEmail` inserts an HTML comment into the displayed address, so `jane@example.com` looks the same to the reader, but a simple bot harvesting addresses does not recognize it. `shortenUrls` shortens a long URL displayed as a link in the text to something like `https://example.com/…s/and/apples`. Both settings apply only to Texy syntax; Markdown displays URLs exactly as the author wrote them.
 
 
-Obrázky
--------
+Images
+------
 
-Obrázek s popiskem pod sebou je zápis syntaxe Texy a vznikne z něj sémantické HTML5. Tenhle je navíc zarovnaný doprava:
+An image with a caption below it is written in Texy syntax and turns into semantic HTML5. This one is also aligned to the right:
 
 ```texy
-[* susarna.jpg .(Sušárna na půdě) >] *** Foto: Jana Nováková
+[* dryer.jpg .(Dryer in the attic) >] *** Photo: Jane Smith
 ```
 
 ```html
-<figure style="float:right"><img src="susarna.jpg" alt="Sušárna na půdě">
-	<figcaption>Foto: Jana Nováková</figcaption>
+<figure style="float:right"><img src="dryer.jpg" alt="Dryer in the attic">
+	<figcaption>Photo: Jane Smith</figcaption>
 </figure>
 ```
 
-Zarovnání doleva nebo doprava je ve výchozím stavu inline styl `float`, u obrázku i u obrázku s popiskem. Pokud máte v CSS hotové třídy, přiřaďte je:
+By default, alignment to the left or right is an inline `float` style, both for a plain image and for an image with a caption. If your CSS already has classes for it, assign them:
 
 ```php
-$texy->htmlOutput->floatClasses['left'] = 'vlevo';
-$texy->htmlOutput->floatClasses['right'] = 'vpravo';
+$texy->htmlOutput->floatClasses['left'] = 'left';
+$texy->htmlOutput->floatClasses['right'] = 'right';
 ```
 
-Pokud vaše šablony počítají s jiným HTML, změňte i značku a přidejte třídu. Jiná značka než `figure` dá popisek do `<p>`:
+If your templates expect different HTML, change the tag and add a class as well. With a tag other than `figure`, the caption goes into a `<p>`:
 
 ```php
-$texy->htmlOutput->figureTag = 'div';     // výchozí 'figure'
-$texy->htmlOutput->figureClass = 'figure'; // výchozí null, bez třídy
+$texy->htmlOutput->figureTag = 'div';     // default 'figure'
+$texy->htmlOutput->figureClass = 'figure'; // default null, no class
 ```
 
 ```html
-<div class="figure vpravo"><img src="susarna.jpg" alt="Sušárna na půdě">
-	<p>Foto: Jana Nováková</p>
+<div class="figure right"><img src="dryer.jpg" alt="Dryer in the attic">
+	<p>Photo: Jane Smith</p>
 </div>
 ```
 
-Obrázek, který v syntaxi Texy stojí sám na řádku, dostane `figureTag` i bez popisku. Odstavec s více obrázky, a v Markdownu i s jediným, Texy neobalí do `<p>`, ale do `<div>`. Jinou značku nastavíte v `imageParagraphTag`:
+An image that stands alone on a line in Texy syntax gets the `figureTag` even without a caption. A paragraph with several images, and in Markdown even with a single one, is wrapped not in `<p>` but in `<div>`. You set a different tag in `imageParagraphTag`:
 
 ```php
-$texy->htmlOutput->imageParagraphTag = 'p';  // výchozí 'div'
+$texy->htmlOutput->imageParagraphTag = 'p';  // default 'div'
 ```
 
 
-Zarovnání
+Alignment
 ---------
 
-Modifikátory zarovnání (`.<`, `.>`, `.<>`, `.=` a v buňkách tabulky i svislé `.^`, `.-`, `._`) i zarovnání sloupců tabulky v Markdownu vytvoří ve výchozím stavu inline styl, třeba `style="text-align:center"`. Pokud máte v CSS hotové třídy, přiřaďte je:
+Alignment modifiers (`.<`, `.>`, `.<>`, `.=`, and in table cells also the vertical `.^`, `.-`, `._`) as well as column alignment of Markdown tables produce an inline style by default, such as `style="text-align:center"`. If your CSS already has classes for it, assign them:
 
 ```php
 $texy->htmlOutput->textAlignClasses['left'] = 'text-left';
 $texy->htmlOutput->textAlignClasses['center'] = 'text-center';
-$texy->htmlOutput->verticalAlignClasses['top'] = 'nahoru';
+$texy->htmlOutput->verticalAlignClasses['top'] = 'align-top';
 ```
 
-Klíče `textAlignClasses` jsou `left`, `right`, `center` a `justify`, klíče `verticalAlignClasses` jsou `top`, `middle` a `bottom`. Zarovnání, které třídu nemá, zůstane jako inline styl.
+The keys of `textAlignClasses` are `left`, `right`, `center` and `justify`; the keys of `verticalAlignClasses` are `top`, `middle` and `bottom`. An alignment without a class stays an inline style.
 
 
-Značky a třídy prvků
+Element Tags and Classes
+------------------------
+
+```php
+$g = $texy->htmlOutput;
+$g->phraseTags['strong'] = 'b';           // bold text as <b> instead of <strong>
+$g->horizontalRuleClasses['-'] = 'rule';  // class of a horizontal rule, by the character it is written with
+$g->emoticonClass = null;                 // class of the <span> around emoticons
+$g->passHtmlComments = true;              // keep HTML comments from the text in the output
+```
+
+`phraseTags` decides which tag each kind of emphasis gets. The keys name the meaning, not the syntax, so they apply to both languages: `strong` (bold), `emphasis` (italic, whether written as `*…*`, `//…//` or `_…_`), `inserted`, `deleted`, `superscript`, `subscript`, `span`, `abbreviation`, `quote`, and `code` for inline code. A horizontal rule written with hyphens `---` has the key `-`, one written with asterisks `***` the key `*`, in both languages. Underscores `___` in Markdown have the key `_`.
+
+
+HTML Code Formatting
 --------------------
 
-```php
-$g = $texy->htmlOutput;
-$g->phraseTags['strong'] = 'b';           // tučný text jako <b> místo <strong>
-$g->horizontalRuleClasses['-'] = 'cara';  // třída vodorovné čáry podle znaku, kterým je napsaná
-$g->emoticonClass = null;                 // třída <span> kolem emotikonů
-$g->passHtmlComments = true;              // HTML komentáře z textu zachovat ve výstupu
-```
-
-`phraseTags` určuje, jakou značku dostane který druh zvýraznění. Klíče pojmenovávají význam, ne zápis, a proto platí pro oba jazyky: `strong` (tučně), `emphasis` (kurzíva, ať je napsaná `*…*`, `//…//` nebo `_…_`), `inserted`, `deleted`, `superscript`, `subscript`, `span`, `abbreviation`, `quote` a `code` pro kód v textu. Vodorovná čára napsaná pomlčkami `---` má klíč `-`, hvězdičkami `***` klíč `*`, a to v obou jazycích. Podtržítka `___` v Markdownu mají klíč `_`.
-
-
-Formátování HTML kódu
----------------------
-
-Texy vypisuje HTML odsazené a zalomené, aby se v něm dalo číst:
+Texy prints the HTML indented and wrapped so that it is easy to read:
 
 ```php
 $g = $texy->htmlOutput;
-$g->indent = true;       // odsazovat vnořené bloky
-$g->baseIndent = 0;      // počáteční úroveň odsazení, když HTML vkládáte do odsazené šablony
-$g->lineWrap = 80;       // zalamovat řádky delší než 80 znaků, 0 = nezalamovat
-$g->preserveSpaces = ['textarea', 'pre', 'script', 'code', 'samp', 'kbd'];  // značky, v nichž se mezery nemění
+$g->indent = true;       // indent nested blocks
+$g->baseIndent = 0;      // starting indentation level, for HTML inserted into an indented template
+$g->lineWrap = 80;       // wrap lines longer than 80 characters, 0 = no wrapping
+$g->preserveSpaces = ['textarea', 'pre', 'script', 'code', 'samp', 'kbd'];  // tags inside which whitespace is left alone
 ```
 
 
-Povolené HTML značky, třídy a styly
------------------------------------
+Allowed HTML Tags, Classes and Styles
+-------------------------------------
 
-Tři seznamy na `$texy->htmlPolicy` určují, co z HTML a z modifikátorů se dostane do výstupu. Hodnota `true` povolí všechno, `false` nic.
+Three lists on `$texy->htmlPolicy` decide which parts of the HTML and of modifiers make it into the output. The value `true` allows everything, `false` nothing.
 
 ```php
 $texy->htmlPolicy->allowedTags = [
-	'b' => [],            // <b> bez atributů
-	'a' => ['href'],      // <a> jen s atributem href
-	'img' => true,        // <img> s jakýmikoli atributy
+	'b' => [],            // <b> without attributes
+	'a' => ['href'],      // <a> with the href attribute only
+	'img' => true,        // <img> with any attributes
 ];
 ```
 
-Výchozí seznam značek obsahuje běžné značky HTML5, každou se všemi atributy. Klíč `'*'` vyjmenuje atributy povolené u všech značek. Značka, která na seznamu chybí, se ve výstupu zobrazí jako text, a nepovolený atribut zmizí. Platí to pro HTML napsané v syntaxi Texy i v Markdownu:
+The default list of tags contains the common HTML5 tags, each with all its attributes. The key `'*'` lists the attributes allowed on every tag. A tag missing from the list is displayed as text in the output, and an attribute that is not allowed disappears. This holds for HTML written in Texy syntax and in Markdown alike:
 
 ```texy
-<b class="x">tučně</b> <a href="https://example.com" onclick="x()">odkaz</a> <i>kurzíva</i>
+<b class="x">bold</b> <a href="https://example.com" onclick="x()">link</a> <i>italic</i>
 ```
 
 ```html
-<p><b>tučně</b> <a href="https://example.com">odkaz</a>
-&lt;i&gt;kurzíva&lt;/i&gt;</p>
+<p><b>bold</b> <a href="https://example.com">link</a>
+&lt;i&gt;italic&lt;/i&gt;</p>
 ```
 
-Názvy značek a atributů se porovnávají bez ohledu na velikost písmen, stejně jako v HTML. Značka, kterou HTML nezná, třeba `<foo-bar>`, se ve výchozím stavu zobrazí jako text. Projde jen s `allowedTags = true`.
+Tag and attribute names are compared case-insensitively, just as in HTML. A tag that HTML does not define, such as `<foo-bar>`, is displayed as text by default. It gets through only with `allowedTags = true`.
 
-Třídy a styly z modifikátorů syntaxe Texy hlídají další dva seznamy. ID se v seznamu tříd píše s mřížkou:
+Classes and styles coming from Texy syntax modifiers are guarded by two more lists. IDs go into the class list with a leading hash:
 
 ```php
-$texy->htmlPolicy->allowedClasses = ['photo', '#main'];  // výchozí true
-$texy->htmlPolicy->allowedStyles = ['color'];            // výchozí true
+$texy->htmlPolicy->allowedClasses = ['photo', '#main'];  // default true
+$texy->htmlPolicy->allowedStyles = ['color'];            // default true
 ```
 
-Z `.[photo]` pak vznikne `class="photo"`, `.[reklama]` se zahodí. Atributy `class` a `style` v HTML napsaném přímo do textu tyto seznamy nehlídají, o těch rozhoduje jen `allowedTags`.
+Then `.[photo]` produces `class="photo"`, and `.[ad]` is dropped. The `class` and `style` attributes in HTML written directly into the text are not guarded by these lists; only `allowedTags` decides about them.
 
-Texy 3 kontrolovalo atributy podle definice HTML 4 a zahodilo každý, který k dané značce nepatřil. Texy 4 propustí, co povolí `allowedTags`, protože HTML5 žádný pevný seznam nemá a `data-*` nebo `aria-*` atributy by se musely vyjmenovat. Chcete-li atributy omezit, vyjmenujte je.
+Texy 3 checked attributes against the HTML 4 definition and dropped every one that did not belong to the tag. Texy 4 lets through whatever `allowedTags` allows, because HTML5 has no fixed list of attributes and `data-*` or `aria-*` attributes would otherwise have to be listed one by one. If you want to restrict attributes, list them.
 
 
-Povolené adresy
----------------
+Allowed URLs
+------------
 
-`$texy->urlPolicy` omezuje, na jaká schémata adres smějí vést odkazy a obrázky. Hodnotou je regulární výraz, `null` znamená bez omezení, což je výchozí stav:
+`$texy->urlPolicy` restricts which URL schemes links and images may point to. The value is a regular expression; `null` means no restriction, which is the default:
 
 ```php
 $texy->urlPolicy->linkPattern = '~https?:|ftp:|mailto:~A';
 $texy->urlPolicy->imagePattern = '~https?:~A';
 ```
 
-Kontrolují se jen adresy se schématem. Relativní adresy jako `clanky/sklizen` projdou vždy. Odkaz na nepovolenou adresu nevznikne a zůstane po něm jen text. Z obrázku zůstane v Markdownu jeho popis, v syntaxi Texy celý jeho zápis jako text.
+Only URLs with a scheme are checked. Relative URLs such as `articles/harvest` always pass. A link to a URL that is not allowed is not created, and only its text remains. When an image is rejected, Markdown keeps its description, while Texy syntax keeps the whole image markup as text.
 
-`urlPolicy` patří k `htmlPolicy`, která podle ní kontroluje adresy v HTML značkách. Markdownu proto stačí předat `htmlPolicy`, `urlPolicy` si vezme s ní. Když předáte obě, musí to být právě ta `urlPolicy`, kterou `htmlPolicy` používá, jinak Markdown vyhodí `Texy\InvalidArgumentException`.
+`urlPolicy` belongs to `htmlPolicy`, which uses it to check URLs in HTML tags. So passing `htmlPolicy` to Markdown is enough, and the `urlPolicy` comes along with it. If you pass both, it must be exactly the `urlPolicy` that `htmlPolicy` uses; otherwise Markdown throws `Texy\InvalidArgumentException`.
 
 
-Bezpečný režim
---------------
+Safe Mode
+---------
 
-Komentáře pod článkem píše kdokoli. Bezpečný režim zapne jedno volání. Pro Markdown:
+Anyone can post comments under an article. Turning on safe mode takes a single call. For Markdown:
 
 ```php
 $comments = Texy\Markdown\Markdown::gfm(config: $texy->config);
@@ -298,7 +298,7 @@ Texy\Markdown\Configurator::safeMode($comments);
 $html = $comments->toHtml($comment);
 ```
 
-Pro syntaxi Texy:
+For Texy syntax:
 
 ```php
 $comments = new Texy\Texy;
@@ -306,58 +306,58 @@ Texy\Configurator::safeMode($comments);
 $html = $comments->toHtml($comment);
 ```
 
-Na komentáře si vytvořte vlastní objekt, jiný než na články. Bezpečný režim totiž mění nastavení, se kterými jazyk pracuje, a kdyby je komentáře sdílely s články, omezil by i články. Sdílet můžete jen `config`, kterého se bezpečný režim netýká. Komentáře v Markdownu tak dostanou typografii jako články.
+Create a separate object for comments, not the one you use for articles. Safe mode changes the settings the language works with, and if comments shared them with articles, it would restrict the articles too. You can share only `config`, which safe mode does not touch. Comments in Markdown then get the same typography as articles.
 
-Bezpečný režim nastaví:
+Safe mode:
 
-- třídy, ID a inline styly z modifikátorů zakázané (`allowedClasses` a `allowedStyles` na `false`)
-- jen bezpečné HTML značky: `a` s atributy `href` a `title`, `abbr` s `title`, `b`, `br`, `cite`, `code`, `em`, `i`, `strong`, `sub`, `sup`, `q`, `small`, a u všech atributy `title`, `lang` a `dir`
-- odkazy jen na `http:`, `https:`, `ftp:` a `mailto:`, obrázky jen na `http:` a `https:`
-- `rel="nofollow"` u odkazů na cizí weby
-- v Markdownu vypnuté HTML komentáře ve výstupu, v syntaxi Texy vypnuté HTML komentáře, definice odkazů a obrázky
+- forbids classes, IDs and inline styles from modifiers (sets `allowedClasses` and `allowedStyles` to `false`)
+- allows only safe HTML tags: `a` with the `href` and `title` attributes, `abbr` with `title`, `b`, `br`, `cite`, `code`, `em`, `i`, `strong`, `sub`, `sup`, `q`, `small`, and the attributes `title`, `lang` and `dir` on all of them
+- allows links only to `http:`, `https:`, `ftp:` and `mailto:`, images only to `http:` and `https:`
+- adds `rel="nofollow"` to links to other websites
+- in Markdown, turns off HTML comments in the output; in Texy syntax, turns off HTML comments, link definitions and images
 
-Oba jazyky tak v komentáři pustí `<b>` jako tučné písmo a `<script>` zobrazí jako text:
+So in a comment, both languages let `<b>` through as bold text and display `<script>` as text:
 
 ```
-Skvělý recept! <script>alert(1)</script> <b>Díky!</b>
+Great recipe! <script>alert(1)</script> <b>Thanks!</b>
 ```
 
 ```html
-<p>Skvělý recept! &lt;script&gt;alert(1)&lt;/script&gt; <b>Díky!</b></p>
+<p>Great recipe! &lt;script&gt;alert(1)&lt;/script&gt; <b>Thanks!</b></p>
 ```
 
-Obrázek v komentáři v Markdownu se zobrazí, jen když vede na `http:` nebo `https:`. Z obrázku s jinou adresou, třeba `javascript:`, zůstane jen jeho popis. V syntaxi Texy jsou obrázky v bezpečném režimu vypnuté, a pokud je v komentářích chcete, zapněte je parametrem `images`. Platí pro ně totéž omezení adres a definice obrázků zůstanou vypnuté:
+An image in a Markdown comment is displayed only when it points to `http:` or `https:`. An image with any other URL, such as `javascript:`, leaves only its description. In Texy syntax, images are turned off in safe mode, and if you want them in comments, turn them on with the `images` parameter. The same URL restriction applies to them, and image definitions stay turned off:
 
 ```php
 Texy\Configurator::safeMode($comments, images: true);
 ```
 
-Pro syntaxi Texy jsou ještě dvě předpřipravená nastavení:
+For Texy syntax there are two more ready-made settings:
 
-- `Texy\Configurator::disableImages($texy)` vypne všechny zápisy obrázků a z povolených značek odebere `img`, `object`, `embed` a `applet`
-- `Texy\Configurator::disableLinks($texy)` vypne odkazy, e-mailové adresy a definice odkazů a odebere značku `a`
+- `Texy\Configurator::disableImages($texy)` turns off all image syntaxes and removes `img`, `object`, `embed` and `applet` from the allowed tags
+- `Texy\Configurator::disableLinks($texy)` turns off links, email addresses and link definitions, and removes the `a` tag
 
 
 Markdown
 ========
 
-`Texy\Markdown\Markdown` čte Markdown podle specifikace CommonMark. Rozšíření GitHub Flavored Markdown (tabulky, úkolové seznamy, přeškrtnutí, adresy bez závorek a filtr nebezpečných značek) zapne statická továrna:
+`Texy\Markdown\Markdown` reads Markdown according to the CommonMark specification. The GitHub Flavored Markdown extensions (tables, task lists, strikethrough, URLs without angle brackets and the filter for dangerous tags) are turned on by a static factory:
 
 ```php
-$markdown = Texy\Markdown\Markdown::gfm();   // CommonMark a všechna rozšíření GFM
-$markdown = new Texy\Markdown\Markdown;      // jen CommonMark
+$markdown = Texy\Markdown\Markdown::gfm();   // CommonMark and all GFM extensions
+$markdown = new Texy\Markdown\Markdown;      // CommonMark only
 ```
 
-Konstruktor i `gfm()` přijímají tytéž objekty nastavení: `config`, `htmlOutput`, `htmlPolicy` a `urlPolicy`. Když je předáte z `$texy`, jak ukazuje [úvod stránky |#Konfigurace], platí pro Markdown všechno z části [Engine |#Engine]. Když je nepředáte, vytvoří si Markdown vlastní s výchozími hodnotami, jen typografii nastaví na angličtinu a dělení slov vypne. Tytéž objekty pak najdete na `$markdown->config`, `$markdown->htmlOutput` a tak dál:
+Both the constructor and `gfm()` accept the same settings objects: `config`, `htmlOutput`, `htmlPolicy` and `urlPolicy`. When you pass them from `$texy`, as shown [at the top of the page |#Configuration], everything in the [Engine |#Engine] part applies to Markdown. When you don't, Markdown creates its own with default values, except that it sets typography to English and turns hyphenation off. You then find the same objects at `$markdown->config`, `$markdown->htmlOutput` and so on:
 
 ```php
 $markdown = Texy\Markdown\Markdown::gfm();
-$markdown->config->locale = 'cs';
+$markdown->config->locale = 'de';
 ```
 
-Předat můžete i jen některé objekty, třeba jen `config`, když má Markdown převzít typografii a nadpisy, ale HTML chcete nastavit jinak.
+You can also pass only some of the objects, for example only `config`, when Markdown should take over typography and headings but you want to set up the HTML differently.
 
-Každý zápis jde zapnout nebo vypnout zvlášť v poli `allowedSyntax`, třeba když v článcích nechcete tabulky nebo surové HTML:
+Each syntax can be turned on or off separately in the `allowedSyntax` array, for example when you don't want tables or raw HTML in articles:
 
 ```php
 use Texy\Markdown\Syntax;
@@ -368,190 +368,190 @@ $markdown->allowedSyntax[Syntax::HtmlInline] = false;
 ```
 
 |---
-| Konstanta | Zápis
+| Constant | Syntax
 |---
-| `Syntax::HeadingAtx` | nadpis `# Nadpis`
-| `Syntax::HeadingSetext` | nadpis podtržený `===` nebo `---`
-| `Syntax::BlockQuote` | citace `>`
-| `Syntax::List` | seznamy
-| `Syntax::FencedCode` | blok kódu mezi <code>&#96;&#96;&#96;</code> nebo `~~~`
-| `Syntax::IndentedCode` | blok kódu odsazený čtyřmi mezerami
-| `Syntax::ThematicBreak` | vodorovná čára
-| `Syntax::HtmlBlock` | blok surového HTML
-| `Syntax::HtmlInline` | značka HTML v textu
-| `Syntax::LinkDefinition` | definice odkazu `[jméno]: adresa`
-| `Syntax::Link` | odkaz `[text](adresa)`
-| `Syntax::Image` | obrázek `![popis](adresa)`
-| `Syntax::Delimiter` | zvýraznění `*kurzíva*`, `**tučně**` a totéž s `_`
-| `Syntax::Autolink` | adresa ve špičatých závorkách
-| `Syntax::AutolinkEmail` | e-mail ve špičatých závorkách
-| `Syntax::CodeSpan` | kód v textu
-| `Syntax::Escape` | zpětné lomítko před zvláštním znakem
-| `Syntax::Entity` | HTML entity jako `&amp;`
-| `Syntax::HardBreak` | zalomení řádku dvěma mezerami
-| `Syntax::EscapedBreak` | zalomení řádku zpětným lomítkem
-| `Syntax::SoftBreak` | obyčejný konec řádku uvnitř odstavce
-| `Syntax::Table` | tabulky (GFM)
-| `Syntax::TaskList` | úkolové seznamy (GFM)
-| `Syntax::Strikethrough` | přeškrtnutý text `~~` (GFM)
-| `Syntax::AutolinkExtended` | adresy bez závorek (GFM)
-| `Syntax::TagFilter` | zneškodnění nebezpečných značek jako `<script>` (GFM)
+| `Syntax::HeadingAtx` | heading `# Heading`
+| `Syntax::HeadingSetext` | heading underlined with `===` or `---`
+| `Syntax::BlockQuote` | block quote `>`
+| `Syntax::List` | lists
+| `Syntax::FencedCode` | code block between <code>&#96;&#96;&#96;</code> or `~~~`
+| `Syntax::IndentedCode` | code block indented by four spaces
+| `Syntax::ThematicBreak` | horizontal rule
+| `Syntax::HtmlBlock` | block of raw HTML
+| `Syntax::HtmlInline` | HTML tag in text
+| `Syntax::LinkDefinition` | link definition `[name]: url`
+| `Syntax::Link` | link `[text](url)`
+| `Syntax::Image` | image `![description](url)`
+| `Syntax::Delimiter` | emphasis `*italic*`, `**bold**` and the same with `_`
+| `Syntax::Autolink` | URL in angle brackets
+| `Syntax::AutolinkEmail` | email in angle brackets
+| `Syntax::CodeSpan` | inline code
+| `Syntax::Escape` | backslash before a special character
+| `Syntax::Entity` | HTML entities such as `&amp;`
+| `Syntax::HardBreak` | line break with two spaces
+| `Syntax::EscapedBreak` | line break with a backslash
+| `Syntax::SoftBreak` | ordinary line end inside a paragraph
+| `Syntax::Table` | tables (GFM)
+| `Syntax::TaskList` | task lists (GFM)
+| `Syntax::Strikethrough` | strikethrough text `~~` (GFM)
+| `Syntax::AutolinkExtended` | URLs without angle brackets (GFM)
+| `Syntax::TagFilter` | defusing dangerous tags such as `<script>` (GFM)
 
-Markdown nemá obrázek s popiskem ani emotikony, takže nastavení `figureTag`, `figureClass` a `emoticonClass` se ho netýkají. Obrázek, který v odstavci stojí sám, obalí do značky z `imageParagraphTag`, ve výchozím stavu `<div>`.
-
-
-Syntaxe Texy
-============
+Markdown has neither images with captions nor emoticons, so the `figureTag`, `figureClass` and `emoticonClass` settings do not affect it. An image standing alone in a paragraph is wrapped in the tag from `imageParagraphTag`, `<div>` by default.
 
 
-Které zápisy jsou zapnuté
--------------------------
+Texy Syntax
+===========
 
-Pole `$texy->allowedSyntax` zapíná a vypíná jednotlivé zápisy syntaxe Texy. Názvy jsou k dispozici i jako konstanty třídy `Texy\Syntax`:
+
+Which Syntaxes Are Enabled
+--------------------------
+
+The `$texy->allowedSyntax` array turns individual Texy syntaxes on and off. The names are also available as constants of the `Texy\Syntax` class:
 
 ```php
-$texy->allowedSyntax['image'] = false;          // bez obrázků
-$texy->allowedSyntax['phrase/ins'] = true;      // zapnout ++vložený text++
+$texy->allowedSyntax['image'] = false;          // no images
+$texy->allowedSyntax['phrase/ins'] = true;      // turn on ++inserted text++
 $texy->allowedSyntax[Texy\Syntax::Emoticon] = true;
 ```
 
-Pole se čte jednou na začátku převodu, jeho změna během převodu se neprojeví.
+The array is read once at the start of a conversion; changing it during the conversion has no effect.
 
 |---
-| Klíč | Výchozí | Zápis
+| Key | Default | Syntax
 |---
-| `phrase/strong` | zapnuto | tučně `**text**`
-| `phrase/em` | zapnuto | kurzíva `//text//`
-| `phrase/em-alt`, `phrase/em-alt2` | zapnuto | kurzíva `*text*`
-| `phrase/strong+em` | zapnuto | tučná kurzíva `***text***`
-| `phrase/code` | zapnuto | kód <code>&#96;text&#96;</code>
-| `phrase/notexy` | zapnuto | text bez formátování `''text''`
-| `phrase/span`, `phrase/span-alt` | zapnuto | `"text .[třída]"` a `~text .[třída]~`
-| `phrase/quote` | zapnuto | citace v textu `>>text<<`
-| `phrase/acronym`, `phrase/acronym-alt` | zapnuto | zkratky `NBA((National Basketball Association))`
-| `phrase/sup-alt`, `phrase/sub-alt` | zapnuto | indexy `x^2`, `O_2`
-| `phrase/sup`, `phrase/sub` | vypnuto | indexy `x^^2^^`, `O__2__`
-| `phrase/ins` | vypnuto | vložený text `++text++`
-| `phrase/del` | vypnuto | smazaný text `--text--`
-| `phrase/quicklink` | zapnuto | odkaz na jedno slovo `slovo:[adresa]`
-| `phrase/wikilink` | zapnuto | odkaz `[text\|adresa]`
-| `phrase/markdown` | zapnuto | odkaz `[text](adresa)`
-| `phrase/escaped-asterix` | zapnuto | hvězdička zneplatněná zpětným lomítkem
-| `phrase/link` | zapnuto | odkaz na frázi `"text":adresa` nebo `**text**:adresa`, vypnutím zmizí i odkazy `slovo:[adresa]`, `[text\|adresa]` a `[text](adresa)`
-| `link/url` | zapnuto | adresa v textu jako odkaz
-| `link/email` | zapnuto | e-mail v textu jako odkaz
-| `link/definition` | zapnuto | definice odkazu `[jméno]: adresa`
-| `link/reference` | vypnuto | odkaz zapsaný jen jménem `[jméno]`
-| `image` | zapnuto | obrázek `[* foto.jpg *]`
-| `image/definition` | zapnuto | definice obrázku `[*jméno*]: foto.jpg`
-| `figure` | zapnuto | obrázek s popiskem
-| `emoticon` | vypnuto | emotikony `:-)`
-| `heading/underlined` | zapnuto | podtržené nadpisy
-| `heading/surrounded` | zapnuto | nadpisy `### Nadpis`
-| `list` | zapnuto | seznamy
-| `list/decimal`, `list/roman`, `list/alpha` | zapnuto | číslování `1.` a `1)`, `I.` a `I)`, `a)` a `A)`
-| `list/definition` | zapnuto | seznamy definic
-| `table` | zapnuto | tabulky
-| `blockquote` | zapnuto | citace `>`
-| `horizline` | zapnuto | vodorovná čára
-| `blocks` | zapnuto | všechny bloky `/--`
-| `block/code`, `block/pre`, `block/html`, `block/text`, `block/div`, `block/comment`, `block/default` | zapnuto | jednotlivé druhy bloků `/--`
-| `block/texysource` | vypnuto | blok `/--texysource`, který ukáže HTML svého obsahu jako zdrojový kód
-| `fenced-code` | zapnuto | blok kódu mezi <code>&#96;&#96;&#96;</code>
-| `html/tag` | zapnuto | HTML značky v textu
-| `html/comment` | zapnuto | HTML komentáře
-| `html/entity` | zapnuto | HTML entity jako `&amp;`
-| `script` | zapnuto | direktivy `{{jméno: hodnota}}`
+| `phrase/strong` | on | bold `**text**`
+| `phrase/em` | on | italic `//text//`
+| `phrase/em-alt`, `phrase/em-alt2` | on | italic `*text*`
+| `phrase/strong+em` | on | bold italic `***text***`
+| `phrase/code` | on | code <code>&#96;text&#96;</code>
+| `phrase/notexy` | on | text without formatting `''text''`
+| `phrase/span`, `phrase/span-alt` | on | `"text .[class]"` and `~text .[class]~`
+| `phrase/quote` | on | inline quotation `>>text<<`
+| `phrase/acronym`, `phrase/acronym-alt` | on | abbreviations `NBA((National Basketball Association))`
+| `phrase/sup-alt`, `phrase/sub-alt` | on | superscripts and subscripts `x^2`, `O_2`
+| `phrase/sup`, `phrase/sub` | off | superscripts and subscripts `x^^2^^`, `O__2__`
+| `phrase/ins` | off | inserted text `++text++`
+| `phrase/del` | off | deleted text `--text--`
+| `phrase/quicklink` | on | link on a single word `word:[url]`
+| `phrase/wikilink` | on | link `[text\|url]`
+| `phrase/markdown` | on | link `[text](url)`
+| `phrase/escaped-asterix` | on | asterisk escaped with a backslash
+| `phrase/link` | on | phrase link `"text":url` or `**text**:url`; turning it off also removes the links `word:[url]`, `[text\|url]` and `[text](url)`
+| `link/url` | on | URL in text as a link
+| `link/email` | on | email in text as a link
+| `link/definition` | on | link definition `[name]: url`
+| `link/reference` | off | link written by name only `[name]`
+| `image` | on | image `[* photo.jpg *]`
+| `image/definition` | on | image definition `[*name*]: photo.jpg`
+| `figure` | on | image with a caption
+| `emoticon` | off | emoticons `:-)`
+| `heading/underlined` | on | underlined headings
+| `heading/surrounded` | on | headings `### Heading`
+| `list` | on | lists
+| `list/decimal`, `list/roman`, `list/alpha` | on | numbering `1.` and `1)`, `I.` and `I)`, `a)` and `A)`
+| `list/definition` | on | definition lists
+| `table` | on | tables
+| `blockquote` | on | block quote `>`
+| `horizline` | on | horizontal rule
+| `blocks` | on | all `/--` blocks
+| `block/code`, `block/pre`, `block/html`, `block/text`, `block/div`, `block/comment`, `block/default` | on | individual kinds of `/--` blocks
+| `block/texysource` | off | the `/--texysource` block, which shows the HTML of its content as source code
+| `fenced-code` | on | code block between <code>&#96;&#96;&#96;</code>
+| `html/tag` | on | HTML tags in text
+| `html/comment` | on | HTML comments
+| `html/entity` | on | HTML entities such as `&amp;`
+| `script` | on | directives `{{name: value}}`
 
-Typografie a dělení slov nejsou zápisy, vypínají se v [nastavení enginu |#Typografie].
+Typography and hyphenation are not syntaxes; you turn them off in the [engine settings |#Typography].
 
 
-Odstavce
---------
+Paragraphs
+----------
 
 ```php
 $texy->config->mergeLines = true;
 ```
 
-Ve výchozím stavu Texy spojí řádky odstavce do jednoho souvislého textu a nový řádek vytvoří jen tam, kde řádek začíná mezerou. S `false` se zalomí každý řádek.
+By default, Texy joins the lines of a paragraph into one continuous text and starts a new line only where a line begins with a space. With `false`, every line break is kept.
 
 
-Vyvažování nadpisů
-------------------
+Heading Balancing
+-----------------
 
-V syntaxi Texy autor nemusí přemýšlet, jestli článek začíná nadpisem první, nebo druhé úrovně. Texy nadpisy vyváží: nejdůležitější nadpis v článku dostane úroveň `headingTop` a ostatní se seřadí pod něj, ať autor začal kterýmkoli podtržením. Důležitost určuje znak podtržení: `#` je nejdůležitější, pak `*`, `=` a `-`.
+In Texy syntax, the author doesn't have to think about whether the article starts with a first-level or a second-level heading. Texy balances the headings: the most important heading in the article gets the `headingTop` level and the others line up below it, whichever underline the author started with. The underline character sets the importance: `#` is the most important, then `*`, `=` and `-`.
 
-Vyvažování můžete vypnout. Každý znak podtržení pak má pevnou úroveň, `#` první, `*` druhou, `=` třetí a `-` čtvrtou, posunutou podle `headingTop`:
+You can turn balancing off. Each underline character then has a fixed level, `#` the first, `*` the second, `=` the third and `-` the fourth, shifted by `headingTop`:
 
 ```php
-$texy->config->headingBalancing = Texy\HeadingBalancing::Fixed;   // výchozí Dynamic
+$texy->config->headingBalancing = Texy\HeadingBalancing::Fixed;   // default Dynamic
 ```
 
-U nadpisů zapsaných mřížkami na začátku řádku, jako `### Nadpis`, určuje `headingMoreMeansHigher` (výchozí `true`), že víc mřížek znamená důležitější nadpis.
+For headings written with hashes at the start of the line, such as `### Heading`, `headingMoreMeansHigher` (default `true`) says that more hashes mean a more important heading.
 
-Markdown nadpisy nevyvažuje. `#` je vždy první úroveň, `##` druhá a tak dál, posunuté jen podle `headingTop`.
+Markdown does not balance headings. `#` is always the first level, `##` the second and so on, shifted only by `headingTop`.
 
 
-Odkazy zapsané jménem
+Links Written by Name
 ---------------------
 
-Adresy, na které články často odkazují, nemusí autoři vypisovat. Napíšou jen jméno v hranatých závorkách a adresu k němu doplní vaše funkce:
+Authors don't have to type out the URLs that articles often link to. They write just a name in square brackets, and your function fills in the URL:
 
 ```php
 $texy->config->linkResolver = fn(string $name) => match ($name) {
-	'obchod' => 'https://example.com/susarna',
-	'wiki' => 'https://cs.wikipedia.org/wiki/%s',  // %s zastupuje text odkazu
+	'shop' => 'https://example.com/dryer',
+	'wiki' => 'https://en.wikipedia.org/wiki/%s',  // %s stands for the link text
 	default => null,
 };
 ```
 
 ```texy
-"Sušárnu":[obchod] jsme koupili levně a sušíme v ní "švestky":[wiki].
+We bought our "dryer":[shop] cheaply and now use it to dry "plums":[wiki].
 ```
 
 ```html
-<p><a href="https://example.com/susarna">Sušárnu</a> jsme koupili levně a
-sušíme v ní <a href="https://cs.wikipedia.org/wiki/%C5%A1vestky">švestky</a>.</p>
+<p>We bought our <a href="https://example.com/dryer">dryer</a> cheaply and now
+use it to dry <a href="https://en.wikipedia.org/wiki/plums">plums</a>.</p>
 ```
 
-Texy se funkce zeptá jednou za každý odkaz, jehož jméno článek sám nedefinuje. Definice se stejným jménem napsaná přímo v článku tedy má přednost. Funkce dostane jméno tak, jak ho autor napsal, i s případnou kotvou `#sekce`. Vrátí adresu, nebo `null`, když jméno nezná, a adresou pak zůstane samotné jméno. Vrácená adresa projde kontrolou [povolených adres |#Povolené adresy] jako každá jiná.
+Texy asks the function once for each link whose name the article does not define itself. So a definition with the same name written directly in the article takes precedence. The function gets the name exactly as the author wrote it, including any anchor `#section`. It returns the URL, or `null` when it does not know the name, in which case the name itself is used as the URL. The returned URL is checked against the [allowed URLs |#Allowed URLs] like any other.
 
-Jako druhý parametr dostane funkce uzel odkazu `Texy\Nodes\LinkNode` a smí ho upravit, třeba mu změnit text v `$link->content`. Odkaz zapsaný jen jménem, `[stranka]`, poznáte podle `$link->isBareRef`. Obrázky se takhle doplnit nedají: obrázek definuje autor přímo v článku, `[*logo*]: logo.png 100x50 .(Logo blogu)`, nebo mu adresu nastaví váš [průchod |custom-handlers#Úprava dokumentu] nad uzly `ImageNode`.
+As its second parameter, the function gets the link node `Texy\Nodes\LinkNode` and may modify it, for example change its text in `$link->content`. You can tell a link written by name only, `[page]`, by `$link->isBareRef`. Images cannot be filled in this way: the author defines an image directly in the article, `[*logo*]: logo.png 100x50 .(Blog logo)`, or your [pass |custom-handlers#Modifying the Document] over `ImageNode` nodes sets its URL.
 
-V syntaxi Texy může být odkazem i zvýrazněný text, třeba `**recept**:https://example.com`. Pokud to nechcete, nastavte `$texy->allowedSyntax['phrase/link'] = false` a ze zvýraznění odkaz nevznikne. Pozor, tím vypnete všechny odkazy zapsané na text, tedy i `"text":adresa`, `[text|adresa]`, `[text](adresa)` a `slovo:[adresa]`. Zůstanou jen adresy a e-maily napsané přímo v textu.
+In Texy syntax, emphasized text can be a link too, such as `**recipe**:https://example.com`. If you don't want that, set `$texy->allowedSyntax['phrase/link'] = false` and no link is created from emphasis. Be careful: this turns off every link attached to text, including `"text":url`, `[text|url]`, `[text](url)` and `word:[url]`. Only URLs and email addresses written directly in the text remain.
 
 
-Emotikony
+Emoticons
 ---------
 
-Emotikony jsou ve výchozím stavu vypnuté. Po zapnutí Texy nahradí `:-)` znakem 🙂 a podobně:
+Emoticons are turned off by default. Once you turn them on, Texy replaces `:-)` with the 🙂 character and so on:
 
 ```php
 $texy->allowedSyntax['emoticon'] = true;
-$texy->config->emoticons[':-*'] = '😘';   // přidat vlastní
+$texy->config->emoticons[':-*'] = '😘';   // add your own
 ```
 
-Výchozí sada je `:-)`, `:-(`, `;-)`, `:-D`, `8-O`, `8-)`, `:-?`, `:-x`, `:-P` a `:-|`. S nastavením `$texy->htmlOutput->emoticonClass` dostane každý emotikon obal `<span>` s touto třídou.
+The default set is `:-)`, `:-(`, `;-)`, `:-D`, `8-O`, `8-)`, `:-?`, `:-x`, `:-P` and `:-|`. With `$texy->htmlOutput->emoticonClass` set, each emoticon is wrapped in a `<span>` with that class.
 
 
-Seznamy
--------
+Lists
+-----
 
-Položky odrážkových seznamů začínají znakem `*`, `-` nebo `+`, položky číslovaných `1.`, `1)`, `I.`, `I)`, `a)` nebo `A)`. Tyto znaky jsou pevné, jednotlivé druhy číslování ale můžete vypnout jako zápisy:
+Bulleted list items start with `*`, `-` or `+`, numbered ones with `1.`, `1)`, `I.`, `I)`, `a)` or `A)`. These characters are fixed, but you can turn off individual kinds of numbering as syntaxes:
 
 ```php
-$texy->allowedSyntax['list/decimal'] = false;  // 1. a 1)
-$texy->allowedSyntax['list/roman'] = false;    // I. a I)
-$texy->allowedSyntax['list/alpha'] = false;    // a) a A)
+$texy->allowedSyntax['list/decimal'] = false;  // 1. and 1)
+$texy->allowedSyntax['list/roman'] = false;    // I. and I)
+$texy->allowedSyntax['list/alpha'] = false;    // a) and A)
 ```
 
-Vypnutá značka zůstane obyčejným textem. Výjimkou jsou `I)`, `V)` a `X)`, které se s vypnutými římskými číslicemi čtou jako písmena, takže řádky `I) …` a `J) …` vytvoří seznam označený písmeny od I.
+A marker that is turned off stays plain text. The exceptions are `I)`, `V)` and `X)`, which are read as letters when Roman numerals are turned off, so lines `I) …` and `J) …` create a list labeled with letters starting at I.
 
 
-Direktivy
----------
+Directives
+----------
 
-Zápis `{{jméno: hodnota}}` v textu je direktiva, kterou obslouží váš kód. Jak na to, popisuje stránka [Úprava chování prvků |custom-handlers#Direktivy].
+The syntax `{{name: value}}` in the text is a directive, handled by your code. The page [Customizing Elements |custom-handlers#Directives] shows how.
 
-{{maintitle: Konfigurace Texy: Markdown, HTML výstup a bezpečný režim}}
-{{description: Všechna nastavení Texy na jednom místě: typografie a nadpisy pro Markdown i syntaxi Texy, podoba HTML, povolené značky a adresy a bezpečný režim pro komentáře.}}
+{{maintitle: Texy Configuration: Markdown, HTML Output and Safe Mode}}
+{{description: Every Texy setting in one place: typography and headings for Markdown and Texy syntax, HTML output, allowed tags and URLs, and safe mode for comments.}}
