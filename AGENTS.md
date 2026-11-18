@@ -4,7 +4,7 @@ It is my fervent wish that this file guide every AI coding agent working with co
 
 ## Project Overview
 
-This is the documentation repository for the PHP libraries of David Grudl (`github.com/dg/deegee-docs`): Texy, Dibi, AI Access, DressCode and PhpSyntax. It holds their user manuals, written in Texy markup and published under the domain deegee.dev, each library on its own subdomain, and DressCode on its own domain dresscode.run.
+This is the documentation repository for the PHP libraries of David Grudl (`github.com/dg/deegee-docs`): Texy, Dibi, AI Access, DressCode, PhpSyntax and Butler. It holds their user manuals, written in Texy markup and published under the domain deegee.dev, each library on its own subdomain, and DressCode on its own domain dresscode.run.
 
 The Nette framework itself is documented in a separate repository (`github.com/nette/docs`, published at nette.org). The conventions here are the same as there.
 
@@ -41,7 +41,7 @@ The `version` field in `meta.json` says which version of the package the pages d
 
 The package directory always holds the newest version. An older version that keeps its own documentation lives in a sibling directory `<package>-<version>` (`texy-3.x/`), whose `meta.json` names the package in `book`. The web makes the highest version the default one and serves the older ones at `/<lang>/<page>/<version>`.
 
-### Package Inventory (5 packages)
+### Package Inventory (6 packages)
 
 Each package is published on its own subdomain of deegee.dev, named after its directory, except DressCode, which has its own domain:
 
@@ -51,6 +51,7 @@ Each package is published on its own subdomain of deegee.dev, named after its di
 - `ai-access/` - AI Access, one PHP interface for OpenAI, Claude, Gemini, DeepSeek and Grok (https://ai-access.deegee.dev)
 - `dresscode/` - DressCode, PHP code style checker and fixer built on a lossless syntax tree (https://dresscode.run)
 - `phpsyntax/` - PhpSyntax, lossless syntax tree (CST) parser for PHP (https://phpsyntax.deegee.dev)
+- `butler/` - Butler, background tasks for webhooks, cron and the command line (https://butler.deegee.dev)
 
 **Website:**
 - `www/` - Content of the main site (https://deegee.dev)

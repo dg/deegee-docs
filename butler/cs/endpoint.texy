@@ -1,0 +1,116 @@
+Endpoint pro webhooky a cron
+****************************
+
+.[perex]
+Endpoint je jeden PHP soubor, který volají GitHub, platební brána i cron. Ověří, kdo volá, zapíše úlohu, okamžitě odpoví a teprve pak úlohu zpracuje. Ukážeme si, jak ho postavit, jak chránit jednotlivé akce a co přesně odpovídá.
+
+
+Akce
+====
+
+Endpoint dostane mapu akcí. Klíč je jméno akce, hodnota úloha nebo seznam úloh, které spustí:
+
+```php
+// www/endpoint.php
+$endpoint = new Butler\Endpoint(
+	$container->getByType(Butler\Runner::class),
+	verifier: new Butler\Verifiers\GitHubSignature($secrets['github']),
+);
+
+$endpoint->handle([
+	'release' => ImportReleasesTask::class,
+	'github' => [ImportReleasesTask::class, ImportContributorsTask::class],
+	'sponsor' => SponsorTask::class,
+]);
+```
+
+Akce se vybírá podle parametru v URL. Request na `endpoint.php?release` spustí `ImportReleasesTask`, request na `endpoint.php?github` obě úlohy. Když URL nenese žádnou známou akci, endpoint odpoví 404.
+
+Do jedné akce klidně dej víc úloh. Cron tak jedním voláním spustí všechno, co má běžet každých pět minut. Pokud jednu z úloh zrovna zpracovává jiný proces, endpoint ji přeskočí a pokračuje další, takže pomalá úloha nezdrží ostatní.
+
+
+Kdo smí úlohu spustit
+=====================
+
+Endpoint je veřejná adresa a bez ověření by úlohy mohl spouštět kdokoli. Proto dostává **ověřovač** (verifier), který rozhodne, jestli request přišel od někoho, komu věříš. Ověřovač zadaný v konstruktoru platí pro všechny akce, pokud akce nemá vlastní:
+
+```php
+$endpoint->handle([
+	'release' => ImportReleasesTask::class,         // ověří výchozí ověřovač
+	'sponsor' => new Butler\Action(
+		SponsorTask::class,
+		verifier: new Butler\Verifiers\GitHubSignature($secrets['sponsors']),
+	),
+	'paypal' => new Butler\Action(
+		PaypalTask::class,
+		verifier: new Butler\Verifiers\None,        // ověřuje úloha sama, viz níže
+	),
+]);
+```
+
+Butler přináší čtyři ověřovače:
+
+- **`GitHubSignature($secret)`** ověří podpis, kterým GitHub opatří každý webhook. Tajemství nastavíš v nastavení webhooku na GitHubu a stejné předáš sem. Podpis se počítá z těla requestu (HMAC SHA-256 v hlavičce `X-Hub-Signature-256`).
+- **`BearerToken($token)`** očekává hlavičku `Authorization: Bearer <token>`. Hodí se pro cron nebo pro volání z vlastní aplikace. S `allowQuery: true` přijme token i v URL jako `?token=...`, což potřebuješ, když volající hlavičku poslat neumí. Počítej ale s tím, že URL končí v logu webového serveru, takže tam patří jen token, který nic jiného neotevře.
+- **`AnyOf(...)`** projde, když projde kterýkoli z vyjmenovaných, třeba podpis GitHubu, nebo token cronu.
+- **`None`** pustí každého. Použij ho jen u akce, jejíž úloha si původ ověří sama. Typicky PayPal IPN, které úloha ověřuje zpětným dotazem na PayPal.
+
+Prázdné tajemství nebo token ověřovač odmítne výjimkou. Kdyby ho přijal, endpoint by pustil každý request bez tokenu.
+
+Pro každý druh volajícího měj vlastní tajemství: jedno pro webhooky repozitářů, jiné pro sponzory, další pro cron. Když jedno unikne, neotevře ostatní akce.
+
+
+Podmínka akce
+=============
+
+Někdy chceš úlohu spustit jen pro část requestů. GitHub posílá webhook o každém pushi, ale dokumentaci stačí aktualizovat, když se změní hlavní větev. Na to má akce podmínku `when`:
+
+```php
+$endpoint->handle([
+	'doc' => new Butler\Action(
+		UpdateDocsTask::class,
+		when: fn(Butler\Payload $p) => ($p->decodeJson()->ref ?? null) === 'refs/heads/master',
+	),
+]);
+```
+
+Když podmínka vrátí `false`, endpoint odpoví 200, ale nic nezapíše. Push do jiné větve tak úlohu vůbec nespustí. Pokud podmínka narazí na neplatný JSON, endpoint odpoví 400.
+
+Díky podmínce může zůstat úloha `Task`em, který se slučuje, i když se z payloadu rozhoduje, jestli běžet. Bez ní by musela být `PayloadTask` a každý push by zpracovala zvlášť.
+
+
+Co endpoint odpovídá
+====================
+
+| Request | Odpověď |
+|---|---|
+| přijatý, nebo nesplněná podmínka | 200, prázdné tělo |
+| neznámá akce | 404 |
+| volající neprošel ověřením | 403 |
+| tělo větší než 64 kB | 413 |
+| podmínka narazila na neplatný payload | 400 |
+| fronta úlohy je plná | 503 a `Retry-After: 60` |
+
+**Odpověď říká, že práce byla přijata, ne že se povedla.** Endpoint odpoví hned po zápisu, takže o případném selhání úlohy se odesílatel nedozví. Selhání dostane [obsluha běhů |configuration#onrun], s Nette rozšířením se zapíše do logu Tracy, a práce se zkusí znovu při dalším spuštění. GitHub by neúspěšné doručení stejně sám neopakoval a PayPal dostane prázdnou odpověď 200, jak jeho protokol IPN požaduje.
+
+Okamžitá odpověď ještě před zpracováním funguje pod **PHP-FPM**, kde to umožňuje funkce `fastcgi_finish_request()`. Jinde, třeba s vestavěným serverem `php -S`, volající počká, dokud úlohy nedoběhnou.
+
+Všechny úlohy akce endpoint zkontroluje ještě před prvním zápisem. Když je některá neznámá nebo lokálně nepovolená, nezapíše se žádná a nevznikne situace, kdy by půlka akce čekala na zpracování.
+
+
+Endpoint bez globálních proměnných
+==================================
+
+Metoda `handle()` čte request z `$_SERVER`, `$_GET` a `php://input` a odpověď posílá přes `header()`. Pokud chceš endpoint zapojit jinak, třeba do presenteru, použij metodu `accept()`. Ověří a zapíše payload, který jí předáš, a vrátí seznam spuštěných úloh. Odmítnutí oznámí výjimkou `Butler\RequestException`, jejíž kód je HTTP status:
+
+```php
+try {
+	$tasks = $endpoint->accept($actions, new Butler\Payload($body, $headers, $query));
+	// odpovědět 200 a pak zpracovat: $runner->drainMany($tasks)
+} catch (Butler\RequestException $e) {
+	// odpovědět $e->getCode()
+}
+```
+
+{{maintitle: Endpoint v Butleru: webhooky z GitHubu, PayPalu a cron}}
+{{description: Jak v Butleru postavit endpoint pro webhooky a cron: akce, ověření podpisem GitHubu nebo tokenem, podmínka akce a co přesně endpoint odpovídá.}}

@@ -1,0 +1,118 @@
+Nastavení
+*********
+
+.[perex]
+Jak Butler zapojit do aplikace v Nette i bez něj, kam ukládá čekající práci a co všechno jde nastavit.
+
+
+Nette
+=====
+
+Rozšíření zaregistruje do DI kontejneru úložiště, `Butler\Runner` a `Butler\Cli`:
+
+```neon
+extensions:
+	butler: Butler\Bridges\Nette\ButlerExtension
+
+butler:
+	production: true
+```
+
+Úlohy musí být služby v kontejneru, Butler je odtud bere podle třídy. Nejjednodušší je nechat je zaregistrovat automaticky:
+
+```neon
+search:
+	tasks:
+		in: %appDir%/Tasks
+		implements:
+			- Butler\Task
+			- Butler\PayloadTask
+```
+
+
+production
+----------
+
+Říká, jestli aplikace běží v produkci. Mimo ni Butler spustí jen úlohy s atributem [#[Butler\AllowedLocally] |tasks#Úlohy, které smí běžet jen v produkci]. Volba je povinná, aby se na ni nedalo zapomenout.
+
+Hodnotu dej do konfigurace, která se v produkci liší od té lokální, například `production: true` do společné konfigurace a `production: false` do lokální, kterou nahrává jen vývojářský počítač.
+
+Nepoužívej `%productionMode%` z Nette. Ten je `false` v konzoli a pro IP adresu vývojáře, takže by na produkčním serveru zakázal úlohy právě v cronu.
+
+
+dir
+---
+
+Adresář, kam Butler zapisuje čekající práci a zámky. Výchozí je `%tempDir%/butler`.
+
+Adresář musí přežít nasazení nové verze a nesmí se mazat spolu s cache. Mazání `temp/cache` mu nevadí, mazání celého `temp` ano, protože by zmizela zapsaná a dosud nezpracovaná práce. Musí do něj také moci zapisovat PHP-FPM i cron, tedy oba uživatelé, pod kterými běží.
+
+Když dvě aplikace sdílejí jeden `temp` a mají úlohy stejné třídy, dej každé vlastní adresář. Jinak by se spuštění jedné aplikace sloučilo se spuštěním druhé.
+
+
+maxQueueSize
+------------
+
+Kolik payloadů může nejvýš čekat ve frontě jedné `PayloadTask`. Výchozí je 1000. Další request endpoint odmítne kódem 503, takže zahlcení veřejné akce nezaplní disk.
+
+
+maxAttempts
+-----------
+
+Kolikrát se payload zkusí zpracovat, než ho Butler [odmítne |how-it-works#Odmítnuté payloady]. Výchozí je 10.
+
+
+staleAfter
+----------
+
+Po kolika sekundách čekání ohlásí příkaz [drain |cli#Cron: drain] práci jako uvízlou. Výchozí je 3600, tedy hodina.
+
+
+onRun
+-----
+
+Obsluha, která dostane zprávu o každém běhu úlohy, úspěšném i neúspěšném. Výchozí zapisuje selhání do logu Tracy, a když Tracy není nainstalovaná, do `error_log`. Vlastní obsluhu nastavíš třeba takhle:
+
+```neon
+butler:
+	onRun: App\Monitoring::recordRun(...)
+```
+
+```php
+final class Monitoring
+{
+	public static function recordRun(Butler\RunReport $report): void
+	{
+		// $report->task      třída úlohy
+		// $report->entry     zpracovaná práce, null když úloha selhala ještě před ní
+		// $report->duration  doba běhu v sekundách
+		// $report->error     výjimka, nebo null při úspěchu
+	}
+}
+```
+
+
+Bez Nette
+=========
+
+`Butler\Runner` potřebuje čtyři věci: úložiště, továrnu na úlohy, informaci o prostředí a obsluhu běhů.
+
+```php
+$runner = new Butler\Runner(
+	store: new Butler\FileStore(__DIR__ . '/data/butler'),
+	factory: fn(string $task) => new $task,
+	production: getenv('APP_ENV') === 'production',
+	onRun: function (Butler\RunReport $report): void {
+		if ($report->error) {
+			error_log((string) $report->error);
+		}
+	},
+);
+```
+
+Továrna dostane třídu úlohy a vrátí její instanci. Když úlohy potřebují závislosti, vytvoř je tady, nebo je vezmi z kontejneru, který používáš.
+
+`FileStore` má ještě dva volitelné parametry, `maxQueueSize` a `maxAttempts`, se stejným významem jako volby výše.
+
+{{maintitle: Nastavení Butleru: Nette rozšíření, úložiště a limity}}
+{{description: Jak zapojit Butler do Nette i bez něj: povinná volba production, adresář úložiště, limity fronty a pokusů a vlastní obsluha běhů úloh.}}

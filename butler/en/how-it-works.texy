@@ -1,0 +1,77 @@
+How It Works
+************
+
+.[perex]
+What happens between the arrival of a webhook and the end of a task, what exactly Butler guarantees and what happens when something fails. You do not need this page for everyday use, but it helps when you look for why something behaves the way it does.
+
+
+Record, Answer, Process
+=======================
+
+Every request goes through the same steps:
+
+1. The endpoint verifies the caller and the condition of the action.
+2. **It records the work in the store.** For a `Task` it sets the marker "pending", for a `PayloadTask` it adds the payload to the end of the queue.
+3. It answers and closes the connection. From this moment on, the sender knows nothing more.
+4. **It tries the lock of the task, but does not wait for it.** When another process holds the lock, the request ends. Its work is recorded and the other process will see it.
+5. When it gets the lock, it processes everything pending, releases the lock and looks once more whether something arrived meanwhile.
+
+The last check after releasing the lock matters. A request that arrived just before did not get the lock, because this process still held it, and it ended. If the process did not look again after the release, that work would be left lying. This way the process does it.
+
+The result: at any moment at most one process works on a task, and no request waits for the lock. A burst of a hundred webhooks takes a hundred requests of a few milliseconds each and one process that does the work.
+
+
+Merging in a Task
+=================
+
+The marker "pending" of a `Task` carries a random token that each further trigger overwrites. The process reads the token before it starts the task, and after the task finishes successfully it removes the marker only if the token is still the same. When a new trigger arrived meanwhile, the token differs, the marker stays and the task runs once more.
+
+That is why ten triggers during one run mean exactly one more run: they all overwrote the same marker.
+
+
+What Is Guaranteed
+==================
+
+**Recorded work runs at least once.** The marker and the payload are removed only after a successful run. When a process dies halfway, the lock dies with it and the recorded work stays. The next run of the same task takes it over, or the command [drain |cli#Cron: drain] from cron does.
+
+**Not exactly once.** When a process dies after doing the task but before removing the record, the task runs again. That is why it must [cope with repetition |tasks#A Task Must Cope with Repetition].
+
+**Payloads are processed in the order of arrival.** A failed payload stays first and the others wait. Events from the same sender are thus never swapped.
+
+Butler cannot guarantee the order in which the sender sent the events, though. When GitHub delivers two changes in reverse order, Butler processes them as they arrived.
+
+
+Attempts
+========
+
+Butler counts the attempts to process a payload **before the run starts**, not after a failure. That is because of failures that never reach any `catch`: a fatal error, running out of memory, a process killed by PHP-FPM. If attempts were counted after an exception, such a payload would never be counted, it would crash the process again on every attempt and block the queue forever.
+
+When a task fails with an exception, the exception goes to the [handler of runs |configuration#onrun] and the processing of that task's queue ends. It is tried again on the next run.
+
+A `Task` is neither counted nor rejected. A failing `Task` is simply tried again on every further run, because it has no payload that could be set aside.
+
+
+Rejected Payloads
+=================
+
+A payload that has used up its [attempts |configuration#maxattempts] is moved aside by Butler, so that it does not block the others. The same happens to a payload that cannot be read. The command `drain` then keeps reporting them until you return them to the queue with the command [retry |cli#Returning Rejected Payloads] or delete them.
+
+
+The Store
+=========
+
+`Butler\FileStore` keeps everything in a directory, for each task under the name of its class with dots instead of backslashes:
+
+```
+App.Tasks.ImportReleasesTask.lock        lock of the processing
+App.Tasks.ImportReleasesTask.marker      marker of a pending run of a Task
+App.Tasks.SponsorTask.queue/             queue of payloads, one file per payload
+App.Tasks.SponsorTask.rejected/          rejected payloads
+```
+
+The files with payloads are readable JSON, so when debugging you easily see what is pending. Times are in UTC. Lock files are never deleted, because on Linux deleting a locked file would let another process lock a new file of the same name.
+
+The store sits behind the interface `Butler\Store`, so it can be replaced by your own, for example in a database, should the application run on several servers.
+
+{{maintitle: How Butler Works: Recording, Locks, Attempts and Guarantees}}
+{{description: What Butler does between the arrival of a webhook and the end of a task: recording before answering, a lock without waiting, merging, attempts, rejected payloads and the store.}}

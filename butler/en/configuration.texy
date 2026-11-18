@@ -1,0 +1,118 @@
+Configuration
+*************
+
+.[perex]
+How to wire Butler into an application in Nette and without it, where it stores pending work and what you can configure.
+
+
+Nette
+=====
+
+The extension registers the store, `Butler\Runner` and `Butler\Cli` in the DI container:
+
+```neon
+extensions:
+	butler: Butler\Bridges\Nette\ButlerExtension
+
+butler:
+	production: true
+```
+
+Tasks have to be services in the container, Butler takes them from there by their class. The simplest way is to have them registered automatically:
+
+```neon
+search:
+	tasks:
+		in: %appDir%/Tasks
+		implements:
+			- Butler\Task
+			- Butler\PayloadTask
+```
+
+
+production
+----------
+
+Says whether the application runs in production. Outside of it, Butler runs only tasks with the attribute [#[Butler\AllowedLocally] |tasks#Tasks That Run Only in Production]. The option is mandatory, so that it cannot be forgotten.
+
+Put the value into a configuration that differs between production and your machine, for example `production: true` into the common configuration and `production: false` into the local one, which only a developer's machine loads.
+
+Do not use `%productionMode%` from Nette. It is `false` in the console and for a developer's IP address, so on the production server it would forbid the tasks exactly in cron.
+
+
+dir
+---
+
+The directory where Butler writes pending work and locks. The default is `%tempDir%/butler`.
+
+The directory must survive deploying a new version and must not be emptied together with the cache. Emptying `temp/cache` does not bother it, emptying the whole `temp` does, because the recorded and not yet processed work would disappear. Both PHP-FPM and cron must be able to write into it, that is both users they run as.
+
+When two applications share one `temp` and have tasks of the same class, give each its own directory. Otherwise a run of one application would merge with a run of the other.
+
+
+maxQueueSize
+------------
+
+How many payloads can wait in the queue of one `PayloadTask` at most. The default is 1000. The endpoint refuses the next request with code 503, so flooding a public action does not fill the disk.
+
+
+maxAttempts
+-----------
+
+How many times Butler tries to process a payload before it [rejects |how-it-works#Rejected Payloads] it. The default is 10.
+
+
+staleAfter
+----------
+
+After how many seconds of waiting the command [drain |cli#Cron: drain] reports work as stuck. The default is 3600, which is an hour.
+
+
+onRun
+-----
+
+A handler that gets a report about every run of a task, successful or not. The default one writes failures to the Tracy log, and to `error_log` when Tracy is not installed. You set your own handler like this:
+
+```neon
+butler:
+	onRun: App\Monitoring::recordRun(...)
+```
+
+```php
+final class Monitoring
+{
+	public static function recordRun(Butler\RunReport $report): void
+	{
+		// $report->task      class of the task
+		// $report->entry     the work processed, null when the task failed before it
+		// $report->duration  duration of the run in seconds
+		// $report->error     the exception, or null on success
+	}
+}
+```
+
+
+Without Nette
+=============
+
+`Butler\Runner` needs four things: a store, a factory of tasks, the environment and a handler of runs.
+
+```php
+$runner = new Butler\Runner(
+	store: new Butler\FileStore(__DIR__ . '/data/butler'),
+	factory: fn(string $task) => new $task,
+	production: getenv('APP_ENV') === 'production',
+	onRun: function (Butler\RunReport $report): void {
+		if ($report->error) {
+			error_log((string) $report->error);
+		}
+	},
+);
+```
+
+The factory gets the class of a task and returns its instance. When tasks need dependencies, create them here, or take them from the container you use.
+
+`FileStore` has two more optional parameters, `maxQueueSize` and `maxAttempts`, with the same meaning as the options above.
+
+{{maintitle: Configuring Butler: Nette Extension, Store and Limits}}
+{{description: How to wire Butler into Nette and without it: the mandatory option production, the store directory, the limits of the queue and attempts, and your own handler of runs.}}

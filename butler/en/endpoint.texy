@@ -1,0 +1,116 @@
+Endpoint for Webhooks and Cron
+******************************
+
+.[perex]
+The endpoint is a single PHP file that GitHub, a payment gateway and cron all call. It verifies who is calling, records the task, answers immediately and only then processes the task. Let's see how to build it, how to protect individual actions and what exactly it answers.
+
+
+Actions
+=======
+
+The endpoint gets a map of actions. The key is the name of the action, the value a task or a list of tasks it triggers:
+
+```php
+// www/endpoint.php
+$endpoint = new Butler\Endpoint(
+	$container->getByType(Butler\Runner::class),
+	verifier: new Butler\Verifiers\GitHubSignature($secrets['github']),
+);
+
+$endpoint->handle([
+	'release' => ImportReleasesTask::class,
+	'github' => [ImportReleasesTask::class, ImportContributorsTask::class],
+	'sponsor' => SponsorTask::class,
+]);
+```
+
+The action is chosen by a parameter in the URL. A request to `endpoint.php?release` triggers `ImportReleasesTask`, a request to `endpoint.php?github` both tasks. When the URL carries no known action, the endpoint answers 404.
+
+Feel free to put several tasks into one action. Cron then triggers everything that should run every five minutes with a single call. If another process is working on one of the tasks right now, the endpoint skips it and goes on with the next one, so a slow task does not hold up the others.
+
+
+Who May Trigger a Task
+======================
+
+The endpoint is a public address, and without verification anyone could trigger tasks. That is why it gets a **verifier** that decides whether the request came from someone you trust. The verifier given in the constructor applies to all actions, unless an action has its own:
+
+```php
+$endpoint->handle([
+	'release' => ImportReleasesTask::class,         // checked by the default verifier
+	'sponsor' => new Butler\Action(
+		SponsorTask::class,
+		verifier: new Butler\Verifiers\GitHubSignature($secrets['sponsors']),
+	),
+	'paypal' => new Butler\Action(
+		PaypalTask::class,
+		verifier: new Butler\Verifiers\None,        // the task verifies it itself, see below
+	),
+]);
+```
+
+Butler comes with four verifiers:
+
+- **`GitHubSignature($secret)`** verifies the signature GitHub attaches to every webhook. You set the secret in the webhook settings on GitHub and pass the same one here. The signature is computed from the body of the request (HMAC SHA-256 in the header `X-Hub-Signature-256`).
+- **`BearerToken($token)`** expects the header `Authorization: Bearer <token>`. It suits cron or calls from your own application. With `allowQuery: true` it accepts the token in the URL as well, as `?token=...`, which you need when the caller cannot send a header. Keep in mind, though, that the URL ends up in the web server log, so only a token that opens nothing else belongs there.
+- **`AnyOf(...)`** passes when any of the listed ones passes, for example a GitHub signature or a cron token.
+- **`None`** lets everyone in. Use it only for an action whose task verifies the origin itself. Typically PayPal IPN, which the task verifies by a call back to PayPal.
+
+The verifier refuses an empty secret or token with an exception. If it accepted one, the endpoint would let in every request without a token.
+
+Keep a separate secret for each kind of caller: one for repository webhooks, another for sponsors, another for cron. When one leaks, it does not open the other actions.
+
+
+Condition of an Action
+======================
+
+Sometimes you want to trigger a task for only some requests. GitHub sends a webhook about every push, but the documentation only needs updating when the main branch changes. For that, an action has the condition `when`:
+
+```php
+$endpoint->handle([
+	'doc' => new Butler\Action(
+		UpdateDocsTask::class,
+		when: fn(Butler\Payload $p) => ($p->decodeJson()->ref ?? null) === 'refs/heads/master',
+	),
+]);
+```
+
+When the condition returns `false`, the endpoint answers 200 but records nothing. A push to another branch thus never triggers the task. If the condition runs into invalid JSON, the endpoint answers 400.
+
+Thanks to the condition, a task can stay a `Task` that merges, even though the payload decides whether it runs. Without it, the task would have to be a `PayloadTask` and would process each push separately.
+
+
+What the Endpoint Answers
+=========================
+
+| Request | Answer |
+|---|---|
+| accepted, or the condition not met | 200, empty body |
+| unknown action | 404 |
+| caller not verified | 403 |
+| body over 64 kB | 413 |
+| condition ran into an invalid payload | 400 |
+| the queue of the task is full | 503 and `Retry-After: 60` |
+
+**The answer says the work was accepted, not that it succeeded.** The endpoint answers right after recording, so the sender never learns that a task failed. The failure goes to the [handler of runs |configuration#onrun], which with the Nette extension writes it to the Tracy log, and the work is tried again on the next run. GitHub would not repeat a failed delivery by itself anyway, and PayPal gets the empty 200 answer its IPN protocol requires.
+
+Answering before the processing works under **PHP-FPM**, where the function `fastcgi_finish_request()` makes it possible. Elsewhere, for example with the built-in server `php -S`, the caller waits until the tasks finish.
+
+The endpoint checks all tasks of an action before recording the first one. When one of them is unknown or not allowed locally, none is recorded, so you never end up with half of an action waiting for processing.
+
+
+Endpoint Without Global Variables
+=================================
+
+The method `handle()` reads the request from `$_SERVER`, `$_GET` and `php://input` and sends the answer with `header()`. If you want to wire the endpoint in differently, for example into a presenter, use the method `accept()`. It verifies and records the payload you pass to it and returns the list of triggered tasks. It reports a refusal with the exception `Butler\RequestException`, whose code is the HTTP status:
+
+```php
+try {
+	$tasks = $endpoint->accept($actions, new Butler\Payload($body, $headers, $query));
+	// answer 200 and then process: $runner->drainMany($tasks)
+} catch (Butler\RequestException $e) {
+	// answer $e->getCode()
+}
+```
+
+{{maintitle: Endpoint in Butler: Webhooks from GitHub, PayPal and Cron}}
+{{description: How to build an endpoint for webhooks and cron in Butler: actions, verification by a GitHub signature or a token, the condition of an action and what the endpoint answers.}}

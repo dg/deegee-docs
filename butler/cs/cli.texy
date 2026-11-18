@@ -1,0 +1,95 @@
+Příkazová řádka a cron
+**********************
+
+.[perex]
+Úlohu jde spustit i ručně z příkazové řádky a cron potřebuje příkaz, který převezme práci po spadlém procesu a ohlásí, co uvízlo. Obojí obstará `Butler\Cli`.
+
+
+Skript
+======
+
+Stačí krátký skript, který vytvoří DI kontejner a předá argumenty:
+
+```php
+// bin/task.php
+require __DIR__ . '/../vendor/autoload.php';
+
+$container = (new App\Bootstrap)->bootConsoleApplication();
+exit($container->getByType(Butler\Cli::class)->handle(array_slice($argv, 1)));
+```
+
+Bez Nette sestavíš `Cli` sám z [runneru |configuration#Bez Nette]: `new Butler\Cli($runner)`.
+
+
+Spuštění úlohy
+==============
+
+```shell
+php bin/task.php run App.Tasks.ImportReleasesTask
+```
+
+Příkaz zapíše spuštění a úlohu hned zpracuje. Když ji zrovna zpracovává jiný proces, třeba request z webhooku, počká, až skončí, takže po návratu příkazu je práce hotová.
+
+Jméno úlohy píšeš s **tečkami místo zpětných lomítek**. Shell zpětná lomítka bez uvozovek sní, takže `App\Tasks\ImportReleasesTask` by do skriptu dorazilo jako `AppTasksImportReleasesTask`. Zápis s lomítky v uvozovkách funguje také.
+
+`PayloadTask` potřebuje tělo. Vezme ho ze souboru, nebo se znakem `-` ze standardního vstupu:
+
+```shell
+php bin/task.php run App.Tasks.PaypalTask ipn.txt
+php bin/task.php run App.Tasks.PaypalTask - < ipn.txt
+```
+
+Bez souboru `run` u `PayloadTask`u jen zpracuje payloady, které už čekají ve frontě, a nový nepřidá.
+
+Úloha, která smí běžet [jen v produkci |tasks#Úlohy, které smí běžet jen v produkci], se lokálně nespustí ani ručně.
+
+
+Cron: drain
+===========
+
+```shell
+php bin/task.php drain
+```
+
+`drain` zpracuje všechnu čekající práci všech úloh. Patří do cronu, typicky každých pět minut:
+
+```
+*/5 * * * * www-data php /var/www/example/bin/task.php drain
+```
+
+Proč ho potřebuješ, když úlohy spouštějí webhooky? Protože proces, který úlohu zpracovává, může spadnout: restart PHP-FPM, vypršení času, nedostatek paměti. Zapsaná práce pak zůstane čekat do dalšího spuštění. `drain` je to další spuštění, které přijde vždycky, i když další webhook dlouho nepřijde.
+
+Zároveň hlídá, jestli něco neuvízlo:
+
+```
+App\Tasks\SponsorTask: failed
+App\Tasks\SponsorTask: pending since 2026-11-18 03:05:33 UTC
+App\Tasks\PaypalTask: 2 payloads rejected, see retry
+```
+
+Ohlásí práci, která čeká déle než hodinu, a [odmítnuté payloady |how-it-works#Odmítnuté payloady]. V takovém případě skončí s kódem 1, takže ti cron pošle výstup e-mailem.
+
+
+Vrácení odmítnutých payloadů
+============================
+
+Payload, který opakovaně selhal, Butler odloží stranou, aby neblokoval další. Až příčinu opravíš, vrátíš ho do fronty:
+
+```shell
+php bin/task.php retry App.Tasks.PaypalTask
+```
+
+Payloady se vrátí s vynulovaným počtem pokusů a hned se zpracují.
+
+
+Návratové kódy
+==============
+
+| Kód | Význam |
+|---|---|
+| 0 | vše proběhlo |
+| 1 | některá úloha selhala, něco uvízlo, nebo nastala chyba (vypíše se na chybový výstup) |
+| 2 | chybné argumenty, vypíše se nápověda |
+
+{{maintitle: Butler z příkazové řádky: ruční spuštění a cron}}
+{{description: Jak v Butleru spustit úlohu ručně, nastavit cron s příkazem drain, který převezme práci po spadlém procesu, a vrátit odmítnuté payloady.}}

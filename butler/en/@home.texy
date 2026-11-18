@@ -1,0 +1,85 @@
+Butler: Background Tasks for Webhooks, Cron and the Command Line
+****************************************************************
+
+<div class=perex>
+
+Butler is a PHP library for the work your web application does outside of ordinary pages: it downloads new releases from GitHub when a webhook arrives, processes a payment from PayPal, recalculates statistics from cron. You write each such task as one class, and Butler takes care of when, how many times and by whom it runs.
+
+Above all, it solves a trap that tasks triggered by webhooks fall into sooner or later: when a hundred of them arrive at once and each one waits for a lock, they occupy every PHP-FPM process and the whole site stops responding. With Butler, the sender gets an answer within milliseconds, a single process does the task and nothing gets lost.
+
+</div>
+
+
+Why a Plain Lock Is Not Enough
+==============================
+
+A task that must not run twice at the same time usually takes a lock, for example with `flock()`. A second request waits until the first one finishes and only then gets to work. As long as webhooks arrive one at a time, this works without a hitch.
+
+Then you release a new version in forty repositories at once, and GitHub sends a hundred webhooks within a few minutes. Every request waits for the lock, and because it waits, it holds a PHP-FPM process. Soon all of them are taken and the site returns error 504. GitHub and nginx gave up long ago, but PHP keeps waiting. Only a restart helps.
+
+Butler never waits for the lock. A request **records that work is needed, answers, and only then tries the lock**. When another process holds it, the request simply ends: its work is recorded, and the process holding the lock will see it. At any moment at most one process works on a task, and the other requests occupy the server for a few milliseconds only.
+
+
+Installation
+============
+
+```shell
+composer require dg/butler
+```
+
+Butler requires PHP 8.4 or newer. It needs nothing else, and the bundled [extension |configuration#Nette] connects it to Nette.
+
+
+The First Task
+==============
+
+A task is a class with a single method `run()`:
+
+```php
+#[Butler\AllowedLocally]
+final class ImportReleasesTask implements Butler\Task
+{
+	public function run(): void
+	{
+		// downloads releases from GitHub and updates their list on the site
+	}
+}
+```
+
+The attribute `#[Butler\AllowedLocally]` says the task may run on your machine too. A task without it runs only in production, so that development never sends an e-mail to a customer or charges a payment by mistake. More on that in the chapter [Tasks |tasks#Tasks That Run Only in Production].
+
+Webhooks and cron call a single file, for example `www/endpoint.php`, which looks like this:
+
+```php
+$endpoint = new Butler\Endpoint(
+	$container->getByType(Butler\Runner::class),
+	verifier: new Butler\Verifiers\GitHubSignature($secret),
+);
+
+$endpoint->handle([
+	'release' => ImportReleasesTask::class,
+]);
+```
+
+Now you can add a webhook in the repository settings on GitHub pointing to `https://example.org/endpoint.php?release`, with the same secret you have in `$secret`. GitHub gets its answer right away, and the import runs after the answer has been sent. When GitHub sends a hundred webhooks at once, the import runs once or twice, not a hundred times in a row.
+
+
+What Butler Can Do
+==================
+
+- **Two kinds of tasks.** A [Task |tasks] needs no input, and several runs requested at the same time merge into one. A [PayloadTask |tasks#PayloadTask: A Task with Input] gets the body of the request and processes each one separately, in the order they arrived.
+- **Verifying the caller.** A GitHub signature, a token in a header or in the URL, or a combination. See [Endpoint |endpoint#Who May Trigger a Task].
+- **Nothing gets lost.** A request is written to disk before the endpoint answers and removed only once the task succeeds. When a process dies halfway, the next run takes over the work. See [How It Works |how-it-works].
+- **A command line for manual runs and for cron**, including a report of what got stuck. See [Command Line and Cron |cli].
+- **Tasks that never reach a developer's machine**, because they run only in production.
+
+
+When Butler Is Not the Right Choice
+===================================
+
+Butler is meant for an application on a single server. The store is a directory on disk and the locks are file locks, so on several servers behind a load balancer each server would watch over its own tasks only.
+
+Nor is it a scheduler. Cron decides what runs when, Butler only makes sure the run is safe. And it is not a full-blown queue with workers like Symfony Messenger. If you need to process thousands of messages a minute, reach for that.
+
+{{maintitle: Butler: Background Tasks for Webhooks and Cron in PHP}}
+{{description: Butler runs tasks from webhooks, cron and the command line. The sender gets an answer right away, a burst of webhooks never exhausts PHP-FPM and no work gets lost.}}

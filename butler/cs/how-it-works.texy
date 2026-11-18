@@ -1,0 +1,77 @@
+Jak to funguje
+**************
+
+.[perex]
+Co se děje mezi příchodem webhooku a doběhnutím úlohy, co přesně Butler zaručuje a co se stane, když něco selže. Pro běžné používání tuhle stránku nepotřebuješ, ale pomůže, až budeš hledat, proč se něco chová tak, jak se chová.
+
+
+Zapsat, odpovědět, zpracovat
+============================
+
+Každý request projde stejnými kroky:
+
+1. Endpoint ověří volajícího a podmínku akce.
+2. **Zapíše práci do úložiště.** U `Task`u nastaví značku "čeká", u `PayloadTask`u přidá payload na konec fronty.
+3. Odpoví a uzavře spojení. Od téhle chvíle odesílatel neví o ničem dalším.
+4. **Zkusí zámek úlohy, ale nečeká na něj.** Když zámek drží jiný proces, request skončí. Jeho práce je zapsaná a druhý proces ji uvidí.
+5. Když zámek získá, zpracuje všechno, co čeká, uvolní zámek a ještě jednou se podívá, jestli mezitím něco nepřibylo.
+
+Poslední kontrola po uvolnění zámku je důležitá. Request, který přišel těsně předtím, zámek nedostal, protože ho tento proces ještě držel, a skončil. Kdyby se proces po uvolnění znovu nepodíval, jeho práce by zůstala ležet. Takhle ji zpracuje.
+
+Výsledek: úlohu v jednu chvíli zpracovává nejvýš jeden proces a žádný request nečeká na zámek. Dávka sta webhooků zabere sto requestů po pár milisekundách a jeden proces, který udělá práci.
+
+
+Slučování u Task
+================
+
+Značka "čeká" u `Task`u nese náhodný token, který každé další spuštění přepíše. Proces si token přečte, než úlohu spustí, a po úspěšném doběhnutí značku smaže, jen pokud je token pořád stejný. Když mezitím přišlo nové spuštění, token se liší, značka zůstane a úloha proběhne ještě jednou.
+
+Proto deset spuštění během jednoho běhu znamená právě jeden další běh: všechna přepsala stejnou značku.
+
+
+Co je zaručeno
+==============
+
+**Zapsaná práce proběhne aspoň jednou.** Značka i payload se smažou až po úspěšném běhu. Když proces uprostřed spadne, zámek zanikne spolu s ním a zapsaná práce zůstane. Převezme ji další spuštění téže úlohy, nebo příkaz [drain |cli#Cron: drain] z cronu.
+
+**Ne právě jednou.** Když proces spadne po vykonání úlohy, ale před smazáním záznamu, úloha proběhne znovu. Proto musí [snést opakování |tasks#Úloha musí snést opakování].
+
+**Payloady se zpracují v pořadí příchodu.** Selhaný payload zůstane první a další počkají. Události od stejného odesílatele se tak nepřehází.
+
+Butler ale nezaručí pořadí, v jakém odesílatel události poslal. Když GitHub doručí dvě změny v opačném pořadí, Butler je zpracuje tak, jak přišly.
+
+
+Pokusy
+======
+
+Butler počítá pokusy o zpracování payloadu **ještě před spuštěním**, ne až po selhání. Je to kvůli selhání, která se do žádného `catch` nedostanou: fatální chyba, překročení paměti, proces zabitý PHP-FPM. Kdyby se počítalo až po výjimce, takový payload by se nezapočítal nikdy, při každém pokusu by znovu shodil proces a navždy by blokoval frontu.
+
+Když úloha selže výjimkou, dostane ji [obsluha běhů |configuration#onrun] a zpracování fronty té úlohy skončí. Zkusí se znovu při dalším spuštění.
+
+`Task` se nepočítá ani neodmítá. Selhávající `Task` se prostě zkusí znovu při každém dalším spuštění, protože nemá žádný payload, který by se dal odložit.
+
+
+Odmítnuté payloady
+==================
+
+Payload, který vyčerpal [pokusy |configuration#maxattempts], Butler přesune stranou, aby neblokoval další. Totéž udělá s payloadem, který nejde přečíst. Příkaz `drain` je pak hlásí, dokud je nevrátíš do fronty příkazem [retry |cli#Vrácení odmítnutých payloadů] nebo nesmažeš.
+
+
+Úložiště
+========
+
+`Butler\FileStore` ukládá všechno do adresáře, pro každou úlohu pod jménem její třídy s tečkami místo zpětných lomítek:
+
+```
+App.Tasks.ImportReleasesTask.lock        zámek zpracování
+App.Tasks.ImportReleasesTask.marker      značka čekajícího spuštění Tasku
+App.Tasks.SponsorTask.queue/             fronta payloadů, jeden soubor na payload
+App.Tasks.SponsorTask.rejected/          odmítnuté payloady
+```
+
+Soubory s payloady jsou čitelný JSON, takže při ladění snadno zjistíš, co čeká. Časy jsou v UTC. Soubory zámků se nikdy nemažou, protože na Linuxu by smazání zamčeného souboru dovolilo jinému procesu zamknout nový soubor téhož jména.
+
+Úložiště je za rozhraním `Butler\Store`, takže jde nahradit vlastním, například v databázi, pokud by aplikace běžela na víc serverech.
+
+{{maintitle: Jak funguje Butler: zápis, zámky, pokusy a záruky}}
+{{description: Co Butler dělá mezi příchodem webhooku a doběhnutím úlohy: zápis před odpovědí, zámek bez čekání, slučování, pokusy, odmítnuté payloady a úložiště.}}

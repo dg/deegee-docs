@@ -1,0 +1,95 @@
+Command Line and Cron
+*********************
+
+.[perex]
+A task can also be run by hand from the command line, and cron needs a command that takes over the work of a crashed process and reports what got stuck. `Butler\Cli` does both.
+
+
+The Script
+==========
+
+A short script that creates the DI container and passes the arguments is all it takes:
+
+```php
+// bin/task.php
+require __DIR__ . '/../vendor/autoload.php';
+
+$container = (new App\Bootstrap)->bootConsoleApplication();
+exit($container->getByType(Butler\Cli::class)->handle(array_slice($argv, 1)));
+```
+
+Without Nette, you build `Cli` yourself from the [runner |configuration#Without Nette]: `new Butler\Cli($runner)`.
+
+
+Running a Task
+==============
+
+```shell
+php bin/task.php run App.Tasks.ImportReleasesTask
+```
+
+The command records the run and processes the task right away. When another process is working on it at the moment, for example a request from a webhook, it waits until that process finishes, so the work is done when the command returns.
+
+You write the name of the task with **dots instead of backslashes**. A shell eats unquoted backslashes, so `App\Tasks\ImportReleasesTask` would arrive in the script as `AppTasksImportReleasesTask`. Backslashes in quotes work too.
+
+A `PayloadTask` needs a body. It takes it from a file, or with the character `-` from the standard input:
+
+```shell
+php bin/task.php run App.Tasks.PaypalTask ipn.txt
+php bin/task.php run App.Tasks.PaypalTask - < ipn.txt
+```
+
+Without a file, `run` of a `PayloadTask` only processes the payloads already waiting in the queue and adds no new one.
+
+A task that may run [only in production |tasks#Tasks That Run Only in Production] does not run locally, not even by hand.
+
+
+Cron: drain
+===========
+
+```shell
+php bin/task.php drain
+```
+
+`drain` processes all pending work of all tasks. It belongs in cron, typically every five minutes:
+
+```
+*/5 * * * * www-data php /var/www/example/bin/task.php drain
+```
+
+Why do you need it when webhooks trigger the tasks? Because the process working on a task can die: a restart of PHP-FPM, a timeout, running out of memory. The recorded work then waits for the next run. `drain` is that next run, the one that always comes, even when no webhook arrives for a long time.
+
+At the same time it watches whether something got stuck:
+
+```
+App\Tasks\SponsorTask: failed
+App\Tasks\SponsorTask: pending since 2026-11-18 03:05:33 UTC
+App\Tasks\PaypalTask: 2 payloads rejected, see retry
+```
+
+It reports work pending for more than an hour and [rejected payloads |how-it-works#Rejected Payloads]. In that case it ends with code 1, so cron e-mails you the output.
+
+
+Returning Rejected Payloads
+===========================
+
+A payload that failed repeatedly is set aside by Butler, so that it does not block the others. Once you have fixed the cause, you return it to the queue:
+
+```shell
+php bin/task.php retry App.Tasks.PaypalTask
+```
+
+The payloads return with the attempts reset and are processed right away.
+
+
+Exit Codes
+==========
+
+| Code | Meaning |
+|---|---|
+| 0 | everything ran |
+| 1 | a task failed, something got stuck, or an error occurred (written to the error output) |
+| 2 | wrong arguments, the usage is printed |
+
+{{maintitle: Butler from the Command Line: Manual Runs and Cron}}
+{{description: How to run a task by hand in Butler, set up cron with the command drain, which takes over the work of a crashed process, and return rejected payloads.}}

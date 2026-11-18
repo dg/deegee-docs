@@ -1,0 +1,85 @@
+Butler: úlohy na pozadí pro webhooky, cron i příkazovou řádku
+*************************************************************
+
+<div class=perex>
+
+Butler je PHP knihovna pro úlohy, které tvoje webová aplikace dělá mimo běžné stránky: stáhne nová vydání z GitHubu, když přijde webhook, zpracuje platbu z PayPalu, přepočítá statistiky z cronu. Každou takovou úlohu napíšeš jako jednu třídu a Butler se postará o to, kdy, kolikrát a kým se spustí.
+
+Hlavně řeší past, do které se úlohy spouštěné webhookem dostanou dřív nebo později: když jich přijde stovka naráz a každá čeká na zámek, obsadí všechny procesy PHP-FPM a celý web přestane odpovídat. S Butlerem odesílatel dostane odpověď za pár milisekund, úlohu zpracuje jediný proces a nic se neztratí.
+
+</div>
+
+
+Proč nestačí obyčejný zámek
+===========================
+
+Úloha, která nemá běžet dvakrát současně, si obvykle vezme zámek, třeba `flock()`. Druhý request počká, až první doběhne, a teprve pak se pustí do práce. Dokud chodí jeden webhook za čas, funguje to bez potíží.
+
+Jenže pak vydáš novou verzi ve čtyřiceti repozitářích najednou a GitHub pošle stovku webhooků během pár minut. Každý request čeká na zámek, a protože čeká, drží proces PHP-FPM. Za chvíli jsou obsazené všechny a web vrací chybu 504. GitHub ani nginx dávno nečekají, ale PHP pořád ano. Pomůže až restart.
+
+Butler na zámek nikdy nečeká. Request **zapíše, že je potřeba práce, odpoví a teprve pak zkusí zámek**. Když ho drží jiný proces, request prostě skončí: jeho práce je zapsaná a proces, který zámek drží, ji uvidí. Úlohu tak v jednu chvíli zpracovává nejvýš jeden proces a ostatní requesty zaberou server jen na pár milisekund.
+
+
+Instalace
+=========
+
+```shell
+composer require dg/butler
+```
+
+Butler vyžaduje PHP 8.4 nebo novější. Kromě něj nepotřebuje nic, s Nette ho propojí přiložené [rozšíření |configuration#Nette].
+
+
+První úloha
+===========
+
+Úloha je třída s jedinou metodou `run()`:
+
+```php
+#[Butler\AllowedLocally]
+final class ImportReleasesTask implements Butler\Task
+{
+	public function run(): void
+	{
+		// stáhne vydání z GitHubu a aktualizuje jejich seznam na webu
+	}
+}
+```
+
+Atribut `#[Butler\AllowedLocally]` říká, že úloha smí běžet i na tvém počítači. Úloha bez něj běží jen v produkci, aby se při vývoji nikdy omylem neposlal e-mail zákazníkovi nebo nestrhla platba. Víc o tom v kapitole [Tasky |tasks#Úlohy, které smí běžet jen v produkci].
+
+Webhooky a cron volají jeden soubor, například `www/endpoint.php`, který vypadá takhle:
+
+```php
+$endpoint = new Butler\Endpoint(
+	$container->getByType(Butler\Runner::class),
+	verifier: new Butler\Verifiers\GitHubSignature($secret),
+);
+
+$endpoint->handle([
+	'release' => ImportReleasesTask::class,
+]);
+```
+
+Teď můžeš v nastavení repozitáře na GitHubu přidat webhook na adresu `https://example.org/endpoint.php?release` se stejným tajemstvím, jaké máš v `$secret`. GitHub dostane odpověď hned a import proběhne po jejím odeslání. Když GitHub pošle sto webhooků naráz, import poběží jednou nebo dvakrát, ne stokrát po sobě.
+
+
+Co Butler umí
+=============
+
+- **Dva druhy úloh.** [Task |tasks] nepotřebuje žádný vstup a víc spuštění, která přijdou současně, se sloučí do jednoho. [PayloadTask |tasks#PayloadTask: úloha se vstupem] dostane tělo requestu a každé zpracuje zvlášť, ve stejném pořadí, v jakém přišla.
+- **Ověření volajícího.** Podpis GitHubu, token v hlavičce nebo v URL, případně kombinace. Viz [Endpoint |endpoint#Kdo smí úlohu spustit].
+- **Nic se neztratí.** Požadavek se zapíše na disk dřív, než endpoint odpoví, a smaže se, až když úloha uspěje. Když proces uprostřed spadne, práci převezme další spuštění. Viz [Jak to funguje |how-it-works].
+- **Příkazová řádka pro ruční spuštění a cron**, včetně hlášení, co uvízlo. Viz [Příkazová řádka a cron |cli].
+- **Úlohy, které se k vývojářskému počítači nedostanou**, protože běží jen v produkci.
+
+
+Kdy Butler není to pravé
+========================
+
+Butler je pro aplikaci na jednom serveru. Úložiště je adresář na disku a zámky jsou souborové, takže na víc serverech za load balancerem by si každý server hlídal jen své úlohy.
+
+Není to ani plánovač. Kdy se má co spustit, řídí cron, Butler jen zajistí, že spuštění proběhne bezpečně. A není to plnohodnotná fronta s workery, jako je Symfony Messenger. Pokud potřebuješ zpracovávat tisíce zpráv za minutu, sáhni po ní.
+
+{{maintitle: Butler: úlohy na pozadí pro webhooky a cron v PHP}}
+{{description: Butler spouští úlohy z webhooků, cronu i příkazové řádky. Odesílatel dostane odpověď hned, dávka webhooků neobsadí PHP-FPM a žádná práce se neztratí.}}

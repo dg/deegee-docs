@@ -1,0 +1,121 @@
+Tasks
+*****
+
+.[perex]
+A task is a class with a method `run()`. Depending on whether it needs input, you write it as a `Task` or as a `PayloadTask`, and that decides how it behaves when several requests trigger it at once.
+
+
+Task: A Task Without Input
+==========================
+
+Most background tasks find out everything they need on their own. An import of releases looks at GitHub, a recalculation of statistics at the database, sending e-mails at the message queue. Who or what triggered them does not matter. Such tasks implement the interface `Butler\Task`:
+
+```php
+#[Butler\AllowedLocally]
+final class ImportReleasesTask implements Butler\Task
+{
+	public function __construct(
+		private GitHubClient $github,
+		private ReleaseRepository $releases,
+	) {
+	}
+
+
+	public function run(): void
+	{
+		foreach ($this->github->fetchReleases() as $release) {
+			$this->releases->save($release);
+		}
+	}
+}
+```
+
+A task is an ordinary service. In Nette, Butler takes it from the DI container, so it can ask for anything it needs in its constructor.
+
+**Several runs merge into one.** When ten webhooks arrive while the import is running, the import does not run ten times. It runs once after the current run finishes, and the runs waiting until then merge together. The result is the same, because the import looks at the current state of GitHub, whichever of the webhooks triggered it.
+
+This brings one condition: the result of a `Task` must not depend on which request triggered it. The task must not read `$_GET`, `$_POST` or the time of the request. As soon as it needs to, it is a `PayloadTask`.
+
+
+PayloadTask: A Task with Input
+==============================
+
+Some tasks need to know exactly what arrived. A payment from PayPal carries a transaction number and an amount, a sponsorship webhook from GitHub the name of the sponsor. Such tasks implement the interface `Butler\PayloadTask` and get the content of the request as an argument:
+
+```php
+final class SponsorTask implements Butler\PayloadTask
+{
+	public function run(Butler\Payload $payload): void
+	{
+		$event = $payload->decodeJson();
+		match ($event->action) {
+			'created' => $this->addSponsor($event->sponsorship),
+			'cancelled' => $this->removeSponsor($event->sponsorship),
+			default => null,
+		};
+	}
+}
+```
+
+Nothing merges here. **Each payload is processed separately and in the order it arrived**, so, for example, the cancellation of a sponsorship is never processed before its creation. When one payload fails, the ones behind it wait until it passes, or until Butler [rejects |how-it-works#Rejected Payloads] it after repeated failures.
+
+
+Payload
+=======
+
+`Butler\Payload` is the body, the headers and the URL parameters of the request that triggered the task. Thanks to it, a task never reaches into `$_POST` or `php://input` and can be tested with a payload you make by hand.
+
+```php
+$payload->body;                        // body of the request as a string
+$payload->getHeader('X-GitHub-Event'); // a header, case-insensitive; null when missing
+$payload->decodeJson();                // body as JSON (objects), null for an empty body
+$payload->decodeForm();                // body as a form, as in PayPal IPN
+$payload->query;                       // parameters from the URL
+```
+
+`decodeJson()` throws `JsonException` when the body is not valid JSON. An empty body is valid and returns `null`, because that is what a manual run without data looks like.
+
+In a test, you build the payload directly:
+
+```php
+$task->run(new Butler\Payload('{"action": "created", "sponsorship": {...}}'));
+```
+
+The [Endpoint |endpoint] removes the headers `Authorization` and `Cookie` and the URL parameter `token` from the payload before storing it, so credentials never lie on disk.
+
+
+A Task Must Cope with Repetition
+================================
+
+Butler guarantees that every recorded piece of work runs **at least once**. It does not promise exactly once. When a process dies right after the task did its work, but before Butler recorded that it is done, the task runs again.
+
+With a `Task` this usually does not matter, because a recalculation or an import gives the same result the second time. With a `PayloadTask` you have to keep it in mind. A payment that is already in the database must not be recorded twice, not even when the customer has cancelled the subscription meanwhile and a second processing would restore it by mistake. Typically you solve it with a check by the transaction number:
+
+```php
+if ($this->payments->exists($ipn['txn_id'])) {
+	return; // already processed, the state may have changed since
+}
+```
+
+You cannot avoid repetition even without Butler: PayPal and GitHub themselves send the same thing again when they are not sure you have received it.
+
+
+Tasks That Run Only in Production
+=================================
+
+On a developer's machine you do not want to send e-mails to customers, download payments from the bank or call a paid API by mistake. That is why **a task without the attribute `#[Butler\AllowedLocally]` runs only in production**. Outside of it, Butler refuses to run it with the exception `Butler\ProductionOnlyException`, before it even creates the task, so not even the clients of the services the task uses are created locally.
+
+```php
+#[Butler\AllowedLocally] // the local mailer sends nothing anywhere
+final class UnpaidReminderTask implements Butler\Task
+{
+	// ...
+}
+```
+
+Give the attribute to a task that you know does not touch live services with the local configuration. Reading a third-party API or the sandbox of a payment system is fine, as long as it is deliberate.
+
+Whether the application is in production is decided by the [configuration |configuration#production], never by the name of the machine. An unknown machine with the local configuration thus behaves locally, and a mistake leads to the task being refused, not run.
+
+{{maintitle: Tasks in Butler: Tasks Without Input and with Input}}
+{{description: How to write a task in Butler: a Task without input merges, a PayloadTask processes each payload separately and in order. Plus repetition and production-only tasks.}}

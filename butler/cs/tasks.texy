@@ -1,0 +1,121 @@
+Tasky
+*****
+
+.[perex]
+Úloha je třída s metodou `run()`. Podle toho, jestli potřebuje vstup, ji napíšeš jako `Task`, nebo jako `PayloadTask`, a to rozhoduje, jak se chová, když ji spustí víc requestů naráz.
+
+
+Task: úloha bez vstupu
+======================
+
+Většina úloh na pozadí si všechno potřebné zjistí sama. Import vydání se podívá na GitHub, přepočet statistik do databáze, odeslání e-mailů do fronty zpráv. Na tom, kdo nebo co je spustilo, nezáleží. Takové úlohy implementují rozhraní `Butler\Task`:
+
+```php
+#[Butler\AllowedLocally]
+final class ImportReleasesTask implements Butler\Task
+{
+	public function __construct(
+		private GitHubClient $github,
+		private ReleaseRepository $releases,
+	) {
+	}
+
+
+	public function run(): void
+	{
+		foreach ($this->github->fetchReleases() as $release) {
+			$this->releases->save($release);
+		}
+	}
+}
+```
+
+Úloha je obyčejná služba. V Nette ji Butler bere z DI kontejneru, takže si do konstruktoru řekne o cokoli, co potřebuje.
+
+**Víc spuštění se sloučí do jednoho.** Když přijde deset webhooků, zatímco import zrovna běží, nespustí se import desetkrát. Proběhne jednou po doběhnutí toho současného a do té doby čekající spuštění se slijí dohromady. Výsledek je stejný, protože import se podívá na aktuální stav GitHubu, ať už ho spustil kterýkoli z webhooků.
+
+Z toho plyne jediná podmínka: výsledek `Task`u nesmí záviset na tom, který request ho spustil. Úloha nesmí číst `$_GET`, `$_POST` ani čas requestu. Jakmile to potřebuje, je to `PayloadTask`.
+
+
+PayloadTask: úloha se vstupem
+=============================
+
+Některé úlohy potřebují vědět, co přesně přišlo. Platba z PayPalu nese číslo transakce a částku, webhook sponzorství z GitHubu jméno sponzora. Takové úlohy implementují rozhraní `Butler\PayloadTask` a obsah requestu dostanou jako argument:
+
+```php
+final class SponsorTask implements Butler\PayloadTask
+{
+	public function run(Butler\Payload $payload): void
+	{
+		$event = $payload->decodeJson();
+		match ($event->action) {
+			'created' => $this->addSponsor($event->sponsorship),
+			'cancelled' => $this->removeSponsor($event->sponsorship),
+			default => null,
+		};
+	}
+}
+```
+
+Tady se nic neslučuje. **Každý payload se zpracuje zvlášť a v pořadí, v jakém přišel**, takže se třeba zrušení sponzorství nezpracuje dřív než jeho založení. Když jeden payload selže, ty za ním počkají, dokud neprojde, nebo dokud ho Butler po opakovaném selhání [neodmítne |how-it-works#Odmítnuté payloady].
+
+
+Payload
+=======
+
+`Butler\Payload` je tělo, hlavičky a parametry URL requestu, který úlohu spustil. Úloha díky tomu nikdy nesahá do `$_POST` nebo `php://input` a dá se otestovat s payloadem, který si vyrobíš ručně.
+
+```php
+$payload->body;                        // tělo requestu jako řetězec
+$payload->getHeader('X-GitHub-Event'); // hlavička, velikost písmen nehraje roli; null, když chybí
+$payload->decodeJson();                // tělo jako JSON (objekty), null pro prázdné tělo
+$payload->decodeForm();                // tělo jako formulář, třeba u PayPal IPN
+$payload->query;                       // parametry z URL
+```
+
+`decodeJson()` vyhodí `JsonException`, když tělo není platný JSON. Prázdné tělo platné je a vrátí `null`, protože tak vypadá ruční spuštění bez dat.
+
+V testu payload sestavíš přímo:
+
+```php
+$task->run(new Butler\Payload('{"action": "created", "sponsorship": {...}}'));
+```
+
+[Endpoint |endpoint] z payloadu ještě před uložením odstraní hlavičky `Authorization` a `Cookie` a parametr URL `token`, takže na disku nikdy neleží přihlašovací údaje.
+
+
+Úloha musí snést opakování
+==========================
+
+Butler zaručuje, že každá zapsaná práce proběhne **aspoň jednou**. Neslibuje, že právě jednou. Když proces spadne těsně poté, co úloha udělala svou práci, ale dřív, než si Butler zapsal, že je hotovo, proběhne úloha znovu.
+
+U `Task`u to obvykle nevadí, protože přepočet nebo import dá podruhé stejný výsledek. U `PayloadTask`u na to musíš myslet. Platba, která už je v databázi, se nesmí zapsat podruhé, a to ani tehdy, když mezitím zákazník předplatné zrušil a druhé zpracování by mu ho omylem obnovilo. Typicky to vyřešíš kontrolou podle čísla transakce:
+
+```php
+if ($this->payments->exists($ipn['txn_id'])) {
+	return; // už zpracováno, stav se od té doby mohl změnit
+}
+```
+
+Opakování se nevyhneš ani bez Butleru: PayPal i GitHub samy posílají totéž znovu, když si nejsou jisté, že ses o něm dozvěděl.
+
+
+Úlohy, které smí běžet jen v produkci
+=====================================
+
+Na vývojářském počítači nechceš omylem poslat zákazníkům e-mail, stáhnout platby z banky nebo zavolat placené API. Proto **úloha bez atributu `#[Butler\AllowedLocally]` běží jen v produkci**. Mimo ni Butler její spuštění odmítne výjimkou `Butler\ProductionOnlyException`, ještě než úlohu vůbec vytvoří, takže lokálně nevzniknou ani klienti služeb, které úloha používá.
+
+```php
+#[Butler\AllowedLocally] // lokální mailer nikam neposílá
+final class UnpaidReminderTask implements Butler\Task
+{
+	// ...
+}
+```
+
+Atribut dej úloze, o které víš, že s lokální konfigurací nesahá na ostré služby. Čtení cizího API nebo hřiště platebního systému je v pořádku, když je to vědomé.
+
+Jestli je aplikace v produkci, určuje [konfigurace |configuration#production], nikdy jméno počítače. Neznámý počítač s lokální konfigurací se tak chová lokálně a omyl vede k odmítnutí úlohy, ne k jejímu spuštění.
+
+{{maintitle: Tasky v Butleru: úlohy bez vstupu a se vstupem}}
+{{description: Jak v Butleru napsat úlohu: Task bez vstupu se slučuje, PayloadTask zpracuje každý payload zvlášť a v pořadí. Plus opakování a úlohy jen pro produkci.}}
